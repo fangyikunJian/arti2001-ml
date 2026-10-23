@@ -1,0 +1,561 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>线性回归逐页精读</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600;700&display=swap">
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#F4F6F8; --card:#FFFFFF; --card2:#FAFBFC;
+  --ink:#18202B; --muted:#586274; --faint:#8A93A3; --line:#E2E6EC; --line2:#EDF0F4;
+  --blue:#2560C4; --green:#0B7A4C; --amber:#A65A0C; --red:#BE2F45; --violet:#6A3CC0; --teal:#0E8F9C;
+  --blue-s:rgba(37,96,196,.10); --green-s:rgba(11,122,76,.10); --amber-s:rgba(166,90,12,.11);
+  --red-s:rgba(190,47,69,.09); --violet-s:rgba(106,60,192,.09);
+  --mark:#FFDF7A; --code-bg:#F0F3F7; --code-ink:#243247;
+  --sans:"IBM Plex Sans","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --serif:"IBM Plex Serif","Songti SC","STSong",Georgia,serif;
+  --mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+  --shadow:0 1px 2px rgba(20,28,40,.04),0 8px 24px rgba(20,28,40,.06);
+  --measure:70ch;
+}
+:root:not([data-theme="light"]){ @media (prefers-color-scheme:dark){
+  --bg:#0D131A; --card:#151D27; --card2:#111823;
+  --ink:#E7ECF3; --muted:#95A1B4; --faint:#68748699; --line:#232D3A; --line2:#1B2430;
+  --blue:#74B4FF; --green:#54D69C; --amber:#F0B45E; --red:#FF8593; --violet:#B694F2; --teal:#3FC6D4;
+  --blue-s:rgba(116,180,255,.13); --green-s:rgba(84,214,156,.12); --amber-s:rgba(240,180,94,.13);
+  --red-s:rgba(255,133,147,.12); --violet-s:rgba(182,148,242,.12);
+  --mark:rgba(255,206,102,.32); --code-bg:#0E151D; --code-ink:#C7D3E2;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.34);
+}}
+:root[data-theme="dark"]{
+  --bg:#0D131A; --card:#151D27; --card2:#111823;
+  --ink:#E7ECF3; --muted:#95A1B4; --faint:#68748699; --line:#232D3A; --line2:#1B2430;
+  --blue:#74B4FF; --green:#54D69C; --amber:#F0B45E; --red:#FF8593; --violet:#B694F2; --teal:#3FC6D4;
+  --blue-s:rgba(116,180,255,.13); --green-s:rgba(84,214,156,.12); --amber-s:rgba(240,180,94,.13);
+  --red-s:rgba(255,133,147,.12); --violet-s:rgba(182,148,242,.12);
+  --mark:rgba(255,206,102,.32); --code-bg:#0E151D; --code-ink:#C7D3E2;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.34);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:17px;line-height:1.78;-webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility}
+::selection{background:var(--mark);color:var(--ink)}
+
+/* progress + top bar */
+#top{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+#top .inner{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:16px;
+  padding:11px 24px}
+#brand{font-family:var(--mono);font-size:12.5px;letter-spacing:.02em;color:var(--muted);white-space:nowrap}
+#brand b{color:var(--ink);font-weight:600}
+#top .spacer{flex:1}
+#jump{font-family:var(--mono);font-size:12.5px;color:var(--ink);background:var(--card);
+  border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;max-width:46vw}
+#themeBtn{font-family:var(--mono);font-size:13px;color:var(--muted);background:var(--card);
+  border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer;transition:.15s}
+#themeBtn:hover{color:var(--ink);border-color:var(--blue)}
+#bar{height:2px;background:var(--blue);width:0;transition:width .1s linear}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px;display:grid;
+  grid-template-columns:210px minmax(0,1fr);gap:40px;align-items:start}
+@media(max-width:880px){.wrap{grid-template-columns:1fr;gap:0}#toc{display:none}}
+
+/* side TOC */
+#toc{position:sticky;top:74px;padding:30px 0 40px;font-size:13.5px}
+#toc .toc-h{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 12px 12px}
+#toc a{display:flex;gap:9px;align-items:baseline;text-decoration:none;color:var(--muted);
+  padding:5px 12px;border-left:2px solid var(--line);line-height:1.4;transition:.14s}
+#toc a .n{font-family:var(--mono);font-size:11.5px;color:var(--faint);min-width:20px}
+#toc a:hover{color:var(--ink);border-left-color:var(--muted)}
+#toc a.on{color:var(--blue);border-left-color:var(--blue);font-weight:600}
+#toc a.on .n{color:var(--blue)}
+
+main{padding:14px 0 120px;min-width:0}
+.lead{padding:26px 0 6px}
+.lead .kicker{font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--teal);margin:0 0 14px}
+.lead h1{font-family:var(--serif);font-weight:700;font-size:clamp(2rem,5vw,3rem);line-height:1.08;
+  letter-spacing:-.015em;margin:0;text-wrap:balance}
+.lead .sub{font-size:1.06rem;color:var(--muted);margin:16px 0 0;max-width:60ch}
+.lead .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.chip{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--card);
+  border:1px solid var(--line);border-radius:100px;padding:5px 13px}
+.chip.hot{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 40%,var(--line))}
+
+/* page section */
+.page{padding:40px 0;border-top:1px solid var(--line);max-width:var(--measure)}
+.page:first-of-type{border-top:none}
+.eyebrow{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12.5px;
+  color:var(--faint);margin:0 0 10px}
+.eyebrow .pn{color:var(--blue);font-weight:600}
+.eyebrow .dot{width:4px;height:4px;border-radius:50%;background:var(--faint)}
+.page h2{font-family:var(--serif);font-weight:600;font-size:clamp(1.5rem,3.3vw,2.05rem);
+  line-height:1.18;letter-spacing:-.01em;margin:0 0 4px;text-wrap:balance}
+.page h2 .en{color:var(--ink)}
+.page .zh{color:var(--muted);font-size:.62em;font-weight:500;font-family:var(--sans)}
+.page h3{font-family:var(--sans);font-weight:600;font-size:1.12rem;margin:30px 0 10px;
+  letter-spacing:.005em;color:var(--ink)}
+.page h3 .num{color:var(--teal);font-family:var(--mono);font-size:.86em;margin-right:.5em}
+.page p{margin:14px 0}
+.page a{color:var(--blue)}
+.core{font-size:1.12rem;line-height:1.7;color:var(--ink);border-left:3px solid var(--blue);
+  padding:4px 0 4px 18px;margin:18px 0}
+.core b{font-weight:600}
+ul,ol{margin:14px 0;padding-left:2px;list-style:none}
+li{position:relative;padding-left:26px;margin:9px 0}
+ul>li::before{content:"";position:absolute;left:6px;top:.72em;width:6px;height:6px;border-radius:50%;
+  background:var(--blue);opacity:.55}
+ol{counter-reset:li}
+ol>li{counter-increment:li}
+ol>li::before{content:counter(li);position:absolute;left:0;top:.05em;font-family:var(--mono);
+  font-size:12px;font-weight:600;color:var(--blue);background:var(--blue-s);width:20px;height:20px;
+  border-radius:6px;display:grid;place-items:center}
+strong{font-weight:700;color:var(--ink)}
+mark{background:linear-gradient(transparent 54%,var(--mark) 54%);color:inherit;
+  padding:0 .05em;border-radius:2px 2px 0 0}
+code,.k{font-family:var(--mono);font-size:.9em;background:var(--code-bg);color:var(--code-ink);
+  padding:.1em .42em;border-radius:5px;border:1px solid var(--line2)}
+.term{color:var(--blue);font-weight:600}
+sup{font-size:.7em}
+
+/* formula */
+.fml{font-family:var(--mono);font-size:1.22rem;text-align:center;background:var(--card2);
+  border:1px solid var(--line);border-radius:12px;padding:22px 16px;margin:20px 0;color:var(--ink);
+  letter-spacing:.01em;overflow-x:auto}
+.fml .em{color:var(--blue)}
+
+/* tables */
+.tw{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:12px;
+  box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:.96rem;background:var(--card)}
+caption{caption-side:top;text-align:left;font-family:var(--mono);font-size:11.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--faint);padding:0 0 8px 2px}
+th,td{padding:11px 16px;text-align:left;border-bottom:1px solid var(--line2);vertical-align:top}
+thead th{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.03em;
+  color:var(--muted);background:var(--card2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+tbody tr:hover td{background:color-mix(in srgb,var(--blue) 4%,transparent)}
+.data td:first-child{color:var(--muted)}
+td .hl{color:var(--green);font-weight:600}
+
+/* callouts */
+.call{display:grid;grid-template-columns:auto 1fr;gap:0 16px;margin:20px 0;padding:16px 20px;
+  border-radius:12px;border:1px solid var(--line);background:var(--card);position:relative;
+  border-left-width:4px}
+.call .lbl{grid-column:1;font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;white-space:nowrap;padding-top:2px;display:flex;align-items:center;gap:7px}
+.call .bd{grid-column:2;min-width:0}
+.call .bd>:first-child{margin-top:0}.call .bd>:last-child{margin-bottom:0}
+@media(max-width:560px){.call{grid-template-columns:1fr;gap:8px}.call .lbl{grid-column:1}.call .bd{grid-column:1}}
+.call.warn{border-left-color:var(--red);background:linear-gradient(var(--red-s),var(--red-s)),var(--card)}
+.call.warn .lbl{color:var(--red)}
+.call.key{border-left-color:var(--amber);background:linear-gradient(var(--amber-s),var(--amber-s)),var(--card)}
+.call.key .lbl{color:var(--amber)}
+.call.mem{border-left-color:var(--green);background:linear-gradient(var(--green-s),var(--green-s)),var(--card)}
+.call.mem .lbl{color:var(--green)}
+.call.lang{border-left-color:var(--blue);background:linear-gradient(var(--blue-s),var(--blue-s)),var(--card)}
+.call.lang .lbl{color:var(--blue)}
+.call.trivia{border-left-color:var(--violet);background:linear-gradient(var(--violet-s),var(--violet-s)),var(--card)}
+.call.trivia .lbl{color:var(--violet)}
+.call.plain{border-left-color:var(--faint)}
+.call.plain .lbl{color:var(--muted)}
+
+/* study check */
+.check{margin:22px 0;border:1px solid var(--line);border-radius:12px;background:var(--card);
+  box-shadow:var(--shadow);overflow:hidden}
+.check summary{cursor:pointer;padding:15px 20px;list-style:none;display:flex;gap:12px;align-items:baseline;
+  font-weight:500}
+.check summary::-webkit-details-marker{display:none}
+.check summary .st{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--green);background:var(--green-s);border-radius:6px;
+  padding:3px 9px;white-space:nowrap;flex:none}
+.check summary .arw{margin-left:auto;color:var(--faint);transition:.2s;flex:none;font-family:var(--mono)}
+.check[open] summary .arw{transform:rotate(90deg)}
+.check .ans{padding:0 20px 18px 20px;border-top:1px dashed var(--line);margin-top:2px;
+  color:var(--ink);background:var(--card2)}
+.check .ans::before{content:"答案";display:inline-block;font-family:var(--mono);font-size:11px;
+  letter-spacing:.08em;color:var(--green);margin:14px 0 4px;font-weight:600}
+.check .ans p:first-of-type{margin-top:4px}
+
+/* scatter figure */
+figure{margin:22px 0}
+figure svg{width:100%;height:auto;display:block;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;box-shadow:var(--shadow)}
+figcaption{font-size:.86rem;color:var(--muted);margin-top:10px;text-align:center;font-style:italic}
+.ax{stroke:var(--line);stroke-width:1.4}
+.axl{fill:var(--faint);font-family:var(--mono);font-size:12px}
+.grid{stroke:var(--line2);stroke-width:1}
+.dot{fill:var(--teal)}
+.fit{stroke:var(--amber);stroke-width:2.6;fill:none;stroke-linecap:round}
+.res{stroke:var(--faint);stroke-width:1;stroke-dasharray:2 3;opacity:.7}
+
+.endnote{max-width:var(--measure);margin-top:46px;padding:22px 24px;border:1px dashed var(--line);
+  border-radius:14px;background:var(--card2);color:var(--muted);font-size:.96rem}
+.endnote b{color:var(--ink)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="top"><div class="inner">
+  <span id="brand"><b>线性回归</b> · 逐页精读 · <span style="color:var(--amber)">样张 P1–P8</span></span>
+  <span class="spacer"></span>
+  <select id="jump" aria-label="跳到某一页"></select>
+  <button id="themeBtn" aria-label="切换主题">☾ 暗色</button>
+</div><div id="bar"></div></div>
+
+<div class="wrap">
+  <nav id="toc" aria-label="目录"><div class="toc-h">M1 T2 · 27 页</div><div id="tocList"></div></nav>
+  <main>
+
+  <header class="lead">
+    <p class="kicker">ARTI2001 · Module 1 · Topic 2</p>
+    <h1>Linear Regression</h1>
+    <p class="sub">把课件一页一页拆开精读——每页抓核心、标陷阱、补直觉，考试怎么考就怎么标。这是样张，先看第 1–8 页的讲法与排版。</p>
+    <div class="meta">
+      <span class="chip">Fitting Lines</span>
+      <span class="chip">Minimizing Error</span>
+      <span class="chip">Making Predictions</span>
+      <span class="chip hot">⚠ 陷阱已标注</span>
+    </div>
+  </header>
+
+  <!-- P1 -->
+  <section class="page" id="p1">
+    <div class="eyebrow"><span class="pn">P.01</span><span class="dot"></span><span>封面 · Cover</span></div>
+    <h2><span class="en">Fitting Lines, Minimizing Error, Making Predictions</span></h2>
+    <p>副标题其实就是<mark>整个主题的三步骨架</mark>，记住它，你就知道这一周在干什么：</p>
+    <ol>
+      <li><strong>Fitting Lines</strong> — 用一条直线去拟合数据。</li>
+      <li><strong>Minimizing Error</strong> — 定义「误差」并把它最小化。</li>
+      <li><strong>Making Predictions</strong> — 用学到的直线去预测新数据。</li>
+    </ol>
+    <div class="call key"><div class="lbl">★ 一句话浓缩</div><div class="bd">
+      <p>讲义备注给的核心问题：线性回归把「<term>数值预测</term>」和「<term>线性函数</term>」连起来，用<mark>残差（residuals）和平方误差</mark>衡量偏差，再通过<strong>优化（梯度下降）或闭式解（正规方程）</strong>学出参数。这句话基本就是全部 27 页的浓缩版。</p>
+    </div></div>
+  </section>
+
+  <!-- P2 -->
+  <section class="page" id="p2">
+    <div class="eyebrow"><span class="pn">P.02</span><span class="dot"></span><span>Acknowledgement of Country</span></div>
+    <h2><span class="en">Acknowledgement of Country</span></h2>
+    <div class="call plain"><div class="lbl">跳过</div><div class="bd">
+      <p>澳洲大学课件的固定开场，向 Kaurna、Boandik、Barngarla 等原住民族群及其长者致敬。<mark>跟技术内容无关，考试不考，跳过即可。</mark></p>
+    </div></div>
+  </section>
+
+  <!-- P3 -->
+  <section class="page" id="p3">
+    <div class="eyebrow"><span class="pn">P.03</span><span class="dot"></span><span>Agenda · 六个模块</span></div>
+    <h2><span class="en">Agenda</span> <span class="zh">这一周的六个模块</span></h2>
+    <div class="tw"><table>
+      <thead><tr><th class="n">#</th><th>模块</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td class="n">1</td><td>Why Linear Regression?</td><td>动机，它在 ML 里的位置</td></tr>
+        <tr><td class="n">2</td><td>The Model</td><td>一元线性回归 <span class="k">y = wx + b</span></td></tr>
+        <tr><td class="n">3</td><td>Measuring Error</td><td>残差与代价函数</td></tr>
+        <tr><td class="n">4</td><td>Gradient Descent</td><td>机器怎么找到最佳拟合线</td></tr>
+        <tr><td class="n">5</td><td>Beyond One Feature</td><td>多元回归与正规方程</td></tr>
+        <tr><td class="n">6</td><td>Tutorial &amp; Practical</td><td>手算推导 + 代码实现</td></tr>
+      </tbody>
+    </table></div>
+    <div class="call warn"><div class="lbl">⚠ 别跳</div><div class="bd">
+      <p>备注特别提醒：后面的计算<mark>全部建立在前面的定义和记号之上</mark>。所以第 6 页的记号（notation）那一页千万别跳，不然后面全是坑。</p>
+    </div></div>
+  </section>
+
+  <!-- P4 -->
+  <section class="page" id="p4">
+    <div class="eyebrow"><span class="pn">P.04</span><span class="dot"></span><span>Why Predict a Number?</span></div>
+    <h2><span class="en">Why Predict a Number?</span> <span class="zh">为什么要预测一个数字</span></h2>
+    <p class="core"><b>核心一句话：</b>很多真实问题要预测的是一个<mark>连续量（continuous quantity）</mark>，而不是一个类别。</p>
+    <p>课件给了四个例子：</p>
+    <ul>
+      <li><strong>Housing prices</strong> — 从面积、位置、房龄预测售价</li>
+      <li><strong>Stock trends</strong> — 从历史信号估计未来价值</li>
+      <li><strong>Weather</strong> — 预测明天的气温</li>
+      <li><strong>Student outcomes</strong> — 从学习时长预测考试分数</li>
+    </ul>
+    <p>这一页最重要的是那张散点图（house size vs. price），它是<term>本主题的贯穿例子</term>：</p>
+    <figure>
+      <svg viewBox="0 0 560 300" role="img" aria-label="房屋面积与价格的散点图，呈明显上升趋势">
+        <line class="grid" x1="60" y1="60" x2="520" y2="60"/><line class="grid" x1="60" y1="150" x2="520" y2="150"/>
+        <line class="ax" x1="60" y1="30" x2="60" y2="256"/><line class="ax" x1="60" y1="256" x2="520" y2="256"/>
+        <text class="axl" x="52" y="60" text-anchor="end">300</text>
+        <text class="axl" x="52" y="154" text-anchor="end">200</text>
+        <text class="axl" x="52" y="260" text-anchor="end">120</text>
+        <text class="axl" x="60" y="276" text-anchor="middle">1.0</text>
+        <text class="axl" x="244" y="276" text-anchor="middle">2.0</text>
+        <text class="axl" x="428" y="276" text-anchor="middle">3.0</text>
+        <text class="axl" x="516" y="276" text-anchor="end">size (k sqft)</text>
+        <text class="axl" x="30" y="26" text-anchor="middle">price</text>
+        <circle class="dot" cx="60" cy="242.7" r="5"/><circle class="dot" cx="96.8" cy="210" r="5"/>
+        <circle class="dot" cx="152" cy="193.6" r="5"/><circle class="dot" cx="207.2" cy="182.7" r="5"/>
+        <circle class="dot" cx="244" cy="150" r="5"/><circle class="dot" cx="299.2" cy="122.7" r="5"/>
+        <circle class="dot" cx="354.4" cy="119.5" r="5"/><circle class="dot" cx="409.6" cy="84.5" r="5"/>
+        <circle class="dot" cx="464.8" cy="57.3" r="5"/><circle class="dot" cx="520" cy="46.4" r="5"/>
+      </svg>
+      <figcaption>10 个样本（m = 10）：面积越大价格越高，但点不落在任何一条直线上。</figcaption>
+    </figure>
+    <div class="tw"><table class="data"><caption>House size × price（贯穿例子）</caption>
+      <thead><tr><th class="n">Size (1000 sqft)</th><th class="n">Price ($1000s)</th></tr></thead>
+      <tbody>
+        <tr><td class="n">1.0</td><td class="n">145</td></tr><tr><td class="n">1.2</td><td class="n">175</td></tr>
+        <tr><td class="n">1.5</td><td class="n">190</td></tr><tr><td class="n">1.8</td><td class="n">200</td></tr>
+        <tr><td class="n">2.0</td><td class="n">230</td></tr><tr><td class="n">2.3</td><td class="n">255</td></tr>
+        <tr><td class="n">2.6</td><td class="n">258</td></tr><tr><td class="n">2.9</td><td class="n">290</td></tr>
+        <tr><td class="n">3.2</td><td class="n">315</td></tr><tr><td class="n">3.5</td><td class="n">325</td></tr>
+      </tbody>
+    </table></div>
+    <p>看两件事：</p>
+    <ol>
+      <li><strong>有明显的上升趋势</strong> — 面积越大价格越高，所以「用直线拟合」是合理的。</li>
+      <li><strong>点不会完全落在任何一条直线上</strong> — 这就是整门课存在的理由。真实数据有噪声和没测到的因素，<mark>目标是抓住趋势，而不是追逐每一个点</mark>。</li>
+    </ol>
+    <div class="call warn"><div class="lbl">⚠ 初学易错</div><div class="bd">
+      <p>完美穿过所有点<strong>不是</strong>目标，那叫<mark>过拟合（overfitting）</mark>。</p>
+    </div></div>
+    <div class="call trivia"><div class="lbl">◇ 小八卦</div><div class="bd">
+      <p>"regression" 这个词来自 <term>Galton</term> 19 世纪研究身高的工作——高个父母的孩子会「回归」到平均值。这个名字纯属历史遗留，跟方法本身在做什么没关系。</p>
+    </div></div>
+    <details class="check"><summary><span class="st">Study check</span><span>从照片预测一个人的年龄——回归还是分类？</span><span class="arw">▸</span></summary>
+      <div class="ans"><p><strong>回归。</strong>年龄是连续数值（23.5 岁是有意义的）。但注意：如果任务是分成「儿童 / 青年 / 中年 / 老年」四档，那就变成<term>分类</term>了。<mark>任务类型取决于输出的形式，不取决于输入。</mark></p></div>
+    </details>
+  </section>
+
+  <!-- P5 -->
+  <section class="page" id="p5">
+    <div class="eyebrow"><span class="pn">P.05</span><span class="dot"></span><span>Regression in the ML Landscape</span></div>
+    <h2><span class="en">Regression vs Classification</span> <span class="zh">回归在机器学习版图中的位置</span></h2>
+    <p class="core"><b>核心一句话：</b>监督学习分成两大家族，<mark>分界线只有一条——你要预测的 y 是什么类型</mark>。</p>
+    <div class="tw"><table>
+      <thead><tr><th></th><th>Regression 回归</th><th>Classification 分类</th></tr></thead>
+      <tbody>
+        <tr><td>预测什么</td><td><mark>连续值</mark> continuous</td><td><mark>离散类别</mark> discrete</td></tr>
+        <tr><td>输出</td><td>一个实数 real number</td><td>一个标签 / 类 label</td></tr>
+        <tr><td>例子</td><td>房价（$）、气温（°C）、分数</td><td>垃圾邮件、猫/狗/鸟、及格与否</td></tr>
+      </tbody>
+    </table></div>
+    <h3><span class="num">1</span>两者都是监督学习</h3>
+    <p>共同点是：训练时我们已经<strong>握有正确答案</strong>。整条流水线也完全一样——</p>
+    <div class="fml">数据 → 带参数的模型 → <span class="em">代价函数</span> → 优化器 → 评估</div>
+    <p>变的<mark>只是代价函数和输出的形式</mark>，底层哲学没变。所以你学会线性回归这套流程，下一个主题学分类时只是换零件，不用重学思路。</p>
+    <h3><span class="num">2</span>「看起来是数字，其实是类别」的陷阱</h3>
+    <div class="call warn"><div class="lbl">⚠ 数据处理坑</div><div class="bd">
+      <p>邮编 <span class="k">5005</span> 存成数字，但它是个<term>标签</term>。<span class="k">5006</span> 并不是「比 5005 多一」，把邮编拿去<strong>求平均是没有意义的</strong>。同样的坑：学号、电话号码、球衣号码。</p>
+      <p><strong>判断方法：</strong>问自己「<mark>这两个数相减 / 求平均有意义吗？</mark>」没有意义 → 它是类别，不是连续量。</p>
+    </div></div>
+    <div class="call mem"><div class="lbl">↺ 回到 P4 复习</div><div class="bd">
+      <ul style="margin:0">
+        <li>回归预测<strong>连续量</strong>，不是类别。</li>
+        <li>散点图有上升趋势，但点不精确落在直线上 → <mark>抓趋势，不追点</mark>。</li>
+        <li>"regression" 的名字来自 Galton 身高研究，是历史遗留。</li>
+      </ul>
+    </div></div>
+  </section>
+
+  <!-- P6 -->
+  <section class="page" id="p6">
+    <div class="eyebrow"><span class="pn">P.06</span><span class="dot"></span><span>Setting Up the Problem · 记号</span></div>
+    <h2><span class="en">Setting Up the Problem</span> <span class="zh">问题的建立与记号</span></h2>
+    <div class="call key"><div class="lbl">★ 全学期地基</div><div class="bd">
+      <p>备注明说：这套记号会用<mark>一整个学期</mark>，现在马虎，之后每个主题都会混乱。</p>
+    </div></div>
+    <p>我们从一个<term>训练集（training set）</term>开始——一堆「输入 + 已知输出」的配对。</p>
+    <div class="tw"><table><caption>五个记号 Notation</caption>
+      <thead><tr><th>记号</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td class="k">x</td><td>输入特征 input feature，例如房屋面积</td></tr>
+        <tr><td class="k">y</td><td>目标 / 输出值 target，例如价格</td></tr>
+        <tr><td><span class="k">(x⁽ⁱ⁾, y⁽ⁱ⁾)</span></td><td>第 <em>i</em> 个训练样本 the i-th example</td></tr>
+        <tr><td class="k">m</td><td>训练样本的数量 number of examples</td></tr>
+        <tr><td class="k">ŷ</td><td>模型的预测值 predicted value（y-hat）</td></tr>
+      </tbody>
+    </table></div>
+    <h3>三个必须记牢的坑</h3>
+    <div class="call warn"><div class="lbl">⚠ 坑 1</div><div class="bd">
+      <p><strong>上标是索引，不是指数。</strong>课件原话点名「头两周最常见的记号误读」，会悄无声息毁掉你后面的代数推导。</p>
+      <p><span class="k">x⁽²⁾</span> = 数据集里的<mark>第二栋房子</mark>；&nbsp; <span class="k">x²</span> = x 的平方。写的时候上标加括号 <span class="k">x⁽²⁾</span>，就是为了跟平方区分。</p>
+    </div></div>
+    <div class="call warn"><div class="lbl">⚠ 坑 2</div><div class="bd">
+      <p><strong>m 和 n 别搞反。</strong> <span class="k">m</span> = 样本数 = 表格<mark>行数</mark>（有几栋房子）；<span class="k">n</span> = 特征数 = 输入<mark>列数</mark>（每栋看几个属性），到第 5 模块「多元回归」才登场。</p>
+    </div></div>
+    <div class="call mem"><div class="lbl">✎ 记忆法</div><div class="bd">
+      <p><span class="k">m</span> 数 exa<strong>m</strong>ples，<span class="k">n</span> 数 features 的维度。互换是常见失分点。</p>
+    </div></div>
+    <div class="call warn"><div class="lbl">⚠ 坑 3</div><div class="bd">
+      <p><strong>y 和 ŷ 是两个东西。</strong> <span class="k">y</span> = 真实观测值；<span class="k">ŷ</span> = 模型猜出来的值。<mark>整门课的全部工程，就是想办法让 ŷ 尽量接近 y</mark>——后面的残差、代价函数、梯度下降全围绕这句展开。</p>
+    </div></div>
+    <details class="check"><summary><span class="st">Study check</span><span>课件原题：表里 x⁽³⁾ 和 y⁽³⁾ 分别是什么？</span><span class="arw">▸</span></summary>
+      <div class="ans"><p>第 3 行：<span class="k">x⁽³⁾ = 1.5</span>（千平方英尺），<span class="k">y⁽³⁾ = 190</span>（千美元）。<mark>注意不是 1.0² 也不是第 0 行</mark>——索引从 1 开始数。</p></div>
+    </details>
+  </section>
+
+  <!-- P7 -->
+  <section class="page" id="p7">
+    <div class="eyebrow"><span class="pn">P.07</span><span class="dot"></span><span>The Simple Linear Regression Model</span></div>
+    <h2><span class="en">The Model</span> <span class="zh">一元线性回归模型</span></h2>
+    <div class="fml"><span class="em">f</span><sub style="font-size:.62em">w,b</sub>(x) = <span class="em">w</span>x + <span class="em">b</span> &nbsp;&nbsp;（也写作 ŷ = wx + b）</div>
+    <h3><span class="num">1</span>先卸下心理负担</h3>
+    <p>课件备注开门见山：这就是你中学学过的 <span class="k">y = mx + c</span>，只是换了字母。</p>
+    <div class="tw"><table>
+      <thead><tr><th>中学</th><th>机器学习</th></tr></thead>
+      <tbody>
+        <tr><td><span class="k">m</span>（斜率）</td><td><span class="k">w</span> — weight / slope，权重 / 斜率</td></tr>
+        <tr><td><span class="k">c</span>（截距）</td><td><span class="k">b</span> — bias / intercept，偏置 / 截距</td></tr>
+      </tbody>
+    </table></div>
+    <p><mark>没有任何新东西。</mark>真正新的是「怎么<strong>自动</strong>找到最好的 w 和 b」，那是后面几页的事。</p>
+    <h3><span class="num">2</span>w 和 b 各自是什么</h3>
+    <ul>
+      <li><strong>w — 斜率</strong>：y 每随 x 变化一个单位而改变多少。房价里回答：<mark>每多 1000 平方英尺，预测价格增加多少</mark>。</li>
+      <li><strong>b — 截距</strong>：x = 0 时的预测值。</li>
+    </ul>
+    <div class="call warn"><div class="lbl">⚠ 重点</div><div class="bd">
+      <p><span class="k">b</span> 常常在<strong>物理上没有意义</strong>。面积为 0 的房子并不存在，也没有价格。但这完全没问题——<mark>b 只是一个垂直偏移量，让直线坐到正确的高度上</mark>，它本身不需要能被解释。很多学生在这里纠结，不必。</p>
+    </div></div>
+    <h3><span class="num">3</span>关键术语：参数 vs 超参数</h3>
+    <div class="tw"><table>
+      <thead><tr><th></th><th>参数 Parameters</th><th>超参数 Hyperparameters</th></tr></thead>
+      <tbody>
+        <tr><td>例子</td><td><span class="k">w</span>、<span class="k">b</span></td><td>学习率 learning rate</td></tr>
+        <tr><td>谁定的</td><td><mark>从数据中学出来</mark></td><td><mark>我们自己选</mark></td></tr>
+        <tr><td>算法会调吗</td><td>会</td><td>不会，算法从不碰它</td></tr>
+      </tbody>
+    </table></div>
+    <p>一句话：<strong>参数是学出来的，超参数是我们挑的。</strong>考试常考，别混。</p>
+    <div class="call lang"><div class="lbl">§ 去神秘化</div><div class="bd">
+      <p><strong>训练 = </strong>在所有可能的 <span class="k">(w, b)</span> 组合里搜索，找出最好的那一对。没有更玄的东西。整个第 3、4 模块（代价函数、梯度下降）只是在回答「什么叫最好」和「怎么高效地搜」。</p>
+    </div></div>
+    <div class="call mem"><div class="lbl">✎ 好习惯</div><div class="bd">
+      <p>单位检查：x 是千平方英尺、y 是千美元，那么 <span class="k">w</span> 的单位 = 千美元 / 千平方英尺。养成检查单位的习惯，能帮你抓出很多计算错误。</p>
+    </div></div>
+    <details class="check"><summary><span class="st">Study check</span><span>增大 w 会让直线怎么变？增大 b 呢？</span><span class="arw">▸</span></summary>
+      <div class="ans"><p>增大 <span class="k">w</span> → 直线<mark>旋转变陡</mark>（steeper）；增大 <span class="k">b</span> → 直线<mark>整体向上平移</mark>。课件说这 30 秒互动很值——到后面「代价曲面」那页，你才会明白我们是在调<term>两个互相独立</term>的东西。</p></div>
+    </details>
+  </section>
+
+  <!-- P8 -->
+  <section class="page" id="p8">
+    <div class="eyebrow"><span class="pn">P.08</span><span class="dot"></span><span>Visualizing the Best-Fit Line</span></div>
+    <h2><span class="en">The Best-Fit Line</span> <span class="zh">可视化最佳拟合线</span></h2>
+    <p>这一页把 P7 的公式画出来了。拟合出的直线是：</p>
+    <div class="fml"><span class="em">f</span>(x) = 72x + 78 &nbsp;&nbsp;（w = 72，b = 78）</div>
+    <figure>
+      <svg viewBox="0 0 560 300" role="img" aria-label="散点图叠加拟合直线 f(x)=72x+78，点与线之间的竖直间隙就是误差">
+        <line class="grid" x1="60" y1="60" x2="520" y2="60"/><line class="grid" x1="60" y1="150" x2="520" y2="150"/>
+        <line class="ax" x1="60" y1="30" x2="60" y2="256"/><line class="ax" x1="60" y1="256" x2="520" y2="256"/>
+        <text class="axl" x="52" y="60" text-anchor="end">300</text>
+        <text class="axl" x="52" y="154" text-anchor="end">200</text>
+        <text class="axl" x="52" y="260" text-anchor="end">120</text>
+        <text class="axl" x="60" y="276" text-anchor="middle">1.0</text>
+        <text class="axl" x="244" y="276" text-anchor="middle">2.0</text>
+        <text class="axl" x="428" y="276" text-anchor="middle">3.0</text>
+        <!-- residual guides -->
+        <line class="res" x1="60" y1="242.7" x2="60" y2="237.3"/><line class="res" x1="96.8" y1="210" x2="96.8" y2="217.9"/>
+        <line class="res" x1="152" y1="193.6" x2="152" y2="188.8"/><line class="res" x1="207.2" y1="182.7" x2="207.2" y2="164.4"/>
+        <line class="res" x1="244" y1="150" x2="244" y2="150.5"/><line class="res" x1="299.2" y1="122.7" x2="299.2" y2="127.7"/>
+        <line class="res" x1="354.4" y1="119.5" x2="354.4" y2="105"/><line class="res" x1="409.6" y1="84.5" x2="409.6" y2="82.2"/>
+        <line class="res" x1="464.8" y1="57.3" x2="464.8" y2="59.5"/><line class="res" x1="520" y1="46.4" x2="520" y2="36.7"/>
+        <line class="fit" x1="60" y1="237.3" x2="520" y2="36.7"/>
+        <circle class="dot" cx="60" cy="242.7" r="5"/><circle class="dot" cx="96.8" cy="210" r="5"/>
+        <circle class="dot" cx="152" cy="193.6" r="5"/><circle class="dot" cx="207.2" cy="182.7" r="5"/>
+        <circle class="dot" cx="244" cy="150" r="5"/><circle class="dot" cx="299.2" cy="122.7" r="5"/>
+        <circle class="dot" cx="354.4" cy="119.5" r="5"/><circle class="dot" cx="409.6" cy="84.5" r="5"/>
+        <circle class="dot" cx="464.8" cy="57.3" r="5"/><circle class="dot" cx="520" cy="46.4" r="5"/>
+      </svg>
+      <figcaption>青点 = 实际房价；橙线 = 模型预测；点线之间的<strong>竖直间隙 = 误差</strong>（下一页要测量的东西）。</figcaption>
+    </figure>
+    <div class="tw"><table>
+      <thead><tr><th>图上元素</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>青色点</td><td>实际观测到的房价</td></tr>
+        <tr><td>橙色线</td><td>模型在每个面积值上的预测</td></tr>
+        <tr><td>竖直间隙</td><td><mark>误差</mark>——下一页要正式测量的东西</td></tr>
+      </tbody>
+    </table></div>
+    <div class="tw"><table class="data"><caption>第三列是模型算出来的预测值</caption>
+      <thead><tr><th class="n">Size x</th><th class="n">Actual y</th><th class="n">Predicted ŷ = 72x+78</th></tr></thead>
+      <tbody>
+        <tr><td class="n">1.0</td><td class="n">145</td><td class="n"><span class="hl">150.0</span></td></tr>
+        <tr><td class="n">1.5</td><td class="n">190</td><td class="n"><span class="hl">186.0</span></td></tr>
+        <tr><td class="n">2.0</td><td class="n">230</td><td class="n"><span class="hl">222.0</span></td></tr>
+        <tr><td class="n">2.6</td><td class="n">258</td><td class="n"><span class="hl">265.2</span></td></tr>
+        <tr><td class="n">3.2</td><td class="n">315</td><td class="n"><span class="hl">308.4</span></td></tr>
+        <tr><td class="n">3.5</td><td class="n">325</td><td class="n"><span class="hl">330.0</span></td></tr>
+      </tbody>
+    </table></div>
+    <p>自己验一下：<span class="k">x = 2.0 → 72×2.0 + 78 = 222</span> ✓</p>
+    <h3>三个重点</h3>
+    <ol>
+      <li><strong>直线在「没见过的面积」上也能预测。</strong>表里没有 2.5，但直线照样算：<span class="k">72×2.5 + 78 = 258</span>。这叫<mark>泛化（generalisation）</mark>——模型有用的根本原因。</li>
+      <li><strong>没有任何一条直线能穿过全部 10 个点。</strong>这条线是一个<term>折中</term>，同时靠近所有点。回想 P4：抓趋势，不追点。</li>
+      <li><strong>大白话解释：</strong>每多 1000 平方英尺，关联着大约多 <span class="k">7.2 万美元</span>，在 <span class="k">7.8 万美元</span>的基准偏移之上。</li>
+    </ol>
+    <div class="call lang"><div class="lbl">§ 语言纪律</div><div class="bd">
+      <p>说 <strong>associated with（关联）</strong>，<mark>不要说 causes（导致）</mark>。把房子扩建 1000 平方英尺，并不会可靠地给它加上 7.2 万美元的价值。模型学到的只是观测数据里的一个<term>模式</term>，其中混杂着大量未被区分的因素（好地段、房龄、装修）。这是<strong>相关 ≠ 因果</strong>在本课的第一次出现，写报告和答题都要注意用词。</p>
+    </div></div>
+    <div class="call key"><div class="lbl">★ 这页的真正作用</div><div class="bd">
+      <p>这条线看上去很好，于是逼出下一页的问题：<mark>「好」到底按什么精确定义来衡量？</mark>——这就是 P9 开始的 residuals 和 cost function。</p>
+    </div></div>
+    <details class="check"><summary><span class="st">Study check</span><span>你会怎么去衡量这条线有多好？（先自己想 10 秒）</span><span class="arw">▸</span></summary>
+      <div class="ans"><p>答案就是下一页：用每个点的<mark>残差（residual）= y − ŷ</mark>，再把所有残差的<strong>平方</strong>加起来，就是<term>代价函数</term>。越小 = 这条线越好。</p></div>
+    </details>
+  </section>
+
+  <div class="endnote">
+    <p style="margin:0"><b>这是样张（P1–P8）。</b>风格 OK 的话，我按这套把 <b>M1T2 全 27 页</b>做满（residuals → 代价函数 → 梯度下降 → 多元回归 / 正规方程 → tutorial / practical），再接着做你贴的 <b>T1、practical Exercise 3</b>。要调的地方（字号、配色、亮/暗默认、某类标注卡的样式）现在说，越早定越省事。</p>
+  </div>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  var pages=[["p1","封面"],["p2","Acknowledgement"],["p3","Agenda"],["p4","Why Predict a Number"],
+    ["p5","Regression vs Classification"],["p6","Setting Up · 记号"],["p7","The Model y=wx+b"],["p8","Best-Fit Line"]];
+  var toc=document.getElementById('tocList'), jump=document.getElementById('jump');
+  pages.forEach(function(p,i){
+    var a=document.createElement('a');a.href='#'+p[0];a.dataset.id=p[0];
+    a.innerHTML='<span class="n">'+String(i+1).padStart(2,'0')+'</span><span>'+p[1]+'</span>';
+    toc.appendChild(a);
+    var o=document.createElement('option');o.value=p[0];o.textContent='P.'+String(i+1).padStart(2,'0')+' · '+p[1];
+    jump.appendChild(o);
+  });
+  jump.addEventListener('change',function(){var el=document.getElementById(this.value);if(el)el.scrollIntoView({behavior:'smooth'});});
+
+  // theme toggle (persist, guarded)
+  var root=document.documentElement, btn=document.getElementById('themeBtn');
+  function sysDark(){return matchMedia('(prefers-color-scheme:dark)').matches;}
+  function cur(){var t=root.getAttribute('data-theme');return t||(sysDark()?'dark':'light');}
+  function paint(){var d=cur()==='dark';btn.textContent=d?'☀ 亮色':'☾ 暗色';}
+  try{var s=localStorage.getItem('t2r-theme');if(s)root.setAttribute('data-theme',s);}catch(e){}
+  paint();
+  btn.addEventListener('click',function(){var next=cur()==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);try{localStorage.setItem('t2r-theme',next);}catch(e){}paint();});
+
+  // scroll progress
+  var bar=document.getElementById('bar');
+  function prog(){var h=document.documentElement,sc=h.scrollTop||document.body.scrollTop,
+    max=h.scrollHeight-h.clientHeight;bar.style.width=(max>0?sc/max*100:0)+'%';}
+  addEventListener('scroll',prog,{passive:true});prog();
+
+  // active section in TOC
+  var links=[].slice.call(toc.querySelectorAll('a'));
+  var map={};links.forEach(function(a){map[a.dataset.id]=a;});
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){ if(e.isIntersecting){
+        links.forEach(function(a){a.classList.remove('on');});
+        var a=map[e.target.id];if(a){a.classList.add('on');
+          try{jump.value=e.target.id;}catch(x){}}
+      }});
+    },{rootMargin:'-45% 0px -50% 0px'});
+    pages.forEach(function(p){var el=document.getElementById(p[0]);if(el)io.observe(el);});
+  }
+})();
+</script>

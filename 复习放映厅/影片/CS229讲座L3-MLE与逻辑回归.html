@@ -1,0 +1,774 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 第三讲 放映厅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#77849A; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(17px,2.6vw,38px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:5vh}
+
+#big{font-family:var(--mono);font-size:clamp(32px,6vw,88px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(82ch,93%);width:100%;max-height:38vh;overflow-y:auto;margin-bottom:58px;display:flex;flex-direction:column;align-items:center;pointer-events:auto;-webkit-mask-image:none}
+#cap{text-align:center;font-size:clamp(14px,1.6vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:1.05em 0 0;max-width:min(76ch,100%);text-align:left;
+  font-size:clamp(11.5px,1.14vw,15.5px);font-weight:300;line-height:1.78;color:#93A1B5;
+  border-top:1px solid #1E2634;padding-top:.9em;transition:opacity .4s ease}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(96ch,92%);max-height:84vh;overflow:auto;
+  background:rgba(13,18,26,.94);border:1px solid #253044;border-radius:14px;
+  padding:26px 30px 24px;transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 5px}
+#sum h3{font-size:clamp(18px,2.2vw,29px);font-weight:800;margin:0 0 16px;letter-spacing:-.02em;line-height:1.2}
+#sum .rows{display:grid;gap:12px}
+@media(min-width:900px){#sum .rows{grid-template-columns:1fr 1fr;gap:13px 26px}}
+#sum .row{border-left:2px solid #2A3546;padding-left:13px}
+#sum .rk{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 3px}
+#sum .rv{font-size:clamp(12px,1.14vw,15.5px);font-weight:300;line-height:1.72;color:#C3CEDD;margin:0}
+#sum .rv b{color:#F0F4FA;font-weight:600}
+#sum .rv i{font-style:normal;color:var(--blue)}
+#sum .rv em{font-style:normal;color:var(--green)}
+#sum .rv s{text-decoration:none;color:var(--coral)}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(70ch,90%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:24px 28px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(14px,1.55vw,21px);font-weight:600;margin:0 0 16px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:8px}
+#quiz button{font-family:var(--sans);font-size:clamp(12px,1.24vw,16.5px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:11px 16px;cursor:pointer;text-align:left;line-height:1.5;
+  transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:16px 0 0;font-size:clamp(12px,1.18vw,15.5px);font-weight:300;
+  color:#93A1B5;line-height:1.72;border-top:1px solid #1E2634;padding-top:13px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(26px,4.9vw,70px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.06;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.35vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:60ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.2vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+.tok.mut{color:var(--dimmer)}
+
+#strip{position:fixed;z-index:6;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8.5px;color:var(--dimmer);letter-spacing:.08em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.pt.q{fill:none;stroke:var(--yellow);stroke-width:2.6;stroke-dasharray:4 4}
+.fit{stroke:var(--blue);stroke-width:3.2;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 10px rgba(84,169,247,.5))}
+.fit.bad{stroke:var(--coral);filter:drop-shadow(0 0 10px rgba(255,124,135,.5))}
+.curve{stroke:var(--green);stroke-width:3.2;fill:none;filter:drop-shadow(0 0 10px rgba(91,221,168,.45))}
+.bell{fill:var(--violet);fill-opacity:.16;stroke:var(--violet);stroke-width:2.4}
+.res{stroke:var(--coral);stroke-width:2;stroke-dasharray:5 4}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+
+/* ── caption placement: P cycles bottom / top / side ──────────────────────
+   The caption block carries a translucent backdrop so it stays readable even
+   when it lands on top of the artwork; side mode also shifts the scene left
+   so the two never fight for the same pixels. */
+#capWrap{background:rgba(8,11,17,.74);backdrop-filter:blur(7px);
+  -webkit-backdrop-filter:blur(7px);border-radius:13px;padding:13px 20px 15px}
+#capL.pos-top{align-items:flex-start}
+#capL.pos-top #capWrap{margin-bottom:0;margin-top:3.4vh}
+#capL.pos-side{align-items:center;justify-content:flex-end}
+#capL.pos-side #capWrap{margin-bottom:0;margin-right:2vw;max-width:min(44ch,36%);align-items:flex-start}
+#capL.pos-side #cap{text-align:left}
+#capL.pos-side #narr{max-width:100%}
+/* Percentage translations on an SVG element resolve unreliably, so side mode
+   narrows the canvas instead: preserveAspectRatio re-centres the artwork
+   inside the smaller box, which moves it clear of the caption panel. */
+svg#scene{transition:width .5s cubic-bezier(.2,.7,.3,1)}
+body.scene-shift svg#scene{width:64%;right:auto}
+#posHint{position:fixed;left:50%;top:16px;transform:translateX(-50%);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--yellow);background:rgba(8,11,17,.86);padding:5px 13px;border-radius:20px;
+  opacity:0;transition:opacity .3s ease;pointer-events:none;z-index:9}
+#posHint.show{opacity:1}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解 · P 字幕位置</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var VID="https://www.youtube.com/watch?v=het9HFqo1TQ&t=";
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();}
+
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(500).delay(230).attr("opacity",1);}
+function frame(o){o=o||{};var P=o.P||{l:380,r:900,t:150,b:490};
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);
+  if(o.xlab)note(o.xlab,P.r,P.b+32,"","end");
+  if(o.ylab)note(o.ylab,P.l-8,P.t-14,"","end");
+  return P;}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||8);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*40;}).attr("r",r||8);}
+function path(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(1000).attr("stroke-dashoffset",0);}}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+function fn(f,x0,x1,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=x0+(x1-x0)*t;p.push([x,f(x)]);}return p;}
+function bell(cx,cy,sc,h){
+  var pts=fn(function(x){return cy-h*Math.exp(-Math.pow((x-cx)/sc,2)/2);},cx-3.2*sc,cx+3.2*sc,60);
+  var d="M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L")+
+        "L"+(cx+3.2*sc).toFixed(1)+","+cy+"L"+(cx-3.2*sc).toFixed(1)+","+cy+"Z";
+  var e=gS.append("path").attr("class","bell").attr("d",d);
+  if(!FAST)e.attr("opacity",0).transition().duration(700).attr("opacity",1);}
+
+/* ── text layers ── */
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  if(FAST){cap.innerHTML=h;cap.classList.remove("off");return;}
+  cap.classList.add("off");setTimeout(function(){cap.innerHTML=h;cap.classList.remove("off");},150);}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:800,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(11px)"},{opacity:1,transform:"none"}],
+      {duration:540,delay:260,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+a+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;
+  if(FAST){narrEl.innerHTML=t;narrEl.classList.remove("off");return;}
+  narrEl.classList.add("off");setTimeout(function(){narrEl.innerHTML=t;narrEl.classList.remove("off");},150);}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+/* ═══════════ THE FILM ═══════════ */
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();
+  KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){
+  clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){
+  clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* ── 开场 ── */
+KP("开场",function(){
+S(0,function(){clearScene();setEq(null);
+  setTitle("Stanford CS229 · Lecture 3","为什么是平方误差<br>以及第一个分类器",
+    "14 个知识点 · 每个都有总结与检验 · 空格推进");},null);
+S(1320,function(){noTitle();clearScene();
+  boxNode(150,180,340,80,"0:00–0:22  局部加权回归","r");
+  boxNode(150,300,340,80,"0:22–1:05  概率解释 + 逻辑回归","g");
+  boxNode(150,420,340,80,"1:05–1:19  牛顿法","r");
+  note("本课不考",700,228,"r","start");
+  note("★ 全片核心 · 考纲重合最高",700,348,"g","start");
+  note("本课不考",700,468,"r","start");
+  setCap("<b>先划范围。</b>这一讲三段，中间那段<em>正好压在你的考纲上</em>。<br>它同时装着 <i>T2 Tutorial Q1</i> 和 <i>T3 Tutorial Q2</i> 两道原题。");},
+  "先说清取舍。<b>局部加权回归</b>（前 22 分钟）是一种非参数方法，你的课程完全不涉及；<b>牛顿法</b>（最后 14 分钟）是逻辑回归的另一种优化方式，本课也只讲梯度下降。<i>中间那 43 分钟才是重点</i>——它回答了 T2 遗留的那个问题「<s>为什么偏偏是平方误差</s>」，然后引出你 T3 的全部内容：sigmoid、逻辑回归、交叉熵梯度。");
+});
+
+/* ── 1 · 参数化与非参数化 ── */
+KP("1 · 参数化",function(){
+S(362,function(){clearScene();setEq(null);
+  boxNode(180,250,380,110,"参数化方法","b");
+  boxNode(720,250,380,110,"非参数化方法","v");
+  note("训练完就丢掉数据",370,410,"b");note("预测时还要用原始数据",910,410,"v");
+  note("线性回归 · 逻辑回归 · SVM",370,448,"");note("局部加权回归 · KNN",910,448,"");
+  setCap("一个术语上的分水岭：<b>训练完之后，还需要保留原始数据吗？</b>");},
+  "<b>参数化方法</b>训练结束后只需保存<i>固定数量的参数</i>（比如 θ₀ 和 θ₁），原始数据可以丢掉——预测时只用参数。<b>非参数化方法</b>则相反：预测时<s>还要回头查原始数据</s>，所以模型的「大小」随训练集增长。你课程 M1 的所有算法都是参数化的；Module 2 的 DBSCAN 和 KNN 属于非参数化那一类。");
+S(555,function(){clearScene();var P=frame({xlab:"x",ylab:"y"});
+  var r=rng(9),p=[];
+  for(var i=0;i<22;i++){var x=400+i*22+r()*10;
+    p.push([x,400-70*Math.sin((x-400)/150)-r()*30]);}
+  dots(p);
+  setCap("<b>局部加权回归</b>的想法：预测某点时，<br>只<em>重点参考它附近的样本</em>，远处的样本权重压低。");},
+  "它给每个训练样本一个权重 w⁽ⁱ⁾，<i>离查询点越近权重越大</i>。这样即使全局是条曲线，每个局部也能用直线拟合得很好。控制「多近算近」的参数叫<b>带宽 τ</b>——τ 太小会过拟合（只看极少数邻居，被噪声带偏），τ 太大会欠拟合（退化成普通线性回归）。这个权衡和你课程里 SVM 的 <s>γ</s> 完全是同一类问题。");
+});
+SUM(555,1,{h:"参数化 vs 非参数化",
+ k:"分界在于<b>训练后还需不需要原始数据</b>。参数化方法只存固定数量的参数，数据可丢；非参数化方法预测时仍要查数据，模型规模随训练集增长。",
+ m:"局部加权回归给每个样本一个<i>随距离衰减的权重</i>，于是全局的曲线可以被一段段局部直线拟合。控制衰减速度的是<b>带宽 τ</b>。",
+ w:"<s>易错</s>：「非参数化」不是「没有参数」，而是<b>参数数量不固定、随数据增长</b>。另外 τ 的作用和 SVM 的 γ 类似——<i>太小过拟合、太大欠拟合</i>，不是越小越好。",
+ e:"<b>局部加权回归不在你的考纲内</b>，这一段只需知道术语区分即可。但「某个超参太小过拟合、太大欠拟合」这个模式在 T4 的 <i>C</i> 和 <i>γ</i> 上会考。"});
+QUIZ(555,1,{t:"你课程 M1 涉及的线性回归、逻辑回归、SVM，属于哪一类？",
+ o:["非参数化——因为它们需要大量数据","<b>参数化</b>——训练后只需保存固定数量的参数（w 和 b），原始数据可以丢掉",
+    "两者都不是","取决于数据量大小"],
+ a:1,
+ w:"判据是：<b>预测时还需不需要原始训练数据</b>。<br><br>线性回归训练完只留下 θ；SVM 稍微特殊——它只保留<i>支持向量</i>，数量远少于全体样本，但仍是有限且固定的，习惯上仍归为参数化。<br><br>典型的非参数化是 <s>KNN</s>：预测时必须遍历全部训练样本找最近邻，一条数据都不能丢。"});
+
+/* ── 2 · 遗留问题 ── */
+KP("2 · 为什么是平方",function(){
+S(1320,function(){clearScene();setEq(null);
+  setEq("$$J(\\theta)=\\tfrac12\\sum_i\\bigl(h_\\theta(x^{(i)})-y^{(i)}\\bigr)^2$$","top");
+  setBig("?","为什么偏偏是平方");
+  setCap("上一讲留了个问题没答：<br><b>误差为什么要平方？</b>为什么不是绝对值、不是四次方？");},
+  "上一讲给的理由是操作层面的：<i>平方能消符号，还能重罚大误差</i>。但这只解释了「平方可以」，没解释「<b>为什么应该</b>」。这一段 Ng 要给出一个更硬的理由——<s>在一组明确的概率假设下，最小二乘不是一个选择，而是唯一合理的结果</s>。这正是你 <b>T2 Tutorial Q1</b> 那道题问的东西。");
+});
+
+SUM(1320,2,{h:"遗留问题：平方误差的资格",
+ k:"上一讲给平方误差的理由是<b>操作层面的</b>——消符号、重罚大误差。但那只说明「平方<i>可以</i>」，没说明「<em>为什么应该</em>」。这一段要给出一个更硬的答案。",
+ m:"接下来的推导会证明：<b>在一组明确的概率假设下，最小二乘不是一个选择，而是唯一合理的结果</b>。这把一个看起来武断的工程决定，变成了有前提、有推导的<i>统计结论</i>。",
+ w:"<s>反过来也成立</s>：既然结论依赖前提，<b>前提不成立时平方误差就失去了这层理论支持</b>。所以答题时不能只写结论，必须把假设一起写出来。",
+ e:"<b>这正是 T2 Tutorial Q1 的问题背景</b>。那道题要求「逐步给出化简过程」并解释为什么最大化对数似然等价于最小化平方误差——本片知识点 3 到 7 就是完整的答案。"});
+QUIZ(1320,2,{t:"上一讲说「平方能消符号、还能重罚大误差」。这个理由<b>不够</b>在哪里？",
+ o:["这个理由完全错误","它只说明了平方<b>可以用</b>，没说明<em>为什么应该用它</em>而不是绝对值或四次方",
+    "平方其实不能消符号","大误差不该被重罚"],
+ a:1,
+ w:"那两条性质<b>绝对值损失也有</b>：|ε| 同样消符号；而四次方对大误差罚得更重。<br><br>所以「消符号 + 重罚大误差」<s>不足以把平方从一堆候选里挑出来</s>——它是一个合理性说明，不是一个推导。<br><br>接下来五个知识点给出的才是真正的答案：<em>假设 IID 高斯噪声，极大似然自动导出平方误差</em>。<br><br>而且这个答案还带来一个副产品——<b>换一个噪声分布，就换出一个不同的损失函数</b>（本片知识点 13 会回到这一点）。"});
+
+/* ── 3 · 误差项 ── */
+KP("3 · 误差项",function(){
+S(1444,function(){clearScene();setBig(null);
+  flip(T("y","y⁽ⁱ⁾")+T("e"," = ")+T("th","θᵀx⁽ⁱ⁾")+T("p"," + ")+T("eps","ε⁽ⁱ⁾","hl"));
+  setCap("先给数据一个<b>生成故事</b>：<br>真实值 = 线性部分 <i>加上</i> 一个<em>误差项 ε</em>。");},
+  "这一步是整段推导的起点，也是最容易被略过的一步。它假设<b>世界本身就是线性的</b>，我们看到的偏差全部来自 ε。ε 装的是什么？<i>所有没被特征捕捉到的因素</i>——房子的朝向、卖家急不急着出手、当天的心情，加上测量误差。这些东西太多太杂，无法一一建模，于是把它们打包成一个随机变量。");
+S(1560,function(){clearScene();var P=frame({xlab:"x",ylab:"y"});
+  path([[400,440],[890,200]]);
+  var r=rng(5),p=[];
+  for(var i=0;i<9;i++){var x=420+i*52,ybase=440-(x-400)*(240/490);
+    p.push([x,ybase+(r()-.5)*70]);}
+  dots(p);
+  p.forEach(function(q){var yb=440-(q[0]-400)*(240/490);
+    gS.append("line").attr("class","res").attr("x1",q[0]).attr("x2",q[0]).attr("y1",yb).attr("y2",q[1]);});
+  note("ε 就是这些偏离",640,530,"r");
+  setCap("图上那条线是<b>假想的真实关系</b>，<br>每个点偏离它的距离，就是那个样本的 <em>ε</em>。");},
+  "注意这个视角的转换：<b>之前我们把直线看成「拟合结果」，现在把它看成「真相」</b>，而观测到的点是真相加噪声。这个转换很关键——它让我们能<i>问一个概率问题</i>：如果真相是这条线，那我们恰好观测到这组点的可能性有多大？回答这个问题，就得到了最小二乘。");
+});
+SUM(1444,3,{h:"给数据一个生成故事",
+ k:"假设真实值由两部分组成：<b>确定的线性部分 θᵀx</b> 加上<b>随机的误差项 ε</b>。ε 打包了所有没被特征捕捉的因素与测量误差。",
+ m:"这是一次<i>视角转换</i>：直线不再是「拟合结果」，而被当成「<b>真相</b>」，观测点是真相加噪声。有了这个设定，才能问出概率问题——「若真相是这条线，观测到这组点的可能性有多大」。",
+ w:"<s>注意</s>：这是一个<b>假设</b>，不是事实。如果真实关系压根不是线性的，或者误差跟 x 有关（异方差），这个故事就不成立，后面推出的最小二乘也就失去了理论依据。",
+ e:"T2 Tutorial Q1 的题干正是从这个设定出发。答题时<b>务必先写出 y = θᵀx + ε 并说明 ε 代表什么</b>——这是推导的第一个得分点。"});
+QUIZ(1560,3,{t:"模型 y⁽ⁱ⁾ = θᵀx⁽ⁱ⁾ + ε⁽ⁱ⁾ 中，误差项 ε 主要代表什么？",
+ o:["模型算错的部分，应该通过调参消掉","<b>没被特征捕捉到的因素</b>（未建模的影响）<i>加上</i>测量误差",
+    "训练数据里的错误标注","梯度下降没收敛造成的残留"],
+ a:1,
+ w:"ε 装的是<b>结构性地无法用现有特征解释的部分</b>：房子的朝向、卖家心态、当天行情，再加上测量本身的误差。<br><br><s>它不是可以调参消掉的东西</s>——即使参数取到最优，ε 依然存在。这也是为什么任何模型都有误差下限（贝叶斯误差）。<br><br>把 ε 当成「模型的错误」是概念性错误，会导致误以为「训练得够久就能让 ε 归零」。"});
+
+/* ── 4 · 高斯假设 ── */
+KP("4 · 高斯假设",function(){
+S(1560,function(){clearScene();setEq(null);
+  bell(640,470,90,250);
+  note("ε",640,510,"v");note("0",640,500,"");
+  setEq("$$\\varepsilon^{(i)}\\sim\\mathcal{N}(0,\\sigma^2)$$","top");
+  setCap("<b>关键假设</b>：这些误差服从<em>均值为 0 的正态分布</em>。");},
+  "为什么假设正态？两个理由。<b>其一是中心极限定理</b>：ε 是<i>许多独立小因素之和</i>，而大量独立随机变量的和趋向正态分布——这让假设有了理论依据。<b>其二是数学上方便</b>，Ng 也坦承这一点。均值取 0 的含义是：<s>误差没有系统性偏向</s>，不会总是偏高或总是偏低；如果有，那部分应该被吸收进 θ₀。");
+S(1554,function(){clearScene();setEq(null);
+  boxNode(140,200,300,90,"独立","b");
+  boxNode(490,200,300,90,"同分布","g");
+  boxNode(840,200,300,90,"正态","v");
+  note("样本之间互不影响",290,340,"b");
+  note("每个 ε 用同一个 σ²",640,340,"g");
+  note("钟形，均值为 0",990,340,"v");
+  note("IID  ·  independently and identically distributed",640,440,"y");
+  setCap("完整的假设有三条：<b>独立</b>、<b>同分布</b>、<b>正态</b>。<br>合起来简称 <em>IID 高斯噪声</em>。");},
+  "三条缺一不可，而且各自都可能被现实违反。<b>独立</b>：时间序列数据里相邻样本高度相关，这条就不成立。<b>同分布（等方差）</b>：如果贵房子的价格波动比便宜房子大，那就是<i>异方差</i>，也不成立。<s>违反了会怎样？</s>——最小二乘依然能算，但它不再是极大似然估计，标准误差和置信区间都会失真。你课程 T2 Tutorial Q1 答案末尾那句「<b>若噪声假设改变，可能需要不同的损失或加权</b>」说的正是这件事。");
+});
+SUM(1560,4,{h:"IID 高斯噪声：三条假设",
+ k:"三条一起：<b>独立</b>（样本互不影响）、<b>同分布</b>（共用同一个 σ²）、<b>正态</b>（钟形、均值 0）。合称 <em>IID 高斯噪声</em>，记作 ε ~ N(0, σ²)。",
+ m:"正态假设的理论依据是<b>中心极限定理</b>——ε 是许多独立小因素之和，而大量独立随机变量的和趋向正态。均值取 0 意味着<i>误差没有系统性偏向</i>，否则那部分应被 θ₀ 吸收。",
+ w:"<s>三条都可能被现实违反</s>：时间序列数据不独立；价格波动随规模变大就是异方差（不同分布）。违反后最小二乘<b>仍能计算</b>，但不再是极大似然估计，推断结论会失真。",
+ e:"<b>T2 Tutorial Q1 必考这三条</b>。答题时要完整写出「独立、等方差、正态」，并补上那句关键的限定：<i>若噪声假设改变，可能需要不同的损失函数或加权方案</i>。"});
+QUIZ(1554,4,{t:"极大似然等价于最小二乘，需要的假设是？",
+ o:["特征已标准化","<b>误差独立、服从同一个方差的正态分布</b>（IID 高斯）",
+    "模型至少包含一个二次项","学习率足够小"],
+ a:1,
+ w:"这是 <b>T2 Tutorial Q1</b> 的标准答案。三条缺一不可：<br><br>· <i>独立</i>——展开似然时才能把联合概率写成连乘<br>· <i>同方差</i>——所有项共用同一个 σ²，才能提到求和号外<br>· <i>正态</i>——指数里才会出现平方项<br><br>选项 A、C、D 都与这个等价性<s>毫无关系</s>：标准化影响的是收敛速度，多项式项属于模型选择，学习率属于优化设置。"});
+
+/* ── 5 · 似然函数 ── */
+KP("5 · 似然",function(){
+S(1860,function(){clearScene();setEq(null);
+  setEq("$$p\\bigl(y^{(i)}\\mid x^{(i)};\\theta\\bigr)=\\frac{1}{\\sqrt{2\\pi}\\,\\sigma}\\exp\\!\\left(-\\frac{(y^{(i)}-\\theta^{\\top}x^{(i)})^2}{2\\sigma^2}\\right)$$","top");
+  setCap("因为 ε 是正态的，<b>给定 x 时 y 也是正态的</b>——<br>只不过中心从 0 移到了 <em>θᵀx</em>。");},
+  "读这个式子的正确方式：<b>它是一个关于 y 的概率密度</b>，中心在 θᵀx，宽度由 σ 决定。注意分号——<i>p(y|x; θ)</i> 里的分号表示 θ 是<b>参数而非随机变量</b>。这是频率学派的写法；如果写成 p(y|x, θ)（逗号），就意味着把 θ 也当成随机变量，那是贝叶斯的立场。Ng 在课上专门提了这个记号上的讲究。");
+S(1843,function(){clearScene();
+  setEq("$$L(\\theta)=\\prod_{i=1}^{m}p\\bigl(y^{(i)}\\mid x^{(i)};\\theta\\bigr)$$","top");
+  setCap("把所有样本的概率<b>乘起来</b>，得到<em>似然函数</em> L(θ)。<br><span style='color:#77849A'>能连乘，正是因为假设了样本独立</span>");},
+  "<b>似然和概率是同一个式子，但问的问题相反</b>。概率问：给定参数，出现这组数据的可能性多大？似然问：<i>给定这组数据，哪个参数最可能产生它</i>？数据是固定的（已经观测到了），变量是 θ。<s>这个视角转换是极大似然估计的全部思想</s>——挑一个 θ，让「我们恰好看到这组数据」这件事变得最不奇怪。");
+});
+SUM(1860,5,{h:"似然：反过来问参数",
+ k:"给定 x 时 y 服从<b>以 θᵀx 为中心的正态分布</b>。把所有样本的密度<i>连乘</i>得到似然 L(θ)。<em>能连乘的依据正是独立假设</em>。",
+ m:"似然与概率是同一个式子、相反的问法：概率固定参数问数据，<b>似然固定数据问参数</b>。极大似然估计就是挑一个 θ，让已观测到的这组数据变得最不奇怪。",
+ w:"<s>记号讲究</s>：p(y|x; θ) 用<b>分号</b>，表示 θ 是参数不是随机变量（频率学派）；写成逗号则意味着把 θ 也当随机变量（贝叶斯）。考试里写分号更稳妥。",
+ e:"T2 Tutorial Q1 会要求你<b>写出似然函数并逐步化简</b>。第一步就是把连乘写出来，并说明「因为独立所以可以连乘」——这句话本身就是得分点。"});
+QUIZ(1843,5,{t:"似然函数 L(θ) 能写成各样本概率的<b>连乘</b>，依据是哪条假设？",
+ o:["误差服从正态分布","误差<b>相互独立</b>","误差均值为 0","所有误差共用同一个方差"],
+ a:1,
+ w:"<b>独立</b>是连乘的唯一依据：只有独立事件的联合概率才等于各自概率的乘积。<br><br>其余三条各有各的用处：<i>正态</i>让指数里出现平方项；<i>均值为 0</i> 保证没有系统性偏移；<i>同方差</i>让 σ² 能被提到求和号外当常数。<br><br>这四条在推导里<s>分工明确</s>，考试问「哪一条支撑哪一步」时不要混。"});
+
+/* ── 6 · 对数似然 ── */
+KP("6 · 对数似然",function(){
+S(2210,function(){clearScene();
+  flip(T("l","ℓ(θ)")+T("e"," = ")+T("log","log")+T("L"," L(θ)")+T("e2"," = ")+T("log2","log")+T("prod"," ∏","hl")+T("p"," p(y⁽ⁱ⁾|x⁽ⁱ⁾;θ)"));
+  setCap("直接对连乘求导很难看。<b>取对数</b>——<br>因为 log 是<em>单调递增</em>的，最大化 log L 和最大化 L <i>取到同一个 θ</i>。");},
+  "这是极大似然估计的标准操作，理由有三个。<b>其一</b>：log 单调递增，所以不改变最优点位置。<b>其二</b>：<i>log 把连乘变成连加</i>，求导立刻变简单。<b>其三</b>：数值上，几百个小于 1 的概率连乘会<s>下溢成 0</s>，取对数后变成加法就没有这个问题。第三条在工程上尤其重要。");
+S(2210,function(){clearScene();
+  flip(T("l","ℓ(θ)")+T("e"," = ")+T("sum","Σ","res")+T("log"," log")+T("p"," p(y⁽ⁱ⁾|x⁽ⁱ⁾;θ)"));
+  setCap("<b>连乘变成了连加。</b><br>这就是取对数最直接的好处。");},
+  "<i>log(ab) = log a + log b</i> 这条初等性质，在这里发挥了决定性作用。接下来把正态密度代进去，指数部分会被 log 直接剥掉——<b>这正是为什么正态假设和对数似然是绝配</b>。换成别的分布（比如拉普拉斯分布），剥出来的就不是平方项而是绝对值项，最终得到的也就不是最小二乘，而是最小绝对偏差。");
+S(2365,function(){clearScene();
+  flip(T("l","ℓ(θ)")+T("e"," = ")+T("c","m log(1/√(2π)σ)","mut")+T("m"," − ")+T("f","1/(2σ²)","mut")+T("sum"," Σ")+T("sq"," (y⁽ⁱ⁾−θᵀx⁽ⁱ⁾)²","hl"));
+  setCap("代入正态密度并展开。<br><b>第一项是常数</b>（不含 θ），<b>第二项前面有个负号</b>。");},
+  "看清这个式子的结构：<i>第一项 m·log(...) 完全不含 θ</i>，对 θ 求导为零，可以整个丢掉。<i>第二项前面的系数 −1/(2σ²) 是个负常数</i>。于是「最大化 ℓ(θ)」就等价于「<b>最小化后面那个求和</b>」——而那个求和，正是<s>误差平方和</s>。");
+});
+SUM(2210,6,{h:"取对数：连乘变连加",
+ k:"对似然取对数得到<b>对数似然 ℓ(θ)</b>。因为 log <i>单调递增</i>，最大化 ℓ 与最大化 L 得到同一个 θ；而 log 把<b>连乘变成连加</b>，求导立刻变简单。",
+ m:"代入正态密度后，log 把指数直接剥掉，留下<b>平方项</b>。式子变成「常数 − 正常数 × 误差平方和」——最大化它等价于<em>最小化误差平方和</em>。",
+ w:"<s>还有一个工程理由常被忽略</s>：几百个小于 1 的概率连乘会<b>数值下溢成 0</b>，取对数变成加法就避免了。这也是实践中一律用 log-likelihood 的原因。",
+ e:"T2 Tutorial Q1 要求「<b>逐步给出化简过程</b>」。三个关键步骤：① log 化乘为加 ② 代入正态密度、指数被剥掉 ③ 指出第一项是常数、第二项系数为负。<i>每一步都要写出来</i>。"});
+QUIZ(2365,6,{t:"若把噪声假设从正态换成<b>拉普拉斯分布</b>（密度含 e^(−|ε|/b)），极大似然会导出什么损失？",
+ o:["还是误差平方和","<b>误差绝对值之和</b>——因为 log 剥掉指数后留下的是 |ε| 而不是 ε²",
+    "误差的四次方和","不存在闭式的损失函数"],
+ a:1,
+ w:"这道题直击推导的<b>因果链</b>：<em>是噪声分布决定了损失函数</em>，不是反过来。<br><br>正态密度的指数里是 <i>−ε²/2σ²</i>，log 剥掉 exp 后留下<b>平方</b>；拉普拉斯的指数里是 <i>−|ε|/b</i>，剥完留下<b>绝对值</b>，于是导出<s>最小绝对偏差</s>（LAD）。<br><br>顺带一个实用结论：绝对值损失对<b>离群点更稳健</b>，因为它不像平方那样放大大误差。"});
+
+/* ── 7 · MLE ⇒ 最小二乘 ── */
+KP("7 · ★ MLE⇒最小二乘",function(){
+S(2433,function(){clearScene();
+  flip(T("max","最大化 ")+T("l","ℓ(θ)")+T("eq"," ⟺ ")+T("min","最小化 ")+T("sse","½ Σ (y⁽ⁱ⁾−θᵀx⁽ⁱ⁾)²","res"));
+  setCap("<b>结论。</b>在 IID 高斯噪声假设下，<br><em>极大似然估计和最小二乘是同一件事</em>。");},
+  "这就是上一讲那个问题的答案：<b>平方误差不是随便选的</b>，它是「假设噪声是 IID 高斯」这个前提的<i>数学推论</i>。这个结果的分量在于——它把一个看起来武断的工程选择，变成了一个有前提、有推导的<b>统计结论</b>。同时它也划出了边界：<s>前提不成立时，平方误差就失去了这层理论支持</s>。");
+S(2500,function(){clearScene();setEq(null);
+  boxNode(140,180,300,90,"假设 IID 高斯噪声","v");
+  boxNode(140,320,300,90,"写出似然 L(θ)","b");
+  boxNode(140,460,300,90,"取对数 ℓ(θ)","b");
+  boxNode(760,320,340,90,"最小二乘","g");
+  link(290,270,290,320);link(290,410,290,460);
+  link(440,505,760,380);
+  note("常数项丢掉 · 负号翻向",600,470,"y");
+  setCap("整条推理链<b>只有四步</b>。<br>T2 Tutorial Q1 要的就是把这四步写清楚。");},
+  "考试时按这四步写，每一步都要给出<b>理由</b>而不只是结果：① 写出 y = θᵀx + ε 并假设 ε ~ N(0,σ²) IID；② 因为独立，似然是连乘；③ 取 log，连乘变连加，指数被剥掉；④ <i>第一项与 θ 无关可丢，第二项系数为负</i>，所以最大化 ℓ 等价于最小化 SSE。<s>最后别忘了补一句结论的限定</s>：这个等价性依赖于噪声假设。");
+});
+SUM(2433,7,{h:"★ 平方误差的来历",
+ k:"在 <b>IID 高斯噪声</b>假设下，<em>极大似然估计与最小二乘完全等价</em>。平方误差不是任意的工程选择，而是这组概率假设的<i>数学推论</i>。",
+ m:"四步链条：<b>①</b> y = θᵀx + ε，ε ~ N(0,σ²) IID → <b>②</b> 独立 ⟹ 似然连乘 → <b>③</b> 取 log，连乘变连加、指数被剥掉留下平方 → <b>④</b> 常数项可丢、系数为负 ⟹ 最大化 ℓ = 最小化 SSE。",
+ w:"<s>这是一个条件结论，不是普遍真理</s>。噪声若非高斯（比如拉普拉斯），导出的就不是平方损失。答题时<b>必须把前提写出来</b>，只写结论会掉分。",
+ e:"<b>这就是 T2 Tutorial Q1 的整道题</b>。要求「逐步给出化简过程」并解释等价性。四步都要写，每步给理由，结尾补一句<i>若噪声假设改变则可能需要不同的损失或加权</i>。"});
+QUIZ(2500,7,{t:"下面哪句话<b>最准确</b>地概括这个结论？",
+ o:["最小二乘永远是最好的损失函数","平方误差之所以合理，是因为它能重罚大误差",
+    "<b>在 IID 高斯噪声的假设下</b>，最小二乘就是极大似然估计；<i>假设改变则结论不再成立</i>",
+    "极大似然估计只能用于线性回归"],
+ a:2,
+ w:"关键在<b>「在……假设下」</b>这个限定。<br><br>选项 A 把条件结论说成了普遍真理；选项 B 是上一讲那个<s>操作层面的理由</s>，不是这一讲给出的统计依据；选项 D 错得更明显——极大似然是通用的估计方法，下一段就要用它推逻辑回归。<br><br>你课程 T2 Tutorial Q1 的参考答案末尾写着：「<i>Under the independent, equal-variance Gaussian-noise assumption, OLS is also the maximum-likelihood estimator. If the noise assumptions change, a different loss or weighting may be more appropriate.</i>」——<b>后半句和前半句一样重要</b>。"});
+
+/* ── 8 · 分类的设定 ── */
+KP("8 · 分类设定",function(){
+S(2625,function(){clearScene();var P=frame({P:{l:380,r:900,t:200,b:470},xlab:"x"});
+  var r=rng(17),a=[],b=[];
+  for(var i=0;i<7;i++)a.push([410+r()*180,470]);
+  for(var j=0;j<7;j++)b.push([660+r()*220,200]);
+  dots(a,"c");dots(b,"b");
+  note("y = 0",480,510,"g");note("y = 1",790,170,"b");
+  setCap("换到<b>分类</b>：y 只能取 <em>0</em> 或 <em>1</em>。<br>这叫<i>二分类</i>问题。");},
+  "分类问题的输出是<b>离散标签</b>。这里用 0/1 编码而不是 −1/+1，是为了后面能把 y 直接当成<i>概率</i>来处理——p(y=1|x) 是个 0 到 1 的数，和标签的取值范围正好对上。<s>注意你课程 T3 的感知机用的是 −1/+1</s>，T4 的 SVM 也是；只有逻辑回归用 0/1。这个差异会影响更新公式的形式，手算时要看清题目用的是哪套。");
+S(2683,function(){clearScene();var P=frame({P:{l:380,r:900,t:200,b:470},xlab:"x"});
+  var r=rng(17),a=[],b=[];
+  for(var i=0;i<7;i++)a.push([410+r()*180,470]);
+  for(var j=0;j<7;j++)b.push([660+r()*220,200]);
+  dots(a,"c");dots(b,"b");
+  path([[390,480],[900,180]],"fit bad");
+  note("线性回归硬套 → 值会跑到 0 以下和 1 以上",640,545,"r");
+  setCap("<b>能不能直接用线性回归？</b><br><s>不能。</s>直线会一路延伸到 0 以下、1 以上。");},
+  "线性回归用在分类上有两个硬伤。<b>其一</b>：输出没有边界，可以是 −3 或 5，而<i>概率必须落在 0 到 1 之间</i>。<b>其二</b>更隐蔽：在最右边加一个「非常大的 x、y=1」的样本，<s>整条直线会被拽歪</s>，反而把原本分对的点分错——因为平方损失会重罚这个「预测 0.5 而真值 1」的远点，即使它本来就该被分成 1。所以需要一个<b>把输出压进 (0,1) 的函数</b>。");
+});
+SUM(2625,8,{h:"分类：为什么线性回归不行",
+ k:"二分类的 y 只取 <b>0 或 1</b>。直接套线性回归有两个问题：<i>输出无界</i>（可以小于 0 或大于 1，不能当概率），以及<i>对远处样本过度敏感</i>——加一个很远的正例就能把整条直线拽歪。",
+ m:"根本原因是<b>平方损失惩罚的是数值距离</b>，而分类关心的是「在哪一侧」。一个已经被牢牢分对、但离边界很远的点，平方损失仍会给它很大的惩罚，于是它<em>不合理地主导了拟合</em>。",
+ w:"<s>编码差异要注意</s>：逻辑回归用 <b>0/1</b>，而你课程的感知机和 SVM 用 <b>−1/+1</b>。更新公式的形式会因此不同，手算时先看清题目用的是哪一套。",
+ e:"T3 会考「<b>感知机与逻辑回归的共同点与输出差异</b>」。共同点：都形成线性得分 wᵀx+b，都给出线性决策边界。差异：<i>感知机取符号得硬类别，逻辑回归过 sigmoid 得概率</i>。"});
+QUIZ(2683,8,{t:"用线性回归直接做二分类，最主要的问题是？",
+ o:["计算太慢","<b>输出没有边界</b>（可能小于 0 或大于 1，无法当概率），且<i>远处样本会不合理地拽歪拟合</i>",
+    "无法处理多个特征","必须先标准化特征"],
+ a:1,
+ w:"两个问题都源自<b>平方损失惩罚的是数值距离</b>，而分类真正关心的是「落在边界哪一侧」。<br><br>一个已经被牢牢分对、但离边界很远的正例，平方损失依然会因为「预测 0.6 而真值 1」而重罚它，于是<s>它反而主导了拟合方向</s>，把边界拽偏。<br><br>解法是换一个函数把输出压进 (0,1)，并换一个<em>只关心分类是否正确</em>的损失——这就是下一个知识点。"});
+
+/* ── 9 · sigmoid ── */
+KP("9 · sigmoid",function(){
+S(2868,function(){clearScene();
+  var P=frame({P:{l:340,r:940,t:160,b:480},xlab:"z"});
+  gS.append("line").attr("class","guide").attr("x1",340).attr("x2",940).attr("y1",320).attr("y2",320);
+  gS.append("line").attr("class","guide").attr("x1",640).attr("x2",640).attr("y1",160).attr("y2",480);
+  path(fn(function(x){var z=(x-640)/52;return 480-320/(1+Math.exp(-z));},340,940,120),"curve");
+  note("0.5",620,315,"y","end");note("1",620,175,"");note("0",620,478,"");
+  setEq("$$g(z)=\\frac{1}{1+e^{-z}}$$","top");
+  setCap("<b>sigmoid 函数</b>（也叫 logistic 函数，<i>两个名字完全同义</i>）。<br>把任意实数压进 <em>(0, 1)</em>。");},
+  "这条曲线的几个性质要记牢：<b>g(0) = 0.5</b>（这是决策边界的由来）；<i>z → +∞ 时趋近 1，z → −∞ 时趋近 0</i>，但<s>永远取不到 0 和 1</s>；曲线关于 (0, 0.5) 中心对称，即 <b>g(−z) = 1 − g(z)</b>。最后这条在手算时特别省事——算过 σ(1) = 0.7311，就直接知道 σ(−1) = 0.2689。");
+S(2947,function(){clearScene();
+  var P=frame({P:{l:340,r:940,t:160,b:480},xlab:"z"});
+  gS.append("line").attr("class","guide").attr("x1",340).attr("x2",940).attr("y1",320).attr("y2",320);
+  path(fn(function(x){var z=(x-640)/52;return 480-320/(1+Math.exp(-z));},340,940,120),"curve");
+  dots([[640,320]],"q",11);
+  note("g(0) = 0.5  ⟸  决策边界",640,290,"y");
+  setEq("$$h_\\theta(x)=g(\\theta^{\\top}x)=\\frac{1}{1+e^{-\\theta^{\\top}x}}$$","top");
+  setCap("把线性得分 <i>θᵀx</i> 送进 sigmoid，<br>输出就是<b>「y = 1 的概率」</b>。");},
+  "<b>决策边界在 θᵀx = 0 处</b>，因为那里 g 恰好等于 0.5，正好是默认阈值。这一点是考试常客——问「为什么边界是得分为零的那条线」，答案就是 <i>σ(0) = 0.5</i>。还要注意：<s>边界本身仍然是线性的</s>。sigmoid 弯的是「得分到概率」这一段映射，<b>不是</b>把决策边界弄弯了——想要弯的边界得靠特征变换或核方法。");
+});
+SUM(2868,9,{h:"sigmoid：把得分压成概率",
+ k:"<b>g(z) = 1/(1+e⁻ᶻ)</b>，把任意实数压进 (0,1)。逻辑回归的假设是 <i>h(x) = g(θᵀx)</i>，输出解读为「y=1 的概率」。sigmoid 和 logistic 是<em>完全同义</em>的两个名字。",
+ m:"关键性质：<b>g(0) = 0.5</b>，所以<i>决策边界就是 θᵀx = 0</i>；两端趋近 0 和 1 但永不取到；中心对称 <b>g(−z) = 1 − g(z)</b>——手算时算一个就得到另一个。",
+ w:"<s>常见误解</s>：以为 sigmoid 让决策边界变弯了。<b>没有</b>——边界仍是 θᵀx = 0 这个线性方程。sigmoid 弯的是「得分 → 概率」的映射曲线。要弯的边界必须靠特征变换或核方法。",
+ e:"<b>T3 必考</b>：「为什么决策边界是得分为零的那条线」——因为 σ(0)=0.5 正好等于默认阈值。还要会算 σ 的几个常用值：σ(1)=0.7311、σ(2)=0.8808、σ(−1)=0.2689。"});
+QUIZ(2947,9,{t:"逻辑回归的决策边界是 <b>θᵀx = 0</b>，根本原因是？",
+ o:["sigmoid 在 z=0 处不可导","<b>σ(0) = 0.5</b>，恰好等于默认的分类阈值",
+    "那里梯度最小","那里损失函数等于零"],
+ a:1,
+ w:"决策规则是「<i>p ≥ 0.5 判为正类</i>」。而 <b>σ 单调递增且 σ(0) = 0.5</b>，所以 p ≥ 0.5 ⟺ θᵀx ≥ 0。<br><br>边界就落在 θᵀx = 0 这条线（或超平面）上。<br><br>顺带纠正两个错误选项：sigmoid 在 z=0 处<s>处处可导</s>，而且那里的<em>梯度恰恰最大</em>（等于 0.25），不是最小。"});
+
+/* ── 10 · 逻辑回归的似然 ── */
+KP("10 · 逻辑回归似然",function(){
+S(3168,function(){clearScene();setEq(null);
+  setEq("$$p(y=1\\mid x;\\theta)=h_\\theta(x),\\qquad p(y=0\\mid x;\\theta)=1-h_\\theta(x)$$","top");
+  setCap("y 只有两个取值，<br>所以概率也只有<b>两句话</b>要说。");},
+  "这就是<b>伯努利分布</b>：一次只有两种结果的随机试验。逻辑回归的完整假设是「<i>给定 x，y 服从参数为 h(x) 的伯努利分布</i>」——和线性回归假设「给定 x，y 服从以 θᵀx 为中心的正态分布」是完全平行的结构。<s>换了分布，就换了模型</s>，但推导的套路一模一样：写似然、取对数、求梯度。");
+S(3168,function(){clearScene();
+  flip(T("p","p(y|x;θ)")+T("e"," = ")+T("a","h(x)")+T("ay","^y","hl")+T("b"," · (1−h(x))")+T("by","^(1−y)","hl"));
+  setCap("<b>一个漂亮的合并写法</b>：把两句话压成一个式子。<br>y=1 时后半截变成 1，y=0 时前半截变成 1。");},
+  "这个技巧值得单独记住。<i>任何数的 0 次方都是 1</i>，所以指数位置放上 y 和 1−y，就能让<b>其中一项自动失效</b>。y=1 时式子退化成 h(x)，y=0 时退化成 1−h(x)——正好是上一镜那两句话。这么写不是为了好看，是<s>为了能对整个式子统一求导</s>，不用分情况讨论。");
+S(3227,function(){clearScene();
+  setEq("$$\\ell(\\theta)=\\sum_{i}\\Bigl[y^{(i)}\\log h_\\theta(x^{(i)})+(1-y^{(i)})\\log\\bigl(1-h_\\theta(x^{(i)})\\bigr)\\Bigr]$$","top");
+  setCap("连乘、取对数，得到<b>对数似然</b>。<br><span style='color:#77849A'>把它取负号再除以 m，就是你课程里的「二元交叉熵」</span>");},
+  "<b>这个式子你一定见过</b>——它就是你课程 T3 的<i>二元交叉熵损失</i>，只差一个负号和一个 1/m。CS229 说「<b>最大化</b>对数似然」，你的课程说「<b>最小化</b>平均交叉熵」，<s>是同一件事的两种说法</s>。看视频时务必做这个换算，否则会觉得梯度符号对不上。");
+});
+SUM(3168,10,{h:"逻辑回归的似然：伯努利版本",
+ k:"假设 <b>给定 x 时 y 服从伯努利分布</b>，参数是 h(x)。用 <i>h(x)^y · (1−h(x))^(1−y)</i> 把两种情况压成一个式子，连乘取对数后得到对数似然。",
+ m:"这和线性回归是<b>完全平行的结构</b>：线性回归假设正态、导出平方损失；逻辑回归假设伯努利、导出交叉熵。<em>换分布就换损失，推导套路一模一样</em>——写似然、取对数、求梯度。",
+ w:"<s>符号换算必须做</s>：CS229 说「最大化对数似然」，你课程说「最小化平均二元交叉熵」。两者差一个<b>负号</b>和一个 <b>1/m</b>。不换算会觉得梯度方向对不上。",
+ e:"<b>T3 Tutorial Q2</b> 用的就是本课的写法：J = −(1/N)Σ[y ln p + (1−y) ln(1−p)]。手算时按本课这个式子来，别用 CS229 的正号版本。"});
+QUIZ(3227,10,{t:"CS229 的「最大化对数似然」和你课程的「最小化平均二元交叉熵」是什么关系？",
+ o:["完全不同的两个目标","<b>同一件事</b>——差一个负号和一个 1/m",
+    "前者用于回归，后者用于分类","后者是前者的近似"],
+ a:1,
+ w:"把对数似然<b>取负号</b>就得到交叉熵，再<b>除以样本数 m</b> 就成了平均交叉熵。<br><br>最大化一个量 ⟺ 最小化它的相反数，所以两者<em>取到同一个 θ</em>。<br><br><s>这个换算必须在看视频时随手做掉</s>，否则你会发现 CS229 写的是「θ := θ <b>+</b> α∇」（梯度上升），而你课程写的是「θ := θ <b>−</b> α∇」（梯度下降），以为哪里错了。"});
+
+/* ── 11 · 梯度：形式重现 ── */
+KP("11 · ★ 梯度形式",function(){
+S(3672,function(){clearScene();setEq(null);
+  setEq("$$\\frac{\\partial \\ell}{\\partial \\theta_j}=\\sum_i\\bigl(y^{(i)}-h_\\theta(x^{(i)})\\bigr)x_j^{(i)}$$","top");
+  setCap("求导之后——<b>看这个形状。</b>");},
+  "算这个偏导要用到 sigmoid 的一个漂亮性质：<b>g′(z) = g(z)(1−g(z))</b>。代进去之后，<i>分母上那些复杂的东西全部消掉</i>，只剩下这个极简的结果。这不是巧合，而是<s>指数族分布的共同性质</s>——Ng 在下一讲讲广义线性模型时会解释为什么所有这类模型的梯度都长成同一个样子。");
+S(3672,function(){clearScene();setEq(null);
+  boxNode(120,190,470,90,"线性回归","b");
+  boxNode(120,330,470,90,"逻辑回归","g");
+  note("(y − θᵀx) · x",355,238,"b");
+  note("(y − σ(θᵀx)) · x",355,378,"g");
+  note("形式完全相同 · 只有 h 变了",640,500,"y");
+  setCap("<b>和线性回归的梯度一模一样。</b><br>唯一的差别是 h 从 <i>θᵀx</i> 换成了 <em>σ(θᵀx)</em>。");},
+  "Ng 特意停下来强调这不是巧合。<b>背后是广义线性模型（GLM）</b>：正态分布和伯努利分布都属于<i>指数族</i>，而所有指数族模型的极大似然梯度都是「<b>(真实值 − 预测值) × 特征</b>」这个形状。<s>你的课程不考 GLM</s>，但知道这层关系能让你把 T2 和 T3 的公式当成同一个东西记，省一半力气。");
+S(3672,function(){clearScene();setEq(null);
+  setEq("$$\\frac{\\partial J}{\\partial w}=\\frac{1}{N}\\sum_i\\bigl(p_i-y_i\\bigr)x_i$$","top");
+  setBig(null);
+  setCap("换成<b>你课程的写法</b>：<i>(p − y)</i> 而不是 <i>(y − h)</i>，<br>因为本课是<em>最小化</em>损失、做梯度<b>下降</b>。");},
+  "两个式子只差一个负号，来源就是「最大化似然」与「最小化损失」的立场差异。<b>你课程 T3 Tutorial Q2 用的是这一版</b>：∂J/∂w = (1/N)Σ(pᵢ−yᵢ)xᵢ，更新式是 w ← w − α·∂J/∂w。<i>(pᵢ − yᵢ) 是带符号的概率误差</i>——预测概率高于标签为正、低于为负。<s>手算时务必用本课这一版</s>，否则符号会反。");
+});
+SUM(3672,11,{h:"★ 梯度的形状：误差 × 特征",
+ k:"逻辑回归的梯度和线性回归<b>形式完全相同</b>：<em>(真实值 − 预测值) × 特征</em>。唯一的差别是预测值 h 从 <i>θᵀx</i> 变成了 <i>σ(θᵀx)</i>。",
+ m:"推导中用到 sigmoid 的性质 <b>g′(z) = g(z)(1−g(z))</b>，代入后复杂项全部消掉。形式相同不是巧合——正态与伯努利都属于<i>指数族</i>，所有这类模型的极大似然梯度都是这个形状（广义线性模型）。",
+ w:"<s>符号方向必须看清</s>：CS229 写 (y − h) 做梯度<b>上升</b>；你课程写 (p − y) 做梯度<b>下降</b>，还要除以 N。两者等价，但<b>手算必须用本课的版本</b>，否则参数会往反方向走。",
+ e:"<b>T3 Tutorial Q2 原题</b>：∂J/∂w = (1/N)Σ(pᵢ−yᵢ)xᵢ，∂J/∂b = (1/N)Σ(pᵢ−yᵢ)。要会做<i>一步梯度更新并验证 BCE 下降</i>。记住 (pᵢ−yᵢ) 的含义是<em>带符号的概率误差</em>。"});
+QUIZ(3672,11,{t:"某样本的真实标签 y = 1，模型预测概率 p = 0.9。它对梯度 (1/N)Σ(pᵢ−yᵢ)xᵢ 的贡献方向是？",
+ o:["(p−y) = +0.1，会推动参数<b>减小</b>该特征的权重","(p−y) = −0.1，会推动参数<b>增大</b>该特征的权重（若 x 为正）",
+    "贡献为 0，因为已经分对了","无法判断，取决于学习率"],
+ a:1,
+ w:"<b>(p − y) = 0.9 − 1 = −0.1</b>，是负数。<br><br>更新式是 w ← w − α·(1/N)Σ(pᵢ−yᵢ)xᵢ，<i>减去一个负数等于加</i>，所以若 x 为正，权重会被<em>推大</em>——这是对的，因为模型预测 0.9 还不够高，应该更确信一点。<br><br><s>选项 C 是常见错误</s>：分对了不等于贡献为零。只有 <b>p 恰好等于 y</b>（即 p=1）时贡献才是 0，而 sigmoid <i>永远取不到 1</i>——所以逻辑回归的梯度永远不会完全归零，这也是它在可分数据上会让 ‖w‖ 无限增大的原因。"});
+
+/* ── 12 · 牛顿法 ── */
+KP("12 · 牛顿法",function(){
+S(3932,function(){clearScene();setEq(null);
+  var P=frame({P:{l:340,r:940,t:170,b:470},xlab:"θ"});
+  path(fn(function(x){var t=(x-500)/180;return 400-120*t;},360,920,40),"curve");
+  gS.append("line").attr("class","guide").attr("x1",340).attr("x2",940).attr("y1",400).attr("y2",400);
+  dots([[800,240]],"b",9);
+  path([[800,240],[680,400]],"fit");
+  dots([[680,400]],"q",10);
+  note("切线与横轴的交点 → 下一个 θ",640,520,"y");
+  setCap("<b>牛顿法</b>：用切线逼近，<br>一步跨到切线与横轴的交点。");},
+  "牛顿法解的是 <i>f(θ) = 0</i>。用在优化上就是解 <b>ℓ′(θ) = 0</b>——导数为零的地方就是极值点。做法是在当前位置画一条切线，直接跳到切线与横轴的交点，重复。<s>它比梯度下降快得多</s>，具有<b>二次收敛</b>性质：每迭代一次，正确的有效数字大致翻倍，通常十几步就收敛。");
+S(4456,function(){clearScene();setEq(null);
+  boxNode(150,200,420,90,"梯度下降","b");
+  boxNode(150,340,420,90,"牛顿法","g");
+  note("每步便宜 · 需要很多步",360,248,"b");
+  note("每步很贵（要算 Hessian 的逆）· 步数很少",360,388,"g");
+  note("参数上万时 → 用梯度下降",640,500,"y");
+  setCap("代价是<b>每一步要算 Hessian 的逆</b>。<br>参数有五万个时，那是个 <s>50000 × 50000</s> 的矩阵。");},
+  "这就是取舍：<b>牛顿法用「每步很贵」换「步数很少」</b>。参数不多时（几十到几百）非常划算；参数上万时，求 Hessian 的逆代价是 O(n³)，完全不可行——这也是<i>深度学习一律用梯度下降及其变体</i>的原因。<s>你的课程只讲梯度下降</s>，牛顿法知道有这回事、知道取舍在哪即可。");
+});
+SUM(3932,12,{h:"牛顿法：快，但每步很贵",
+ k:"牛顿法用<b>切线逼近</b>求解 ℓ′(θ) = 0：在当前点画切线，跳到切线与横轴的交点，重复。它具有<em>二次收敛</em>——每步正确位数大致翻倍，通常十几步收敛。",
+ m:"代价是每步都要计算并求逆 <b>Hessian</b>（二阶导矩阵）。参数有 n 个时，这是 O(n³) 的操作。<i>用「每步很贵」换「步数很少」</i>——参数少时划算，参数多时完全不可行。",
+ w:"<s>不要以为「收敛快」就一定更好</s>。衡量标准是<b>总时间</b>：牛顿法 15 步 × 每步极贵，可能远慢于梯度下降 5000 步 × 每步极便宜。深度学习动辄百万参数，所以一律用梯度下降及其变体。",
+ e:"<b>牛顿法不在你的考纲内</b>。这一段的价值是那个取舍框架：<i>每步代价 × 步数 = 总代价</i>。同样的思路你课程 T2 里也出现过——批量梯度下降每步贵、随机梯度下降每步便宜。"});
+QUIZ(4456,12,{t:"训练一个有 <b>五万个参数</b>的模型，为什么通常不用牛顿法？",
+ o:["牛顿法不保证收敛","<b>每步要求一个 50000×50000 矩阵的逆</b>，代价是 O(n³)，完全不可行",
+    "牛顿法只适用于线性模型","牛顿法需要的迭代次数太多"],
+ a:1,
+ w:"牛顿法的迭代次数<em>反而很少</em>（通常十几步），选项 D 说反了。<br><br>问题出在<b>每步的代价</b>：Hessian 是 n×n 矩阵，求逆是 O(n³)。n = 50000 时这个数字大到无法计算，而且<s>光是存下这个矩阵就要约 10 GB 内存</s>。<br><br>判断优化算法时要看 <b>每步代价 × 步数</b>，不能只看其中一项——这个框架和你课程里批量 vs 随机梯度下降的取舍是同一个道理。"});
+
+/* ── 13 · 对照课程 ── */
+KP("13 · 对照你的课程",function(){
+S(4700,function(){clearScene();setEq(null);
+  boxNode(90,150,360,80,"L3 · 0:22–0:45","g");
+  boxNode(90,270,360,80,"L3 · 0:45–1:05","g");
+  boxNode(90,390,360,80,"L3 · 0:00–0:22 / 1:05–1:19","r");
+  note("→  T2 Tutorial Q1  (MLE ⇒ 最小二乘)",700,198,"g","start");
+  note("→  T3  (sigmoid · 逻辑回归 · 交叉熵梯度)",700,318,"g","start");
+  note("→  本课不考（局部加权 / 牛顿法）",700,438,"r","start");
+  setCap("<b>这一讲和你考纲的对应关系。</b>");},
+  "把这一讲压成三句话：<b>①</b> 平方误差来自 IID 高斯噪声假设，这是 T2 Tutorial Q1 的整道题；<b>②</b> sigmoid 把线性得分压成概率，决策边界在得分为零处，梯度是「(p−y)×特征」，这是 T3 的全部核心；<b>③</b> 局部加权回归和牛顿法<s>不考</s>。看视频时可以直接跳过 0:00–0:22 和 1:05 之后。");
+S(4700,function(){clearScene();setEq(null);
+  boxNode(340,150,600,86,"① 假设噪声分布","v");
+  boxNode(340,258,600,86,"② 写出似然并取对数","b");
+  boxNode(340,366,600,86,"③ 求梯度","b");
+  boxNode(340,474,600,86,"④ 得到损失函数与更新规则","g");
+  [236,344,452].forEach(function(y){link(640,y,640,y+22);});
+  note("正态 → 平方损失     伯努利 → 交叉熵",640,600,"y");
+  setCap("<b>整个 Module 1 的统一骨架。</b><br>换一个噪声分布，就换出一个模型。");},
+  "这是这一讲最该带走的思维方式。<b>模型不是被发明出来的，是被推导出来的</b>：先对数据的生成过程做一个概率假设，然后极大似然自动给出损失函数和更新规则。<i>正态 → 平方损失 → 线性回归</i>；<i>伯努利 → 交叉熵 → 逻辑回归</i>。有了这个骨架，T2 和 T3 就不再是两堆要分别背的公式，而是<em>同一套推导的两个实例</em>。");
+});
+SUM(4700,13,{h:"一个骨架，两个模型",
+ k:"Module 1 的前两个 Topic 共用<b>同一套推导骨架</b>：① 假设噪声分布 → ② 写似然、取对数 → ③ 求梯度 → ④ 得到损失与更新规则。<em>正态导出平方损失（线性回归），伯努利导出交叉熵（逻辑回归）</em>。",
+ m:"两者的梯度形式完全一致——<b>(真实值 − 预测值) × 特征</b>，只有预测值 h 不同。这是因为正态与伯努利同属<i>指数族</i>，广义线性模型统一了它们。",
+ w:"<s>看视频时的两个换算</s>：CS229 用「最大化对数似然、梯度上升、(y−h)」，你课程用「最小化平均损失、梯度下降、(p−y)、除以 N」。等价，但<b>手算必须用本课版本</b>。",
+ e:"这一讲覆盖 <b>T2 Tutorial Q1</b>（0:22–0:45）和 <b>T3 全部</b>（0:45–1:05）两大块。看视频可以直接跳过 <i>0:00–0:22 的局部加权</i> 和 <i>1:05 之后的牛顿法</i>——都不在考纲内。"});
+QUIZ(4700,13,{t:"按这一讲的骨架，如果假设「给定 x 时 y 服从<b>伯努利分布</b>」，极大似然会导出什么？",
+ o:["平方损失，也就是线性回归","<b>交叉熵损失，也就是逻辑回归</b>",
+    "绝对值损失","没有闭式的损失函数"],
+ a:1,
+ w:"这就是这一讲的<b>统一骨架</b>：<em>噪声/输出分布决定损失函数</em>。<br><br>· 正态分布 → 指数里是 −ε²，log 剥掉后留下<b>平方</b> → 线性回归<br>· 伯努利分布 → 概率写成 h^y(1−h)^(1−y)，取 log 后留下 <b>y log h + (1−y) log(1−h)</b> → 交叉熵 → 逻辑回归<br>· 拉普拉斯分布 → 留下 <b>绝对值</b> → 最小绝对偏差<br><br><s>模型不是发明出来的，是从假设推导出来的</s>——这是整个 Module 1 最值得带走的一句话。"});
+
+/* ── 收尾 ── */
+KP("完",function(){
+S(4768,function(){clearScene();setEq(null);setBig(null);setCap(null);
+  setTitle("第三讲 · 完","平方误差有了来历，第一个分类器也有了",
+    "下一站：T4 的 SVM 与核方法（L6 · L7）");},null);
+});
+
+/* ── projector ── */
+var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+KPS.forEach(function(k){
+  var bar=document.createElement("div");bar.className="kpbar";
+  var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+  for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+    p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+  bar.addEventListener("click",function(){go(k.from,true);});
+  kpsEl.appendChild(bar);});
+function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+  return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+function go(n,force){
+  n=Math.max(0,Math.min(SHOTS.length-1,n));
+  if(n===cur)return;
+  if(locked&&n>cur&&!force)return;
+  FAST=true;clearScene();
+  for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+  FAST=false;
+  cur=n;clearQuiz();clearSum();
+  var sh=SHOTS[n];
+  if(sh.enter)sh.enter();
+  setNarr(sh.n);
+  if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+  if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+  pipEls.forEach(function(p,i){if(!p)return;
+    var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+    p.className=base+(i===n?" now":(i<n?" seen":""));});
+  var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+  [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+  document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+  var tc=document.getElementById("tc");
+  tc.textContent="▶ "+hhmmss(sh.t);tc.href=VID+Math.round(sh.t)+"s";}
+window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+window.addEventListener("keydown",function(e){
+  if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+  else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+  else if(e.key==="Home"){e.preventDefault();go(0,true);}
+  else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+    var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+    document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+go(0);
+
+/* ── caption placement ─────────────────────────────────────────────────── */
+var CAP_POS=["bottom","top","side"],CAP_LABEL={bottom:"字幕 · 底部",top:"字幕 · 顶部",side:"字幕 · 侧栏"};
+var capIdx=0;
+try{var _cp=localStorage.getItem("filmCapPos");if(_cp!==null)capIdx=Math.max(0,Math.min(2,+_cp));}catch(e){}
+var posHint=document.createElement("div");posHint.id="posHint";document.body.appendChild(posHint);
+var _hintT=null;
+function applyCapPos(announce){
+  var L=document.getElementById("capL"),p=CAP_POS[capIdx];
+  L.classList.remove("pos-top","pos-side");
+  if(p!=="bottom")L.classList.add("pos-"+p);
+  document.body.classList.toggle("scene-shift",p==="side");
+  try{localStorage.setItem("filmCapPos",String(capIdx));}catch(e){}
+  if(announce){
+    posHint.textContent=CAP_LABEL[p];posHint.classList.add("show");
+    if(_hintT)clearTimeout(_hintT);
+    _hintT=setTimeout(function(){posHint.classList.remove("show");},1400);
+  }
+}
+window.addEventListener("keydown",function(e){
+  if(e.key==="p"||e.key==="P"){e.preventDefault();capIdx=(capIdx+1)%CAP_POS.length;applyCapPos(true);}
+});
+applyCapPos(false);
+})();
+</script>

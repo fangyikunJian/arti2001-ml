@@ -1,0 +1,257 @@
+{
+ "tag": "CS229-kmeans",
+ "title": "k-means 聚类算法（讲义）",
+ "sub": "CS229 讲义精读",
+ "pdf": "slides/cs229-notes7a.pdf",
+ "pages": 3,
+ "notes": [
+  {
+   "r": [
+    1,
+    1
+   ],
+   "star": 2,
+   "t": "算法本体：两行伪代码就写完了",
+   "one": "随机初始化 k 个质心，然后反复「分配」与「移动」，直到收敛。",
+   "quote": "<em>The inner-loop of the algorithm repeatedly carries out two steps: (i) <b>“Assigning”</b> each training example x⁽ⁱ⁾ to the closest cluster centroid µⱼ, and (ii) <b>Moving</b> each cluster centroid µⱼ to the mean of the points assigned to it.</em>",
+   "eq": "分配：c⁽ⁱ⁾ := arg min_j ‖ x⁽ⁱ⁾ − µⱼ ‖²\n更新：µⱼ := Σᵢ 1{c⁽ⁱ⁾=j} x⁽ⁱ⁾  ÷  Σᵢ 1{c⁽ⁱ⁾=j}",
+   "pts": [
+    "<b>问题设定</b>：给一个训练集 {x⁽¹⁾,…,x⁽ⁿ⁾}，想把数据分成若干<b>内聚的「簇」</b>。<b>没有标签 y</b>——所以这是无监督问题。",
+    "⭐ <b>更新式里的 1{·} 是指示函数</b>：分子只把<em>属于该簇</em>的点加起来，分母数出<em>该簇有几个点</em>。<b>所以这个式子就是「取该簇的均值」</b>，只是写成了对全体求和的形式。",
+    "⚠️ <b>记住这个「指示函数」的写法</b>——T3 的 EM 里，M 步的公式和它<b>长得几乎一样</b>，只是把 1{c⁽ⁱ⁾=j} 换成了<b>责任度 w</b>。那个替换正是「硬分配变软分配」的全部内容。",
+    "<b>关于初始化</b>，讲义给了一个具体做法：<em>随机挑 k 个训练样本，把质心设成这些样本的值</em>，并补了一句 <em>(Other initialization methods are also possible)</em>——<b>k-means++ 就是那些「其它方法」之一</b>，但讲义这里没展开。",
+    "<b>µⱼ 的身份</b>：讲义说它们代表我们<b>当前对簇中心位置的猜测</b>。注意是「猜测」——它会一轮一轮被修正。"
+   ],
+   "tbl": [
+    {
+     "cap": "两步的分工（讲义原文的 (i)(ii)）",
+     "head": [
+      "步",
+      "动词",
+      "做什么",
+      "这一步谁不动"
+     ],
+     "rows": [
+      [
+       "(i)",
+       "<b>Assigning</b>",
+       "每个样本归到<b>最近</b>的质心",
+       "<b>质心不动</b>"
+      ],
+      [
+       "(ii)",
+       "<b>Moving</b>",
+       "每个质心搬到属于它的点的<b>均值</b>",
+       "归属不动"
+      ]
+     ]
+    }
+   ],
+   "say": "⭐ <b>「指示函数」这个写法值得多看一眼</b>，因为它是理解 T3 的钥匙。k-means 的更新式分子是 Σᵢ <b>1{c⁽ⁱ⁾=j}</b> x⁽ⁱ⁾，而 GMM 的 M 步是 Σᵢ <b>wᵢⱼ</b> x⁽ⁱ⁾。<br>Ng 在课堂上点破了两者的关系：<b>责任度 wᵢⱼ 恰好就是那个指示函数的期望</b>（一个指示函数的期望等于它为真的概率）。<b>所以「软分配」在数学上就是「把非 0 即 1 的指示函数换成它的期望」</b>——这一句能让你少背一套公式。",
+   "ng": "课堂上 Ng 讲这两步在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=223s\" target=\"_blank\">03:43</a>，用的是大白话：<em>找出所有蓝点的均值，把蓝色质心搬过去</em>。他在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=97s\" target=\"_blank\">01:37</a> 先讲了用途——<b>聚类最常见的用途之一是市场细分</b>，这个动机讲义里没有。<span class=\"src\">CS229/transcripts/L13.txt · 本地已下载</span>",
+   "exam": "本课 T2 的手算大题就是走这两步。答题必写：<b>用题目给的初始质心、每个点的距离比较、更新后的质心</b>。⚠️ 本课课件强调<b>整个分配步里质心保持不动</b>——讲义的 (i)(ii) 分步写法正好印证这一点。",
+   "tip": {
+    "t": "记号差别",
+    "v": "讲义用 <b>n</b> 表示样本数、<b>d</b> 表示特征维数（x⁽ⁱ⁾∈R^d）。本课课件常用 <b>m</b> 表示样本数。看到 n 和 m 要在心里对应过来。"
+   }
+  },
+  {
+   "r": [
+    2,
+    2
+   ],
+   "star": 3,
+   "t": "★★ 失真函数 J，以及「k-means 就是坐标下降」",
+   "one": "定义 J 之后，收敛性只用一句话就说清了——但那一句的措辞很讲究。",
+   "quote": "<em>It can be shown that <b>k-means is exactly coordinate descent on J</b>. Specifically, the inner-loop of k-means repeatedly minimizes J with respect to c while holding µ fixed, and then minimizes J with respect to µ while holding c fixed.</em>",
+   "eq": "J(c, µ) = Σᵢ ‖ x⁽ⁱ⁾ − µ_c(i) ‖²",
+   "pts": [
+    "<b>失真函数 J</b>：每个样本到<b>它被分到的那个</b>质心的平方距离之和。讲义管它叫 <b>distortion function</b>；你们课件和 sklearn 叫 <b>inertia / WCSS</b>。<b>三个名字，同一个东西。</b>",
+    "⭐ <b>这一页的核心是那句「exactly coordinate descent」</b>：J 有<b>两组变量</b>（分配 c 与质心 µ），而 k-means 的内循环<b>先固定 µ 对 c 求最小，再固定 c 对 µ 求最小</b>——这正是坐标下降的定义。",
+    "<b>为什么这个视角重要</b>：它说明<b>两步都不是「经验做法」，而是各自子问题的严格最优解</b>。固定 µ 时，每个点选最近的质心确实让自己那一项最小；固定 c 时，<b>使 Σ‖xᵢ−µ‖² 最小的 µ 就是均值</b>（最小二乘的基本性质）。",
+    "<b>由此得到收敛性</b>：既然每一步都不增加 J，<b>J 单调下降，而且 J 的值必然收敛</b>。",
+    "⚠️ <b>但讲义的措辞很克制</b>，括号里补了一句关键的话——见下一页。"
+   ],
+   "tbl": [
+    {
+     "cap": "坐标下降的两个子问题",
+     "head": [
+      "子问题",
+      "固定什么",
+      "优化什么",
+      "闭式解是什么"
+     ],
+     "rows": [
+      [
+       "(i) 分配",
+       "质心 µ",
+       "归属 c",
+       "<b>选最近的质心</b>"
+      ],
+      [
+       "(ii) 更新",
+       "归属 c",
+       "质心 µ",
+       "<b>取该簇的均值</b>"
+      ]
+     ]
+    },
+    {
+     "cap": "同一个量的三个名字",
+     "head": [
+      "出处",
+      "叫法"
+     ],
+     "rows": [
+      [
+       "CS229 讲义",
+       "<b>distortion function</b>（失真函数）"
+      ],
+      [
+       "本课课件",
+       "<b>inertia</b> / within-cluster sum of squares"
+      ],
+      [
+       "sklearn",
+       "<code>inertia_</code>"
+      ]
+     ]
+    }
+   ],
+   "say": "⭐ <b>「更新步为什么取均值」——坐标下降视角给了严格答案</b>：对一组固定的点，使 <b>Σ‖xᵢ − c‖²</b> 最小的 c <em>就是</em>它们的均值（对 c 求导令零，Σ2(c−xᵢ)=0 立刻得到）。<br><b>所以取均值不是因为「要取中心」，而是因为它是那个子问题的严格最优解。</b> 被问「为什么更新步取均值」时这么答，比说「因为要取中心」高一个层次。",
+   "ng": "Ng 在课堂上讲 J 与收敛在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=749s\" target=\"_blank\">12:29</a>。⚠️ <b>他的措辞比讲义还谨慎</b>：他说 <em>this shows k-means must converge, <b>or at least this function must converge</b></em>——<b>自己留了余地</b>。课堂上他没有提「坐标下降」这个词，<b>那是讲义独有的说法</b>。<span class=\"src\">CS229/transcripts/L13.txt · 本地已下载</span>",
+   "exam": "本课 T2 常问「这两步在减小什么」——答 <b>J（inertia / WCSS）</b>。若问「为什么必然收敛」，这一页给前半句（每步不增），<b>下一页给后半句</b>，两句都要写。"
+  },
+  {
+   "r": [
+    3,
+    3
+   ],
+   "star": 3,
+   "t": "★★ 非凸、局部最优，与一个被明确承认的例外",
+   "one": "J 非凸 ⇒ 可能卡在局部最优；而且理论上还可能来回振荡——讲义把话说全了。",
+   "quote": "<em>In theory, it is possible for k-means to <b>oscillate</b> between a few different clusterings … that have <b>exactly the same value of J</b>, but this almost never happens in practice.</em> … <em>The distortion function J is a <b>non-convex</b> function, and so coordinate descent on J is <b>not guaranteed to converge to the global minimum</b>.</em>",
+   "pts": [
+    "⭐ <b>这一页最该记的是那个「例外」</b>：上一页说「J 的值必然收敛」，这一页补上——<b>J 收敛不等于 c 和 µ 收敛</b>。理论上 k-means 可以在<b>几个 J 值完全相同的分法之间来回振荡</b>。讲义紧接着说<em>实践中几乎不会发生</em>。",
+    "<b>为什么这个区分重要</b>：很多教材写「k-means 一定收敛」时含糊带过，讲义在这里<b>明确区分了「目标函数收敛」和「算法状态收敛」</b>。考试答题时写「J 单调不增且必然收敛」是安全的；写「算法一定在有限步内停在一个固定分法」<b>严格说需要额外条件</b>。",
+    "<b>J 是非凸的</b> ⇒ 对 J 做坐标下降<b>不保证收敛到全局最小</b> ⇒ <b>k-means 可能卡在局部最优</b>。",
+    "<b>讲义的态度很平衡</b>：它说<em>很多时候 k-means 表现良好、能给出很好的聚类，尽管有这个问题</em>。但如果你担心卡在坏的局部极小——<b>办法是用不同的随机初始质心跑很多次，然后在所有结果里挑 J 最低的那个</b>。",
+    "⭐ <b>最后这句就是 sklearn 里 n_init 的出处</b>：<b>独立重启若干次，保留 inertia 最低的一次</b>。⚠️ 它<s>不是</s>迭代次数（那是 max_iter）。"
+   ],
+   "tbl": [
+    {
+     "cap": "收敛性：三句话的层次（别混为一谈）",
+     "head": [
+      "说法",
+      "成立吗",
+      "出处"
+     ],
+     "rows": [
+      [
+       "J 单调不增",
+       "<b>成立</b>",
+       "两步各是子问题最优解"
+      ],
+      [
+       "J 的值必然收敛",
+       "<b>成立</b>",
+       "单调 + 有下界 0"
+      ],
+      [
+       "c 和 µ 必然停在固定值",
+       "<b>通常成立，但理论上可能振荡</b>",
+       "讲义第 3 页明确承认"
+      ],
+      [
+       "收敛到全局最优",
+       "<b>不成立</b>",
+       "J 非凸"
+      ]
+     ]
+    }
+   ],
+   "say": "⚠️ <b>这一页和我们在本课的讲法有个细微差别，值得对齐</b>：本课的放映厅片子里，我把收敛论证写成「①每步不增 ②分配方式有限 ⇒ J 取值有限 ⇒ 必然有限步停下」。<br><b>CS229 讲义在这里更谨慎</b>：它只断言 <b>J 的值收敛</b>，并<b>明确承认 c/µ 理论上可能在等 J 的分法之间振荡</b>。<br>⭐ <b>两者不矛盾</b>——「取值有限」保证 J 不会无限下降，但要推出<em>状态</em>也停下，还需要「严格下降或终止」这类额外约定（实现里靠「分配不再变化就停」来保证）。<b>答题时按本课课件的口径写即可，但知道这个细节能让你在被追问时答得住。</b>",
+   "ng": "课堂上 Ng 讲局部极小在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=906s\" target=\"_blank\">15:06</a>：有学生问 k-means 会不会卡住，他直接答 <em>Well, k-means get stuck on local minima</em>——<b>会</b>。应对办法他说得很具体：<b>从不同的随机初始质心跑 10 次、100 次、甚至 1000 次，挑代价函数最低的那一次</b>。⭐ 注意<b>课堂的措辞（get stuck，会）比讲义（can be susceptible，可能）更肯定</b>，答题按讲义的中性说法更稳。<span class=\"src\">CS229/transcripts/L13.txt · 本地已下载</span>",
+   "exam": "本课 T2 高频考点集中在这一页：<b>①「同一份数据两次运行结果不同说明什么」</b>——答 J 非凸、存在多个局部极小、依赖初始化；<b>②「n_init=10 是什么意思」</b>——答独立重启 10 次、保留 inertia 最低的，<b>不是迭代 10 轮</b>。",
+   "tip": {
+    "t": "⚠ 容易说过头",
+    "v": "<b>「k-means 一定会停在一个固定的分法上」严格说需要额外条件。</b> 讲义只断言 <b>J 的值</b>必然收敛，并明确承认理论上可能在等 J 的分法之间振荡（只是实践中几乎不发生）。答题写「J 单调不增且收敛」最稳妥。",
+    "w": 1
+   }
+  }
+ ],
+ "quiz": {
+  "1": [
+   {
+    "q": "k-means 更新式 µⱼ := Σᵢ1{c⁽ⁱ⁾=j}x⁽ⁱ⁾ / Σᵢ1{c⁽ⁱ⁾=j} 里，指示函数 1{·} 起什么作用？",
+    "o": [
+     "给每个样本加权重",
+     "分子只累加属于该簇的点、分母数出该簇有几个点——合起来就是「取该簇的均值」",
+     "保证质心是实际存在的样本点",
+     "把距离转换成概率"
+    ],
+    "a": 1,
+    "why": "1{c⁽ⁱ⁾=j} 在样本 i 属于簇 j 时为 1、否则为 0。于是分子是该簇所有点之和、分母是该簇点数，<b>整体就是均值</b>。⭐ 记住这个写法——GMM 的 M 步把它换成<b>责任度 w</b>，那就是硬分配变软分配的全部内容。"
+   }
+  ],
+  "2": [
+   {
+    "q": "讲义说「k-means 就是对 J 做坐标下降」，具体指什么？",
+    "o": [
+     "每次沿一个坐标轴方向移动质心",
+     "每次只更新一个样本的归属",
+     "内循环先固定 µ 对 c 求最小，再固定 c 对 µ 求最小——轮流优化两组变量",
+     "用梯度下降逐步逼近最优解"
+    ],
+    "a": 2,
+    "why": "原文：<em>repeatedly minimizes J with respect to c while holding µ fixed, and then minimizes J with respect to µ while holding c fixed</em>。J 有<b>两组变量</b>，轮流固定一组优化另一组——这正是坐标下降。⭐ 推论：<b>两步各是子问题的严格最优解</b>，不是经验做法。"
+   },
+   {
+    "q": "按坐标下降的视角，为什么更新步要取「均值」而不是别的位置？",
+    "o": [
+     "因为这是算法的约定",
+     "因为对一组固定的点，使 Σ‖xᵢ−c‖² 最小的 c 正是它们的均值",
+     "因为均值一定落在簇的几何中心",
+     "因为均值计算最快"
+    ],
+    "a": 1,
+    "why": "这是最小二乘的基本性质：对 c 求导令零得 Σ2(c−xᵢ)=0 ⇒ c = 均值。<b>所以更新步是「固定分配」这个子问题的严格最优解</b>，这也正是 J 在这一步不会增加的原因。"
+   }
+  ],
+  "3": [
+   {
+    "q": "讲义在第 3 页明确承认了一个理论上的例外，是什么？",
+    "o": [
+     "k-means 可能在几个 J 值完全相同的分法之间来回振荡，只是实践中几乎不发生",
+     "J 可能变成负数",
+     "J 可能不下降",
+     "质心可能跑到数据范围之外"
+    ],
+    "a": 0,
+    "why": "原文：<em>In theory, it is possible for k-means to oscillate between a few different clusterings … that have exactly the same value of J, but this almost never happens in practice</em>。⭐ 这说明<b>「J 的值收敛」和「c、µ 停在固定值」不是同一件事</b>，讲义把这个区分说清楚了。"
+   },
+   {
+    "q": "讲义为什么说 k-means 可能卡在局部最优？",
+    "o": [
+     "因为失真函数 J 是非凸的，对非凸函数做坐标下降不保证到达全局最小",
+     "因为距离用的是欧氏距离",
+     "因为样本量有限",
+     "因为初始质心是随机选的"
+    ],
+    "a": 0,
+    "why": "原文：<em>The distortion function J is a non-convex function, and so coordinate descent on J is not guaranteed to converge to the global minimum</em>。<b>根因是 J 非凸</b>；随机初始化只是决定你落进哪一个局部极小，不是问题的根源。"
+   },
+   {
+    "q": "讲义给出的应对局部最优的办法是？",
+    "o": [
+     "改用曼哈顿距离",
+     "增大 k",
+     "先做 PCA 降维",
+     "用不同的随机初始质心跑很多次，在所有结果里挑 J 最低的那个"
+    ],
+    "a": 3,
+    "why": "原文：<em>run k-means many times (using different random initial values …), then … pick the one that gives the lowest distortion J</em>。⭐ 这正是 sklearn <code>n_init</code> 的出处——<b>独立重启次数</b>，不是迭代次数（那是 <code>max_iter</code>）。"
+   }
+  ]
+ }
+}

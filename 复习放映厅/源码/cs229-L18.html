@@ -1,0 +1,899 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L18 · 连续状态 MDP 与模型模拟</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L18 · 连续状态 MDP 与模型模拟",
+  subtitle:"离散化的极限 · 模拟器 · 拟合值迭代 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=QFu5nuc-S0s&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 阶梯函数（画离散化的那个比喻）── */
+function stair(x0,x1,y0,y1,n){
+  var p=[],i;
+  for(i=0;i<n;i++){
+    var xa=x0+(x1-x0)*i/n, xb=x0+(x1-x0)*(i+1)/n;
+    var yy=y0+(y1-y0)*(i+0.5)/n;
+    p.push([xa,yy]); p.push([xb,yy]);
+    if(i<n-1) p.push([xb,y0+(y1-y0)*(i+1.5)/n]);}
+  return p;}
+
+/* ── 网格世界：cols×rows 个格子，cb(i,j) 返回 [文字, 类名]，null 跳过 ──
+   ⚠ 2026-10-15：补充镜里用了 grid() 但主文件忘了定义，整片在第一个用到它的
+     帧上抛 ReferenceError。静态体检查不出来，是浏览器实扫抓到的。 */
+function grid(x0,y0,cw,ch,cols,rows,cb){
+  var i,j;
+  for(j=0;j<rows;j++)for(i=0;i<cols;i++){
+    var v=cb(i,j); if(v===null) continue;
+    boxNode(x0+i*cw, y0+j*ch, cw-6, ch-6, v[0], v[1]||"");}}
+
+/* ── 网格（画离散化切格子）── */
+function mesh(x0,y0,x1,y1,n){
+  var i;
+  for(i=0;i<=n;i++){
+    var x=x0+(x1-x0)*i/n, y=y0+(y1-y0)*i/n;
+    curve([[x,y0],[x,y1]],"d"); curve([[x0,y],[x1,y]],"d");}}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L18","连续状态 MDP 与模型模拟",
+      "11 个格子变成无穷多个");},
+    "L17 把 MDP 彻底解决了——<b>但那一整套方法从头到尾都建立在一个前提上：状态只有有限多个。</b><br><b>11 个方程 11 个未知数、对每个状态遍历更新、解线性方程组——每一步都需要能把状态一个个数过来。</b><br><b>⚠ 而真实问题几乎都不是这样。</b>一辆车的状态是<b>位置、朝向、速度</b>，一架直升机还要加上<b>三个姿态角</b>，<b>这些全是实数，有无穷多种取值</b>。<br><b>这一讲给两条路。</b><br><b>第一条是离散化</b>：<b>把连续空间切成格子，每格当一个状态，退回 L17 的框架</b>。<b>⭐ 它简单、好使，在低维问题上完全够用</b>——<b>但有一个会要命的毛病，维度一高就彻底崩。</b><br><b>第二条是这一讲真正的主角：拟合值迭代。</b><b>它绕开离散化，直接去近似那个价值函数</b>——<b>用的工具你早就学过，就是线性回归。</b><br><b>⚠ 中间还要补一个 L17 没提过的零件：模拟器。</b><b>它是「模型化强化学习」的核心，而 Ng 会讲一个很硬的实战教训：模拟器做成确定性的，学出来的策略在视频里很好看，搬上真机就废。</b>");
+});
+KP("1 · 连续状态长什么样：车、直升机、倒立摆",function(){
+  S(257,function(){clearScene();setEq(null);setCap("三个例子，维度一个比一个高");
+       says("4:17","a common way to model the state of a car that is driving around on planet Earth");
+       matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:192,
+         cell:function(i,j){var t=[
+           ["系统","状态里有什么","维度"],
+           ["车","位置 x,y ＋ 朝向 ＋ 各自的速度","6"],
+           ["直升机","x,y,z ＋ roll,pitch,yaw ＋ 各自速率","12"],
+           ["倒立摆","小车位置、速度 ＋ 杆角度、角速度","4"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⚠ 这些量全是实数 —— 每一个都有无穷多种取值",640,398,"r");},"<b>先把「连续状态」落到具体例子上。</b><br><b>一辆在地面上开的车</b>：Ng 说常见的建模方式是<b>记下位置（x 和 y）、朝向，以及它们各自的变化率</b>，大约六个数。<br><b>一架直升机</b>：<b>位置要三个数 x、y、z</b>；<b>姿态还要三个数，通常叫 roll、pitch、yaw</b>（翻滚、俯仰、偏航）；<b>再加上这六个量各自的变化率，一共十二个数。</b><br><b>倒立摆</b>——<b>Ng 说这是强化学习早期大家都在做的经典问题</b>：<b>一根杆铰接在小车上，铰链处没有马达，杆可以自由倒下；要靠左右移动小车把杆立住。</b><b>它的状态是四维的：小车的位置和速度、杆的角度和角速度。</b><br><b>⚠ 关键在于：这些量全是实数。</b><b>⇒ 每一个都有无穷多种取值，根本没法像 11 个格子那样数过来。</b>");
+  S(257,function(){clearScene();setEq(null);setCap("对照 L17 的网格世界");
+   matrix({rows:4,cols:3,cw:350,ch:46,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["","L17 网格世界","L18 真实系统"],
+       ["状态","11 个格子，数得过来","无穷多个实数组合"],
+       ["价值函数","11 个数，存成一张表","★ 存不下 —— 必须换表示法"],
+       ["更新","遍历 11 个状态","遍历不了"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return (i===2&&j===2)?"hl":"";}});
+   note("⭐ 所以这一讲真正要解决的，是「价值函数怎么表示」这个问题",640,398,"y");},"<b>把 L17 和 L18 并排放，就知道这一讲真正要解决什么了。</b><br><b>状态那一行：L17 是 11 个格子，数得过来；L18 是无穷多个实数组合。</b><br><b>价值函数那一行：L17 可以把 11 个数存成一张表；⭐ 而 L18 存不下——这才是真正的困难所在。</b><br><b>更新那一行：L17 可以遍历 11 个状态挨个更新；L18 根本遍历不了。</b><br><b>⭐ 所以这一讲的核心问题不是「算法不够快」，而是「价值函数该怎么表示」。</b><br><b>⚠ 想清楚这一点，后面两条路就都好理解了</b>：<b>离散化是「硬把它变回一张表」，拟合值迭代是「换一种表示法，用函数代替表」。</b>");
+  SUM(257,1,{h:"连续状态：车 6 维、直升机 12 维、倒立摆 4 维",k:"<b>车</b>：位置 x,y ＋ 朝向 ＋ 各自的变化率。<b>直升机</b>：<b>x,y,z</b> 三个位置 ＋ <b>roll, pitch, yaw</b> 三个姿态角 ＋ 各自速率 = 12 个数。",m:"<b>倒立摆</b>（Ng 说是强化学习早期的经典问题）：<b>杆铰接在小车上、铰链无马达可自由倒下</b>，靠左右移动小车把它立住。状态是<b>小车位置、小车速度、杆角度、杆角速度</b>共 4 维。",w:"⚠ <b>这些量全是实数</b>，每一个都有<b>无穷多种取值</b>。",e:"⇒ <b>没法像 11 个格子那样数过来</b> —— L17 的全套方法都失效了。"});
+  QUIZ(257,1,{t:"直升机的状态空间通常怎么建模？",o:["只需要速度和加速度","x,y,z 三个位置 ＋ roll, pitch, yaw 三个姿态角 ＋ 它们各自的变化率，共 12 个实数","用一个离散的「飞行模式」编号","只需要 x, y, z 三个位置"],a:1,w:"⭐ 倒立摆是经典的 <b>4 维</b>问题（小车位置/速度、杆角度/角速度）。⚠ 这些量<b>全是实数</b>，所以无法像 11 个格子那样枚举。"});
+});
+KP("2 · ★ 离散化：最直接的办法",function(){
+  S(664,function(){clearScene();setEq(null);setCap("把连续空间切成格子");
+       says("11:04","the most straightforward way to work with a continuous state space is discretization");
+       mesh(380,200,900,380,6);
+       dots([[432,236],[510,300],[640,260],[770,330],[850,216],[590,350]],"b",6);
+       note("每个格子 = 一个离散状态",640,172,"y");
+       note("⭐ 切完之后，就可以原封不动套用 L17 的值迭代",640,398,"y");},"<b>处理连续状态最直接的办法，Ng 说就是离散化。</b><br><b>做法一句话说清：把连续的取值范围切成有限多段，每个格子当成一个离散状态。</b><br><b>图上那张网格就是切分的结果</b>——<b>原本可以落在任意位置的点，现在只记它掉进了哪一格。</b><br><b>⭐ 这个办法最大的好处是：切完之后，问题就变回 L17 那种有限状态的 MDP 了，可以原封不动套用值迭代或策略迭代。</b><br><b>你不需要任何新算法。</b><br><b>⚠ 但它有两个毛病，Ng 特意说「我先讲缺点，再讲什么时候该用它」。</b>下面两节就是这两个缺点。");
+  S(664,function(){clearScene();setEq(null);setCap("切完之后，一切照旧");
+   boxNode(130,196,470,58,"切格子之前","d");
+   boxNode(130,264,470,58,"连续状态 ⇒ L17 的方法全用不了","d");
+   boxNode(690,196,470,58,"★ 切格子之后","g");
+   boxNode(690,264,470,58,"有限状态 MDP ⇒ 值迭代、策略迭代照用","g");
+   note("⭐ 这就是它最大的吸引力：不用学任何新东西",640,352,"y");
+   note("⚠ 代价藏在「切多细」这个问题里 —— 下面两节就讲它",640,398,"r");},"<b>再强调一次离散化为什么这么有吸引力。</b><br><b>切格子之前，状态是连续的，L17 那一整套方法一个都用不了。</b><br><b>⭐ 切格子之后，你手上就是一个标准的有限状态 MDP——值迭代、策略迭代、解线性方程组，全部照用。</b><br><b>你不需要学任何新算法，不需要写新代码，连调试经验都能直接搬过来。</b><br><b>⚠ 但代价藏在一个问题里：切多细？</b><b>切得粗，价值函数就粗糙；切得细，状态数就爆炸。</b><br><b>⇒ 接下来两节分别讲这两头。</b>");
+  SUM(664,2,{h:"★ 离散化：把连续空间切成格子",k:"Ng：<b>处理连续状态空间最直接的办法就是离散化</b>——<b>把取值范围切成有限多段，每个格子当一个离散状态</b>。",m:"<b>原本可以落在任意位置的点，现在只记它掉进哪一格。</b>",w:"⭐ <b>最大的好处</b>：切完之后问题就变回 L17 那种有限状态 MDP，<b>可以原封不动套用值迭代/策略迭代，不需要任何新算法</b>。",e:"⚠ 但它有<b>两个毛病</b>——Ng 特意说「先讲缺点，再讲什么时候该用它」。"});
+  QUIZ(664,2,{t:"离散化处理连续状态的做法和好处是什么？",o:["把连续取值范围切成有限多段、每格当一个状态；好处是问题变回有限状态 MDP，可直接套用 L17 的算法","把状态归一化到 [0,1]；好处是数值稳定","用神经网络拟合状态；好处是精度高","只保留最重要的那一维；好处是降维"],a:0,w:"⭐ 它<b>不需要任何新算法</b>，这是它最大的吸引力。⚠ 但有两个毛病——Ng 说「先讲缺点，再讲什么时候该用」。"});
+});
+KP("3 · ⚠ 毛病一：价值函数被压成阶梯",function(){
+  S(822,function(){clearScene();setEq(null);setCap("Ng 的类比：用阶梯去拟合房价");
+       says("13:42","this staircase would be how discretization will represent the price of a house");
+       axes({x0:300,x1:980,y0:380,y1:190});
+       curve(fn(function(x){return 370-150*Math.pow((x-310)/660,0.72);},310,970,70),"g");
+       curve(stair(310,970,370,220,7),"y");
+       note("真实关系：一条光滑的曲线",870,214,"g");
+       note("离散化表示：一段段平台",620,350,"y");
+       note("⭐ 想更接近真实，就只能把格子切得更细",640,398,"y");},"<b>第一个毛病，Ng 用了一个很好懂的类比：这相当于用阶梯去拟合房价随面积的变化。</b><br><b>绿色那条是真实关系——面积大一点，价格就贵一点，是一条光滑的曲线。</b><br><b>而离散化只能给出黄色那种阶梯：同一个格子里的所有面积，都被当成同一个价格。</b><br><b>⚠ 搬到强化学习里就是：价值函数被表示成了分段常数。</b><b>落在同一格的所有状态，都被认为「一样好」</b>——<b>哪怕其中一个紧贴着悬崖边，另一个离得还远。</b><br><b>⭐ 想让它更接近真实，办法只有一个：把格子切得更细。</b><br><b>⚠ 而这正好引出第二个、也是真正致命的毛病——因为切得更细是要付代价的。</b>");
+  S(822,function(){clearScene();setEq(null);setCap("阶梯在 RL 里具体会出什么事");
+   grid(400,200,130,54,4,3,function(i,j){
+     if(i===3&&j===0) return ["+1","g"];
+     if(i===3&&j===1) return ["−1","r"];
+     if(i===2&&j===1) return ["同一格","y"];
+     if(i===2&&j===0) return ["同一格","y"];
+     return ["",""];});
+   note("⚠ 格子切粗了：紧贴陷阱的状态和离得远的状态落进同一格",640,172,"r");
+   note("⭐ 于是算法认为它们「一样安全」—— 而实际上差别极大",640,398,"y");},"<b>阶梯这件事在强化学习里具体会出什么问题？用网格世界就能说清楚。</b><br><b>假设格子切得比较粗，于是「紧贴 −1 陷阱」的那个状态，和「离陷阱还有一段距离」的状态，落进了同一个格子。</b><br><b>⚠ 离散化的后果是：算法认为这两个状态的价值完全相同，也就是「一样安全」。</b><br><b>⭐ 而实际上它们差别极大——一个走错一步就掉下去，另一个还有缓冲。</b><br><b>⇒ 结果就是算法在这片区域做出的决策会很糟糕：它要么过度保守（按最危险的那个状态行事），要么过度冒险。</b><br><b>⚠ 这就是「表示能力不够」的实际代价，而且它不是算得慢的问题——就算你把值迭代跑到完全收敛，答案依然是错的。</b>");
+  SUM(822,3,{h:"⚠ 毛病一：价值函数变成分段常数的阶梯",k:"Ng 的类比：<b>相当于用阶梯去拟合房价随面积的变化</b>——真实关系是光滑曲线，离散化只能给出一段段平台。",m:"<b>搬到 RL 里</b>：<b>落在同一格的所有状态都被认为「一样好」</b>，哪怕<b>其中一个紧贴悬崖边、另一个离得还远</b>。",w:"⭐ <b>想更接近真实，办法只有一个：把格子切得更细。</b>",e:"⚠ <b>而切得更细是要付代价的</b> —— 这就引出第二个、真正致命的毛病。"});
+  QUIZ(822,3,{t:"离散化的第一个毛病是什么？Ng 用什么类比？",o:["无法保证收敛；类比是梯度爆炸","计算太慢；类比是排序算法","会过拟合；类比是高次多项式","价值函数被压成分段常数的阶梯——同一格里的状态都被当成一样好；类比是用阶梯拟合房价随面积的变化"],a:3,w:"⭐ 想更准就得<b>切得更细</b>，⚠ 而这正好引出第二个致命毛病——<b>切得更细的代价</b>。"});
+});
+KP("4 · ⚠⚠ 毛病二：维数灾难",function(){
+  S(907,function(){clearScene();setEq("$$\\text{状态空间 } \\mathbb{R}^{n}\\text{，每维切 } k \\text{ 段} \\;\\Longrightarrow\\; k^{n} \\text{ 个离散状态}$$","top");
+       setCap("指数，不是乘法");
+       says("15:07","the state space is in R_n, and discretize each dimension into k values",214);
+       matrix({rows:5,cols:2,cw:400,ch:34,x:240,y:234,
+         cell:function(i,j){var t=[
+           ["维度 n（每维切 10 段）","状态数"],
+           ["2（平面位置）","100"],
+           ["4（倒立摆）","1 万"],
+           ["12（直升机）","1 万亿"],
+           ["★ 每多一维","就乘以 10"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===4?"hl":"";}});},"<b>⚠⚠ 第二个毛病是真正致命的那个。</b><br>Ng 把它写得很清楚：<b>如果状态空间是 n 维的，每一维切成 k 段，总的离散状态数就是 k 的 n 次方。</b><br><b>他举的数是「每维只切 10 段，这已经相当粗了」——结果是 10 的 n 次方，随维度指数增长。</b><br><b>把表里的数看一遍，感受会很直接</b>：<b>二维（比如平面位置）只有 100 个状态，没问题；四维的倒立摆是 1 万个，还能算；而十二维的直升机是 1 万亿个</b>——<b>这个数字已经超出了任何计算机能处理的范围。</b><br><b>⭐ 要害在于「每多一维，就乘以 10」。</b><b>这不是「慢一点」，而是直接变成不可能。</b><br><b>⇒ 这个现象有个名字叫维数灾难。</b>");
+  S(907,function(){clearScene();setEq(null);setCap("为什么不能靠「多买几台机器」解决");
+   boxNode(130,196,470,58,"线性增长的问题","g");
+   boxNode(130,264,470,58,"算力翻一倍 ⇒ 能处理的规模翻一倍","g");
+   boxNode(690,196,470,58,"★ 指数增长的问题","r");
+   boxNode(690,264,470,58,"算力翻一倍 ⇒ 只多处理「一点点」维度","r");
+   note("⭐ 10 倍算力，只够 12 维直升机多切「不到一维」",640,352,"y");
+   note("⚠ 所以维数灾难不是工程问题，是必须换算法的信号",640,398,"r");},"<b>为什么维数灾难不能靠「多买几台机器」解决？这一点值得单独说清楚。</b><br><b>对线性增长的问题，算力翻一倍，能处理的规模就翻一倍——加硬件是有用的。</b><br><b>⭐ 而指数增长完全不同：状态数是 10 的 n 次方，算力翻 10 倍，只够你把 n 增加 1。</b><br><b>对十二维的直升机来说，就算给你 10 倍的算力，也不过是让你在某一维上多切一点点。</b><br><b>⚠ 所以维数灾难不是一个「等硬件变快就好了」的工程问题。</b><b>⇒ 它是一个明确的信号：这条路本身走不通，必须换算法。</b><br><b>⭐ 这也是为什么 Ng 要花半节课讲离散化的缺点——不是为了否定它，是为了说明下半节那个新算法的必要性。</b>");
+  SUM(907,4,{h:"⚠⚠ 毛病二：维数灾难 —— k^n",k:"Ng：<b>状态空间是 n 维、每维切 k 段 ⇒ 总共 k^n 个离散状态</b>。他举的数是<b>每维只切 10 段（已经相当粗）</b>。",m:"<b>具体感受</b>：2 维 = 100 个 ✓；4 维（倒立摆）= 1 万个 ✓；<b>12 维（直升机）= 1 万亿个</b> ✗。",w:"⭐ <b>要害是「每多一维就乘以 10」</b>——这不是「慢一点」，而是<b>直接变成不可能</b>。",e:"⇒ 这个现象叫<b>维数灾难</b>。"});
+  QUIZ(907,4,{t:"离散化的维数灾难具体是什么？",o:["维度越高，每维需要切得越细","高维时 γ 必须取得更小","n 维、每维切 k 段 ⇒ 共 k^n 个状态；每维只切 10 段时，12 维的直升机就有 1 万亿个状态","维度越高，收敛越慢但仍可行"],a:2,w:"⭐ 要害是「<b>每多一维就乘以 10</b>」——不是慢一点，是<b>直接变成不可能</b>。"});
+});
+KP("5 · ★ 分寸：离散化并不是坏办法",function(){
+  S(935,function(){clearScene();setEq(null);setCap("Ng 明确说了它什么时候够用");
+       says("15:35","discretization works fine if you have relatively low dimensional problems");
+       matrix({rows:4,cols:2,cw:430,ch:48,x:210,y:196,
+         cell:function(i,j){var t=[
+           ["维度","Ng 的说法"],
+           ["2 维","完全没问题"],
+           ["4 维（倒立摆）","还可以"],
+           ["更高","⚠ 必须换更讲究的算法"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 它简单、容易实现、在小问题上效果不错 —— 别一听「有缺点」就否定它",640,398,"y");},"<b>⚠ 讲完两个毛病，要把分寸补回来：Ng 并没有否定离散化。</b><br><b>他的原话很明确：低维问题用离散化完全没问题。</b><b>二维很轻松；四维的倒立摆也还行。</b><br><b>⭐ 而且他专门说了一句很实在的话——「虽然它不是最好的算法，但在小问题上它工作得不错」。</b><br><b>离散化的优点是真实的：简单、容易实现、不需要学新东西、调试也方便。</b><br><b>⚠ 所以正确的态度不是「离散化是坏办法」，而是「它有一个明确的适用范围，超出这个范围才需要换」。</b><br><b>⇒ 需要换的时候，换的就是这一讲的主角：拟合值迭代。</b><b>下一节开始讲它。</b>");
+  S(935,function(){clearScene();setEq(null);setCap("该先试哪个");
+   boxNode(170,196,980,56,"① 先问：我的状态空间几维？","b");
+   boxNode(170,264,980,56,"② 2–4 维 ⇒ 先用离散化，简单、快、好调试","g");
+   note("③ 效果不够或维度更高 ⇒ 再上拟合值迭代",640,348,"y");
+   note("⭐ 这是很标准的工程顺序：先用最简单能work的办法，再谈升级",640,398,"y");},"<b>给一个实际的决策顺序。</b><br><b>第一步先问自己：状态空间是几维的？</b><br><b>第二步：如果是两到四维，先用离散化。</b><b>⭐ 它简单、实现快、容易调试，而且 Ng 明确说这个范围内它工作得不错。</b><br><b>第三步：如果效果不够，或者维度本来就更高，再上拟合值迭代。</b><br><b>⭐ 这是一个很标准的工程顺序：先用最简单的、能工作的办法，再谈升级。</b><br><b>⚠ 反过来做的代价很实在——一上来就写拟合值迭代，你要同时调特征、调 m 和 k、还要怀疑是不是不收敛；</b><b>而如果先用离散化跑通，你至少有了一个已知正确的参照，后面出问题时能对比着查。</b>");
+  SUM(935,5,{h:"★ 离散化的适用范围：低维问题完全够用",k:"Ng 明确说：<b>低维问题用离散化完全没问题</b>——<b>2 维很轻松，4 维的倒立摆也还行</b>。",m:"⭐ 他的原话是「<b>虽然不是最好的算法，但在小问题上工作得不错</b>」。",w:"<b>它的优点是真实的</b>：简单、容易实现、不用学新东西、调试方便。",e:"⚠ <b>正确的态度</b>：不是「离散化是坏办法」，而是「<b>它有明确的适用范围，超出才需要换</b>」——换的就是<b>拟合值迭代</b>。"});
+  QUIZ(935,5,{t:"关于离散化，哪种态度符合 Ng 在课上的说法？",o:["只要状态连续就不能用","低维问题（2 维很轻松、4 维的倒立摆也还行）用它完全没问题；只有更高维时才必须换更讲究的算法","它有致命缺陷，任何情况下都不该用","它比拟合值迭代更准，只是慢"],a:1,w:"⭐ Ng 的原话是「<b>虽然不是最好的算法，但在小问题上工作得不错</b>」——它简单、好实现、好调试。"});
+});
+KP("6 · ⚠ 状态里放什么，是你的选择",function(){
+  S(316,function(){clearScene();setEq(null);setCap("建模时第一个要做的决定");
+       says("5:16","it is up to you how you want to model the car");
+       boxNode(130,196,470,58,"要不要记方向盘的当前转角？","b");
+       boxNode(130,264,470,58,"要不要记轮胎磨损程度？","b");
+       boxNode(690,196,470,58,"★ 答案：看你要做什么应用","y");
+       boxNode(690,264,470,58,"普通驾驶：六个数就够了","g");
+       note("⚠ 回想 L16 的马尔可夫性质：状态要含「做决定所需的全部信息」",640,352,"r");
+       note("⭐ 放少了违反马尔可夫性；放多了维数灾难立刻加倍惩罚你",640,398,"y");},"<b>Ng 在讲车的状态时停下来说了一件很重要的事：状态里放什么，是你的选择。</b><br><b>他举的例子很具体：要不要把方向盘的当前转角也记进状态？要不要记轮胎磨损到什么程度？</b><br><b>⭐ 他的回答是：取决于你在做什么应用。</b><b>对大部分普通驾驶来说，位置、朝向加上它们的变化率这六个数就是足够的细节。</b><br><b>⚠ 把这件事和 L16 的马尔可夫性质连起来看，才能理解它的分量</b>：<b>状态必须包含「做决定所需的全部信息」。</b><br><b>⇒ 于是建模变成一个两头受压的决定：放少了，状态不自足，违反马尔可夫性质，算法根本学不好；</b><b>⭐ 而放多了，维数灾难会立刻加倍惩罚你——每多一维就乘以 k。</b><br><b>⚠ 这个张力在 L17 里是感觉不到的，因为那里状态是题目给定的。</b>");
+  S(316,function(){clearScene();setEq(null);setCap("一个实际的取舍例子");
+   matrix({rows:4,cols:3,cw:350,ch:46,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["要建的应用","状态里要不要放方向盘转角","理由"],
+       ["普通巡航","不用","转角变化很快，不影响大局"],
+       ["精确泊车","★ 要","低速时转角直接决定轨迹"],
+       ["赛道竞速","★ 要，还要加轮胎状态","抓地力决定极限"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i>=2?"hl":"";}});
+   note("⭐ 同一辆车，不同应用，该放进状态的东西完全不同",640,398,"y");},"<b>把 Ng 那个问题具体化，就知道这个决定有多实在。</b><br><b>同一辆车，做不同的应用，该放进状态的东西完全不同。</b><br><b>普通巡航：方向盘转角不用放。它变化很快，而且在高速直行时对大局影响不大。</b><br><b>⭐ 精确泊车：必须放。低速挪动时，方向盘打到哪个角度直接决定了车会沿什么轨迹走。</b><br><b>⭐ 赛道竞速：不仅要放转角，还得考虑轮胎状态——抓地力决定了过弯的极限，而这正是竞速里最关键的量。</b><br><b>⚠ 所以「状态空间」不是物理系统的客观属性，而是你针对任务做的一个建模决定。</b><b>⇒ 这也意味着：同一个机器人，换个任务可能就要重新设计状态。</b>");
+  SUM(316,6,{h:"⚠ 状态里放什么是建模者的选择",k:"Ng：<b>要不要记方向盘转角？要不要记轮胎磨损？</b>——<b>取决于你在做什么应用</b>；普通驾驶六个数就够。",m:"⚠ <b>连着 L16 的马尔可夫性质看</b>：状态必须包含<b>「做决定所需的全部信息」</b>。",w:"⇒ <b>两头受压</b>：<b>放少了</b>状态不自足、违反马尔可夫性质，算法学不好；⭐ <b>放多了</b>维数灾难<b>立刻加倍惩罚</b>（每多一维乘以 k）。",e:"⚠ <b>这个张力在 L17 里感觉不到</b>，因为那里状态是题目给定的。"});
+  QUIZ(316,6,{t:"建模时决定「状态里放什么」要权衡什么？",o:["只要维度是偶数即可","必须和动作的维度相同","只要放得越多越好，信息多总是有利","放少了违反马尔可夫性质（状态不含做决定所需的全部信息），放多了维数灾难立刻惩罚——每多一维状态数乘以 k"],a:3,w:"⭐ Ng 的例子：<b>要不要记方向盘转角、轮胎磨损</b>——取决于应用；普通驾驶六个数就够。⚠ 这个张力在 L17 里感觉不到。"});
+});
+KP("7 · 运动学模型与动力学模型",function(){
+  S(367,function(){clearScene();setEq(null);setCap("机器人领域的一对术语");
+       says("6:07","that would be called the kinematic model of the car");
+       boxNode(130,200,470,58,"运动学模型（kinematic）","b");
+       boxNode(130,268,470,58,"只记位置和朝向","b");
+       boxNode(690,200,470,58,"★ 动力学模型（dynamics）","y");
+       boxNode(690,268,470,58,"再加上它们的变化率（速度）","y");
+       note("⭐ 这一讲用的是动力学模型 —— 六维的那个",640,352,"y");
+       note("⚠ 为什么要速度：只知道「在哪」不足以决定下一步该怎么做",640,398,"r");},"<b>Ng 顺带补了一对机器人领域的术语。</b><br><b>只记位置和朝向的那种叫运动学模型；再加上它们的变化率（也就是速度）的那种叫动力学模型。</b><br><b>⭐ 这一讲用的是动力学模型——前面说的那个六维状态就是它。</b><br><b>⚠ 为什么非要带上速度？</b>这又回到马尔可夫性质：<b>只知道车「在哪」，不足以决定下一步该怎么做。</b><b>同样的位置，车可能在高速前进，也可能几乎静止，该踩油门还是该刹车完全相反。</b><br><b>⭐ 这和 L16 里直升机那个例子是同一个道理：只给位置不给速度，分不出正在上升还是正在下坠。</b><br><b>⇒ 所以带速度的动力学模型，才是满足马尔可夫性质的那个。</b>");
+  S(367,function(){clearScene();setEq(null);setCap("维度翻倍的代价");
+   matrix({rows:4,cols:3,cw:350,ch:46,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["","运动学（3 维）","动力学（6 维）"],
+       ["状态","x, y, 朝向","再加三个变化率"],
+       ["每维切 10 段","1 千个状态","★ 100 万个状态"],
+       ["离散化可行吗","可以","⚠ 已经很勉强"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return (i===2&&j===2)?"hl":"";}});
+   note("⭐ 维数灾难在这里就已经开始咬人了",640,398,"y");},"<b>从运动学模型换到动力学模型，维度从三维翻到六维，代价有多大？算一下就知道。</b><br><b>每一维切 10 段的话：三维是 1 千个状态，完全没问题；⭐ 六维就是 100 万个状态。</b><br><b>⚠ 100 万个状态做值迭代，已经很勉强了——每一轮都要遍历一百万次，还要为每个状态试所有动作。</b><br><b>⭐ 注意这里只是从 3 维到 6 维，维数灾难就已经开始咬人了，而直升机是 12 维。</b><br><b>⇒ 这个计算很能说明问题：维数灾难不是「高维时才要担心的事」，它从很低的维度就开始发力了。</b><br><b>⚠ 而且你没得选——不带速度就违反马尔可夫性质，带上速度维度就翻倍。</b>");
+  SUM(367,7,{h:"运动学模型 vs 动力学模型",k:"<b>运动学模型（kinematic）</b>：只记位置和朝向。<b>动力学模型（dynamics）</b>：再加上它们的<b>变化率（速度）</b>。",m:"⭐ <b>这一讲用的是动力学模型</b>——前面那个六维状态就是它。",w:"⚠ <b>为什么非要带速度</b>：只知道「在哪」不足以决定下一步——<b>同样的位置，高速前进和几乎静止，该踩油门还是刹车完全相反</b>。",e:"⭐ <b>和 L16 直升机那个例子同理</b>：只给位置不给速度，分不出正在上升还是下坠。⇒ <b>带速度的动力学模型才满足马尔可夫性质</b>。"});
+  QUIZ(367,7,{t:"运动学模型和动力学模型的区别是什么？这一讲用哪个？",o:["运动学只记位置和朝向，动力学再加上它们的变化率（速度）；这一讲用动力学，因为只给位置不满足马尔可夫性质","动力学模型维度更低；这一讲用动力学","运动学用于地面、动力学用于空中；这一讲用运动学","两者等价，只是叫法不同"],a:0,w:"⚠ 为什么非要速度：<b>同样的位置，高速前进和几乎静止，该踩油门还是刹车完全相反</b>。⭐ 和 L16 直升机「只给位置分不出上升还是下坠」同理。"});
+});
+KP("8 · ⭐ 倒立摆：强化学习的果蝇",function(){
+  S(477,function(){clearScene();setEq(null);setCap("早期大家都在做的那个问题");
+       says("7:57","one of the problems that a lot of people just had to work on");
+       curve([[380,370],[900,370]],"d");
+       boxNode(560,320,160,46,"小车","b");
+       curve([[640,320],[700,200]],"y");
+       dots([[700,200]],"y",9);
+       note("杆铰接在小车上，铰链处没有马达",640,172,"y");
+       note("⚠ 杆不受控制，只能靠左右移动小车间接把它立住",640,398,"r");},"<b>Ng 说倒立摆是强化学习早期大家都在做的问题，很多教科书里都有它。</b><br><b>装置是这样的：一根杆铰接在一辆小车上，铰链处没有马达——杆完全不受直接控制，会自由倒下。</b><br><b>⚠ 你唯一能做的是左右移动小车，靠这个间接把杆立住。</b><br><b>⭐ 为什么它成了经典？因为它小得能算、又难得有意思。</b><b>状态只有四维（小车的位置和速度、杆的角度和角速度），小到可以离散化硬算；</b><b>但控制逻辑一点都不平凡——想把往右倒的杆扶正，你得先把小车往右开，这和直觉里「往左推回去」正好相反。</b><br><b>⇒ 这个「反直觉」正是它作为教学例子的价值，也是前面讲「角度 × 速度」交互特征时用它举例的原因。</b>");
+  S(477,function(){clearScene();setEq(null);setCap("为什么拿它当基准问题");
+   matrix({rows:4,cols:2,cw:430,ch:46,x:210,y:196,
+     cell:function(i,j){var t=[
+       ["性质","好处"],
+       ["状态只有 4 维","离散化也能算 ⇒ 有已知正确答案可对照"],
+       ["控制逻辑反直觉","能真正区分算法好坏"],
+       ["★ 失败很明显","杆倒了就是倒了，不用设计评价指标"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 第三条最被低估：有一个毫不含糊的成败判据",640,398,"y");},"<b>为什么这么多人拿倒立摆当基准问题？三条理由，而且第三条最被低估。</b><br><b>第一，状态只有四维，离散化也算得动——这意味着你有一个已知正确的参照答案，可以用来验证新算法对不对。</b><br><b>第二，控制逻辑反直觉，不是随便摆弄两下就能成功的，所以它能真正区分算法的好坏。</b><br><b>⭐ 第三条最关键：失败非常明显。杆倒了就是倒了。</b><br><b>⚠ 这一点为什么重要？因为在很多强化学习任务里，「做得好不好」本身就需要设计一个评价指标，而那个指标设计得不好，整个实验就没有意义。</b><b>倒立摆免掉了这层麻烦——它自带一个毫不含糊的成败判据。</b><br><b>⇒ 回想 L16 讲奖励函数时那个坑：奖励写歪了算法会忠实地追求歪目标。倒立摆几乎不可能把奖励写歪。</b>");
+  SUM(477,8,{h:"⭐ 倒立摆：经典的四维控制问题",k:"Ng 说它是<b>强化学习早期大家都在做的问题</b>。装置：<b>一根杆铰接在小车上，铰链处没有马达</b>，杆会自由倒下。",m:"⚠ <b>你唯一能做的是左右移动小车</b>，靠这个<b>间接</b>把杆立住。",w:"⭐ <b>为什么成了经典</b>：状态只有四维（小车位置/速度、杆角度/角速度），<b>小到可以离散化硬算</b>；<b>但控制逻辑一点不平凡</b>。",e:"⭐ <b>反直觉之处</b>：想把往右倒的杆扶正，<b>得先把小车往右开</b>——和「往左推回去」的直觉正相反。"});
+  QUIZ(477,8,{t:"倒立摆问题的装置和难点是什么？",o:["杆是柔性的；难点是形变建模","杆上有马达，直接控制角度；难点是马达延迟","杆铰接在小车上、铰链无马达可自由倒下，只能靠左右移动小车间接立住；难点是控制反直觉——要扶正往右倒的杆得先把小车往右开","小车固定，靠风力控制杆；难点是风速随机"],a:2,w:"⭐ 它小到能离散化硬算（<b>4 维</b>），但控制逻辑不平凡——这正是它当教学例子的价值，也是「<b>角度 × 速度</b>」交互特征的来源。"});
+});
+KP("9 · ★ 为什么拟合值迭代需要模拟器",function(){
+  S(1369,function(){clearScene();setEq(null);setCap("算法和模型是配套的");
+       /* ⚠ 讲稿里 ASR 把 "fitted" 听成了 "fits it"（"fits it value iteration..."）。
+          这里引用的是修正后的正确英文；时间码 22:49 是用讲稿原词验过的。
+          crosscheck 会因此报一条「正文里找不到」—— 属已知且可接受。 */
+       says("22:49","fitted value iteration works best with a model with simulator");
+       boxNode(170,196,980,56,"算法第②步要「对每个状态、每个动作采 k 个下一状态」","b");
+       boxNode(170,264,980,56,"⇒ 必须能随时问「在 s 做 a 会去哪」，而且问任意多次","y");
+       note("⚠ 真机做不到：你没法让机器人回到同一个状态再试一次",640,348,"r");
+       note("⭐ 而模拟器可以 —— 把状态设回去，想试多少次试多少次",640,398,"y");},"<b>Ng 说拟合值迭代「配上一个模型或模拟器时效果最好」。这不是建议，是算法本身的要求。</b><br><b>看算法第二步要做什么：对每一个采样到的状态、每一个动作，采 k 个下一状态。</b><b>⇒ 这意味着你必须能随时问「在状态 s 做动作 a 会去到哪」，而且要能问任意多次。</b><br><b>⚠ 真实机器人做不到这件事。</b><b>机器人一旦动了就到了新状态，你没法让它回到刚才那个状态再试一次</b>——<b>更别说对同一个状态试 k 次、对每个动作都试一遍。</b><br><b>⭐ 而模拟器可以：把状态变量直接设回去，想试多少次试多少次。</b><br><b>⇒ 所以「必须有模拟器」是这个算法的硬前提，这也是它被归为 model-based 的原因。</b>");
+  SUM(1369,9,{h:"★ 模拟器是拟合值迭代的硬前提",k:"Ng：拟合值迭代<b>配上模型/模拟器时效果最好</b>——这不是建议，是<b>算法本身的要求</b>。",m:"<b>算法第②步</b>要对<b>每个状态、每个动作采 k 个下一状态</b> ⇒ 必须能<b>随时问「在 s 做 a 会去哪」、而且问任意多次</b>。",w:"⚠ <b>真机做不到</b>：机器人一动就到了新状态，<b>没法回到刚才那个状态再试一次</b>，更别说对每个动作各试 k 次。",e:"⭐ <b>模拟器可以</b>：把状态变量直接设回去，想试多少次试多少次。⇒ 这正是它被归为 <b>model-based</b> 的原因。"});
+  QUIZ(1369,9,{t:"为什么拟合值迭代必须有模拟器？",o:["为了加速计算","为了估计奖励函数","算法要对每个状态的每个动作采 k 个下一状态，这要求能把状态设回去反复试；真机一动就到了新状态，做不到","为了做探索"],a:2,w:"⭐ 模拟器能<b>把状态变量直接设回去</b>，想试多少次试多少次。⇒ 这正是它被归为 <b>model-based</b> 的原因。"});
+});
+KP("10 · 预告：下一讲的 LQR 与 LQG",function(){
+  S(2182,function(){clearScene();setEq(null);setCap("线性模型还能更进一步");
+       says("36:22","we actually talk about some other models later, called LQR and LQG");
+       boxNode(130,200,470,58,"这一讲：拟合值迭代","b");
+       boxNode(130,268,470,58,"通用，但要采样、要拟合、不保证收敛","b");
+       boxNode(690,200,470,58,"★ L19：LQR","y");
+       boxNode(690,268,470,58,"模型线性 ＋ 奖励是二次型 ⇒ 有精确解","y");
+       note("⭐ 代价是适用面窄了 —— 但在它适用的地方，它好得多",640,352,"y");
+       note("⚠ 注意 LQR 用的模型就是这一讲的 s′ ≈ A·s + B·a",640,398,"r");},"<b>Ng 在讲线性模型时顺口提了一句：后面还会讲另外几种模型，叫 LQR 和 LQG。</b><br><b>把它和这一讲对照一下，就知道下一讲在补什么。</b><br><b>这一讲的拟合值迭代很通用——不管你的模型什么形状、奖励函数什么样，它都能用。</b><b>⚠ 但代价是：要采样估期望、要拟合、而且不保证收敛。</b><br><b>⭐ L19 的 LQR 走的是另一条路：如果你的模型恰好是线性的，而且奖励恰好是二次型的，那么最优策略有精确的闭式解。</b><b>不用采样，不用拟合，不用迭代到收敛。</b><br><b>⚠ 代价当然是适用面窄了——但在它适用的地方，它比通用方法好得多。</b><br><b>⭐ 而且注意一个衔接点：LQR 用的那个线性模型，正是这一讲讲过的 s′ ≈ A·s + B·a。</b><b>所以这一讲学的建模方法，下一讲会直接拿去用。</b>");
+  SUM(2182,10,{h:"预告：L19 的 LQR 走另一条路",k:"<b>这一讲的拟合值迭代很通用</b>——模型什么形状、奖励什么样都能用；⚠ <b>代价是要采样、要拟合、不保证收敛</b>。",m:"⭐ <b>LQR</b>：模型<b>线性</b> ＋ 奖励<b>二次型</b> ⇒ <b>最优策略有精确闭式解</b>，不用采样、不用拟合、不用迭代。",w:"⚠ <b>代价是适用面窄了</b>——但在它适用的地方，<b>它比通用方法好得多</b>。",e:"⭐ <b>衔接点</b>：LQR 用的线性模型<b>正是这一讲的 s′ ≈ A·s + B·a</b>，这一讲学的建模方法下一讲直接拿去用。"});
+  QUIZ(2182,10,{t:"L19 的 LQR 和这一讲的拟合值迭代是什么关系？",o:["LQR 是拟合值迭代的一种实现","拟合值迭代通用但要采样/拟合且不保证收敛；LQR 要求模型线性、奖励二次型，换来精确闭式解——适用面窄但在适用处好得多","LQR 不需要模型","LQR 只能用于离散状态"],a:1,w:"⭐ 衔接点：<b>LQR 用的线性模型正是这一讲的 s′ ≈ A·s + B·a</b>，这一讲的建模方法下一讲直接拿去用。"});
+});
+KP("11 · ★★ 换思路：不切格子，直接近似 V*",function(){
+  S(1210,function(){clearScene();setEq(null);setCap("绕开离散化");
+       says("20:10","approximate V star directly without resorting to discretization");
+       boxNode(120,200,440,76,"离散化的思路","d");
+       boxNode(120,296,440,56,"为每个格子存一个数","d");
+       boxNode(720,200,440,76,"★ 这一讲的思路","y");
+       boxNode(720,296,440,56,"用一个函数去拟合整条价值曲线","y");
+       note("⭐ 不再需要「为每个状态存一个数」—— 存的是一组参数",640,398,"y");},"<b>⭐ 换一条路：不把连续空间切碎，而是直接去近似 V*。</b><br><b>两种思路的根本差别在于「存什么」。</b><br><b>离散化的做法是为每个格子存一个数</b>——<b>格子有多少个，就要存多少个数，所以才会有维数灾难。</b><br><b>⭐ 而这一讲的做法是：用一个函数去拟合整条价值曲线，只存这个函数的参数。</b><br><b>⇒ 参数的个数和状态的个数脱钩了。</b><b>哪怕状态有无穷多个，参数仍然只有那么几个。</b><br><b>⚠ 这个想法你其实早就见过——回想监督学习：你不会为每一种房子面积都存一个价格，你拟合一条直线，然后用它去预测任意面积的价格。</b><b>这里做的是同一件事，只不过要预测的不是房价，而是「从这个状态出发能拿多少」。</b>");
+  S(1210,function(){clearScene();setEq(null);setCap("一张图看懂两种表示法");
+   axes({x0:300,x1:980,y0:370,y1:190});
+   curve(stair(320,960,360,230,9),"d");
+   curve(fn(function(x){return 362-135*Math.pow((x-320)/640,0.8);},320,960,70),"y");
+   note("灰：离散化 —— 每格存一个数",560,190,"d");
+   note("★ 黄：拟合 —— 存一组参数，曲线是算出来的",700,398,"y");
+   note("⭐ 黄线在没采样到的地方也有值",640,350,"g");},"<b>把两种表示法画在同一张图上，差别最直观。</b><br><b>灰色的阶梯是离散化：每一格存一个数，格子之间是断开的。</b><br><b>⭐ 黄色的曲线是拟合：你只存一组参数 θ，曲线上任意一点的值都是用 θᵀφ(s) 现算出来的。</b><br><b>⇒ 最要紧的区别是：黄线在「没被采样到的地方」也有值。</b><br><b>离散化只能告诉你落在某一格里的状态值多少（而且格内全都一样）；</b><b>而拟合出来的函数，对任何一个你从没见过的状态，都能立刻给出一个估计。</b><br><b>⭐ 这个「能外推到没见过的状态」的能力，正是监督学习的核心能力，也是这一讲把它借过来的理由。</b>");
+  SUM(1210,11,{h:"★★ 直接近似 V*，不经过离散化",k:"<b>两种思路的根本差别在「存什么」</b>：离散化<b>为每个格子存一个数</b>（格子多少就存多少，所以有维数灾难）。",m:"⭐ <b>这一讲</b>：用一个函数拟合整条价值曲线，<b>只存这个函数的参数</b>。",w:"⇒ <b>参数个数和状态个数脱钩了</b>——哪怕状态无穷多，参数仍然只有那么几个。",e:"⚠ <b>这个想法你早就见过</b>：监督学习里你不会为每种房子面积存一个价格，而是<b>拟合一条直线再去预测</b>。"});
+  QUIZ(1210,11,{t:"「直接近似 V*」与离散化的根本差别在哪？",o:["差别在「存什么」：离散化为每个格子存一个数，所以状态数一多就爆炸；近似法只存一个函数的参数，参数个数与状态个数脱钩","前者更精确，后者更快","前者只能用于确定性环境","前者不需要奖励函数"],a:0,w:"⚠ 这和<b>监督学习</b>是同一个想法：不为每种面积存一个房价，而是<b>拟合一条曲线再预测</b>。"});
+});
+KP("12 · ★ V(s) = θᵀφ(s)：把线性回归搬过来",function(){
+  S(1315,function(){clearScene();setEq("$$V(s) \\;=\\; \\theta^{\\top}\\phi(s) \\qquad\\text{对照}\\qquad h_{\\theta}(x) \\;=\\; \\theta^{\\top}\\phi(x)$$","top");
+       setCap("两边形状一模一样");
+       says("21:55","we will approximate v star of s as a linear function of features of the state",214);
+       matrix({rows:4,cols:3,cw:350,ch:38,x:130,y:250,
+         cell:function(i,j){var t=[
+           ["","线性回归","拟合值迭代"],
+           ["输入","房子 x","状态 s"],
+           ["特征","φ(x)：面积、面积²、卧室数…","φ(s)：角度、速度、角度×速度…"],
+           ["输出","预测房价","★ 预测「从这儿出发能拿多少」"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});},"<b>具体怎么近似？Ng 说：把 V*(s) 写成状态特征的线性函数。</b><br><b>也就是 V(s) = θᵀφ(s)</b>——<b>φ(s) 是你为状态设计的一组特征，θ 是要学的参数。</b><br><b>⭐ 把它和线性回归并排放，形状完全一样。</b><br><b>线性回归里：输入是一栋房子，特征是面积、面积的平方、卧室数等等，输出是预测的房价。</b><br><b>这里：输入是一个状态，特征是角度、速度、角度乘速度等等，输出是「从这个状态出发能拿到的期望总回报」。</b><br><b>⚠ Ng 特意提醒了一句分寸：这是「用线性回归，但要做大量修改」。</b><b>⇒ 所以别以为把价值函数的训练数据丢进 sklearn 就完事了——下面会看到那些修改在哪里。</b>");
+  S(1315,function(){clearScene();setEq(null);setCap("「线性」指的是对谁线性");
+   boxNode(130,196,470,58,"⚠ 常见误解","r");
+   boxNode(130,264,470,58,"以为 V 必须是状态的线性函数","r");
+   boxNode(690,196,470,58,"★ 实际","g");
+   boxNode(690,264,470,58,"是对参数 θ 线性，对状态可以任意非线性","g");
+   note("⭐ 所以 φ(s) 里放 x²、角度×速度 这类项完全没问题",640,352,"y");
+   note("⚠ 和线性回归里「线性模型也能拟合曲线」是同一回事",640,398,"r");},"<b>这里有一个几乎每个人都会卡一下的点：「线性函数」到底是对谁线性？</b><br><b>⚠ 常见的误解是：以为 V 必须是状态的线性函数，那样的话价值函数只能是一个平面，根本没法用。</b><br><b>⭐ 实际上，线性指的是「对参数 θ 线性」——对状态 s 可以是任意非线性的。</b><br><b>⇒ 所以 φ(s) 里完全可以放 x 的平方、角度乘速度这种非线性项。</b><b>只要 V 写成 θ 和 φ(s) 的内积，它就是「线性模型」。</b><br><b>⚠ 这和线性回归里「线性模型照样能拟合曲线」是完全同一回事</b>——<b>你把 x² 当成一个新特征，模型对参数仍是线性的，但拟合出来的是抛物线。</b><br><b>⭐ 想通这一点，前面那个「角度 × 速度」的交互特征就顺理成章了。</b>");
+  SUM(1315,12,{h:"★ V(s) = θᵀφ(s)：形状就是线性回归",k:"Ng：<b>把 V*(s) 近似成状态特征的线性函数</b>——<b>φ(s) 是你设计的特征，θ 是要学的参数</b>。",m:"⭐ <b>和线性回归并排看</b>：那边输入房子、特征是面积/面积²/卧室数、输出房价；<b>这边输入状态、特征是角度/速度/角度×速度、输出「从这儿出发能拿多少」</b>。",w:"⚠ <b>Ng 的分寸</b>：这是「<b>用线性回归，但要做大量修改</b>」。",e:"⇒ <b>别以为把数据丢进现成的回归库就完事</b>——修改在哪里，后面几节会看到。"});
+  QUIZ(1315,12,{t:"拟合值迭代用什么形式来近似价值函数？",o:["用决策树逐层划分状态空间","用一张查找表，每个状态一行","用 k 近邻从历史状态中检索","V(s) = θᵀφ(s)，即状态特征的线性函数——形状和线性回归完全一样"],a:3,w:"⭐ 对照：线性回归用特征预测<b>房价</b>，这里用特征预测<b>「从这个状态出发能拿多少」</b>。⚠ Ng 说这是「用线性回归但要做大量修改」。"});
+});
+KP("13 · ★★ 模型（模拟器）是什么",function(){
+  S(1412,function(){clearScene();setEq(null);setCap("一个函数：给它状态和动作，它告诉你下一个状态");
+       says("23:32","a model of a or a simulator of your robot is just a function that takes as input a state");
+       boxNode(110,210,250,70,"状态 s","b");
+       boxNode(110,300,250,56,"动作 a","b");
+       boxNode(520,240,280,80,"模拟器","y");
+       boxNode(930,240,250,80,"下一状态 s′","g");
+       link(360,245,520,275); link(360,328,520,295); link(800,280,930,280);
+       note("⭐ 它就是 L17 里那个 P_sa，只不过现在以「能采样」的形式给出",640,398,"y");},"<b>在讲算法之前，要先补一个 L17 没正式出现过的零件：模型，也叫模拟器。</b><br><b>Ng 的定义很朴素：它就是一个函数，输入当前状态和当前动作，输出下一个状态。</b><br><b>⭐ 它其实就是 L17 里那个 P_sa，只不过换了一种形式。</b><b>L17 里 P_sa 是一张概率表，你可以把所有可能的 s′ 枚举出来求和；</b><b>而连续状态下枚举不可能，所以模型以「能采样」的形式给出——你问它一次，它给你一个 s′。</b><br><b>⚠ 这个差别很重要，它决定了后面算法的形状：期望算不出来，只能靠多次采样取平均。</b><br><b>⭐ 那模型从哪来？Ng 给了两条途径，下面两节分别讲。</b>");
+  S(1412,function(){clearScene();setEq(null);setCap("两种模型来源，一张表");
+   matrix({rows:4,cols:3,cw:350,ch:46,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["","物理引擎","从数据学"],
+       ["要什么","系统的尺寸、质量等参数","机器人跑出来的 (s, a) 记录"],
+       ["准不准","取决于物理建模对不对","取决于数据覆盖得够不够"],
+       ["★ 共同点","","都只是真实世界的近似"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⚠ 记住最后一行 —— 它是后面那条实战教训的根",640,398,"r");},"<b>先把两条模型来源摆成一张表，下面两节再分别细讲。</b><br><b>物理引擎需要的是系统的物理参数：尺寸、质量这些；它准不准，取决于你的物理建模对不对。</b><br><b>从数据学需要的是机器人实际跑出来的状态-动作记录；它准不准，取决于数据覆盖得够不够全。</b><br><b>⚠ 但最要紧的是最后一行——两者有一个共同点：都只是真实世界的近似。</b><br><b>物理引擎忽略了空气阻力的细节、地面的不平整、零件的磨损；</b><b>从数据学的模型，在没见过的状态上只能靠外推。</b><br><b>⭐ 记住这一行，因为它正是后面那条实战教训（确定性模拟器会学出脆弱策略）的根。</b>");
+  SUM(1412,13,{h:"★★ 模型/模拟器：输入 (s, a)，输出 s′",k:"Ng 的定义很朴素：<b>它就是一个函数，输入当前状态和动作，输出下一个状态</b>。",m:"⭐ <b>它其实就是 L17 的 P_sa</b>，只不过 L17 里是<b>一张能枚举求和的概率表</b>，这里是<b>能采样的形式</b>——你问它一次，它给你一个 s′。",w:"⚠ <b>这个差别决定了后面算法的形状</b>：连续状态下<b>期望算不出来，只能靠多次采样取平均</b>。",e:"⭐ 模型有<b>两条来源</b>：物理引擎，或从数据里学。"});
+  QUIZ(1412,13,{t:"强化学习里的「模型」或「模拟器」指什么？",o:["价值函数的近似器","奖励函数的估计","一个函数：输入当前状态和动作，输出下一个状态——本质是 L17 的 P_sa，但以「能采样」的形式给出","策略网络"],a:2,w:"⚠ 这个「采样而非枚举」的差别很关键：<b>连续状态下期望算不出来，只能多次采样取平均</b>——后面算法的形状由此而来。"});
+});
+KP("14 · ★ 模型来源一：物理引擎",function(){
+  S(1570,function(){clearScene();setEq(null);setCap("翻物理书，或者直接用现成的引擎");
+       says("26:10","one way to build a model is to use a physics simulator");
+       boxNode(130,200,470,58,"办法 A：自己推运动方程","b");
+       boxNode(130,268,470,58,"牛顿力学 ⇒ s′ = s + Δt · ṡ","b");
+       boxNode(690,200,470,58,"★ 办法 B：开源物理引擎","g");
+       boxNode(690,268,470,58,"填进尺寸、质量等参数就能跑","g");
+       note("⭐ Ng 说后者是更常见的做法 —— 不必自己推公式",640,352,"y");
+       note("他自己就用物理引擎给四足机器人搭过模拟器，用 RL 教会它走路",640,398,"d");},"<b>模型的第一条来源是物理引擎。</b><br><b>办法 A 是自己推：翻开物理课本，用牛顿力学写出系统的运动方程。</b><b>倒立摆这种四维系统，推导是做得出来的</b>——<b>基本形式是「新状态 = 旧状态 + 时间步长 × 变化率」。</b><br><b>⭐ 办法 B 更常见，Ng 明确说这才是通常的做法：直接用开源的物理引擎。</b><b>你只需要把系统的尺寸、质量这些参数填进去，它就会把模拟器给你吐出来。</b><br><b>⇒ 不必自己推公式，省掉大量容易出错的体力活。</b><br><b>⚠ 这不是纸上谈兵——Ng 说他自己就用物理引擎给一个四足机器人搭过模拟器，然后用强化学习教会它走路。</b>");
+  S(1570,function(){clearScene();setEq(null);setCap("物理引擎的两个局限");
+   boxNode(130,196,470,58,"⚠ 局限一：参数要测准","r");
+   boxNode(130,264,470,58,"质量、转动惯量、摩擦系数都得给对","r");
+   boxNode(690,196,470,58,"⚠ 局限二：总有没建模的东西","r");
+   boxNode(690,264,470,58,"空气扰动、零件磨损、地面不平","r");
+   note("⭐ 所以物理引擎给的也只是近似 —— 回到那条实战教训",640,352,"y");
+   note("⇒ 这正是为什么要在模拟器里加噪声",640,398,"g");},"<b>物理引擎听起来很可靠，但它也有两个实在的局限，值得说清楚。</b><br><b>局限一：参数要测准。</b><b>质量、转动惯量、摩擦系数，这些数你得真的量出来或查出来；填错了，模拟器就是错的，而且错得很隐蔽。</b><br><b>局限二：总有没建模进去的东西。</b><b>空气的扰动、零件的磨损、地面的不平整——物理引擎不会凭空知道这些。</b><br><b>⭐ 所以物理引擎给出的同样只是近似，这又回到了那条实战教训。</b><br><b>⇒ 也正因如此，Ng 才建议在模拟器里加噪声：那个噪声项的作用，某种意义上就是在替所有「没建模进去的东西」占一个位置。</b>");
+  SUM(1570,14,{h:"★ 模型来源一：物理引擎",k:"<b>办法 A</b>：自己推运动方程（牛顿力学），基本形式是 <b>新状态 = 旧状态 + 时间步长 × 变化率</b>。",m:"⭐ <b>办法 B（Ng 说这才是更常见的）</b>：<b>直接用开源物理引擎</b>，把尺寸、质量等参数填进去，它把模拟器吐给你。",w:"⇒ <b>不必自己推公式</b>，省掉大量容易出错的体力活。",e:"⚠ <b>不是纸上谈兵</b>：Ng 说他自己<b>用物理引擎给四足机器人搭过模拟器，再用 RL 教会它走路</b>。"});
+  QUIZ(1570,14,{t:"用物理引擎建模型时，Ng 说更常见的做法是什么？",o:["用神经网络端到端学习物理定律","直接用开源物理引擎，填进尺寸、质量等参数就能得到模拟器","自己翻物理书推导运动方程","让机器人随机动作再拟合"],a:1,w:"⭐ 自己推也可以（<b>新状态 = 旧状态 + Δt × 变化率</b>），但用引擎<b>省掉大量容易出错的体力活</b>。Ng 自己就这么给四足机器人搭过模拟器。"});
+});
+KP("15 · ★★ 模型来源二：从数据里学",function(){
+  S(2001,function(){clearScene();setEq("$$s_{t+1} \\;\\approx\\; A\\,s_t \\;+\\; B\\,a_t$$","top");
+       setCap("让机器人动一阵，然后做线性回归");
+       says("33:21","let us approximate S_t plus 1 as a linear function of the previous state",214);
+       note("① 让机器人（哪怕随机地）动一阵，记下每一刻的 s 和 a",640,266,"b");
+       note("② 用这些数据拟合矩阵 A 和 B，让预测的 s_{t+1} 尽量准",640,318,"b");
+       note("⭐ Ng：这等价于做 n 次线性回归 —— 每次预测状态向量的一个分量",640,370,"y");
+       note("⚠ 严格说这不算「线性回归」，因为 A、B 是矩阵不是向量",640,402,"r");},"<b>模型的第二条来源：从数据里学出来。</b><br><b>第一步：让机器人在环境里动一阵，哪怕用的是随机动作，把每一刻的状态和动作都记下来。</b><br><b>第二步：用这些数据去拟合一个线性模型——下一个状态约等于 A 乘当前状态，加 B 乘当前动作。</b><b>要学的就是矩阵 A 和 B。</b><br><b>⭐ Ng 点出了一个很有用的观察：这等价于做 n 次线性回归。</b><b>状态是一个 n 维向量，你对它的每一个分量各做一次回归</b>——<b>第一次预测第一个状态分量，第二次预测第二个，以此类推。</b><br><b>⚠ 他也补了一句分寸：严格说这不完全算「线性回归」，因为 A 和 B 是矩阵而不是参数向量；但拆成一个分量一个分量看，它就是线性回归。</b><br><b>⇒ 这种形式后面还会再出现，L19 讲 LQR 时用的就是它。</b>");
+  S(2001,function(){clearScene();setEq(null);setCap("注意「随机动作」这个细节");
+   boxNode(170,196,980,56,"收集数据时用什么策略？Ng 说哪怕随机动作也行","b");
+   boxNode(170,264,980,56,"⭐ 因为目标不是「表现好」，而是「把状态空间走遍」","g");
+   note("⚠ 反过来：用一个很好的策略收集，反而可能学不好模型",640,348,"r");
+   note("因为好策略只走它熟悉的那条路，模型在别处一无所知",640,398,"d");},"<b>从数据学模型时，有个细节值得单独点出来：收集数据该用什么策略？</b><br><b>Ng 说哪怕用随机动作也行。</b><b>⭐ 为什么随机就够？因为这一步的目标不是「让机器人表现好」，而是「把状态空间尽量走遍」。</b><br><b>⚠ 反过来想会更清楚：如果你用一个已经很好的策略去收集数据，反而可能学不好模型。</b><br><b>因为好策略只走它熟悉的那条路线，数据会密集地堆在一小片区域里，</b><b>而模型在其他地方一无所知。</b><br><b>⇒ 这其实就是 L17 那个探索与利用问题，换了一副面孔出现在「学模型」这一步上。</b>");
+  SUM(2001,15,{h:"★★ 模型来源二：拟合 s_{t+1} ≈ A·s_t + B·a_t",k:"<b>① 让机器人（哪怕随机地）动一阵，记下每一刻的 s 和 a ② 用这些数据拟合矩阵 A 和 B</b>。",m:"⭐ Ng 的观察：<b>这等价于做 n 次线性回归</b>——状态是 n 维向量，<b>对它的每个分量各做一次回归</b>。",w:"⚠ <b>分寸</b>：严格说这不完全算线性回归，因为 <b>A、B 是矩阵而不是参数向量</b>；但<b>拆成一个分量看就是</b>。",e:"⇒ <b>这种线性模型后面还会再出现</b>——L19 讲 LQR 时用的就是它。"});
+  QUIZ(2001,15,{t:"从数据里学模型的做法是什么？Ng 说它等价于什么？",o:["用策略梯度直接学策略；不需要模型","用值迭代反推 P_sa；等价于动态规划","用贝叶斯推断估计后验；等价于 EM","让机器人动一阵记录 (s, a)，拟合 s_{t+1} ≈ A·s_t + B·a_t；等价于做 n 次线性回归，每次预测状态向量的一个分量"],a:3,w:"⚠ 分寸：严格说不算线性回归（<b>A、B 是矩阵</b>），但<b>拆成分量看就是</b>。⇒ 这种线性模型<b>L19 讲 LQR 时还会用</b>。"});
+});
+KP("16 · ⚠⚠ 确定性模拟器的坑：视频好看，上真机就废",function(){
+  S(2537,function(){clearScene();setEq(null);setCap("这一讲最硬的一条实战教训");
+       says("42:17","a lot of reinforcement learning algorithms will learn a very brittle model");
+       boxNode(120,200,470,58,"确定性模型","r");
+       boxNode(120,268,470,58,"s′ = A·s + B·a，每次结果完全相同","r");
+       boxNode(690,200,470,58,"★ 随机模型","g");
+       boxNode(690,268,470,58,"s′ = A·s + B·a ＋ 一个高斯噪声项","g");
+       note("⚠ 用确定性模型，算法会学出在模拟器里完美、到真机上立刻失败的策略",640,352,"r");
+       note("⭐ 根子：模拟器永远不可能 100% 准确",640,398,"y");},"<b>⚠⚠ 这是整讲最硬的一条实战教训，而且不是理论推导，是踩出来的。</b><br><b>模型可以做成两种。</b><b>确定性的：s′ = A·s + B·a，同样的输入永远给出同样的输出。</b><b>随机的：在后面再加一个从高斯分布里采样的噪声项，每次结果略有不同。</b><br><b>⚠ Ng 说，如果你用确定性模拟器，很多强化学习算法会学出一个非常脆弱的策略——在你的模拟器里表现完美，到真实机器人上就不行。</b><br><b>⭐ 根子在于那句话：模拟器永远不可能 100% 准确。</b><b>确定性模拟器等于向算法承诺「世界就是这样一丝不差」，于是算法会去钻那些只在模拟器里成立的空子。</b><br><b>⇒ 一旦真实世界有一点偏差，这些空子全部失效。</b><b>下一镜讲他给的建议。</b>");
+  S(2632,function(){clearScene();setEq(null);setCap("Ng 的建议");
+       says("43:52","if you want your model-based RL work to work on a real robot");
+       boxNode(170,196,980,56,"把模拟器做成随机的（加噪声）","g");
+       boxNode(170,264,980,56,"⇒ 学出的策略必须在「有扰动」的条件下也站得住","g");
+       note("⭐ 而一个能扛住模拟器噪声的策略，迁移到真实世界的胜算大得多",640,348,"y");
+       note("⚠ 他还说：确定性模拟器很容易做出很酷的视频 —— 但那说明不了什么",640,398,"r");},"<b>Ng 的建议很直接：想让 model-based RL 在真机上管用，就把模拟器做成随机的。</b><br><b>⭐ 道理是这样的：加了噪声之后，学出来的策略必须在「每一步都可能被扰动」的条件下仍然站得住。</b><b>⇒ 而一个能扛住模拟器噪声的策略，迁移到真实世界的胜算要大得多</b>——<b>因为真实世界的不确定性，形式上正是这种扰动。</b><br><b>⚠ 他还讲了一句很值得记住的话：用确定性模拟器，做出一段很酷的强化学习视频其实不难。</b><b>算法在模拟器里会表现得非常漂亮。</b><br><b>⭐ 但那说明不了什么——他说如果真拿那个确定性模型学出来的策略去跑真机，基本是不行的。</b><br><b>⇒ 所以「模拟器里好看」不是成功的证据，这是整条教训的落点。</b>");
+  SUM(2537,16,{h:"⚠⚠ 模拟器要做成随机的，否则策略很脆弱",k:"<b>两种模型</b>：确定性的 <b>s′ = A·s + B·a</b>（同样输入永远同样输出）；随机的<b>再加一个高斯噪声项</b>。",m:"⚠ Ng：<b>用确定性模拟器，算法会学出非常脆弱的策略</b>——<b>在模拟器里完美，到真机上就不行</b>。",w:"⭐ <b>根子</b>：<b>模拟器永远不可能 100% 准确</b>。确定性模拟器等于承诺「世界一丝不差」，算法就去<b>钻只在模拟器里成立的空子</b>。",e:"⭐ <b>建议</b>：把模拟器做成随机的 ⇒ 策略必须在有扰动时也站得住，<b>迁移到真实世界胜算大得多</b>。⚠ <b>「模拟器里好看」不是成功的证据</b>——确定性模拟器很容易做出很酷的视频。"});
+  QUIZ(2537,16,{t:"为什么 Ng 建议把模拟器做成随机的而不是确定性的？",o:["确定性模拟器会让算法钻只在模拟器里成立的空子，学出在真机上立刻失败的脆弱策略；而模拟器永远不可能 100% 准确","确定性模拟器无法计算期望","随机模拟器算得更快","随机性可以替代探索"],a:0,w:"⭐ 能扛住模拟器噪声的策略，<b>迁移到真实世界胜算大得多</b>。⚠ Ng 特别提醒：<b>确定性模拟器很容易做出很酷的视频，但那说明不了什么</b>。"});
+});
+KP("17 · ★ 这套路线叫「模型化强化学习」",function(){
+  S(2380,function(){clearScene();setEq(null);setCap("给这条路线一个名字");
+       says("39:40","this is called model-based reinforcement learning");
+       boxNode(130,200,470,58,"模型化（model-based）","g");
+       boxNode(130,268,470,58,"先建一个模拟器，再在模拟器里学","g");
+       boxNode(690,200,470,58,"对照：L17 的做法","b");
+       boxNode(690,268,470,58,"直接在真实环境里数次数估 P_sa","b");
+       note("⭐ 好处：数据便宜 —— 模拟器里想跑多少次就跑多少次",640,352,"y");
+       note("Ng 举例：电子游戏是天然的完美模拟器，可以放心炸掉几百辆虚拟车",640,398,"d");},"<b>给这条路线一个名字：Ng 说这叫「模型化强化学习」（model-based reinforcement learning）。</b><br><b>它的形状是：先建一个模拟器，然后主要在模拟器里学。</b><br><b>⭐ 它最大的好处是数据便宜。</b><b>真机上每试一次都要花真实时间、磨损硬件、甚至可能摔坏；而模拟器里想跑多少次就跑多少次。</b><br><b>Ng 举的例子很生动：电子游戏天然就有一个完美的模拟器——游戏本身</b>。<b>所以强化学习算法可以放心地在里面炸掉几百辆虚拟的车，毫无代价。</b><br><b>⚠ 但要记住上一节那条教训：模拟器越好用，「模拟器里的成功」就越容易被误当成真正的成功。</b><b>⇒ 数据便宜是真便宜，但便宜的数据来自一个近似的世界。</b>");
+  S(2380,function(){clearScene();setEq(null);setCap("model-based 的代价在哪");
+   boxNode(130,196,470,58,"好处","g");
+   boxNode(130,264,470,58,"数据便宜、可以大量试错","g");
+   boxNode(690,196,470,58,"⚠ 代价","r");
+   boxNode(690,264,470,58,"多了一层误差：模型本身是近似的","r");
+   note("⭐ 策略在近似的世界里最优，不等于在真实世界里最优",640,352,"y");
+   note("⚠ 这个「两层误差」的结构，是 model-based 方法的根本特点",640,398,"r");},"<b>把 model-based 的代价也说清楚，才算讲完整。</b><br><b>好处前面说了：数据便宜，可以大量试错。</b><br><b>⚠ 代价是多了一层误差。</b><b>直接在真实环境里学（像 L17 那样数次数），估计出的 P_sa 虽然不准，但它来自真实世界；</b><b>而 model-based 的做法是先建一个近似的世界，再在那个世界里求最优。</b><br><b>⭐ 于是你得到的是「在近似世界里最优的策略」——这不等于在真实世界里最优。</b><br><b>⇒ 这个「两层误差」的结构，是 model-based 方法的根本特点：模型误差会被优化过程放大，因为算法会主动去找模型里最有利的那些地方，而那些地方恰恰最可能是模型错了的地方。</b>");
+  SUM(2380,17,{h:"★ model-based RL：先建模拟器，再在里面学",k:"Ng 给这条路线的名字是 <b>model-based reinforcement learning</b>：<b>先建一个模拟器，然后主要在模拟器里学</b>。",m:"⭐ <b>最大的好处是数据便宜</b>：真机每试一次要花真实时间、磨损硬件、甚至摔坏；<b>模拟器里想跑多少次跑多少次</b>。",w:"<b>Ng 的例子</b>：<b>电子游戏天然自带完美模拟器——游戏本身</b>，算法可以放心炸掉几百辆虚拟车。",e:"⚠ <b>但要连着上一条教训记</b>：模拟器越好用，「模拟器里的成功」<b>越容易被误当成真正的成功</b>。"});
+  QUIZ(2380,17,{t:"model-based RL 的最大好处是什么？要连带注意什么？",o:["数据便宜——模拟器里想跑多少次就跑多少次；但便宜的数据来自一个近似的世界，模拟器里的成功不等于真正的成功","不需要探索；注意要用 ε-greedy","不需要奖励函数；注意要调 γ","收敛更快；注意初始值的选择"],a:0,w:"⭐ Ng 的例子：<b>电子游戏天然自带完美模拟器</b>，可以放心炸掉几百辆虚拟车。⚠ 但模拟器<b>永远不可能 100% 准确</b>。"});
+});
+KP("18 · ★★ 第一步：挑特征 φ(s)",function(){
+  S(2788,function(){clearScene();setEq(null);setCap("挑那些能反映「现在情况好不好」的量");
+       says("46:28","the first step is to choose features of the state s");
+       boxNode(170,196,980,56,"价值函数衡量的是「从这儿开始能做得多好」","b");
+       boxNode(170,264,980,56,"⇒ 所以要挑能反映「现在情况好不好」的量","g");
+       note("倒立摆的例子：x、ẋ、x²、杆的角度、★ 角度 × 速度",640,348,"y");
+       note("⚠ 注意最后那个交互项 —— 它不是凑数的",640,398,"r");},"<b>拟合值迭代的第一步是选特征。Ng 给了一条很实用的指导原则。</b><br><b>先回想价值函数到底是什么：它是「机器人从这个状态开始，期望能拿到多少折扣总回报」。</b><b>换句话说，它衡量的是「从这儿开始，这个机器人能做得多好」。</b><br><b>⭐ 所以挑特征时，就挑那些你认为能反映「现在情况好不好」的量。</b><br><b>倒立摆的例子里，Ng 列了几个：小车的位置 x、速度 ẋ、x 的平方、杆的角度，以及——角度乘以速度。</b><br><b>⚠ 最后那个交互项不是凑数的，下一镜专门讲它为什么必须有。</b>");
+  S(2788,function(){clearScene();setEq(null);setCap("为什么必须有「角度 × 速度」这个交互项");
+       boxNode(120,196,470,58,"杆正倒向右边","r");
+       boxNode(120,264,470,58,"小车也正在向右追 ⇒ 其实还有救","g");
+       boxNode(690,196,470,58,"杆正倒向右边","r");
+       boxNode(690,264,470,58,"小车却在往左走 ⇒ 基本完了","r");
+       note("⭐ 同样的杆角度，好坏完全相反 —— 取决于速度",640,348,"y");
+       note("⇒ 所以必须给算法一个「角度 × 速度」这样的交互特征",640,398,"g");},"<b>为什么非要「角度乘速度」这样一个交互项？Ng 的解释非常具体。</b><br><b>看两个情形：都是杆正在倒向右边。</b><br><b>情形一：小车也正在向右追。</b><b>这其实还有救</b>——<b>小车追到杆底下，就能把它重新扶正。</b><br><b>情形二：小车却在往左走。</b><b>那基本就完了</b>——<b>杆往右倒、小车往左跑，只会倒得更快。</b><br><b>⭐ 关键在于：同样的杆角度，好坏完全相反，取决于小车的速度。</b><br><b>⚠ 而单独的「角度」特征和单独的「速度」特征，谁都表达不了这件事</b>——<b>必须有一个把两者乘在一起的项，模型才能表达「这两个量是相互依赖的」。</b><br><b>⇒ 这和线性回归里加交互特征是完全一样的道理。</b>");
+  S(2788,function(){clearScene();setEq(null);setCap("和监督学习挑特征的对照");
+   matrix({rows:4,cols:3,cw:350,ch:46,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["","预测房价","预测价值函数"],
+       ["要预测的量","这栋房子值多少钱","★ 从这个状态出发能拿多少"],
+       ["好特征","面积、地段、房龄","角度、速度、角度×速度"],
+       ["判断标准","和房价相关吗","和「情况好不好」相关吗"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return (i===1&&j===2)?"hl":"";}});
+   note("⭐ 完全是同一套思维方式 —— Ng 自己也是这么类比的",640,398,"y");},"<b>把挑特征这件事和监督学习并排放，思路就完全通了。</b><br><b>预测房价时，你要预测的是「这栋房子值多少钱」，好特征是面积、地段、房龄这些；判断一个特征好不好，就看它和房价相不相关。</b><br><b>⭐ 预测价值函数时，你要预测的是「从这个状态出发能拿多少」，好特征是角度、速度、角度乘速度这些；判断标准就是它和「现在情况好不好」相不相关。</b><br><b>⚠ Ng 自己就是这么类比的——他说「就像你预测房价时会问，哪些特征对预测房价最有用」。</b><br><b>⇒ 所以这里不需要新的直觉，你在监督学习里练出来的特征工程感觉可以直接搬过来。</b>");
+  SUM(2788,18,{h:"★★ 挑特征：反映「现在情况好不好」",k:"<b>原则</b>：价值函数衡量「<b>从这儿开始能做得多好</b>」⇒ 挑那些能<b>反映现在情况好不好</b>的量。",m:"<b>倒立摆的例子</b>：小车位置 x、速度 ẋ、x²、杆的角度，以及 <b>★ 角度 × 速度</b>。",w:"⭐ <b>为什么必须有交互项</b>：杆倒向右边时，<b>小车也在向右追 ⇒ 还有救</b>；<b>小车在往左走 ⇒ 基本完了</b>。<b>同样的角度，好坏完全相反。</b>",e:"⚠ <b>单独的「角度」和单独的「速度」都表达不了这件事</b>，必须把两者乘起来 —— 和线性回归里加交互特征同理。"});
+  QUIZ(2788,18,{t:"倒立摆的特征里为什么要有「杆角度 × 小车速度」这一项？",o:["因为角度和速度的单位需要统一","为了让模型变成非线性，提高拟合能力","为了让特征数量是偶数","同样的杆角度好坏可能完全相反：小车正往杆倒的方向追就还有救，反之基本完了；单独的角度或速度都表达不了这种依赖"],a:3,w:"⭐ 挑特征的原则是：<b>价值函数衡量「从这儿开始能做得多好」，就挑能反映「现在情况好不好」的量</b>。这和线性回归里加交互特征同理。"});
+});
+KP("19 · ⭐ 一个便宜：数据多到可以随便加特征",function(){
+  S(2944,function(){clearScene();setEq(null);setCap("model-based RL 的一个实际好处");
+       says("49:04","you can usually afford to choose a larger number of features");
+       boxNode(120,200,470,58,"平常做监督学习","b");
+       boxNode(120,268,470,58,"数据有限 ⇒ 特征太多会过拟合","b");
+       boxNode(690,200,470,58,"★ 这里","g");
+       boxNode(690,268,470,58,"模拟器要多少数据给多少 ⇒ 可以放开加","g");
+       note("⭐ 加进去没用的特征，拟合时它的权重自然会接近 0",640,352,"y");
+       note("⚠ 但这不等于「随便乱加」—— 好特征仍然决定了近似能有多准",640,398,"r");},"<b>Ng 在这里提了一个 model-based RL 实实在在的便宜。</b><br><b>平常做监督学习时，你得小心特征数量：数据就那么多，特征一多就容易过拟合。</b><br><b>⭐ 但这里不一样——训练数据是模拟器生成的，你要多少有多少。</b><br><b>Ng 的原话是：有了大量数据，你通常可以放心选用更多的特征，不太需要因为担心过拟合而束手束脚。</b><br><b>他还补了一句：加进去的特征里如果有些没用，拟合时它们的权重自然会接近 0，不会造成太大伤害。</b><br><b>⚠ 但要把分寸说清楚：这不等于「随便乱加」。</b><b>⭐ 特征决定了你的函数能表达什么形状——如果真正重要的那个交互项你没想到，再多数据也补不回来。</b><b>数据量解决的是「过拟合」，解决不了「表达能力不够」。</b>");
+  SUM(2944,19,{h:"⭐ 数据由模拟器生成，可以放开加特征",k:"<b>平常做监督学习</b>：数据有限，<b>特征太多会过拟合</b>，得小心控制数量。",m:"⭐ <b>这里不一样</b>：训练数据是<b>模拟器生成的，要多少有多少</b> ⇒ Ng 说<b>可以放心选用更多特征，不必因担心过拟合而束手束脚</b>。",w:"<b>没用的特征，拟合时权重自然接近 0</b>，不会造成太大伤害。",e:"⚠ <b>但不等于随便乱加</b>：⭐ <b>特征决定函数能表达什么形状</b>——真正重要的交互项没想到，<b>再多数据也补不回来</b>。数据量解决过拟合，解决不了表达能力。"});
+  QUIZ(2944,19,{t:"为什么拟合值迭代里可以用比平常更多的特征？这有什么边界？",o:["因为价值函数一定是线性的；没有边界","因为状态是连续的；边界是维度","数据由模拟器生成、要多少有多少，所以不太担心过拟合；但特征决定了函数能表达什么形状，表达能力不够是数据量补不回来的","因为用了正则化；边界是正则系数"],a:2,w:"⭐ 没用的特征<b>权重会自然接近 0</b>。⚠ 但<b>数据量解决的是「过拟合」，解决不了「表达能力不够」</b>。"});
+});
+KP("20 · ★★★ 拟合值迭代：四步走",function(){
+  S(3310,function(){clearScene();setEq(null);setCap("值迭代 ＋ 监督学习的缝合");
+       boxNode(170,180,980,50,"① 随机采样 m 个状态 s₁ … s_m","b");
+       boxNode(170,238,980,50,"② 对每个 sᵢ 的每个动作 a：用模拟器采 k 个 s′，算 V 的平均 ⇒ q(a)","y");
+       boxNode(170,296,980,50,"③ yᵢ = max over a 的 q(a)","y");
+       boxNode(170,354,980,50,"④ 用监督学习把 θ 拟合到这 m 对 (sᵢ, yᵢ) 上；回到 ②","g");
+       note("⭐ 对照 L17：②③ 就是 Bellman 更新，④ 是新加的那一步",640,160,"y");},"<b>★★★ 现在把所有零件装起来，这就是拟合值迭代。Ng 自己说「这是个很长的算法」，但拆成四步就很清楚。</b><br><b>① 先随机采样 m 个状态。</b><b>它们就是后面要拟合的那批「训练样本的输入」。</b><br><b>② 对每一个采到的状态，再对它的每一个动作：用模拟器采 k 个下一状态，把这 k 个 s′ 的 V 值求平均</b>——<b>这个平均值记作 q(a)，它是在估计那个期望。</b><br><b>③ 对动作取最大：yᵢ = max over a 的 q(a)。</b><br><b>④ 用监督学习，把参数 θ 拟合到这 m 对 (sᵢ, yᵢ) 上；然后回到第二步再来一轮。</b><br><b>⭐ 和 L17 对照着看：第②③步其实就是 Bellman 更新（取期望、再取 max），第④步才是新加的那一步。</b><b>下面三节分别细讲这几步里的关键。</b>");
+  S(3310,function(){clearScene();setEq(null);setCap("和 L17 值迭代逐行对照");
+   matrix({rows:4,cols:3,cw:350,ch:46,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["","L17 值迭代","★ 拟合值迭代"],
+       ["遍历谁","全部 11 个状态","随机采样的 m 个状态"],
+       ["算期望","枚举所有 s′ 求和","采 k 个 s′ 取平均"],
+       ["存结果","写进表格","用监督学习拟合 θ"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return j===2?"hl":"";}});
+   note("⭐ 三处改动，每一处都是被「状态无穷多」逼出来的",640,398,"y");},"<b>把两个算法逐行对照，就能看出拟合值迭代到底改了什么。</b><br><b>遍历谁：L17 遍历全部 11 个状态；这里只能随机采样 m 个——因为状态有无穷多个，遍历不完。</b><br><b>算期望：L17 把所有可能的 s′ 枚举出来求和；这里采 k 个样本取平均——因为 s′ 也有无穷多个。</b><br><b>存结果：L17 把算出的值写进表格；这里用监督学习拟合 θ——因为表格存不下。</b><br><b>⭐ 三处改动，每一处都是被同一件事逼出来的：状态有无穷多个。</b><br><b>⇒ 看清这一点，这个「很长的算法」就不再需要死记了——你只要记住「哪里原本是枚举，现在只能采样」。</b>");
+  SUM(3310,20,{h:"★★★ 拟合值迭代的四步",k:"<b>① 随机采样 m 个状态</b>（后面拟合用的「训练输入」）。",m:"<b>② 对每个 sᵢ 的每个动作 a</b>：用模拟器<b>采 k 个 s′，求 V 的平均 ⇒ q(a)</b>（在估那个期望）。<b>③ yᵢ = max over a 的 q(a)</b>。",w:"<b>④ 用监督学习把 θ 拟合到 m 对 (sᵢ, yᵢ) 上，回到 ②。</b>",e:"⭐ <b>对照 L17</b>：第②③步<b>就是 Bellman 更新</b>（取期望、再取 max），<b>第④步才是新加的</b>。"});
+  QUIZ(3310,20,{t:"拟合值迭代的四步分别是什么？",o:["收集轨迹 → 估计 P_sa → 解线性方程组 → argmax","采样 m 个状态 → 对每个状态每个动作采 k 个 s′ 求 V 的平均得 q(a) → yᵢ = max_a q(a) → 用监督学习拟合 θ","离散化 → 值迭代 → 插值 → 输出策略","初始化 θ → 梯度下降 → 投影 → 重复"],a:1,w:"⭐ 对照 L17：<b>②③ 就是 Bellman 更新</b>（取期望再取 max），<b>④ 是新加的那一步</b>——它正是「拟合」两个字的来源。"});
+});
+KP("21 · ★★ 关键一步：期望算不出来，就采样",function(){
+  S(3310,function(){clearScene();setEq("$$q(a) \\;\\approx\\; R(s_i) + \\gamma\\cdot\\frac{1}{k}\\sum_{j=1}^{k} V\\big(s'_j\\big), \\qquad s'_j \\sim P_{s_i a}$$","top");
+       setCap("连续状态下没法把所有 s′ 加起来");
+       says("55:10","sampling k samples of where you get to if you take an action a in a certain state",252);
+       note("L17：状态有限 ⇒ 可以把所有可能的 s′ 枚举出来求和",640,292,"d");
+       note("⚠ 这里：s′ 有无穷多个 ⇒ 求和根本写不出来",640,330,"r");
+       note("⭐ 办法：问模拟器 k 次，拿这 k 个样本的平均去估那个期望",640,368,"y");
+       note("k 越大估计越准，但每一步的代价也越大",640,402,"b");},"<b>⭐ 这一步是整个算法里最关键、也最能体现「连续」带来的改变的一步。</b><br><b>回想 L17：状态有限，所以 Bellman 方程里那个期望可以写成一个求和——把所有可能的 s′ 枚举一遍，各乘上概率加起来。</b><br><b>⚠ 而现在 s′ 有无穷多个，这个求和根本写不出来。</b><br><b>⭐ 办法就是采样：向模拟器要 k 个下一状态的样本，算出它们的 V 值，取平均。</b><b>这个平均值就是对那个期望的估计。</b><br><b>这正是前面说「模型以能采样的形式给出」的用处所在。</b><br><b>⚠ 这里有个直接的权衡：k 越大，期望估得越准，但每一步的计算代价也越大。</b><b>⇒ 因为这个采样对「每个状态 × 每个动作」都要做一遍。</b>");
+  S(3310,function(){clearScene();setEq(null);setCap("k 该取多大");
+   boxNode(130,196,470,58,"k = 1","b");
+   boxNode(130,264,470,58,"最便宜，但估计噪声很大","b");
+   boxNode(690,196,470,58,"k 大（如 10、100）","g");
+   boxNode(690,264,470,58,"估计更稳，但代价成倍上升","g");
+   note("⚠ 代价 = m 个状态 × 动作数 × k —— 三者相乘",640,348,"r");
+   note("⭐ 确定性模拟器下 k=1 就够（每次结果都一样）—— 但别忘了那条教训",640,398,"y");},"<b>k 该取多大？这是实现时必须定的一个数。</b><br><b>k = 1 最便宜，但用单个样本去估一个期望，噪声会很大。</b><br><b>k 取大一些（比如 10 或 100），估计更稳，但代价成倍上升。</b><br><b>⚠ 注意代价是三者相乘：m 个采样状态 × 动作的个数 × k。</b><b>所以 k 从 1 加到 100，整个算法就慢 100 倍。</b><br><b>⭐ 这里有一个有意思的特例：如果你的模拟器是确定性的，那么 k = 1 就够了——因为同样的输入每次给出同样的输出，采再多次也是同一个值。</b><br><b>⚠ 但千万别因此就去用确定性模拟器。</b><b>前面那条教训还算数：省下的计算量，会在真机上以策略失效的形式还回来。</b>");
+  SUM(3310,21,{h:"★★ 用 k 次采样的平均去估期望",k:"<b>L17</b>：状态有限 ⇒ Bellman 里的期望<b>可以写成求和</b>，把所有 s′ 枚举一遍乘概率加起来。",m:"⚠ <b>现在 s′ 有无穷多个</b>，这个求和<b>根本写不出来</b>。",w:"⭐ <b>办法</b>：向模拟器要 <b>k 个下一状态样本</b>，算它们的 V 值取平均 —— 这就是对期望的估计。<b>这正是「模型以能采样的形式给出」的用处。</b>",e:"⚠ <b>权衡</b>：k 越大估计越准，但代价也越大 —— 因为这个采样对<b>每个状态 × 每个动作</b>都要做一遍。"});
+  QUIZ(3310,21,{t:"连续状态下，Bellman 方程里的期望怎么算？",o:["离散化后再求和","用 V 在均值点的取值代替","算不出来：s′ 有无穷多个，求和写不出；办法是向模拟器采 k 个样本，用它们 V 值的平均去估计","用积分的解析公式算出来"],a:2,w:"⭐ 这正是「<b>模型以能采样的形式给出</b>」的用处。⚠ 权衡：k 越大越准但越贵，而且这个采样<b>每个状态 × 每个动作都要做一遍</b>。"});
+});
+KP("22 · ★★ 最后一步：是「拟合」，不是「赋值」",function(){
+  S(3414,function(){clearScene();setEq(null);setCap("这里和 L17 的根本差别");
+       says("56:54","let us set y i equals max over a of q of a");
+       boxNode(120,196,470,58,"L17 的值迭代","b");
+       boxNode(120,264,470,58,"V(s) ← 算出来的值（直接写进表格）","b");
+       boxNode(690,196,470,58,"★ 拟合值迭代","y");
+       boxNode(690,264,470,58,"把 (sᵢ, yᵢ) 当训练数据，拟合出 θ","y");
+       note("⭐ 所以 V(sᵢ) 不一定正好等于 yᵢ —— 它是拟合出来的，有误差",640,352,"y");
+       note("⚠ 「拟合」两个字就是从这儿来的",640,398,"r");},"<b>⚠ 这一步看起来平平无奇，但它和 L17 有一个根本差别，必须讲清楚。</b><br><b>L17 的值迭代里，算出一个值就直接写进表格的那一格</b>——<b>赋值，精确无误。</b><br><b>⭐ 而这里，算出来的那 m 个 yᵢ 只是训练数据。</b><b>你要做的是用监督学习去拟合参数 θ，让 θᵀφ(sᵢ) 尽量接近 yᵢ。</b><br><b>⚠ 所以拟合完之后，V(sᵢ) 不一定正好等于 yᵢ——它是拟合出来的，带着误差。</b><br><b>⇒ 「拟合值迭代」里「拟合」两个字就是从这儿来的。</b><br><b>⭐ 而这正是它能处理无穷多个状态的原因：你不再为每个状态存一个数，只存一组 θ；</b><b>没被采样到的那些状态，V 值由 θᵀφ(s) 直接算出来。</b>");
+  S(3414,function(){clearScene();setEq(null);setCap("代价：收敛性不再有保证");
+   boxNode(130,196,470,58,"L17 值迭代","g");
+   boxNode(130,264,470,58,"有收敛性保证（问题集里证）","g");
+   boxNode(690,196,470,58,"⚠ 拟合值迭代","r");
+   boxNode(690,264,470,58,"每轮都引入拟合误差，可能不收敛","r");
+   note("⭐ 但实践中它工作得很好 —— Ng 的四足机器人就是这么学会走路的",640,352,"y");
+   note("⚠ 知道这一点，调试时才不会一味怀疑自己写错了代码",640,398,"r");},"<b>「拟合」带来了能力，也带来了代价，这一点要讲清楚。</b><br><b>L17 的值迭代有收敛性保证——虽然证明留给了问题集，但那个保证是实打实的。</b><br><b>⚠ 而拟合值迭代每一轮都引入一次拟合误差：你算出的 yᵢ 不会被精确保存，而是被一个函数近似地记住。</b><b>⇒ 这些误差会在轮与轮之间累积，理论上它可能不收敛。</b><br><b>⭐ 但要把分寸说清楚：实践中它工作得很好。</b><b>Ng 的四足机器人就是用这一类方法学会走路的。</b><br><b>⚠ 知道这一点的实际价值在于调试：如果你的拟合值迭代不收敛，那未必是你代码写错了，也可能就是这个算法本身的性质。</b><b>这时该做的是换特征、增大 m 和 k，而不是一行行去找 bug。</b>");
+  SUM(3414,22,{h:"★★ 最后一步是拟合，不是赋值",k:"<b>L17</b>：算出一个值就<b>直接写进表格那一格</b>——赋值，精确无误。",m:"⭐ <b>这里</b>：算出的 m 个 yᵢ <b>只是训练数据</b>，要用监督学习拟合 θ，让 <b>θᵀφ(sᵢ) 尽量接近 yᵢ</b>。",w:"⚠ <b>所以 V(sᵢ) 不一定正好等于 yᵢ</b>——它是拟合出来的，<b>带着误差</b>。「拟合」两个字就从这儿来。",e:"⭐ <b>而这正是它能处理无穷多状态的原因</b>：不再为每个状态存数，<b>只存一组 θ</b>；<b>没被采样到的状态，V 由 θᵀφ(s) 直接算出来</b>。"});
+  QUIZ(3414,22,{t:"拟合值迭代的最后一步与 L17 的值迭代有什么根本差别？",o:["只是换了一个求和顺序","L17 是把算出的值直接赋给表格那一格；这里是把 (sᵢ, yᵢ) 当训练数据拟合 θ，所以 V(sᵢ) 不一定等于 yᵢ","这里多乘了一个折扣因子","L17 用同步更新，这里用异步更新"],a:1,w:"⭐ 这正是它<b>能处理无穷多状态的原因</b>：只存一组 θ，<b>没采样到的状态由 θᵀφ(s) 直接算出来</b>。「拟合」两字就从这儿来。"});
+});
+KP("23 · ★ 学完之后，机器人实际怎么动",function(){
+  S(4784,function(){clearScene();setEq(null);setCap("每一步都现场算一次 argmax");
+       boxNode(110,200,260,70,"① 观测当前状态 s","b");
+       boxNode(430,200,300,70,"② 对每个动作 a 采样估 q(a)","y");
+       boxNode(790,200,260,70,"③ 取 argmax 动作","g");
+       link(370,235,430,235); link(730,235,790,235);
+       note("④ 执行它 ⇒ 过一小段时间再观测新状态 ⇒ 回到 ①",640,330,"g");
+       note("⭐ 注意没有「存一张策略表」这一步 —— 策略是现场从 V 算出来的",640,398,"y");},"<b>θ 学好之后，机器人实际运行时是怎么动的？</b><br><b>① 观测当前状态。</b><b>⚠ Ng 在课堂问答里特意确认了这一点：是真的去观测，不是靠模型推算。</b><b>他说——你执行一个动作，直升机会动起来，中间可能有风、你的模型也可能不准，所以过十分之一秒之后你要重新观测它实际在哪。</b><br><b>② 对每一个可能的动作，用模拟器采样估出 q(a)。</b><br><b>③ 取 argmax，挑出最好的那个动作。</b><br><b>④ 执行它，过一小段时间再观测，回到第一步。</b><br><b>⭐ 注意整个流程里没有「存一张策略表」这一步。</b><b>策略是每一步从价值函数现场算出来的</b>——<b>这和 L17 里「算完 V* 再一次性导出 π*」的做法不同，因为连续状态下那张表根本存不下。</b>");
+  S(4784,function(){clearScene();setEq(null);setCap("为什么不干脆把策略也拟合出来");
+   boxNode(130,196,470,58,"这一讲的做法","b");
+   boxNode(130,264,470,58,"只拟合 V，每步现场算 argmax","b");
+   boxNode(690,196,470,58,"另一条路","y");
+   boxNode(690,264,470,58,"直接拟合策略本身（策略梯度类方法）","y");
+   note("⭐ 现场算 argmax 的代价：每一步都要对每个动作采样一次",640,352,"y");
+   note("⚠ 动作少时无所谓；动作也连续时，这一步本身就成了难题",640,398,"r");},"<b>既然价值函数可以拟合，为什么不干脆把策略也拟合出来，省掉每步的 argmax？这个问题很自然。</b><br><b>这一讲的做法是只拟合 V，每一步现场算 argmax。</b><b>⭐ 代价很明确：每走一步，都要对每个动作采样一次来估 q(a)。</b><br><b>⚠ 动作只有几个（比如倒立摆只能左推或右推）时，这点代价无所谓。</b><br><b>⚠ 但如果动作本身也是连续的——比如直升机的操纵杆可以推到任意位置——那么「对每个动作算一遍再取最大」这件事本身就成了一个优化问题，没法简单枚举。</b><br><b>⭐ 这正是另一类方法（直接拟合策略本身）存在的理由。</b><b>CS229 这一讲没有展开，但知道这个分叉点在哪，对理解整个强化学习的版图很有帮助。</b>");
+  SUM(4784,23,{h:"★ 运行时：每一步现场算 argmax",k:"<b>① 观测当前状态</b> ⚠ Ng 特意确认<b>是真的去观测，不是靠模型推算</b>——「中间可能有风、模型也可能不准，<b>十分之一秒后要重新观测它实际在哪</b>」。",m:"<b>② 对每个动作用模拟器采样估 q(a) ③ 取 argmax 挑动作 ④ 执行，过一小段时间再观测，回到 ①</b>。",w:"⭐ <b>整个流程没有「存一张策略表」这一步</b>——策略是<b>每一步从价值函数现场算出来的</b>。",e:"⇒ <b>和 L17 不同</b>：那里是「算完 V* 再一次性导出 π*」，<b>而连续状态下那张表根本存不下</b>。"});
+  QUIZ(4784,23,{t:"拟合值迭代学完后，机器人每一步是怎么选动作的？",o:["观测当前状态 → 对每个动作采样估 q(a) → 取 argmax → 执行 → 再观测；策略是现场从价值函数算出来的，不存表","用模型推算未来十步再决定","按固定顺序循环执行动作序列","查一张事先算好的策略表"],a:0,w:"⚠ Ng 确认<b>第一步是真的去观测</b>（中间有风、模型也可能不准）。⭐ 不存策略表，是因为<b>连续状态下那张表根本存不下</b>。"});
+});
+KP("完 · 从格子到函数",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L18 · 完","连续状态 MDP",
+      "离散化的极限 · 模拟器 · 拟合值迭代");},
+    "收一下。<b>问题的起点是：L17 的全部方法都要求能把状态一个个数过来，而真实系统的状态是连续的。</b>Ng 给的三个例子很具体：<b>车要记位置、朝向和速度；直升机要记 x、y、z 三个位置，加上 roll、pitch、yaw 三个姿态角，再加上它们的变化率；倒立摆是一个四维状态空间</b>（小车的位置和速度、杆的角度和角速度）。<br><b>第一条路是离散化</b>：<b>把每一维切成若干段，每个格子当一个状态</b>，于是退回 L17 的框架。<b>⚠ 但它有两个毛病。</b><b>其一，它把价值函数表示成了阶梯</b>——Ng 的类比是<b>用阶梯去拟合房价随面积的变化</b>，<b>明明是一条光滑的曲线，你却只能用一段段平台去凑</b>；想更准就得切得更细。<b>⚠⚠ 其二就是切得更细的代价：如果状态空间是 n 维、每一维切成 k 段，总状态数是 k 的 n 次方。</b>Ng 举的数是<b>每维只切 10 段，就已经是 10 的 n 次方，随维度指数增长</b>。<b>⇒ 这就是维数灾难。</b><br><b>⭐ 但分寸要讲清楚：Ng 并不否定离散化。</b>他明确说<b>低维问题用它完全没问题——二维很轻松，四维的倒立摆也还行</b>。<b>它简单、容易实现、而且在小问题上效果不错。</b><b>⇒ 真正的问题出在更高的维度上。</b><br><b>第二条路是直接近似 V*，不经过离散化。</b>做法是<b>把 V*(s) 写成 θᵀφ(s)</b>——<b>φ(s) 是你为状态设计的特征，θ 是要学的参数</b>。<b>⭐ 这正是线性回归的形状</b>：<b>线性回归用特征去预测房价，这里用特征去预测「从这个状态出发能拿多少」</b>。<br><b>⚠ 但要先补一个零件：模型（也叫模拟器）。</b><b>它就是一个函数：输入当前状态和动作，输出下一个状态。</b><b>⭐ 有两条途径。</b><b>一是物理引擎</b>——<b>翻物理书推出运动方程，或者直接用开源物理引擎，填进尺寸和质量就能跑</b>。<b>二是从数据里学</b>：<b>让机器人（哪怕是随机地）动一阵，记下每一刻的状态和动作，然后用线性回归拟合 s_{t+1} ≈ A·s_t + B·a_t</b>。⭐ <b>Ng 点明这等价于做 n 次线性回归，每次预测状态向量的一个分量。</b><br><b>⚠⚠ 这里有一条很硬的实战教训。</b><b>模型可以做成确定性的（输出一个确定的 s′），也可以做成随机的（再加一个高斯噪声项）。</b>Ng 说<b>用确定性模拟器，强化学习算法往往学出一个很脆弱的策略——在模拟器里完美，到真机上就不行</b>。<b>⭐ 根子在于「模拟器永远不可能 100% 准确」</b>，<b>而一个能在带噪声的模拟器里站住的策略，迁移到真实世界的胜算要大得多</b>。<b>⇒ 他的建议很直接：想让 model-based RL 在真机上能用，就把模拟器做成随机的。</b><br><b>最后是拟合值迭代本身。</b><b>第一步选特征 φ(s)</b>——<b>Ng 提示：价值函数衡量的是「机器人从这儿开始能做得多好」，所以挑那些能反映「现在情况好不好」的量</b>，比如倒立摆里<b>杆的角度乘以小车的速度</b>这种交互项，<b>因为杆倒向右边这件事是好是坏，取决于小车是不是正在往右追</b>。<b>⭐ 而且 model-based RL 有个便宜可占：数据是模拟器生成的，要多少有多少</b>，<b>所以不必像平时那样死抠特征数量、担心过拟合</b>。<br><b>算法本身是「值迭代 + 监督学习」的缝合</b>：<b>先采样 m 个状态；对每个状态的每个动作，用模拟器采 k 次下一状态，取 V 的平均值来估那个期望</b>（⭐ <b>这一步是关键——连续状态没法把所有 s′ 加起来，只能采样估计</b>）；<b>再对动作取 max 得到目标值 y_i</b>；<b>最后用监督学习把 θ 拟合到这些 (s_i, y_i) 上</b>。<br><b>⚠ 注意最后一步和 L17 的根本差别：L17 是「把算出来的值直接写进表格」，这里是「把算出来的值当成训练数据去拟合一个函数」。</b><b>⭐ 这正是「拟合」两个字的来源，也是它能处理无穷多个状态的原因——你不再需要为每个状态存一个数，只需要存一组 θ。</b><br><b>下一讲 L19 继续往下：当模型是线性的、奖励是二次型时，有一个漂亮得多的精确解法，叫 LQR。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

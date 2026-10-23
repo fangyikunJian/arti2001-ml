@@ -1,0 +1,105 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Module 3 复习资料</title><style>
+@page { size: A4; margin: 16mm 14mm 16mm 14mm; }
+@page { @bottom-center { content: counter(page); font-size:9pt; color:#8a97aa } }
+@page :first { @bottom-center { content: "" } }
+*{box-sizing:border-box}
+html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+     font-size:10.5pt; line-height:1.62; color:#14181f; margin:0}
+code,.mono{font-family:"Consolas","Cascadia Mono","Courier New",monospace;
+   font-size:.92em; background:#eef1f6; color:#13365e; font-weight:600;
+   padding:0 1.6px; border-radius:2px}
+
+/* ── 封面 ── */
+.cover{text-align:center; padding-top:52mm; page-break-after:always}
+.cover h1{font-size:30pt; margin:0 0 4mm; letter-spacing:.04em}
+.cover .sub{font-size:14pt; color:#334; margin:0 0 2mm}
+.cover .course{font-size:11pt; color:#667; margin:0 0 14mm}
+.cover .cov{display:inline-block; text-align:left; border:1px solid #b9c2d0;
+     border-radius:6px; padding:6mm 9mm; font-size:10pt; line-height:1.9; background:#f7f9fc}
+.cover .cov b{color:#1b3a63}
+.cover .mate{margin-top:10mm; font-size:9.5pt; color:#778}
+
+/* ── 目录 ── */
+.toc{page-break-after:always}
+.toc h2{border:none; margin-top:0}
+.toc ol{list-style:none; padding-left:0; font-size:11pt; line-height:2.05}
+.toc ol ol{font-size:10pt; line-height:1.75; color:#445; padding-left:7mm; margin:1mm 0 2mm}
+.toc ol ol li::before{content:"· "; color:#8a97aa}
+
+/* ── 标题 ── */
+h2{font-size:15pt; margin:9mm 0 3mm; padding:2mm 0 1.6mm;
+   border-bottom:2.2px solid #1b3a63; color:#1b3a63; page-break-after:avoid}
+h3{font-size:12.2pt; margin:6mm 0 2mm; color:#20456f; page-break-after:avoid}
+h4{font-size:11pt; margin:4.5mm 0 1.5mm; color:#2d4a6b; page-break-after:avoid}
+h2 .pg{float:right; font-size:9.5pt; font-weight:400; color:#7a8698; padding-top:2.4mm}
+p{margin:0 0 2.4mm; text-align:justify}
+ol{margin:0 0 2.8mm; padding-left:6.5mm}
+ul{margin:0 0 2.8mm; padding-left:5mm; list-style:none}
+ul>li::before{content:"▪"; color:#4a73a8; display:inline-block;
+              width:4mm; margin-left:-4mm}
+li{margin:.9mm 0}
+b,strong{color:#0d2b4e}
+
+/* ── 表格 ── */
+table{border-collapse:collapse; width:100%; margin:2.5mm 0 4mm; font-size:9.8pt;
+      break-inside:avoid; page-break-inside:avoid}
+th,td{border:1px solid #c3ccd9; padding:1.5mm 2.2mm; vertical-align:top}
+th{background:#e8eef7; color:#12355c; font-weight:600; text-align:left}
+tr:nth-child(even) td{background:#fafbfd}
+td.n,th.n{text-align:right; font-variant-numeric:tabular-nums;
+   font-feature-settings:"tnum" 1; letter-spacing:.2px}
+table.tight td,table.tight th{padding:1.1mm 1.8mm; font-size:9.3pt}
+
+/* ── 公式 ── */
+.eq{margin:2.5mm 0 3mm; padding:2.4mm 4mm; background:#f4f7fb; border-left:3.5px solid #4a73a8;
+    font-family:"Cambria Math","Cascadia Mono",Consolas,serif; font-size:10.6pt;
+    break-inside:avoid; white-space:pre-wrap}
+.eq .lbl{display:block; font-family:inherit; font-size:8.8pt; color:#6b7686}
+sub{font-size:.72em} sup{font-size:.72em}
+
+/* ── 提示框 ── */
+.cal{margin:3mm 0; padding:2.6mm 3.6mm; border-radius:4px; break-inside:avoid;
+     page-break-inside:avoid; font-size:10.1pt}
+.cal .ttl{font-weight:700; display:block; margin-bottom:1.2mm}
+.cal p:last-child{margin-bottom:0}
+.k{background:#fff6e0; border:1px solid #e3b43a; border-left:4px solid #e3b43a}      /* ★ 考点 */
+.k .ttl{color:#8a5a00}
+.w{background:#fdeeee; border:1px solid #d77; border-left:4px solid #d77}            /* ⚠ 易错 */
+.w .ttl{color:#9a2222}
+.t{background:#edf7ee; border:1px solid #6aa96f; border-left:4px solid #6aa96f}      /* ⭐ 技巧 */
+.t .ttl{color:#1f6128}
+.s{background:#eef2fa; border:1px solid #93a7c9; border-left:4px solid #5878ab}      /* Study check */
+.s .ttl{color:#23456f}
+.ng{background:#f3eefb; border:1px solid #9a84c4; border-left:4px solid #7a5fb0}     /* CS229 旁注 */
+.ng .ttl{color:#4c327f}
+
+/* ── 手算例题 ── */
+.ex{margin:3.5mm 0 4.5mm; border:1px solid #9fb3cc; border-radius:5px}
+.ex>.hd{break-after:avoid; page-break-after:avoid}
+.ex>.hd{background:#1b3a63; color:#fff; padding:1.8mm 3.4mm; font-weight:600; font-size:10.4pt}
+.ex>.bd{padding:3mm 3.6mm}
+.ex>.bd>:last-child{margin-bottom:0}
+.step{margin:2mm 0; padding-left:5.5mm; border-left:2px solid #c3ccd9;
+   break-inside:avoid; page-break-inside:avoid}
+.step .sn{font-weight:700; color:#1b3a63; margin-right:1.5mm}
+
+/* ── 题库 ── */
+.qg{margin:4mm 0 5mm; break-inside:avoid-page}
+.qg>.hd{background:#20456f; color:#fff; padding:1.6mm 3.2mm; font-weight:600;
+        font-size:10.5pt; border-radius:4px 4px 0 0}
+.qg>.bd{border:1px solid #9fb3cc; border-top:none; border-radius:0 0 4px 4px; padding:2.6mm 3.4mm}
+.q{margin:0 0 3mm; break-inside:avoid}
+.q .qt{font-weight:600; margin-bottom:1.2mm}
+.q .op{padding-left:6mm; font-size:10pt; line-height:1.75}
+.ans{margin-top:2.5mm; padding:2.4mm 3mm; background:#f6f8fb; border-top:1.5px dashed #9fb3cc;
+     font-size:9.8pt}
+.ans .ttl{font-weight:700; color:#1b3a63; display:block; margin-bottom:1.2mm}
+.ans .a{margin:1.1mm 0}
+.ans .a b{color:#1f6128}
+
+.pb{page-break-before:always}
+.nb{page-break-inside:avoid}
+hr.sep{border:none; border-top:1px solid #d6dde7; margin:5mm 0}
+.note{font-size:9.4pt; color:#5a6676; margin:1.5mm 0 3mm}
+</style></head><body><div class="cover"><h1>Module 3 复习资料</h1><p class="sub">神经网络 · 训练 · 评估 — 总目录</p><p class="course">ARTI2001 Machine Learning · 2026 Semester 2</p><div class="cov"><b>6 册 · 约 120 页</b><br>三册<b>知识点整理</b> + 三册<b>题库与解析</b>（共 205 道选择题）<br>全部对照 <b>Canvas 官方讲义</b>编排，<b>考纲逐条覆盖</b><br>每一课都带<b>速查卡</b>与⚠易错框；<b>手算例题全部 numpy 复算通过</b></div><p class="mate">ARTI2001 · Module 3 测验：Week 13（2026-11-09 ~ 11-15）· 开卷</p></div><div class="toc"><h2>目录</h2><ol><li>这一套包含什么</li><li>考试形式（Canvas 原文要点）</li><li>建议的使用顺序</li><li>★ 考前最后一小时：只看这几处</li><li>材料来源与校验</li></ol></div><h2>这一套包含什么</h2><table><thead><tr><th>文件</th><th>归属</th><th class="n">页数</th></tr></thead><tbody><tr><td>M3T1_神经网络基础_知识点整理.pdf</td><td>Topic 1</td><td class="n">21 页</td></tr><tr><td>M3T1_神经网络基础_题库与解析.pdf</td><td>Topic 1 · 题库</td><td class="n">16 页</td></tr><tr><td>M3T2_训练神经网络_知识点整理.pdf</td><td>Topic 2</td><td class="n">27 页</td></tr><tr><td>M3T2_训练神经网络_题库与解析.pdf</td><td>Topic 2 · 题库</td><td class="n">17 页</td></tr><tr><td>M3T3_模型评估_知识点整理.pdf</td><td>Topic 3</td><td class="n">22 页</td></tr><tr><td>M3T3_模型评估_题库与解析.pdf</td><td>Topic 3 · 题库</td><td class="n">17 页</td></tr></tbody></table><p><b>合计 120 页。</b>建议双面打印；题库可以单独抽出来做。</p><h2>考试形式（Canvas 原文要点）</h2><table><thead><tr><th>项目</th><th>内容</th></tr></thead><tbody><tr><td>时间</td><td><b>Week 13（2026-11-09 ~ 11-15）</b>，在排定的 assessment / practical 课时进行。⚠ Canvas 的 due-date 字段是空的，<b>空的截止日期不代表考试没排</b></td></tr><tr><td>形式</td><td><b>110 分钟 · 100 分</b>，纸笔手写、堂内完成</td></tr><tr><td>题型</td><td><b>Q1–Q20 单选，每题 3 分</b>（四选一，选「最佳答案」）；<b>Q21–Q24 扩展题，每题 10 分</b></td></tr><tr><td>资料</td><td><b>开卷</b>：可带任意印刷或手写笔记，考试期间不得互相传阅</td></tr><tr><td>计算器</td><td>普通的<b>非编程、非图形</b>科学计算器；<b>带通信功能、可存笔记/程序、有符号运算能力的不允许</b></td></tr><tr><td>Python</td><td><b>不要求手写代码</b>，但要能解读出现过的函数、参数、属性与输出的<b>机器学习含义</b></td></tr></tbody></table><div class="cal k"><span class="ttl">★ 扩展题的评分口径（和 M1/M2 一致）</span><p>可能涉及计算与解读、评价某个说法、指出某个流程里的问题、或用证据比较不同方案。<b>要写出中间步骤、说明相关假设、解释推理过程。</b></p><p>原话：A correct final number alone may not demonstrate the required understanding. —— <b>只给出正确的最终数字，可能不足以体现所需的理解。</b></p></div><h2>建议的使用顺序</h2><table><thead><tr><th>顺序</th><th>做什么</th><th>为什么</th></tr></thead><tbody><tr><td>①</td><td>先读 T1 册最前面的<b>记号表</b></td><td>下标读法、ℓ 与 L 的区别、δ 与 Δ 的区别<b>跨全模块通用</b>，先立住</td></tr><tr><td>②</td><td>按 T1 → T2 → T3 读知识点整理</td><td>三个 Topic 是<b>层层叠加</b>的：T1 一个神经元，T2 加隐藏层与批量，T3 评估</td></tr><tr><td>③</td><td>每读完一册，做对应题库</td><td><b>每组 5 题，先遮住解析作答</b>，整组做完再核对</td></tr><tr><td>④</td><td>做错的题回到知识点整理的对应小节</td><td>组标题后面的括号就是小节编号（T2-1 §3 = 第 1 课第 3 节）</td></tr><tr><td>⑤</td><td>考前只看每册的<b>速查卡</b>与红框</td><td>速查卡在每一课末尾，是密度最高的几页</td></tr></tbody></table><h2>★ 考前最后一小时：只看这几处</h2><table><thead><tr><th>主题</th><th>最该确认的东西</th></tr></thead><tbody><tr><td>T1 算例</td><td><b>z → p → L → δ → 梯度 → 更新 → 复查</b>这一串；<b>δ = p − y</b>、∂L/∂wᵢ = δ·xᵢ、∂L/∂b = δ；<b>所有梯度用更新前的原参数算完再一起更新</b></td></tr><tr><td>表达能力</td><td>单个 sigmoid 神经元的<b>决策边界必然是直线</b>；限制来自<b>「仿射分数 + 单调激活 + 固定阈值」这个组合</b>，<b>不是单纯因为只有一个神经元</b>；「再 train 久一点」是错误选项</td></tr><tr><td>激活函数</td><td>σ′ = σ(1−σ)、tanh′ = 1 − tanh²；<b>本课约定 ReLU′(0) = 0、Leaky′(0) = α</b>；<b>输出的符号和斜率的符号是两回事</b>（Leaky 在 −2 处输出 −0.02、导数 +0.01）</td></tr><tr><td>输出–损失</td><td>回归→线性 + MSE/MAE；二分类→sigmoid + BCE；<b>互斥多类→softmax + CCE</b>；<b>多标签→每标签一个 sigmoid + BCE</b>；<b>整数标签用 sparse 版</b>；⚠ from_logits 的实现<b>不要再套一遍激活</b></td></tr><tr><td>隐藏层梯度</td><td>四步：<b>(p−y) → ×输出权重 → ×激活导数 → ×输入</b>；<b>某单元不激活 ⇒ 它的输入权重梯度全为 0</b>；<b>h=0 的那个输出权重梯度也是 0</b></td></tr><tr><td>batch/epoch</td><td><b>100 个观测 / 批大小 20 ⇒ 1 epoch = 5 次更新</b>；<b>1/N 只除一次</b>；<b>平均改善 ≠ 每个样本都改善</b></td></tr><tr><td>自动微分</td><td><b>tape 记录涉及 tf.Variable 的前向运算</b>；<b>tape.gradient 返回梯度但不更新参数</b>；<b>assign_sub 才改参数</b></td></tr><tr><td>泄漏</td><td><b>先划分 → 只在训练集上算预处理参数 → 原样应用 → 用验证选 → 测试评一次</b>；<b>不用标签也会泄漏</b>（[0,2] 均值 1，混入 100 变 34）；<b>「无监督」≠「可以在测试集上拟合」</b></td></tr><tr><td>指标</td><td><b>先声明正类</b>；本课摆法 [[TP, FN], [FP, TN]]，<b>sklearn 是 [[TN, FP], [FN, TP]]</b>；precision 分母 TP+FP、recall 分母 TP+FN；<b>F1 = 2TP/(2TP+FP+FN)，不含 TN</b></td></tr><tr><td>ROC/AUC</td><td><b>加正例往上、加负例往右</b>；两个分母固定；<b>配对法：随机正例分数更高的概率，平局算半胜</b>，和梯形法互验；<b>AUC 不决定阈值、不衡量校准、不编码代价</b></td></tr></tbody></table><div class="cal w"><span class="ttl">⚠ 四条最容易丢分的「概念性」答法</span><ul><li>凡是问「这次更新/这次损失下降说明了什么」，<b>必须答「只证明在这一个样本（或训练集）上有改进，不证明泛化」</b>；</li><li>凡是问「训练强验证差」，<b>先写「可能过拟合」，再补一句「在归因于方差之前，还要检查分布差异、验证样本过小、以及泄漏」</b>；</li><li>凡是涉及阈值，<b>必须写「在验证数据上用代价与约束来选，然后冻结，最后在没碰过的测试集上评估一次」</b>；</li><li>凡是问「反向传播和梯度下降」，<b>必须写成两件工作：</b><b>反向传播算梯度、梯度下降用梯度改参数，反向传播本身不改任何权重。</b></li></ul></div><h2>材料来源与校验</h2><table><thead><tr><th>来源</th><th>用在哪</th></tr></thead><tbody><tr><td>Canvas 讲义 11 页（M3-00 ＋ T1/T2/T3 共 10 课）</td><td>知识点整理的主体，章节按讲义小节编排</td></tr><tr><td>Canvas「Module 3 Assessment」页</td><td>考试形式、Scope 逐条、<b>两道官方示例题（含答案校验）</b></td></tr><tr><td>numpy 复算</td><td><b>全部 165 个数字逐个验算通过</b> —— 含讲义那两张表（学习率一步实验、100 次更新）的<b>完整重算</b></td></tr></tbody></table><p class="note">⚠ M3 的三份 Tutorial 在 Canvas 上按周解锁（T2 10-18、T1 10-19、T3 10-25）。解锁后应当先自己做一遍再看解答，本套资料不含 Tutorial 原题。</p></body></html>

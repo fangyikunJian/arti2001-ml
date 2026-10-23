@@ -1,0 +1,890 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L11 · 反向传播与改进网络</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L11 · 反向传播与改进网络",
+  subtitle:"梯度怎么一层层传回去 · 每个术语先解释再用 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=zUazLXZZA2U&t="};
+
+/* ── Ng 原话 ── */
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 画一层神经元 ── */
+function layer(cx,ys,cls,r){ys.forEach(function(y){dots([[cx,y]],cls||"a",r||16);});}
+function wire(x1,ys1,x2,ys2,cls){ys1.forEach(function(a){ys2.forEach(function(b){
+  link(x1+17,a,x2-17,b);});});}
+
+/* ── 激活函数曲线：kind = "sigmoid" | "tanh" | "relu" ── */
+function act(cx,cy,w,h,kind,cls){
+  var p=[],i;
+  for(i=0;i<=80;i++){
+    var t=-6+12*i/80, v;
+    if(kind==="relu") v=Math.max(0,t)/6;
+    else if(kind==="tanh") v=(Math.tanh(t)+1)/2;
+    else v=1/(1+Math.exp(-t));
+    p.push([cx+w*t/12, cy-h*(v-0.5)]);}
+  curve(p,cls||"b");}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L11","反向传播与改进网络",
+      "梯度是怎么一层层传回去的");},
+    "上一讲搭好了神经网络的架子，<b>这一讲回答一个具体的问题：网络有那么多层、那么多参数，到底怎么知道每个参数该往哪调？</b><br><b>Ng 开场就交代了今天的两件事</b>：<b>① 用链式法则把反向传播推出来；② 讲一堆让网络训练得更好的技巧</b>（激活函数怎么选、参数怎么初始化、优化器怎么改进）。<br><b>⭐ 提前说一句这一讲的性质</b>：反向传播听起来吓人，<b>但它本质上只是「链式法则」这一条高中就学过的求导规则，反复用很多次</b>。真正需要花心思的是<b>为什么要「倒着」算</b>——这一点这一讲会讲透。<br><b>这一版是重做的</b>：旧版只有 12 个知识点，而且链式法则、逐元素积、饱和、扇入这些词都是直接拿来用。<b>这一版每个词先讲清楚再用。</b>");
+});
+KP("1 · 先认识一个词：损失函数",function(){
+  S(191,function(){clearScene();setEq(null);setCap("它就是网络的「考卷分数」—— 越低越好");
+   boxNode(170,205,300,80,"网络的预测","b");
+   boxNode(560,205,230,80,"真实答案","g");
+   boxNode(880,205,240,80,"损失 L","r");
+   link(470,245,560,245); link(790,245,880,245);
+   note("比一比差多少",625,320,"d");
+   note("⭐ 训练就是：调参数，让这个数变小",640,390,"y");},"整讲都围绕「损失函数」转，<b>先把它讲清楚</b>。<br><b>它就是网络的「考卷分数」</b>：<b>把网络的预测和真实答案比一比，差得越多，这个数越大</b>。通常记作 <b>L</b>（loss）。<br><b>⭐ 于是「训练一个网络」这件事，就有了一个非常具体的定义：调整所有参数，让这个 L 尽可能小。</b><br><b>⚠ 注意它和「准确率」不一样</b>：准确率是「对了几道」，而损失是<b>连续的</b>——哪怕你全答对了，损失也可能还能再降一点（因为你可以答得「更有把握」）。<b>连续才好求导，这一点下一节就用上。</b>");
+  S(191,function(){clearScene();setEq(null);setCap("为什么不直接拿「错了几道」当损失");
+       boxNode(130,206,470,74,"错误率：数错了几道","r");
+       boxNode(740,206,440,74,"交叉熵 / 平方误差","g");
+       note("答案只会从 0 跳到 1，中间没有过渡",365,326,"d");
+       note("越有把握分越高，处处有坡度",960,326,"d");
+       note("⭐ 梯度下降全靠导数指路 —— 导数处处为 0 就彻底无路可走",640,396,"y");},"这里有个很自然的疑问：<b>既然目标是少答错，为什么不直接拿「错了几道」当损失？</b><br><b>因为它不可导。</b>把参数挪动一丁点，答对答错通常不会变，损失纹丝不动；<b>一旦变，又是从 0 直接跳到 1</b>。<b>这样的函数导数处处为 0（跳变处甚至不存在）</b>。<br><b>⭐ 而梯度下降全靠导数告诉它「往哪挪、挪多少」——导数为 0，它就彻底无路可走。</b><br><b>所以要换成交叉熵或平方误差这种连续的量</b>：<b>答得越有把握，分越高</b>，参数稍微动一点，损失就跟着动一点。<b>⚠ 这就是「可导」为什么是选损失函数的硬条件。</b>");
+  SUM(191,1,{h:"损失函数 ＝ 网络的考卷分数",k:"<b>把预测和真实答案比一比，差得越多这个数越大。</b>训练 ＝ 调参数让它变小。",m:"⚠ 它和准确率不同：<b>准确率是「对了几道」，损失是连续的</b>——全答对了也可能还能再降（答得更有把握）。",w:"⭐ <b>连续才好求导</b>，这是下一节的前提。",e:"⭐ 「训练 ＝ 最小化损失」这个定义要能脱口而出。"});
+  QUIZ(191,1,{t:"损失函数和准确率的区别是什么？",o:["损失只能用于回归","准确率是「对了几道」；损失是连续的，全答对了也可能还能再降（答得更有把握）——连续才好求导","准确率用于训练，损失用于测试","两者是同一件事"],a:1,w:"⭐ <b>连续可导</b>是关键：这是梯度下降能工作的前提。"});
+});
+KP("2 · 再认识一个词：梯度",function(){
+  S(191,function(){clearScene();setEq(null);setCap("梯度告诉你「往哪动、损失会降得最快」");
+   axes({x0:280,x1:1000,y0:390,y1:180});
+   var i,p=[];
+   for(i=0;i<=50;i++){var x=300+i*13;
+     p.push([x, 200+170*Math.pow((x-700)/340,2)]);}
+   curve(p,"b");
+   dots([[450,310]],"y",10);
+   curve([[450,310],[560,355]],"r");
+   note("当前参数在这儿",430,275,"y");
+   note("损失 L ↑",250,250,"d");
+   note("参数 →",640,398,"d");
+   note("⭐ 导数告诉你坡度 —— 往下坡方向挪一小步",830,330,"g");},"第二个词：<b>梯度</b>。<br><b>把损失想成一个山谷</b>：横轴是某个参数的取值，纵轴是损失。<b>我们想走到谷底（损失最小）。</b><br><b>「导数」告诉你当前这个位置的坡度</b>——<b>往哪边走是下坡，坡有多陡</b>。于是办法就有了：<b>朝下坡方向挪一小步，再看一眼坡度，再挪一步</b>……这就是<b>梯度下降</b>。<br><b>⭐ 「梯度」就是「所有参数的导数凑在一起」</b>——网络有几万个参数，就有几万个导数，合起来叫梯度。<br><b>⚠ 于是整个训练问题被归结成一句话：怎么把每个参数的导数算出来。而这正是反向传播要解决的。</b>");
+  S(191,function(){clearScene();
+       setEq("$$\\theta \\;\\leftarrow\\; \\theta \\;-\\; \\alpha\\,\\frac{\\partial J}{\\partial \\theta}$$");
+       setCap("梯度怎么用：是减，不是加");
+       note("导数为正 ⇒ 往大了走会更糟 ⇒ 所以往回退",640,196,"b");
+       note("⭐ 减号管方向，α 只管步子多大 —— 两件事别混",640,240,"y");},"梯度算出来之后怎么用？<b>就这一行：参数减去「学习率 × 它自己的那个偏导」。</b><br><b>为什么是减</b>：偏导为正，说明<b>把这个参数调大，损失会上升</b>，那当然要<b>往回退</b>。偏导为负则相反。<b>一个减号就同时照顾了两种情况。</b><br><b>⭐ 把两件事分清楚：减号决定方向，α 只决定步子多大。</b><br><b>⚠ 常见的误解是「梯度指向最小值」——不对，梯度指向的是<b>上升最快的方向</b>，加上减号才朝下坡。<b>而且它只是「当下这一点」的局部信息，并不知道最低点在哪。</b>");
+  SUM(191,2,{h:"梯度 ＝ 每个参数的导数凑在一起",k:"把损失想成山谷。<b>导数告诉你当前位置的坡度</b>——往哪边是下坡、有多陡。<b>朝下坡挪一小步，反复</b>，就是梯度下降。",m:"<b>梯度 ＝ 所有参数的导数凑在一起</b>。几万个参数就有几万个导数。",w:"⭐ <b>整个训练问题因此归结成一句话：怎么把每个参数的导数算出来。</b>",e:"⚠ 这正是反向传播要解决的问题——<b>它不是别的，就是一套高效算导数的办法</b>。"});
+  QUIZ(191,2,{t:"训练神经网络的核心计算问题是什么？",o:["如何把每个参数的导数（梯度）算出来——有了它才知道参数往哪调","如何加快矩阵乘法","如何选择网络层数","如何收集更多数据"],a:0,w:"⭐ <b>反向传播不是别的，就是一套高效算导数的办法。</b>有了梯度，朝下坡挪一小步就是梯度下降。"});
+});
+KP("3 · ★ 第三个词：链式法则（反向传播的全部数学）",function(){
+  S(191,function(){clearScene();setEq(null);setCap("一串齿轮：转动是会传递的");
+   boxNode(160,215,230,80,"齿轮 A","b");
+   boxNode(500,215,230,80,"齿轮 B","g");
+   boxNode(840,215,230,80,"齿轮 C","y");
+   link(390,255,500,255); link(730,255,840,255);
+   note("A 转 1 圈 ⇒ B 转 2 圈",445,330,"d");
+   note("B 转 1 圈 ⇒ C 转 3 圈",785,330,"d");
+   note("⭐ 那么 A 转 1 圈 ⇒ C 转 6 圈 —— 把倍数乘起来",640,392,"y");},"<b>第三个词是链式法则，它是反向传播的全部数学内容——真的，就这一条。</b><br><b>先用齿轮理解</b>：三个齿轮咬在一起。<b>A 转一圈带动 B 转两圈，B 转一圈带动 C 转三圈。</b>那么 <b>A 转一圈，C 转几圈？</b><br><b>答案是 2 × 3 = 6 圈——把倍数乘起来。</b><br><b>⭐ 链式法则说的就是这件事：当影响是一环套一环传过去的，总的影响就是各环影响的乘积。</b>");
+  S(191,function(){clearScene();
+   setEq("$$\\frac{\\partial L}{\\partial w} = \\frac{\\partial L}{\\partial a}\\cdot\\frac{\\partial a}{\\partial z}\\cdot\\frac{\\partial z}{\\partial w}$$");
+   setCap("写成式子：中间的东西「消掉」了");
+   says("0:03","we're going to derive the backpropagation with the chain rule");
+   note("w 变一点 ⇒ z 变多少",640,170,"b");
+   note("z 变一点 ⇒ a 变多少",640,200,"g");
+   note("a 变一点 ⇒ L 变多少",640,231,"y");
+   note("⭐ 三个倍数乘起来 = w 变一点，L 变多少",640,265,"r");},"<b>写成数学就是这个式子。</b>读法是从右往左：<b>w 动一点 ⇒ z 动多少</b>；<b>z 动一点 ⇒ a 动多少</b>；<b>a 动一点 ⇒ L 动多少</b>。<b>三个倍数乘起来，就得到「w 动一点，L 动多少」。</b><br><b>⭐ 有个方便的记法</b>：这些分数形式的符号，<b>看起来就像中间的 ∂a 和 ∂z 被「约掉」了</b>——左边剩下 ∂L/∂w。<b>（严格说它们不是真的分数，但这个记法在这里是对的，可以放心用。）</b><br>Ng 开场就说了今天要<b>用链式法则推出反向传播</b>。<b>所以你只要真的懂了这一条，剩下的全是机械地套用。</b>");
+  SUM(191,3,{h:"★★ 链式法则：一环套一环，倍数相乘",k:"<b>齿轮类比</b>：A 转 1 圈带 B 转 2 圈、B 转 1 圈带 C 转 3 圈 ⇒ <b>A 转 1 圈 C 转 6 圈</b>。影响一环套一环时，<b>总影响＝各环影响相乘</b>。",m:"<b>∂L/∂w = (∂L/∂a)·(∂a/∂z)·(∂z/∂w)</b>。从右往左读：w 动 ⇒ z 动多少 ⇒ a 动多少 ⇒ L 动多少。",w:"⭐ 记法：中间的 ∂a、∂z 看起来像被<b>约掉</b>了。（严格说不是真分数，但这里这么记是对的。）",e:"⭐⭐ <b>反向传播的全部数学就是这一条，反复用很多次。</b>懂了它，剩下的是机械套用。"});
+  QUIZ(191,3,{t:"链式法则在说什么？",o:["深层网络的梯度一定会消失","多个函数相加时导数也相加","导数等于函数值除以自变量","当影响是一环套一环传过去的，总的影响等于各环影响的乘积"],a:3,w:"⭐ 齿轮类比：A→B 二倍、B→C 三倍 ⇒ <b>A→C 六倍</b>。<b>反向传播就是这一条反复用很多次。</b>"});
+});
+KP("4 · 把这一讲用的那个小网络摆出来",function(){
+  S(2487,function(){clearScene();setEq(null);setCap("三个神经元 → 两个 → 一个");
+   says("41:27","our network is three neurons casting into two neurons casting into one neuron");
+   layer(300,[220,290,360],"b",16);
+   layer(640,[255,325],"g",16);
+   layer(980,[290],"y",16);
+   wire(300,[220,290,360],640,[255,325]);
+   wire(640,[255,325],980,[290]);
+   note("第 1 层",300,398,"b");
+   note("第 2 层",640,398,"g");
+   note("输出层",980,398,"y");},"<b>整讲用的就是这么一个小网络</b>：<b>三个神经元 → 两个神经元 → 一个输出</b>。<br><b>每条连线上有一个权重 w</b>，每个神经元里做两件事：<b>先把上一层传来的东西加权求和（得到 z），再过一个激活函数（得到 a）</b>。<br><b>⭐ 为什么用这么小的网络？</b>因为<b>反向传播的道理和网络大小无关</b>——三层能讲清楚的事，三百层也是同一套。<b>小网络能让你看清每一步，不被下标淹没。</b><br><b>⚠ 记住这两个符号</b>：<b>z 是「加权求和的结果」，a 是「过了激活函数之后的结果」</b>。后面满篇都是它们。");
+  S(2487,function(){clearScene();setEq(null);setCap("数一数：这个小网络要学多少个数");
+       matrix({rows:4,cols:4,cw:250,ch:46,x:160,y:190,
+         cell:function(i,j){var t=[
+           ["","W 的形状","b 的个数","小计"],
+           ["第 1 层","2 × 3","2","8"],
+           ["第 2 层","1 × 2","1","3"],
+           ["合计","","","11"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 反向传播一次要为这 11 个数各算一个偏导 —— 而且是一趟全算完",640,396,"y");},"把参数数一遍，后面的推导就有了实感。<br><b>第 1 层</b>：3 个输入接到 2 个神经元，<b>W 是 2×3 共 6 个数，再加 2 个偏置，一共 8 个</b>。<b>第 2 层</b>：2 接 1，<b>W 是 1×2 共 2 个，加 1 个偏置，一共 3 个</b>。<b>全网 11 个参数。</b><br><b>⭐ 反向传播要做的事，就是为这 11 个数各算出一个偏导</b>——<b>而且是倒着走一趟就全算完，不是一个一个单独求。</b><br><b>⚠ 注意 W 的形状是「本层神经元数 × 上层神经元数」</b>，很多人会写反；<b>记法是：它要左乘在上一层的输出上。</b>");
+  SUM(2487,4,{h:"这一讲的小网络：3 → 2 → 1",k:"每条连线上一个权重 <b>w</b>；每个神经元里<b>先加权求和得 z，再过激活函数得 a</b>。",m:"⭐ <b>反向传播的道理和网络大小无关</b>——三层讲清楚的事，三百层是同一套。小网络能让你看清每一步。",w:"⚠ 记住两个符号：<b>z ＝ 加权求和的结果；a ＝ 过了激活函数之后的结果</b>。",e:"手算题通常也是这种小网络。<b>把 z 和 a 分清楚是第一步。</b>"});
+  QUIZ(2487,4,{t:"神经元里的 z 和 a 分别指什么？",o:["z 是输入，a 是输出层","两者是同一个量的不同写法","z 是上一层传来的东西加权求和的结果；a 是 z 过了激活函数之后的结果","z 是权重，a 是偏置"],a:2,w:"⚠ 这两个符号后面满篇都是，<b>分清楚是看懂推导的第一步</b>。"});
+});
+KP("5 · ★★ 为什么非要「倒着」算",function(){
+  S(1221,function(){clearScene();setEq(null);setCap("先试试「正着」算会怎样");
+       says("20:21","I don't wanna take the derivative with respect to w_3 because I will only get stuck");
+       boxNode(160,210,250,76,"第 1 层的 w","b");
+       boxNode(510,210,250,76,"第 2 层","g");
+       boxNode(860,210,250,76,"损失 L","y");
+       link(410,248,510,248); link(760,248,860,248);
+       note("想知道第 1 层的 w 对 L 的影响",640,330,"d");
+       note("⚠ 可是它要先穿过第 2 层 —— 而第 2 层的影响你还没算",640,390,"r");},"<b>这是整个反向传播里最值得想明白的一个问题：为什么非要从后往前算？</b><br><b>先看「正着」算会怎样。</b>假设你想先算第 1 层某个权重 w 对损失 L 的影响。<b>按链式法则，你得知道「w 影响 z、z 影响 a、a 影响第 2 层、第 2 层影响 L」——一整条链。</b><br><b>⚠ 麻烦在于：这条链的后半截你还没算过。</b>于是你得先去算第 2 层，<b>而算第 2 层时又会发现要先算第 3 层</b>……<b>Ng 说得很直接：这么干「只会卡住」。</b>");
+  S(1221,function(){clearScene();setEq(null);setCap("倒着算：每一层都能直接用上一步的结果");
+       boxNode(160,210,250,76,"第 1 层","b");
+       boxNode(510,210,250,76,"第 2 层","g");
+       boxNode(860,210,250,76,"损失 L","y");
+       curve([[860,300],[640,340],[410,300]],"r");
+       note("③",285,196,"b"); note("②",635,196,"g"); note("①",985,196,"y");
+       note("⭐ 从损失出发往回走，每一步都只需要「后一层已经算好的那个数」",640,392,"g");},"<b>⭐ 倒过来就全通了。</b><br><b>从损失 L 出发往回走</b>：先算<b>最后一层</b>的梯度（这一步最简单，因为损失就是直接拿最后一层的输出算的）；<b>有了它，再往前推一层</b>——按链式法则，只要把<b>「后一层已经算好的那个数」乘上「这一层自己的那个倍数」</b>就行了。<b>再往前一层，同理。</b><br><b>⭐ 这就是「反向传播」这个名字的来历：梯度像接力棒一样，从损失那头一层层传回去。</b><br><b>⚠ 关键的好处是：每一层都只用算「自己这一环的倍数」，后面的部分已经是现成的了。</b>要是正着算，同一段链会被重复算很多遍。");
+  SUM(1221,5,{h:"★★ 为什么倒着算：后面的结果能直接复用",k:"<b>正着算会卡住</b>（Ng 原话）：算第 1 层要先知道第 2 层的影响，而那个还没算。",m:"<b>倒着算</b>：从损失出发，先算最后一层（最简单），<b>再往前每一步只需「后一层已算好的数 × 这一层自己的倍数」</b>。",w:"⭐ 这就是「反向传播」名字的来历——<b>梯度像接力棒一样从损失那头一层层传回去</b>。",e:"⚠ 好处是<b>每段链只算一次</b>；正着算会把同一段重复算很多遍。"});
+  QUIZ(1221,5,{t:"反向传播为什么要从后往前算？",o:["因为矩阵乘法只能这么做","正着算时每层都依赖还没算出来的后续层；倒着算则每一步只需「后一层已算好的数 × 本层自己的倍数」，结果可复用","因为后面的层更重要","为了节省内存"],a:1,w:"Ng 原话：正着算「只会卡住」。⭐ <b>倒着算让每段链只算一次</b>，而正着算会重复计算同一段。"});
+});
+KP("6 · 第一步：最后一层的梯度",function(){
+  S(893,function(){clearScene();setEq("$$\\frac{\\partial L}{\\partial w^{[3]}} = \\frac{\\partial L}{\\partial a^{[3]}}\\cdot\\frac{\\partial a^{[3]}}{\\partial z^{[3]}}\\cdot\\frac{\\partial z^{[3]}}{\\partial w^{[3]}}$$");
+       setCap("三个因子，每个都很好算");
+       note("损失对输出求导 —— 损失函数自己的导数",640,170,"y");
+       note("激活函数的导数",640,201,"g");
+       note("等于上一层的输出 a⁽²⁾",640,233,"b");
+       note("⭐ 三个都是现成的，直接乘起来",640,265,"r");},"<b>从最后一层开始。</b>按链式法则拆成三个因子，<b>而这三个因子每一个都很好算</b>：<br><b>① ∂L/∂a</b>：损失对网络输出求导——<b>这是损失函数自己的导数，你选了什么损失就是什么</b>。<br><b>② ∂a/∂z</b>：<b>激活函数的导数</b>，也是现成的。<br><b>③ ∂z/∂w</b>：因为 z 就是「上一层的输出 × w 再求和」，<b>所以它对 w 求导的结果就是上一层的输出 a⁽²⁾</b>。<br><b>⭐ 三个都是现成的，乘起来就完事。这就是为什么最后一层最容易——它离损失最近，中间没有别的层挡着。</b>");
+  S(893,function(){clearScene();setEq(null);setCap("三个因子，逐个对号入座");
+       boxNode(120,206,300,74,"∂L / ∂a","r");
+       boxNode(500,206,280,74,"∂a / ∂z","y");
+       boxNode(860,206,300,74,"∂z / ∂W","b");
+       note("损失对输出求导",270,326,"d");
+       note("激活函数在该点的斜率",640,326,"d");
+       note("＝ 上一层的输出 a",1010,326,"d");
+       note("⭐ 三样东西前向算完就都在手里了 —— 一个都不用重算",640,396,"y");},"把这三个因子逐个对上号，就会发现它们都是现成的。<br><b>第一个 ∂L/∂a</b>：损失对网络输出求导，<b>损失函数是你自己选的，这一步纯粹是套公式</b>。<br><b>第二个 ∂a/∂z</b>：<b>激活函数在这一点的斜率</b>——sigmoid 就是 a(1−a)，ReLU 就是 0 或 1。<br><b>第三个 ∂z/∂W</b>：因为 z = Wa + b，<b>对 W 求导就等于上一层的输出 a 本身</b>。<br><b>⭐ 关键在于：这三样东西在前向传播算完的那一刻就全都在手里了</b>，<b>一个都不用重新算。</b><b>⚠ 这也正是下一节「要把 a 和 z 存下来」的原因。</b>");
+  SUM(893,6,{h:"最后一层：三个因子都是现成的",k:"<b>∂L/∂a</b>（损失函数自己的导数）× <b>∂a/∂z</b>（激活函数的导数）× <b>∂z/∂w</b>（＝上一层的输出 a⁽²⁾）。",m:"<b>∂z/∂w 为什么等于上一层的输出</b>：因为 z ＝ 上一层输出 × w 再求和，对 w 求导就剩下那个输出。",w:"⭐ <b>最后一层最容易，因为它离损失最近，中间没有别的层挡着。</b>",e:"⚠ 手算题通常从这一层起步。<b>三个因子分别是什么要记清。</b>"});
+  QUIZ(893,6,{t:"最后一层的 ∂z/∂w 等于什么？",o:["等于激活函数的导数","等于损失 L","等于 1","等于上一层的输出 a"],a:3,w:"因为 <b>z ＝ 上一层输出 × w 再求和</b>，对 w 求导就剩下那个输出。⭐ 这也是为什么反向传播时<b>要把前向算出来的 a 存下来</b>。"});
+});
+KP("7 · 往前再推一层：把接力棒传下去",function(){
+  S(1741,function(){clearScene();setEq(null);setCap("第 2 层的梯度 = 第 3 层传回来的 × 本层自己的");
+       boxNode(760,205,360,80,"第 3 层已经算好的梯度","y");
+       boxNode(760,315,360,80,"× 本层自己的那个倍数","g");
+       boxNode(190,260,440,80,"= 第 2 层的梯度","b");
+       link(760,245,630,290); link(760,355,630,300);
+       note("⭐ 后面的部分是现成的，不用重算",640,170,"d");},"<b>往前推一层，做法完全一样，只是多乘一个因子。</b><br><b>第 2 层的梯度 ＝ 「第 3 层已经算好的那个梯度」 × 「本层自己的那个倍数」。</b><br><b>⭐ 请注意这里省了多少事</b>：第 3 层那一截，<b>我们上一步已经算过了，直接拿来用</b>，<b>一点都不用重算</b>。<br><b>每往前一层，就多乘一个因子，把接力棒继续传下去。</b>一直传到第 1 层，所有参数的梯度就都有了。<br><b>⚠ 这里要留意一个实现上的细节：往前传的时候需要用到前向传播时算出来的 a 和 z。所以前向算的时候要把它们存下来</b>，不能算完就扔。");
+  S(1741,function(){clearScene();setEq(null);setCap("存下来是要花代价的");
+       boxNode(140,206,450,74,"前向：算一层，存一层","b");
+       boxNode(730,206,450,74,"反向：倒着把它们取出来用","g");
+       link(590,243,730,243);
+       note("存的是每层的 a 和 z",365,326,"d");
+       note("用完这一层才能丢",960,326,"d");
+       note("⭐ 所以显存随「层数 × 批量大小」一起涨，不是只看参数量",640,396,"y");},"「把中间结果存下来」听着轻巧，<b>但它是有代价的</b>。<br><b>前向的时候算一层就得存一层</b>的 a 和 z；<b>反向走到哪一层，才能把那一层的存货丢掉</b>。<br><b>⭐ 所以训练时占的显存，是随「层数 × 批量大小」一起涨的，不是只看参数量。</b>一个参数不多但很深的网络，照样能把显存撑爆。<br><b>⚠ 这解释了一个常见现象：同一个模型，推理时轻轻松松，训练时却放不下</b>——<b>因为推理不需要存这些中间结果，算完就能丢。</b>也解释了为什么显存不够时，<b>第一招永远是把批量调小</b>。");
+  SUM(1741,7,{h:"往前推一层：乘上本层的倍数",k:"<b>第 2 层的梯度 ＝ 第 3 层已算好的梯度 × 本层自己的倍数。</b>每往前一层多乘一个因子。",m:"⭐ <b>后面那一截是现成的，一点都不用重算</b>——这正是倒着算的全部好处。",w:"⚠ <b>实现细节</b>：往回传时要用到前向算出来的 a 和 z，<b>所以前向时必须把它们存下来</b>，不能算完就扔。",e:"⭐ 「前向存中间结果、反向复用」是深度学习框架的标准做法。"});
+  QUIZ(1741,7,{t:"反向传播时为什么要保存前向传播算出的 a 和 z？",o:["因为往回传梯度时要用到它们（比如 ∂z/∂w 就等于上一层的输出 a）","为了计算准确率","为了方便调试","不需要保存，可以重新算"],a:0,w:"⭐ <b>「前向存中间结果、反向复用」是深度学习框架的标准做法。</b>⚠ 这也是训练比推理更吃显存的主要原因之一。"});
+});
+KP("8 · ★ 一个会冒出来的新符号：逐元素积 ⊙",function(){
+  S(1741,function(){clearScene();setEq(null);setCap("它和矩阵乘法完全不是一回事");
+       says("29:01","It's an element-wise product");
+       matrix({rows:4,cols:3,cw:250,ch:56,x:260,y:200,
+         cell:function(i,j){var t=[
+           ["","向量 u","向量 v"],
+           ["第 1 个数","2","5"],
+           ["第 2 个数","3","4"],
+           ["u ⊙ v","2×5 = 10","3×4 = 12"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 对应位置各乘各的 —— 结果还是同样长的向量",640,382,"y");},"推到中间会冒出一个符号 <b>⊙</b>，Ng 专门停下来说明了一句——<b>这是「逐元素积」</b>。<br><b>它和矩阵乘法完全不是一回事</b>：<b>逐元素积就是「对应位置各乘各的」</b>。两个长度相同的向量，第一个数乘第一个数、第二个乘第二个，<b>结果还是同样长的向量</b>。<br><b>⚠ 对比一下矩阵乘法</b>：那个要「行乘列再求和」，<b>结果的形状会变</b>。<b>两者千万别混。</b>");
+  S(1741,function(){clearScene();setEq(null);setCap("它为什么会出现在反向传播里");
+       layer(420,[240,310],"g",15);
+       layer(820,[275],"y",15);
+       wire(420,[240,310],820,[275]);
+       note("每个神经元各自过自己的激活函数",620,195,"d");
+       note("⇒ 求导时也是「各算各的」，互不干涉",640,370,"g");
+       note("⭐ 这种「各管各的」关系，写出来就是逐元素积",640,398,"y");},"<b>⭐ 它为什么会在反向传播里冒出来？</b><br>因为<b>激活函数是「每个神经元各过各的」</b>——第一个神经元的 a 只由它自己的 z 决定，<b>和旁边那个神经元毫无关系</b>。<br><b>所以求导的时候也是「各算各的」，互不干涉。</b><b>这种「各管各的、对应位置配对」的关系，写成矩阵记号就正好是逐元素积。</b><br><b>⚠ 而权重那一步不一样</b>：z 是把上一层<b>所有</b>神经元加权求和得到的，<b>各个神经元被混在了一起</b>——<b>那一步就得用真正的矩阵乘法。</b><br><b>所以一条反向传播的式子里，两种乘法会交替出现，位置不能搞错。</b>");
+  SUM(1741,8,{h:"★ 逐元素积 ⊙：对应位置各乘各的",k:"<b>⊙ 不是矩阵乘法</b>：它是「对应位置各乘各的」，<b>结果还是同样长的向量</b>；矩阵乘法要「行乘列再求和」，<b>形状会变</b>。",m:"⭐ <b>为什么会出现</b>：激活函数是每个神经元<b>各过各的</b>，求导时也互不干涉——<b>这种「各管各的」关系写出来就是 ⊙</b>。",w:"⚠ <b>而权重那一步要用真矩阵乘法</b>：z 把上一层所有神经元加权求和，<b>各神经元被混在了一起</b>。",e:"⚠ 一条反向传播式子里<b>两种乘法交替出现，位置不能搞错</b>。"});
+  QUIZ(1741,8,{t:"反向传播式子里为什么会出现逐元素积 ⊙？",o:["这只是一种简写","为了加快计算","因为激活函数是每个神经元各过各的、互不干涉，求导时这种「各管各的」关系写出来就是逐元素积","因为向量不能做矩阵乘法"],a:2,w:"⚠ 对比：<b>权重那一步要用真矩阵乘法</b>，因为 z 把上一层所有神经元混在了一起。<b>两种乘法在一条式子里交替出现。</b>"});
+});
+KP("9 · 先铺词：激活函数是什么",function(){
+  S(2636,function(){clearScene();setEq(null);setCap("神经元里的第二道工序");
+       boxNode(170,215,290,80,"加权求和 → z","b");
+       boxNode(560,215,290,80,"过激活函数 → a","g");
+       boxNode(950,215,210,80,"传给下一层","y");
+       link(460,255,560,255); link(850,255,950,255);
+       note("线性的一步",315,330,"d");
+       note("⭐ 非线性的一步 —— 整个网络的表达力全靠它",705,330,"y");},"<b>每个神经元里有两道工序</b>：<b>第一道是加权求和得到 z</b>（这一步是<b>线性</b>的）；<b>第二道是把 z 过一个「激活函数」得到 a</b>。<br><b>激活函数是什么？就是一个普通的一元函数</b>——输入一个数 z，输出一个数 a。常见的有 sigmoid、tanh、ReLU。<br><b>⭐ 它看起来只是个小配件，但整个神经网络的表达力全靠它。</b><b>下一节就讲为什么。</b>");
+  S(2636,function(){clearScene();setEq(null);setCap("三条常见的曲线，先混个眼熟");
+       act(320,300,210,110,"sigmoid","b");
+       act(640,300,210,110,"tanh","g");
+       act(980,300,210,110,"relu","y");
+       note("sigmoid：压到 0 ~ 1",320,196,"b");
+       note("tanh：压到 −1 ~ 1",640,196,"g");
+       note("ReLU：负的一律压成 0",980,196,"y");
+       note("⭐ 这一节只认形状，后面几节逐条讲它们各自的毛病和好处",640,404,"d");},"课上反复出现的激活函数其实就三条，先把形状认熟。<br><b>sigmoid</b> 是一条 S 形，<b>把任何实数压到 0 到 1 之间</b>。<b>tanh</b> 形状一样，只是<b>压到 −1 到 1，而且以 0 为中心</b>。<b>ReLU</b> 最简单——<b>正的原样放过，负的一律压成 0</b>。<br><b>⭐ Ng 提到一个实践共识：同一层里用同一种激活，而且基本就在这三种里选。</b>他还说了句实在话——<b>深度学习里很多结论是试出来的，为什么某个激活更好，其实并没有完全搞清楚</b>。<br><b>⚠ 它们都属于超参数</b>，<b>实践中是多试几个、挑表现好的，而不是推导出来的。</b>");
+  SUM(2636,9,{h:"激活函数 ＝ 神经元里的第二道工序",k:"神经元两步：<b>① 加权求和得 z（线性）；② 过激活函数得 a（非线性）</b>。",m:"激活函数就是一个<b>普通的一元函数</b>：输入一个数，输出一个数。常见的有 sigmoid、tanh、ReLU。",w:"⭐ <b>它看起来只是个小配件，但整个网络的表达力全靠它。</b>",e:"⚠ 分清两步：<b>加权求和是线性的，激活才是非线性的来源</b>。"});
+  QUIZ(2636,9,{t:"神经元里的两道工序分别是什么？",o:["先激活再加权求和","① 归一化；② 分类","① 加权求和得到 z（线性）；② 过激活函数得到 a（非线性）","① 前向；② 反向"],a:2,w:"⚠ 顺序是<b>先加权求和、再激活</b>。⭐ <b>加权求和是线性的，激活才是非线性的来源</b>——下一节讲为什么这很要命。"});
+});
+KP("10 · ★★★ 为什么必须用非线性的激活函数",function(){
+  S(2636,function(){clearScene();setEq(null);setCap("假设不用激活函数会怎样");
+       says("43:56","if you don't choose activation functions, no matter how deep is your network, it's going to be equivalent to a linear regression");
+       boxNode(160,215,230,76,"线性","b");
+       boxNode(440,215,230,76,"线性","b");
+       boxNode(720,215,230,76,"线性","b");
+       link(390,253,440,253); link(670,253,720,253);
+       boxNode(1000,215,180,76,"= 线性","r");
+       note("⭐ 线性套线性，结果还是线性 —— 层数再多也白搭",640,340,"y");
+       note("⚠ 一百层的网络，等价于一个线性回归",640,395,"r");},"<b>⭐ 这是这一讲最该记住的一条。</b>Ng 说得非常直白：<b>如果你不选激活函数，那么不管你的网络有多深，它都等价于一个线性回归。</b><br><b>为什么？</b>想一下：<b>如果每一层只做「加权求和」（线性），那么线性套线性，结果还是线性。</b>就像「乘 2 再乘 3」等于「乘 6」——<b>你套多少层，最后都能用一层代替</b>。<br><b>⚠ 后果有多严重：你辛辛苦苦搭了一百层的网络，它的表达能力和一条直线一模一样。</b>");
+  S(2636,function(){clearScene();setEq(null);setCap("加了非线性之后就不一样了");
+       axes({x0:250,x1:600,y0:385,y1:190});
+       curve([[270,370],[580,210]],"b");
+       note("纯线性：只能画直线",425,395,"b");
+       axes({x0:720,x1:1070,y0:385,y1:190});
+       curve([[740,360],[790,230],[860,340],[930,215],[1000,330],[1055,240]],"g");
+       note("有了非线性：什么形状都能逼近",895,395,"g");
+       note("⭐ 所以激活函数不是「锦上添花」，是网络能力的唯一来源",640,165,"y");},"<b>加了非线性的激活函数之后，情况完全不同。</b><b>因为每层之间插了一道「掰弯」的工序，多层叠起来就能逼近任意复杂的形状。</b><br><b>⭐ 所以请把这句话记牢：激活函数不是「锦上添花」的小配件，它是神经网络表达能力的唯一来源。</b><br><b>⚠ 一个常见的误解是「层数越多能力越强」。</b><b>不对——没有非线性，层数再多也等于一层。</b><b>真正的说法应该是：「非线性 + 层数」才带来能力，少了非线性，层数一文不值。</b>");
+  SUM(2636,10,{h:"★★★ 没有非线性，再深的网络也等于线性回归",k:"Ng 原话：<b>不选激活函数的话，不管网络多深，它都等价于一个线性回归。</b>",m:"<b>线性套线性还是线性</b>——就像「乘 2 再乘 3」等于「乘 6」，套多少层都能用一层代替。",w:"⭐ <b>激活函数不是锦上添花，是网络表达能力的唯一来源。</b>",e:"⚠ 破一个常见误解：<b>不是「层数越多能力越强」，而是「非线性 + 层数」才带来能力</b>。少了非线性，层数一文不值。"});
+  QUIZ(2636,10,{t:"如果神经网络每层都不加激活函数，会怎样？",o:["训练会变慢但效果一样","不管网络多深，整体都等价于一个线性回归——因为线性套线性还是线性","无法做反向传播","会出现梯度爆炸"],a:1,w:"⭐ Ng 的原话就是这个。类比：<b>「乘 2 再乘 3」等于「乘 6」</b>。⚠ 所以<b>激活函数是网络能力的唯一来源</b>，不是可有可无的配件。"});
+});
+KP("11 · ★ 饱和：梯度在这里会「断掉」",function(){
+  S(2326,function(){clearScene();setEq(null);setCap("看 sigmoid 的两端");
+       says("38:46","high z's and low z's lead to saturation of a tanh activation");
+       axes({x0:280,x1:1000,y0:380,y1:190});
+       act(640,290,330,170,"sigmoid","b");
+       note("z 很小",330,230,"r"); note("z 很大",950,230,"r");
+       note("⚠ 两端几乎是平的 —— 斜率接近 0",640,395,"r");},"<b>现在讲一个很要命的现象，叫「饱和」。</b><br>看 sigmoid 这条曲线：<b>中间那段是斜的，但两端几乎是平的。</b><b>z 很大或很小的时候，曲线趋于水平，斜率接近 0。</b><br>Ng 说 tanh 也一样——<b>很大的 z 和很小的 z 都会让 tanh 饱和</b>。<br><b>⚠ 「斜率接近 0」为什么要命？回忆反向传播：梯度是一串因子相乘，而激活函数的导数正是其中一个因子。</b>");
+  S(2326,function(){clearScene();setEq(null);setCap("一个接近 0 的因子，会把整条链都掐断");
+       boxNode(150,215,210,78,"0.9","g");
+       boxNode(400,215,210,78,"0.8","g");
+       boxNode(650,215,210,78,"0.002","r");
+       boxNode(900,215,210,78,"0.7","g");
+       note("×",375,250,"d"); note("×",625,250,"d"); note("×",875,250,"d");
+       note("⭐ 整条链的乘积 ≈ 0.001 —— 这一层之前的参数几乎收不到信号",640,340,"r");
+       note("⚠ 于是训练就「停」在那里了",640,395,"y");},"<b>⭐ 看这个画面就全明白了。</b>梯度是一串因子连乘。<b>只要其中有一个因子接近 0，整条链的乘积就被掐到接近 0。</b><br><b>后果是：这个饱和的神经元之前的所有层，几乎收不到任何梯度信号——参数基本不更新，训练就「停」在那里了。</b><br><b>⚠ 而且 sigmoid 有个雪上加霜的性质：它的导数最大值只有 0.25。</b>也就是说<b>哪怕在最陡的地方，每传过一层梯度也要打个四折</b>。<b>层数一多，梯度就被连续打折打没了。</b><b>这就是下一节要讲的「梯度消失」。</b>");
+  SUM(2326,11,{h:"★★ 饱和：激活函数两端斜率接近 0",k:"sigmoid / tanh <b>两端几乎是平的，斜率接近 0</b>（Ng：很大和很小的 z 都会让 tanh 饱和）。",m:"⭐ <b>梯度是一串因子连乘，只要有一个因子接近 0，整条链就被掐断</b> ⇒ 这一层之前的参数几乎收不到信号，<b>训练停住</b>。",w:"⚠ 雪上加霜：<b>sigmoid 的导数最大值只有 0.25</b>——哪怕最陡处，每传一层也要打四折。",e:"⭐ 「饱和」是解释梯度消失的关键词，<b>要能说清「斜率接近 0 ⇒ 乘积被掐断」</b>。"});
+  QUIZ(2326,11,{t:"激活函数「饱和」为什么会让训练停住？",o:["饱和处斜率接近 0；梯度是一串因子连乘，一个接近 0 的因子会把整条链掐断，之前的层收不到信号","因为计算会溢出","因为损失函数变成了常数","因为权重变成了 0"],a:0,w:"⚠ 还要记住：<b>sigmoid 的导数最大值只有 0.25</b>，每传一层打四折，<b>层数一多梯度就被打没了</b>。"});
+});
+KP("12 · ReLU 为什么能缓解这个问题",function(){
+  S(2326,function(){clearScene();setEq(null);setCap("三个激活函数放一起比");
+       axes({x0:240,x1:540,y0:375,y1:195});
+       act(390,285,270,150,"sigmoid","b");
+       note("sigmoid：两端都平",390,392,"b");
+       axes({x0:620,x1:920,y0:375,y1:195});
+       act(770,285,270,150,"tanh","g");
+       note("tanh：两端也都平",770,392,"g");
+       axes({x0:1000,x1:1240,y0:375,y1:195});
+       act(1120,285,220,150,"relu","y");
+       note("ReLU：正半边是直线",1120,392,"y");},"<b>三个激活函数放一起比。</b><br><b>sigmoid 和 tanh 的共同毛病是两端都平</b>——两头都会饱和。<br><b>ReLU 不一样</b>：它<b>负半边直接压成 0，正半边是一条斜率恒为 1 的直线</b>。<br><b>⭐ 关键就在正半边：斜率恒等于 1，不管 z 多大都不会变平。</b>于是梯度传过去时<b>乘的是 1，一点都不打折</b>——<b>梯度消失的问题被大大缓解了。</b>");
+  S(2326,function(){clearScene();setEq(null);setCap("⚠ 但它也有自己的毛病");
+       boxNode(170,215,440,82,"好处：正半边斜率恒为 1","g");
+       boxNode(700,215,440,82,"代价：负半边梯度是 0","r");
+       note("梯度不打折，缓解梯度消失",390,340,"g");
+       note("一直落在负半边的神经元会「死掉」",920,340,"r");
+       note("⭐ 实践中仍是默认首选 —— 好处大于坏处",640,395,"y");},"<b>⚠ 但 ReLU 也有自己的毛病：负半边的梯度是 0。</b><br>如果某个神经元的输入<b>一直落在负半边</b>，它的梯度永远是 0，<b>参数就再也不更新了</b>——这个神经元相当于<b>「死掉」了</b>。<br><b>⭐ 即便如此，ReLU 在实践中仍然是默认首选</b>，因为<b>好处（不饱和、算得快）明显大于坏处</b>。而且后来有不少变体专门修补负半边（比如让它有一个很小的斜率而不是 0）。<br><b>⚠ 别把「ReLU 更好」理解成「sigmoid 没用了」</b>：<b>输出层做二分类时还是要用 sigmoid</b>，因为那里需要的是一个 0 到 1 之间的概率。");
+  SUM(2326,12,{h:"ReLU：正半边斜率恒为 1，不饱和",k:"<b>ReLU</b>：负半边压成 0，<b>正半边斜率恒为 1</b> ⇒ 梯度传过去<b>乘 1 不打折</b>，大大缓解梯度消失。",m:"⚠ <b>代价</b>：负半边梯度是 0，输入一直落在负半边的神经元会<b>「死掉」</b>（永不更新）。",w:"⭐ 实践中<b>仍是默认首选</b>，好处大于坏处；也有变体专门修补负半边。",e:"⚠ 别理解成「sigmoid 没用了」——<b>输出层做二分类还是要用 sigmoid</b>，那里需要 0–1 的概率。"});
+  QUIZ(2326,12,{t:"ReLU 为什么能缓解梯度消失？",o:["因为它没有参数","因为它的输出范围更大","因为它是线性的","它的正半边斜率恒为 1，梯度传过去乘的是 1、不打折，不像 sigmoid 两端会饱和"],a:3,w:"⚠ 代价是<b>负半边梯度为 0，神经元可能「死掉」</b>。⚠ 另注：ReLU 并非处处适用——<b>二分类的输出层仍用 sigmoid</b>。"});
+});
+KP("13 · ★★ 为什么不能把参数全初始化成 0",function(){
+  S(3811,function(){clearScene();setEq(null);setCap("全零会发生一件很糟的事");
+       layer(420,[235,305],"d",16);
+       layer(820,[270],"y",16);
+       wire(420,[235,305],820,[270]);
+       note("两个神经元的参数完全一样",620,190,"r");
+       note("⇒ 收到的输入一样、算出的 a 一样",640,340,"r");
+       note("⇒ 反向传播回来的梯度也一样 ⇒ 更新后还是一样",640,392,"r");},"<b>参数的初始值该怎么设？先看一个绝对不能用的办法：全部设成 0（或者全部设成同一个数）。</b><br><b>⚠ 这会发生一件很糟的事</b>：同一层里的两个神经元，<b>参数完全一样 ⇒ 它们收到的输入一样 ⇒ 算出来的 a 也一样</b>。<br><b>反向传播回来的时候，它们收到的梯度也必然一样 ⇒ 更新之后它们还是一模一样。</b><br><b>⭐ 于是不管你训练多少轮，同一层里所有神经元永远是同一个神经元的复制品。</b>一层有 100 个神经元，<b>实际上只相当于 1 个</b>。<b>这叫「对称性」问题。</b>");
+  S(3811,function(){clearScene();setEq(null);setCap("解法：随机初始化，打破对称");
+       says("63:31","make the neuron starts at different places and let them evolve independently");
+       layer(420,[235,305],"b",16);
+       layer(420,[235],"g",16);
+       layer(820,[270],"y",16);
+       wire(420,[235,305],820,[270]);
+       note("一开始就各不相同",620,190,"g");
+       note("⇒ 梯度不同 ⇒ 各自朝不同方向演化",640,340,"g");
+       note("⭐ Ng 的说法：让它们尽可能各自独立地演化",640,392,"y");},"<b>解法很简单：随机初始化。</b>让每个神经元<b>一开始就落在不同的位置</b>。<br><b>⭐ Ng 的说法很好记：让这些神经元从不同的地方出发，然后尽可能各自独立地演化。</b><br><b>一旦初值不同，它们收到的梯度就不同，更新的方向也不同</b>——于是<b>每个神经元会逐渐学到不同的特征</b>，一层 100 个神经元才真的顶 100 个用。<br><b>⚠ 注意偏置项（bias）可以初始化成 0</b>，因为<b>打破对称只需要权重不同就够了</b>。");
+  SUM(3811,13,{h:"★★ 全零初始化 ⇒ 对称性问题",k:"全零（或全同）⇒ 同层神经元<b>输入一样、输出一样、梯度一样、更新后还是一样</b> ⇒ <b>永远是同一个神经元的复制品</b>。一层 100 个只顶 1 个。",m:"<b>解法：随机初始化。</b>Ng：<b>让神经元从不同的地方出发，尽可能各自独立地演化。</b>",w:"⚠ <b>偏置项可以初始化成 0</b>——打破对称只需要权重不同就够了。",e:"⭐ 「为什么不能全零初始化」是高频概念题，<b>答「对称性：梯度相同，永远学不出不同的特征」</b>。"});
+  QUIZ(3811,13,{t:"为什么神经网络的权重不能全部初始化为 0？",o:["因为 0 会导致除零错误","因为激活函数在 0 处不可导","同层神经元会完全对称：输入一样、输出一样、梯度一样，更新后仍然一样，永远学不出不同的特征","因为损失会变成无穷大"],a:2,w:"⭐ 一层 100 个神经元<b>实际只顶 1 个</b>。⚠ 注意<b>偏置项可以设 0</b>——打破对称只需要权重不同。"});
+});
+KP("14 · ★ 随机多大才合适：按「扇入」来定",function(){
+  S(3622,function(){clearScene();setEq(null);setCap("Ng：看这个神经元有几个输入");
+       says("60:22","It means that I will look at the number of inputs");
+       layer(330,[215,275,335,395],"b",13);
+       layer(760,[300],"y",17);
+       wire(330,[215,275,335,395],760,[300]);
+       note("4 个输入",330,170,"b");
+       note("⭐ 输入越多，加权求和的结果就越容易变得很大",980,275,"d");
+       note("所以初始权重要相应地调小",980,330,"y");},"<b>随机初始化还有个讲究：随机的幅度该多大？</b><br><b>Ng 的答案是：看这个神经元有几个输入。</b>（输入的个数有个名字叫<b>「扇入」fan-in</b>。）<br><b>⭐ 道理很直观</b>：如果一个神经元有 1000 个输入，<b>那 1000 项加起来，结果很容易变成一个很大的数</b>——然后一过激活函数就<b>直接饱和</b>了（回忆上一节：饱和 ⇒ 梯度断掉）。<br><b>所以输入越多，初始权重就要调得越小</b>，让加权求和的结果保持在一个合理的范围里。");
+  S(3622,function(){clearScene();setEq("$$w \\sim \\text{随机}\\times\\sqrt{\\tfrac{1}{n}}\\quad(\\text{ReLU 用 }\\sqrt{\\tfrac{2}{n}})$$");
+       setCap("n 就是这一层的输入个数");
+       note("输入多 ⇒ 分母大 ⇒ 初始权重小",640,170,"b");
+       note("输入少 ⇒ 初始权重可以大一些",640,201,"g");
+       note("⭐ 目标：让每层输出的「散开程度」大致保持不变",640,237,"y");
+       note("ReLU 因为砍掉了一半（负半边），所以要乘 2 补回来",640,265,"d");},"<b>写成式子就是这样：随机数再乘上「1 除以输入个数」的平方根。</b>输入越多，分母越大，初始权重就越小。<br><b>⭐ 这么设的目标是：让信号在一层层传递时，「散开程度」大致保持不变</b>——既不会越传越大（爆炸），也不会越传越小（消失）。<br><b>⚠ 用 ReLU 的时候要改成「2 除以 n」。</b>为什么多个 2？<b>因为 ReLU 把负半边直接砍成了 0，等于丢掉了一半的信号，所以要乘 2 补回来。</b><br><b>这两个做法有名字（Xavier 初始化和 He 初始化），但记住「按扇入调整、ReLU 要乘 2」这个道理比记名字有用。</b>");
+  SUM(3622,14,{h:"★ 按扇入初始化：输入越多，权重越小",k:"Ng：<b>看这个神经元有几个输入</b>（扇入）。<b>w ~ 随机 × √(1/n)</b>；<b>ReLU 用 √(2/n)</b>。",m:"⭐ <b>道理</b>：输入多 ⇒ 加权求和容易很大 ⇒ 一过激活就饱和。<b>所以输入越多，初始权重越小。</b>",w:"<b>目标</b>：让信号逐层传递时「散开程度」大致不变——既不爆炸也不消失。<br>⚠ <b>ReLU 乘 2 是因为它砍掉了负半边、丢了一半信号</b>。",e:"⭐ 这两个做法叫 Xavier 和 He 初始化，<b>但记住道理比记名字有用</b>。"});
+  QUIZ(3622,14,{t:"初始化时为什么要按「输入个数 n」来缩放权重？",o:["因为 n 越大训练越慢","输入越多，加权求和的结果越容易很大、一过激活就饱和；所以输入越多初始权重要越小，使各层输出的散开程度大致不变","为了让权重的和等于 1","为了让梯度等于 1"],a:1,w:"⭐ ReLU 要用 √(2/n)，<b>多出来的 2 是补偿它砍掉的负半边</b>。这两个做法叫 Xavier / He 初始化。"});
+});
+KP("15 · ★ 输入归一化：先搬到原点，再把尺度拉齐",function(){
+  S(2906,function(){clearScene();setEq(null);setCap("两步变换，点云的样子跟着变两次");
+       says("45:28","you can use normalization of the input");
+       dots([[300,250],[330,268],[360,242],[390,262],[420,236],[450,256],[480,232]],"r",7);
+       dots([[640,296],[670,314],[700,288],[730,308],[760,282],[790,302],[820,278]],"y",7);
+       dots([[1000,250],[1030,278],[1060,246],[1040,306],[1000,296],[1070,286],[1030,262]],"g",7);
+       note("原始：偏在一边、又瘦又长",390,206,"r");
+       note("① 减均值 ⇒ 挪到原点",730,206,"y");
+       note("② 除标准差 ⇒ 两维一样粗",1040,206,"g");
+       note("⭐ µ 和 σ 都是「每一维各算一个」，不是整个数据集算一个",640,396,"y");},"Ng 讲完激活函数之后，接着给了一个让网络好训练的办法：<b>把输入归一化。</b><br><b>动机很直接</b>：如果 x 本身很大，<b>wx+b 算出来的 z 就很大，激活函数立刻饱和</b>——上一节刚讲过饱和会让梯度断掉。<br><b>做法分两步</b>：<b>① 减去均值</b>，点云从偏在一边挪到原点；<b>② 再除以标准差</b>，两个维度的尺度变得一样粗。<br><b>⭐ 有个细节必须说清楚：µ 和 σ 是「每一维各算一个」</b>，<b>不是整个数据集算一个数</b>。Ng 的原话是<b>「逐元素地除以 σ」</b>——矩阵的每一项各除各的。");
+  S(3104,function(){clearScene();setEq(null);setCap("好处：等高线从扁椭圆变成圆");
+       says("51:44","the steeper slope in this loss contour is always pointing towards the middle");
+       var E=function(cx,cy,rx,ry,cls){var p=[],i;for(i=0;i<=60;i++){var t=2*Math.PI*i/60;
+         p.push([cx+rx*Math.cos(t),cy+ry*Math.sin(t)]);}curve(p,cls);};
+       E(380,300,190,52,"r");E(380,300,128,35,"r");E(380,300,64,18,"r");
+       E(940,300,88,88,"g");E(940,300,58,58,"g");E(940,300,28,28,"g");
+       note("没归一化：最陡方向不指向最低点",380,186,"r");
+       note("归一化后：最陡方向直指中心",940,186,"g");
+       note("⇒ 来回折线，迭代次数多",380,404,"d");
+       note("⇒ 几乎直奔目标",940,404,"d");},"为什么归一化能帮上忙？<b>看损失函数的等高线就明白了。</b><br><b>两维尺度差很多时，等高线是一个很扁的椭圆。</b>梯度下降每一步都朝<b>当下最陡的方向</b>走，而<b>扁椭圆上最陡的方向并不指向中心</b>——于是它来回之字形地折，<b>走很多步才慢慢挪过去</b>。<br><b>归一化之后等高线接近正圆</b>，Ng 的原话是：<b>最陡的方向总是指向中间</b>。<b>⭐ 所以从哪儿起步都几乎是直奔最低点。</b><br><b>⚠ 注意归一化并没有改变最优解在哪，它改变的是「路好不好走」</b>——<b>结果是迭代次数明显变少。</b>");
+  SUM(2906,15,{h:"★ 输入归一化：减均值、除标准差（逐维各算各的）",k:"动机：<b>x 太大 ⇒ z 太大 ⇒ 激活饱和 ⇒ 梯度断掉</b>。两步：<b>① 减 µ ② 除 σ</b>，<b>每一维各算一个</b>。",m:"好处：<b>损失等高线从扁椭圆变成圆</b>，最陡方向直指中心，<b>不用再走之字形</b>。",w:"⚠ 它<b>不改变最优解的位置</b>，改变的是「路好不好走」⇒ <b>迭代次数变少</b>。",e:"⭐ 和 M2 的 PCA 前要标准化是<b>同一个道理</b>：都是在消除「量纲不同导致某一维主导」。"});
+  QUIZ(2906,15,{t:"输入归一化主要改善了什么？",o:["它使梯度永远不会消失","它把损失函数的最优解挪到了原点","它消除了网络的过拟合","它让损失等高线更接近圆形，最陡方向直指最低点，因而迭代次数更少"],a:3,w:"⚠ 它<b>不改变最优解在哪</b>，也不能根治梯度消失；⭐ 它改变的是<b>等高线的形状</b>，也就是「路好不好走」。"});
+});
+KP("16 · ⚠ 测试时必须用训练集的 µ 和 σ",function(){
+  S(3104,function(){clearScene();setEq(null);setCap("这一条最容易写错");
+       says("51:44","you should not compute the mean of the test set");
+       boxNode(130,206,470,74,"✓ 沿用训练集的 µ、σ","g");
+       boxNode(740,206,440,74,"✗ 重新算测试集的","r");
+       note("训练时算一次，存下来备用",365,326,"d");
+       note("等于偷看了测试集的分布",960,326,"d");
+       note("⭐ 作业和考试都爱考这一条，写反直接扣分",640,396,"y");},"这是整段里最容易写错、也最爱考的一条。<br><b>µ 和 σ 是在训练集上算的</b>，<b>到了测试集，要原封不动地沿用这一组数</b>。<br><b>⚠ 千万不要在测试集上重新算一遍均值和标准差</b>——Ng 原话就是「<b>你不应该去算测试集的均值</b>」。<br><b>为什么不行，有两层理由。</b>第一层是方法论上的：<b>测试集的统计量属于测试集的信息，拿来用就是泄露</b>。<br><b>⭐ 第二层更要紧，下一镜专门讲：它会让网络看到一个它从没见过的输入分布。</b>");
+  S(3104,function(){clearScene();setEq(null);setCap("更要紧的理由：第一层看到的分布必须一致");
+       says("51:44","you want the distribution of the inputs at the first neuron to be always the same");
+       boxNode(140,206,450,74,"网络是在那套变换下训出来的","b");
+       boxNode(730,206,450,74,"第一层看到的分布必须一样","g");
+       link(590,243,730,243);
+       note("换一套 µ、σ ⇒ 输入整体偏移",365,326,"d");
+       note("训练时学到的权重就对不上了",960,326,"d");
+       note("⭐ 凡是「在训练集上拟合出来的预处理」都适用这一条",640,396,"y");},"更本质的理由是这个。<br><b>网络的权重，是在「输入已经被那一组 µ、σ 变换过」的前提下训出来的。</b>Ng 的说法是：<b>你希望第一个神经元看到的输入分布始终是同一个，不管来的是训练集还是测试集。</b><br><b>⚠ 如果换一套 µ、σ，整批输入就整体偏移或缩放了</b>，<b>训练时学到的权重和它对不上</b>，表现自然掉。<br><b>⭐ 把这条推广开：凡是「参数在训练集上拟合出来的预处理」，都必须照搬到测试集</b>——<b>PCA 的主成分、分箱的边界、编码表，一律如此。</b>这是一整类题的统一答法。");
+  SUM(3104,16,{h:"⚠ 测试集沿用训练集的 µ、σ —— 不重新算",k:"µ、σ <b>在训练集上算一次</b>，测试时<b>原封不动沿用</b>；在测试集上重算就是<b>信息泄露</b>。",m:"更本质的理由：<b>权重是在那套变换下训出来的</b>，Ng 说<b>第一个神经元看到的分布必须始终一致</b>。",w:"⭐ 推广：<b>凡是在训练集上拟合出来的预处理</b>（PCA 主成分、分箱边界、编码表）<b>一律照搬</b>。",e:"⚠ 这是<b>简答题的高频考点</b>，写成「分别归一化」直接丢分。"});
+  QUIZ(3104,16,{t:"在测试集上做输入归一化时，µ 和 σ 应该怎么取？",o:["沿用训练集上算出来的那一组 µ 和 σ","每个样本各自归一化，不需要 µ 和 σ","用测试集自己算出来的 µ 和 σ","用训练集和测试集合起来算的 µ 和 σ"],a:0,w:"⚠ 在测试集上重算既是<b>信息泄露</b>，又会让<b>第一层看到它没见过的输入分布</b>。⭐ 同一条规则适用于 PCA、分箱等一切在训练集上拟合的预处理。"});
+});
+KP("17 · 梯度消失与梯度爆炸：同一枚硬币的两面",function(){
+  S(3622,function(){clearScene();setEq(null);setCap("每层的因子略大于 1 还是略小于 1，差别是天壤之别");
+       matrix({rows:4,cols:3,cw:290,ch:46,x:190,y:190,
+         cell:function(i,j){var t=[
+           ["每层的因子","传过 10 层","传过 50 层"],
+           ["0.5","约 0.001","几乎是 0"],
+           ["1.5","约 58","大约 6 亿 倍"],
+           ["1.0","1","1"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===1||i===2)?"hl":"";}});
+       note("⭐ 连乘会把微小的偏差放大成灾难",640,395,"y");},"<b>把前面几节串起来，就能理解深层网络最大的两个麻烦。</b><br><b>梯度要经过很多层连乘。</b>假设每层的因子都是 0.5，<b>传过 10 层就只剩千分之一，传过 50 层几乎就是 0</b>——这叫<b>梯度消失</b>，前面的层根本学不动。<br><b>反过来，如果每层的因子是 1.5</b>，传过几十层就会变成一个天文数字——这叫<b>梯度爆炸</b>，参数一步就被推飞了。<br><b>⭐ 关键在于：连乘会把「每层略偏离 1」这个微小的差别，放大成灾难性的后果。</b><br><b>⚠ 这就是为什么初始化和激活函数的选择这么要紧——它们决定了那个「每层的因子」大概是多少。</b>");
+  S(3622,function(){clearScene();setEq(null);setCap("把数字代进去感受一下");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["每层的因子","连乘 10 层","连乘 50 层"],
+           ["0.9","0.35","0.005"],
+           ["1.0","1.0","1.0"],
+           ["1.1","2.6","117"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===1||i===3)?"hl":"";}});
+       note("⭐ 每层只偏离 1 一成，50 层后两头就差了四个数量级",640,396,"y");},"空讲「连乘会放大」没感觉，把数字代进去就一目了然。<br><b>每层因子 0.9</b>：10 层后剩 0.35，<b>50 层后只剩 0.005</b>——梯度基本没了。<b>每层因子 1.1</b>：10 层后 2.6，<b>50 层后变成 117</b>——梯度炸了。<br><b>⭐ 注意这两个因子离 1 都只差一成</b>，<b>可 50 层连乘之后，两头差了四个数量级。</b><br><b>⚠ 所以「消失」和「爆炸」不是两个毛病，是同一个连乘效应往两个方向跑</b>。<b>也正因为这样，初始化的尺度和激活函数的选择才这么要紧——它们决定了那个因子大致落在 1 的哪一侧。</b>");
+  SUM(3622,17,{h:"★ 梯度消失 / 爆炸：连乘放大微小偏差",k:"<b>每层因子 0.5</b> ⇒ 传 10 层剩千分之一、50 层几乎是 0（<b>梯度消失</b>，前面的层学不动）。<b>每层因子 1.5</b> ⇒ 几十层后成天文数字（<b>梯度爆炸</b>）。",m:"⭐ <b>连乘会把「每层略偏离 1」这个微小差别放大成灾难。</b>",w:"⚠ <b>这就是初始化和激活函数选择为什么这么要紧</b>——它们决定了那个「每层的因子」大概是多少。",e:"⭐ 把<b>饱和 → 因子接近 0 → 梯度消失</b> 这条链讲通，是 M3 的高分答法。"});
+  QUIZ(3622,17,{t:"梯度消失和梯度爆炸的共同根源是什么？",o:["梯度要经过很多层连乘，而连乘会把「每层因子略偏离 1」这个微小差别放大成灾难","学习率设得不对","数据没有标准化","损失函数选错了"],a:0,w:"⭐ 因子 0.5 传 50 层几乎归零；因子 1.5 传几十层成天文数字。⚠ <b>所以初始化和激活函数的选择才这么要紧</b>。"});
+});
+KP("18 · 批量多大：每次拿多少数据算一次梯度",function(){
+  S(4141,function(){clearScene();setEq(null);setCap("三种做法");
+       matrix({rows:4,cols:3,cw:290,ch:56,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["做法","每次用多少数据","特点"],
+           ["全批量","全部","方向最准，但一步很慢"],
+           ["随机（单样本）","1 个","一步极快，但方向很抖"],
+           ["小批量","几十到几百","两者折中 —— 实践中的默认"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 小批量还有个硬理由：显卡擅长并行算一批，不擅长一个个算",640,382,"y");},"<b>梯度下降每走一步，都要先算一次梯度。问题是：算梯度时用多少数据？</b><br><b>全批量</b>：每次都用<b>全部</b>训练数据。方向最准，<b>但数据一多，走一步就要很久</b>。<br><b>随机梯度下降</b>：每次只用<b>一个</b>样本。一步极快，<b>但单个样本算出来的方向很抖</b>，走起来歪歪扭扭。<br><b>小批量</b>：每次用<b>几十到几百个</b>。<b>这是实践中的默认做法</b>——方向够稳，速度也够快。<br><b>⭐ 小批量还有一个很硬的现实理由：显卡擅长「一次并行算一批」，不擅长「一个一个算」。</b>所以批量太小反而浪费算力。");
+  S(4141,function(){clearScene();setEq(null);setCap("实践里常见的取值");
+       boxNode(130,206,300,74,"32 / 64 / 128","g");
+       boxNode(500,206,300,74,"为什么都是 2 的幂","b");
+       boxNode(870,206,300,74,"显存不够就先调小","y");
+       note("最常用的起点",280,326,"d");
+       note("跟硬件的并行粒度对齐",650,326,"d");
+       note("调批量比换模型便宜",1020,326,"d");
+       note("⭐ 批量不是越大越好：每步更准，但同样的数据量走的步数更少",640,396,"y");},"落到具体数字上，<b>实践中的常见起点是 32、64、128</b>。<br><b>为什么都是 2 的幂</b>：跟硬件的并行粒度对齐，<b>算起来不浪费</b>。<br><b>⭐ 但要破除一个直觉：批量不是越大越好。</b>批量大，<b>每一步的梯度估得更准</b>；可同样一轮数据，<b>你能走的步数也成比例地变少了</b>。<br><b>⚠ 而且批量太大还会丢掉随机性</b>——下一个知识点会讲，<b>那点随机性恰恰是帮你跳出坏点的。</b><br><b>实操上的顺序很固定：显存放不下，第一招永远是把批量调小</b>，比换模型、换卡都便宜。");
+  SUM(4141,18,{h:"小批量：实践中的默认",k:"<b>全批量</b>方向准但一步慢；<b>单样本</b>一步快但方向抖；<b>小批量（几十到几百）</b>是折中，也是默认做法。",m:"⭐ <b>还有个硬理由</b>：显卡擅长「一次并行算一批」，不擅长「一个一个算」——<b>批量太小反而浪费算力</b>。",w:"方向抖不全是坏事：<b>适度的噪声有时能帮助跳出不好的局部区域</b>。",e:"⚠ 「batch size」是最常调的超参之一，<b>要能说清它在「方向稳」和「速度快」之间权衡</b>。"});
+  QUIZ(4141,18,{t:"为什么实践中默认用「小批量」而不是单个样本？",o:["因为小批量不需要学习率","因为单样本无法做反向传播","因为单样本会过拟合","小批量在「方向够稳」和「速度够快」之间折中；而且显卡擅长并行算一批，批量太小反而浪费算力"],a:3,w:"⭐ 那个<b>硬件理由</b>常被忽略：<b>显卡擅长一次并行算一批</b>。⚠ 所以 batch size 不只是数学问题，也是工程问题。"});
+});
+KP("19 · ★ 全批量 / 随机 / 小批量：差别只在一次拿多少",function(){
+  S(3811,function(){clearScene();setEq(null);setCap("三种做法并排看");
+       says("63:31","there is a trade-off between these two which is called mini-batch gradient descent");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:200,
+         cell:function(i,j){var t=[
+           ["","一次用多少数据","扫完一遍数据走几步"],
+           ["全批量","全部 m 条","1 步"],
+           ["随机 SGD","1 条","m 步"],
+           ["小批量","比如 64 条","m/64 步"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 三者算的是同一个梯度的不同近似，区别只在「用多少数据去估」",640,404,"y");},"这三个名字说的其实是同一件事的三档，<b>区别只在「一次拿多少条数据算一次梯度」</b>。<br><b>全批量</b>：每次都用全部 m 条，<b>梯度最准，但扫完一遍数据才走 1 步</b>。<b>随机梯度下降</b>：一次只用 1 条，<b>同样一遍数据能走 m 步，但每一步都很毛躁</b>。<br><b>小批量</b>落在中间，<b>Ng 明说它就是这两者之间的折中</b>。<br><b>⭐ 关键认识：三者在估的是同一个梯度，只是用多少数据去估不一样</b>。<b>⚠ 所以别把 SGD 的梯度当成「错的」——它是无偏的，只是方差大。</b>");
+  S(3940,function(){clearScene();setEq(null);setCap("取舍的两端：随机性 vs 向量化");
+       says("65:40","a trade-off between stochasticity and also vectorization");
+       boxNode(130,206,470,74,"随机性：帮你从坏点里跳出来","y");
+       boxNode(740,206,440,74,"向量化：一次并行算一批","b");
+       note("批量越小，随机性越强",365,326,"d");
+       note("批量越大，硬件越吃得饱",960,326,"d");
+       note("⭐ 两头都想要，所以落在中间 —— 这就是小批量存在的全部理由",640,396,"y");},"Ng 把取舍点得很清楚：<b>随机性和向量化，两头都想要。</b><br><b>随机性这一端</b>：每批数据不同，梯度带噪声，<b>反而能帮你从不好的点里抖出来</b>；<b>批量越小，这种随机性越强</b>。<br><b>向量化那一端</b>：GPU 擅长<b>一次并行算一大批</b>，不擅长一条一条地算；<b>批量越大，硬件越吃得饱</b>。<br><b>⭐ 两个诉求正好相反，所以最优解落在中间——这就是小批量存在的全部理由</b>，<b>它不是和稀泥，是同时占了两边的好处。</b>");
+  SUM(3811,19,{h:"★ 三档：全批量 / 随机 / 小批量",k:"区别只在<b>一次拿多少条数据估梯度</b>：全部 m 条走 1 步 / 1 条走 m 步 / 比如 64 条走 m/64 步。",m:"取舍两端：<b>随机性</b>（批量小，帮你跳出坏点）<b> vs 向量化</b>（批量大，硬件吃得饱）。",w:"⚠ SGD 的梯度<b>不是「错的」</b>——它<b>无偏，只是方差大</b>。",e:"⭐ 小批量不是和稀泥，是<b>同时占了两边好处</b>，所以成了实践默认。"});
+  QUIZ(3811,19,{t:"Ng 说小批量梯度下降权衡的是哪两件事？",o:["准确率和召回率","训练时间和显存占用","随机性（帮助跳出坏点）和向量化（硬件并行效率）","偏差和方差"],a:2,w:"⭐ 批量越小随机性越强，批量越大越能喂饱硬件 —— <b>两个诉求方向相反，所以最优落在中间</b>。"});
+});
+KP("20 · ⚠ 小批量的代价曲线是抖的 —— 别当成没收敛",function(){
+  S(4141,function(){clearScene();setEq(null);setCap("两条代价曲线：一条平滑，一条毛躁");
+       says("69:01","if you use a Mini-batch gradient descent, you're most likely to see something like this");
+       axes({l:220,r:1100,t:200,b:380});
+       curve([[240,230],[340,268],[440,296],[540,318],[640,334],[740,346],[840,354],[940,360],[1040,364]],"g");
+       curve([[240,236],[290,258],[340,250],[390,286],[440,278],[490,308],[540,300],[590,322],[640,316],
+              [690,338],[740,330],[790,348],[840,342],[890,356],[940,350],[990,362],[1040,358]],"y");
+       note("全批量：每一步都在下降",400,196,"g");
+       note("小批量：总体在降，但一路抖",900,196,"y");
+       note("⚠ 抖动不等于没收敛 —— 它只是每一批数据都不一样",640,404,"y");},"Ng 特意画了两条代价曲线做对比，<b>这个图很值得记。</b><br><b>全批量梯度下降的 J 是单调下降的</b>：每一步都用全部数据，梯度方向可靠，<b>曲线很光滑</b>。<br><b>小批量的 J 则是一路抖着往下走</b>——Ng 说你多半会看到这样的图。<br><b>⚠ 原因很简单：每一步用的是不同的一批数据</b>，<b>这一批里恰好难样本多，损失就会抬一下</b>。<br><b>⭐ 所以别一看到抖动就以为训练坏了</b>：<b>只要整体趋势在往下走，就是正常的。</b>");
+  S(4141,function(){clearScene();setEq(null);setCap("那怎么判断是真的没收敛");
+       boxNode(130,206,470,74,"看趋势，不看单步","g");
+       boxNode(740,206,440,74,"想看光滑的 ⇒ 取移动平均","b");
+       note("单步抬高完全正常",365,326,"d");
+       note("或者每扫完一遍记一次",960,326,"d");
+       note("⭐ 真·没收敛长这样：趋势压根不往下，或者一路反弹上去",640,396,"y");},"既然抖动是正常的，<b>那怎么判断训练是真的出问题了？</b><br><b>第一，看趋势不看单步。</b>单独某一步抬高完全正常，<b>要看的是几十步、上百步连起来的走向</b>。<br><b>第二，想看光滑的曲线，就做移动平均</b>，或者<b>每扫完一遍完整数据才记一次</b>——那条曲线会干净很多。<br><b>⭐ 真正「没收敛」长这样：趋势压根不往下走，或者一路反弹上去。</b><br><b>⚠ 顺带一提，这和 M2 里 EM 的对数似然刚好相反</b>：<b>EM 保证每一轮都不下降，所以它一旦下降就说明代码有 bug</b>——<b>小批量这边没有这个保证，别套错。</b>");
+  SUM(4141,20,{h:"⚠ 小批量的 J 曲线会抖，这是正常的",k:"全批量的 J <b>单调下降</b>；小批量的 J <b>总体下降但一路抖</b>，因为<b>每一步用的是不同的一批数据</b>。",m:"判断方法：<b>看趋势不看单步</b>；想看光滑曲线就<b>取移动平均</b>或<b>每轮记一次</b>。",w:"⭐ 真·没收敛：<b>趋势不往下，或者一路反弹</b>。",e:"⚠ 和 M2 的 EM 正相反 —— <b>EM 保证每轮对数似然不下降，一降就是 bug</b>；小批量没有这个保证。"});
+  QUIZ(4141,20,{t:"用小批量梯度下降时，代价函数 J 的曲线上下抖动，说明什么？",o:["说明模型已经过拟合","正常现象：每一步用的是不同的一批数据，只要整体趋势在降就没问题","说明学习率一定设得太大，必须调小","说明代码有 bug，J 必须单调下降"],a:1,w:"⚠ 「J 必须单调下降」只对<b>全批量</b>和 <b>EM</b> 成立。⭐ 小批量每步换一批数据，<b>抖动是其定义带来的</b>，看趋势即可。"});
+});
+KP("21 · ★ 动量：把过去的方向也算进来",function(){
+  S(4141,function(){clearScene();setEq(null);setCap("先看一个常见的毛病");
+       says("69:01","this is the top view of the loss function");
+       var i,p=[];
+       for(i=0;i<=60;i++){var a=i*6*Math.PI/180;
+         p.push([640+270*Math.cos(a),295+95*Math.sin(a)]);}
+       curve(p,"d");
+       p=[];
+       for(i=0;i<=60;i++){var a=i*6*Math.PI/180;
+         p.push([640+170*Math.cos(a),295+60*Math.sin(a)]);}
+       curve(p,"d");
+       curve([[400,245],[460,345],[520,250],[580,340],[640,255],[700,335]],"r");
+       note("⚠ 在狭长的山谷里左右横跳，前进得很慢",640,398,"r");},"<b>先看一个常见的毛病。</b>这是损失函数的<b>俯视图</b>（等高线图，一圈圈的线表示同样的损失值）。<b>如果山谷是狭长的</b>，梯度下降会出现一个很烦人的现象：<b>在两侧山壁之间左右横跳，而沿着山谷往前的方向却走得很慢。</b><br><b>为什么？</b>因为<b>横向的坡最陡，梯度主要指向横向</b>；<b>而我们真正想去的方向（沿谷底往前）坡很缓</b>，每步只挪一点点。<br><b>⚠ 结果就是：绝大部分力气花在了来回横跳上。</b>");
+  S(4371,function(){clearScene();setEq(null);setCap("动量：参考过去几步的方向");
+       says("72:51","So look at the past updates");
+       var i,p=[];
+       for(i=0;i<=60;i++){var a=i*6*Math.PI/180;
+         p.push([640+270*Math.cos(a),295+95*Math.sin(a)]);}
+       curve(p,"d");
+       curve([[400,280],[480,305],[570,292],[660,300],[760,296],[860,298]],"g");
+       note("⭐ 左右横跳的分量互相抵消了",640,235,"g");
+       note("而沿谷底往前的分量一直同向，于是累积起来越走越快",640,392,"y");},"<b>⭐ 动量算法的想法很妙：别只看当前这一步的梯度，把过去几步的方向也算进来。</b>Ng 的说法就是——<b>看看过去的那些更新</b>。<br><b>为什么这能解决横跳？</b>因为<b>横向的分量每一步都在变号</b>（一会儿向左、一会儿向右），<b>把几步平均一下就互相抵消了</b>；<b>而沿谷底往前的分量每一步都同向</b>，<b>累积起来反而越来越大</b>。<br><b>⭐ 结果就是：横跳被压住，前进被加速。</b><br><b>物理类比也很贴切</b>：想象一个小球滚下山谷，<b>它有惯性</b>——不会因为侧壁的一点倾斜就立刻改变方向。<b>「动量」这个名字就是这么来的。</b>");
+  SUM(4371,21,{h:"★★ 动量：参考过去几步的方向",k:"<b>毛病</b>：狭长山谷里梯度下降<b>左右横跳</b>，沿谷底前进很慢（横向坡陡、纵向坡缓）。",m:"⭐ <b>动量</b>：把过去几步的方向也算进来（Ng：<b>看看过去的那些更新</b>）。<b>横向分量不断变号 ⇒ 互相抵消；前进分量一直同向 ⇒ 累积加速。</b>",w:"<b>物理类比</b>：小球滚下山谷<b>有惯性</b>，不会因侧壁的一点倾斜就立刻改向。「动量」的名字由此而来。",e:"⭐ 「动量解决什么问题」要能答：<b>压住横跳、加速前进</b>。"});
+  QUIZ(4371,21,{t:"动量算法为什么能缓解「在狭长山谷里左右横跳」？",o:["因为它用了更大的批量","因为它改变了损失函数","横向分量每步都在变号、平均后互相抵消；而沿谷底前进的分量一直同向、累积起来越走越快","因为它减小了学习率"],a:2,w:"⭐ 物理类比：<b>小球滚下山谷有惯性</b>，不会被侧壁的一点倾斜带偏。<b>横跳被压住，前进被加速。</b>"});
+});
+KP("22 · Adam：把动量和「自适应步长」合在一起",function(){
+  S(4571,function(){clearScene();setEq(null);setCap("Ng 收尾时提到的那个算法");
+       says("71:11","another algorithm that I wanna go over which is called the momentum algorithm");
+       boxNode(170,215,440,82,"动量：参考过去的方向","g");
+       boxNode(700,215,440,82,"自适应：每个参数自己的步长","b");
+       note("压住横跳、加速前进",390,335,"d");
+       note("坡陡的参数步子小，坡缓的步子大",920,335,"d");
+       note("⭐ Adam = 两者合在一起，是现在的默认优化器",640,395,"y");},"<b>最后是 Adam。</b>它做的事可以拆成两半：<br><b>第一半就是刚讲的动量</b>——参考过去的方向，压住横跳。<br><b>第二半叫「自适应步长」</b>：<b>给每个参数单独定一个步长</b>。某个参数方向上坡一直很陡，就<b>让它的步子小一点</b>（免得冲过头）；坡一直很缓，就<b>让它的步子大一点</b>（免得磨蹭）。<br><b>⭐ Adam 把这两件事合在一起，是现在训练神经网络的默认选择。</b><br><b>⚠ 但「默认」不等于「永远最好」</b>：有些任务上调好的 SGD + 动量反而更优。<b>和这门课里所有其它选择一样——它是个默认起点，不是定论。</b>");
+  S(4571,function(){clearScene();setEq(null);setCap("Ng 的交代：细节属于 CS230");
+       says("75:18","in terms of implementation it's one more line of code");
+       boxNode(140,206,450,74,"动量：多一行代码、多一个变量","g");
+       boxNode(730,206,450,74,"RMSProp / Adam：CS230 里细讲","b");
+       note("收益却相当明显",365,326,"d");
+       note("这一讲只给结论和直觉",960,326,"d");
+       note("⭐ 这门课层面记住一句：Adam ＝ 动量 ＋ 每个参数各自的步长",640,396,"y");},"最后交代一下这部分的深浅。<br><b>Ng 对动量的评价很干脆</b>：<b>实现上只多一行代码，内存上只多一个变量，效果却相当明显</b>——这是典型的「便宜又好用」。<br><b>而 RMSProp 和 Adam 的推导细节，他明说放在 CS230 里讲</b>，这一讲只给结论和直觉。<br><b>⭐ 所以这门课层面，记住一句话就够了：Adam ＝ 动量（方向更稳）＋ 自适应步长（每个参数各有各的步子）。</b><br><b>⚠ 别把 Adam 当成万能答案</b>：<b>调好的 SGD+动量在不少任务上仍然打得过它</b>，它只是个省心的默认起点。");
+  SUM(4571,22,{h:"Adam ＝ 动量 ＋ 自适应步长",k:"<b>动量</b>：参考过去的方向，压住横跳。<b>自适应步长</b>：每个参数单独定步长——坡陡的步子小，坡缓的步子大。",m:"⭐ <b>Adam 把两者合在一起，是现在的默认优化器。</b>",w:"⚠ <b>「默认」不等于「永远最好」</b>：有些任务上调好的 SGD + 动量反而更优。",e:"⭐ 和这门课里所有其它选择一样——<b>它是个默认起点，不是定论</b>。"});
+  QUIZ(4571,22,{t:"Adam 是由哪两部分组成的？",o:["动量 + 正则化","动量（参考过去的方向）+ 自适应步长（每个参数单独定步长：坡陡的小、坡缓的大）","ReLU + dropout","小批量 + 随机初始化"],a:1,w:"⚠ Adam 是<b>默认起点不是定论</b>——有些任务上调好的 SGD + 动量反而更优。"});
+});
+KP("完 · 这一讲的两条线",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L11 · 完","反向传播与改进网络","梯度怎么传回去，以及怎么让它传得顺");},
+    "收一下，这一讲是两条线。<br><b>第一条：梯度怎么传回去。</b>全部数学就是<b>链式法则</b>一条——影响一环套一环时，<b>总影响等于各环倍数相乘</b>（齿轮：A→B 二倍、B→C 三倍 ⇒ A→C 六倍）。<b>⭐ 为什么非要倒着算</b>：正着算时每一层都依赖还没算出来的后续层，Ng 说那<b>「只会卡住」</b>；倒着算则<b>每一步只需「后一层已算好的数 × 本层自己的倍数」</b>，后面那截是现成的。<b>⚠ 两个细节</b>：<b>∂z/∂w 等于上一层的输出</b>（所以前向算的 a 要存下来）；式子里<b>逐元素积 ⊙ 和矩阵乘法会交替出现</b>——⊙ 来自「激活函数各神经元各过各的」，矩阵乘法来自「加权求和把它们混在了一起」。<br><b>第二条：怎么让梯度传得顺。</b><b>⭐ 最该记的一句：不选激活函数的话，网络再深也等价于一个线性回归</b>（线性套线性还是线性）——<b>所以非线性是网络表达力的唯一来源，不是锦上添花</b>。而 sigmoid / tanh <b>两端会饱和、斜率接近 0</b>，<b>梯度是连乘，一个接近 0 的因子就能掐断整条链</b>；ReLU 正半边斜率恒为 1 所以不饱和，<b>代价是负半边梯度为 0、神经元可能「死掉」</b>。<b>初始化</b>：<b>绝不能全零</b>——同层神经元会完全对称、永远是彼此的复制品；要<b>随机初始化打破对称</b>，幅度<b>按扇入定</b>（输入越多权重越小，ReLU 要乘 2 补上被砍掉的负半边）。<b>⭐ 梯度消失与爆炸是同一枚硬币的两面</b>：连乘会把「每层因子略偏离 1」放大成灾难。<br><b>优化</b>：<b>小批量</b>是默认（方向够稳、速度够快，而且显卡擅长并行算一批）；<b>动量</b>参考过去几步的方向，<b>横跳的分量互相抵消、前进的分量累积加速</b>；<b>Adam ＝ 动量 ＋ 自适应步长</b>，是现在的默认——<b>⚠ 但默认不等于永远最好。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

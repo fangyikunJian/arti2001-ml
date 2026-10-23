@@ -1,0 +1,885 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L12 · 调试模型与误差分析</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L12 · 调试模型与误差分析",
+  subtitle:"模型做出来之后，下一步该干什么 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=ORrStCArmP4&t="};
+
+/* ── Ng 原话：画面顶部一行，摘自 L12 字幕 ── */
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 一条学习曲线（横轴=训练集大小）── */
+function lcurve(x0,y0,x1,yEnd,yStart,cls){
+  var p=[],i;
+  for(i=0;i<=40;i++){
+    var t=i/40, x=x0+(x1-x0)*t;
+    p.push([x, y0-(yStart-yEnd)*(1-Math.exp(-3*t))]);}
+  curve(p,cls||"b");}
+
+/* ── 流水线方框 ── */
+function pipe(xs,ys,w,h,labels,cls){labels.forEach(function(L,i){
+  boxNode(xs+i*(w+22),ys,w,h,L,(cls&&cls[i])||"");
+  if(i) link(xs+i*(w+22)-22,ys+h/2,xs+i*(w+22),ys+h/2);});}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L12","调试模型与误差分析",
+      "不教新算法，教「下一步该做什么」");},
+    "这一讲很特别：<b>它不教任何新算法。</b>它教的是一件在实际工作里更值钱的事——<b>模型做出来、效果不理想，下一步该干什么？</b><br><b>⭐ Ng 说这个能力对你的产出影响极大。</b>而大多数人的做法是：凭直觉挑一个方向，埋头干几个月，<b>干完才发现方向错了</b>。<br>他说他今天想做的，是<b>把这件「黑魔法」般的事变得更有章法，让你能系统地做判断</b>。这一讲给的就是一套<b>「先诊断、再动手」</b>的方法。<br><b>这一版是重做的</b>：旧版只有 8 个知识点、11 个讲解镜，78 分钟的课压得太扁。这一版把每个术语（过拟合/欠拟合、训练误差、目标函数、流水线…）<b>先讲清楚再用</b>。");
+});
+KP("1 · 「下一步做什么」这个能力有多值钱",function(){
+  S(307,function(){clearScene();setEq(null);setCap("Ng 想把「黑魔法」变成有章法的东西");
+   says("5:07","your ability to decide what to do next has a huge impact");
+   boxNode(170,215,440,82,"凭直觉挑一个方向","r");
+   boxNode(700,215,440,82,"埋头干几个月","r");
+   link(610,256,700,256);
+   note("⚠ 干完才发现方向错了 —— 几个月白费",640,330,"r");
+   note("⭐ 这一讲要换成：先花半天做诊断，再动手",640,388,"g");},"先说清这一讲为什么值得认真看。<br><b>⭐ Ng 的说法是：你「决定下一步做什么」的能力，对你的效率影响极大。</b><br><b>常见的失败模式是这样</b>：模型效果不好 → 凭直觉觉得「大概是数据不够吧」→ 花两个月收集数据 → 发现一点用都没有。<b>两个月没了。</b><br><b>他说他今天想做的，是把这件「黑魔法」般的事变得更有章法</b>，让你能<b>系统地</b>做判断。<br><b>⭐ 核心思路一句话：先花半天做诊断，再决定动手的方向。</b>");
+  S(307,function(){clearScene();setEq(null);setCap("同样一个月，花在哪里差别巨大");
+       says("5:07","your ability to decide what to do next has a huge impact on your efficiency");
+       boxNode(140,206,450,72,"A：凭感觉挑一个方向干一个月","r");
+       boxNode(730,206,430,72,"B：先花半天诊断再动手","g");
+       note("可能整月都在治错的病",365,320,"r");
+       note("剩下的时间都花在对的方向上",945,320,"g");
+       note("⭐ 两个人水平可能一样 —— 差别只在「有没有先确诊」",640,392,"y");},"把这件事说得更具体一点。<b>两个水平相当的人，同样投入一个月，产出可能差很远。</b><br><b>A 凭感觉挑一个方向</b>——比如直接去收集更多数据——<b>如果模型的病根本不是缺数据，这一个月就白费了</b>。<br><b>B 先花半天做诊断</b>，确认病因再动手，<b>剩下的时间全花在对的方向上</b>。<br><b>⭐ Ng 的说法是：决定下一步做什么的能力，对你的效率有巨大影响。</b><br><b>⚠ 注意他说的是「效率」不是「聪明」</b>——这是一项<b>可以学的技能</b>，这一讲讲的就是它。");
+  SUM(307,1,{h:"先诊断，再动手",k:"Ng：<b>「决定下一步做什么」的能力，对效率影响极大</b>。他想把这件「黑魔法」变得有章法。",m:"<b>常见失败模式</b>：凭直觉挑方向 → 埋头干几个月 → 发现方向错了。",w:"⭐ 核心思路：<b>先花半天做诊断，再决定动手方向</b>。",e:"⭐ 遇到「模型表现不好你会怎么做」这类开放题，<b>先说诊断、再说对策，比罗列一堆办法得分高</b>。"});
+  QUIZ(307,1,{t:"Ng 认为这一讲要解决的核心问题是什么？",o:["如何加快训练速度","模型效果不好时，如何系统地判断「下一步该做什么」，而不是凭直觉挑方向埋头干几个月","如何收集更多数据","如何设计更好的神经网络"],a:1,w:"⭐ 他的原话是「决定下一步做什么的能力对效率影响极大」，<b>想把这件黑魔法变得有章法</b>。"});
+});
+KP("2 · 动机场景：20% 的错误率，然后呢",function(){
+  S(337,function(){clearScene();setEq(null);setCap("反垃圾邮件分类器，测试误差 20%");
+   says("5:37","let's say we're building an anti-spam classifier");
+   matrix({rows:5,cols:2,cw:340,ch:52,x:280,y:200,
+     cell:function(i,j){var t=[["你能想到的办法","（都挺合理的）"],
+       ["收集更多训练数据","加更多特征"],
+       ["减少特征数量","换成邮件头特征"],
+       ["梯度下降多跑几轮","改用牛顿法"],
+       ["换一个 λ","改用 SVM"]];return t[i][j];},
+     dim:function(i,j){return i===0;}});},"<b>Ng 用一个具体场景贯穿整讲。</b><br><b>你在做反垃圾邮件分类器</b>：特征用的是精心挑出来的 100 个词（而不是英语里全部 5 万多个词），模型是贝叶斯逻辑回归加梯度下降。<b>结果测试误差 20%——高得没法接受。</b><br><b>下一步做什么？</b>你能想到的办法有一长串，而且<b>每一条看起来都挺合理</b>：多搞点数据、加特征、减特征、换邮件头特征、梯度下降多跑几轮、改用牛顿法、换个 λ、干脆改用 SVM……");
+  S(337,function(){clearScene();setEq(null);setCap("⚠ 挨个试 = 碰运气");
+   boxNode(230,210,820,80,"把清单上的办法一条一条试过去","r");
+   note("每试一条，可能要几天到几周",640,330,"d");
+   note("⚠ 极其耗时，而且最后有没有修到真毛病，很大程度上靠运气",640,388,"r");},"<b>⚠ 最常见的做法是把这张清单一条一条试过去。</b>这个办法<b>可能有用</b>，但它有两个大问题：<br><b>① 极其耗时</b>——每试一条可能要几天到几周。<br><b>② 最后有没有修到真正的毛病，很大程度上靠运气。</b><br><b>⭐ 请注意这张清单上每一条都是「治疗手段」。而没有诊断的治疗，就是碰运气。</b><br>这一讲接下来做的所有事，<b>都是为了把「碰运气」换成「先确诊」</b>。");
+  SUM(337,2,{h:"一长串办法，该先试哪个",k:"场景：反垃圾邮件、100 个词作特征、贝叶斯逻辑回归 + 梯度下降，<b>测试误差 20%</b>。",m:"<b>办法清单很长</b>：加数据 / 加特征 / 减特征 / 换邮件头特征 / 多跑几轮 / 换牛顿法 / 换 λ / 改用 SVM……每条都看起来合理。",w:"⚠ <b>挨个试：极其耗时，而且修没修到真毛病靠运气。</b>",e:"⭐ <b>清单上每条都是「治疗手段」，而没有诊断的治疗就是碰运气。</b>这是整讲的出发点。"});
+  QUIZ(337,2,{t:"Ng 为什么说「把办法清单挨个试」不是好做法？",o:["极其耗时，而且最后有没有修到真正的毛病很大程度上靠运气","因为现代框架已经自动做了","因为那些办法本身都是错的","因为清单上的办法互相冲突"],a:0,w:"⭐ 清单上每一条都是<b>治疗手段</b>，<b>没有诊断的治疗就是碰运气</b>。整讲就是要把「碰运气」换成「先确诊」。"});
+});
+KP("3 · 先认识两个词：过拟合、欠拟合",function(){
+  S(590,function(){clearScene();setEq(null);setCap("用「拟合一条曲线」来理解");
+   axes({x0:230,x1:560,y0:385,y1:185});
+   dots([[280,340],[330,310],[380,300],[430,265],[480,250],[530,215]],"b",7);
+   curve([[260,355],[550,210]],"r");
+   note("欠拟合：模型太简单，连训练数据都没抓住",395,395,"r");
+   axes({x0:720,x1:1050,y0:385,y1:185});
+   dots([[770,340],[820,310],[870,300],[920,265],[970,250],[1020,215]],"b",7);
+   curve([[760,350],[820,305],[870,302],[920,262],[970,252],[1030,212]],"y");
+   note("过拟合：把每个点都穿过去了，连噪声一起学",885,395,"y");},"整讲最常用的诊断叫「偏差 vs 方差」，<b>但这两个词背后其实是「欠拟合」和「过拟合」，先把这两个讲清楚。</b><br><b>欠拟合</b>：<b>模型太简单，连训练数据的规律都没抓住。</b>左图用一条直线去拟合明显弯曲的数据——<b>它连训练集都拟合不好</b>。<br><b>过拟合</b>：<b>模型太复杂，把每个训练点都精确穿过去了</b>，<b>连数据里的噪声一起学进去了</b>。右图那条扭来扭去的线就是。<br><b>⚠ 过拟合的坏处是：它学的是「这批数据的偶然细节」，换一批新数据就不灵了。</b>");
+  S(590,function(){clearScene();setEq(null);setCap("Ng 给的术语对应");
+   says("9:50","a classifier is highly biased, then it tends to under fit the data");
+   boxNode(200,215,420,80,"高偏差（high bias）","b");
+   boxNode(700,215,420,80,"高方差（high variance）","y");
+   note("＝ 欠拟合",410,330,"b");
+   note("＝ 过拟合",910,330,"y");
+   note("⭐ 两套说法，同一件事 —— 别被两个名字绕晕",640,388,"g");},"<b>⭐ 现在把术语对上：</b><br><b>「高偏差」就是欠拟合</b>——Ng 的原话就是「一个分类器高偏差的话，它往往会欠拟合数据」。<br><b>「高方差」就是过拟合。</b><br><b>⚠ 这是两套说法指同一件事</b>，机器学习里两个名字都会用，<b>看到哪个都要能立刻换算过来</b>。<br><b>为什么叫「方差」？</b>直觉是：过拟合的模型<b>对训练数据特别敏感</b>——换一批训练数据，学出来的模型就变样了。<b>「模型本身的变动很大」，所以叫方差大。</b>");
+  SUM(590,3,{h:"★ 高偏差＝欠拟合；高方差＝过拟合",k:"<b>欠拟合</b>：模型太简单，<b>连训练数据都没抓住</b>。<b>过拟合</b>：模型太复杂，<b>把噪声一起学进去了</b>。",m:"术语对应：<b>高偏差 ＝ 欠拟合</b>（Ng 原话），<b>高方差 ＝ 过拟合</b>。两套说法同一件事。",w:"⭐ <b>为什么叫「方差」</b>：过拟合的模型对训练数据特别敏感，换一批数据模型就变样 ⇒ <b>模型本身的变动大</b>。",e:"⚠ 两个名字都要认，<b>看到哪个都要能立刻换算</b>。"});
+  QUIZ(590,3,{t:"「高偏差」和「高方差」分别对应什么？",o:["高偏差指数据有偏，高方差指数据噪声大","高偏差＝过拟合，高方差＝欠拟合","两者都表示模型不收敛","高偏差＝欠拟合（模型太简单，连训练数据都没抓住）；高方差＝过拟合（把噪声也学了）"],a:3,w:"⭐ <b>「方差」这个名字的来由</b>：过拟合的模型对训练数据敏感，换批数据模型就变样——<b>模型本身的变动大</b>。"});
+});
+KP("4 · 再铺一个词：训练误差 vs 测试误差",function(){
+  S(590,function(){clearScene();setEq(null);setCap("同一个模型，在两批数据上各考一次");
+   boxNode(180,205,420,84,"训练误差","b");
+   boxNode(700,205,420,84,"测试误差","g");
+   note("在「学过的」数据上考",390,320,"d");
+   note("在「没见过的」数据上考",910,320,"d");
+   note("⭐ 真正关心的是测试误差 —— 但训练误差才是诊断的钥匙",640,388,"y");},"第二个要铺的词：<b>训练误差</b>和<b>测试误差</b>。<br><b>训练误差</b>：模型在<b>它学过的那批数据</b>上错了多少。<b>测试误差</b>：模型在<b>它没见过的新数据</b>上错了多少。<br><b>⭐ 我们真正关心的当然是测试误差</b>——毕竟模型上线后面对的都是新数据。<br><b>⚠ 但做诊断时，训练误差才是那把钥匙。</b>原因下一节就清楚：<b>光看测试误差，你分不出是欠拟合还是过拟合；必须拿训练误差来对照。</b>");
+  S(751,function(){clearScene();setEq(null);setCap("两个误差一起看，才有四种可能");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["训练误差","测试误差","诊断"],
+           ["高","高（差不多）","欠拟合 · 高偏差"],
+           ["低","高很多","过拟合 · 高方差"],
+           ["低","低","刚好"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1||i===2?"hl":"";}});
+       note("⭐ 只报一个数永远判不出来 —— 必须两个一起看",640,396,"y");},"把两个误差放进一张表，四种情况就一目了然。<br><b>训练误差也高、测试误差差不多</b> ⇒ <b>欠拟合</b>，模型本身不够用。<br><b>训练误差很低、测试误差高很多</b> ⇒ <b>过拟合</b>，模型把训练集的偶然也学进去了。<br><b>两个都低</b> ⇒ 刚好。<br><b>⭐ 关键结论：只报一个数永远判不出是哪种病。</b>有人说「我的测试误差 20%」——<b>这句话本身不包含任何诊断信息</b>，必须配上训练误差才能定性。<br><b>⚠ 下一节讲的学习曲线，就是把这张表画成图。</b>");
+  SUM(590,4,{h:"训练误差 ＝ 学过的数据上错多少；测试误差 ＝ 新数据上错多少",k:"<b>训练误差</b>：在它学过的数据上考。<b>测试误差</b>：在它没见过的数据上考。",m:"<b>真正关心的是测试误差</b>（上线后面对的都是新数据）。",w:"⚠ <b>但诊断的钥匙是训练误差</b>：光看测试误差分不出欠拟合还是过拟合，<b>必须拿训练误差来对照</b>。",e:"⭐ 下一节就是这两个数怎么配合着看。"});
+  QUIZ(590,4,{t:"做偏差/方差诊断时，为什么必须看训练误差？",o:["因为训练误差更容易计算","因为测试误差不可靠","光看测试误差分不出是欠拟合还是过拟合，必须拿训练误差来对照","因为训练误差总是更准确"],a:2,w:"⭐ 我们<b>关心</b>的是测试误差，但<b>诊断</b>要靠训练误差来对照。下一节就是这两个数怎么配合着看。"});
+});
+KP("5 · ★★ 最常用的诊断：两个信号分开两种病",function(){
+  S(434,function(){clearScene();setEq(null);setCap("Ng 说这是他用得最多的一个诊断");
+       says("7:14","the most common diagnostic I end up using is a bias versus variance diagnostic");
+       matrix({rows:3,cols:3,cw:300,ch:62,x:185,y:200,
+         cell:function(i,j){var t=[
+           ["","训练误差","训练与测试的差距"],
+           ["高方差（过拟合）","低","大"],
+           ["高偏差（欠拟合）","本身就高","小"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j>0&&i>0?"hl":"";}});
+       note("⭐ 两个数就够了：训练误差本身高不高、两者差多少",640,390,"y");},"<b>现在是这一讲最实用的一块。</b>Ng 说<b>偏差/方差诊断是他开发算法时用得最多的一个</b>。<br><b>做法只要看两个数</b>：<br><b>① 训练误差本身高不高？</b>如果<b>连训练数据都学不好</b>，那是<b>高偏差（欠拟合）</b>——模型能力不够。<br><b>② 训练误差和测试误差差多少？</b>如果<b>训练误差很低但测试误差高</b>，差距很大，那是<b>高方差（过拟合）</b>——模型把训练集背下来了，但没学到能迁移的规律。<br><b>⭐ 就这两个数，两种病就分开了。</b>");
+  S(434,function(){clearScene();setEq(null);setCap("判断只要两步，顺序不能反");
+       boxNode(230,205,820,76,"① 训练误差本身可以接受吗？","b");
+       note("不行 ⇒ 高偏差，往「增强模型 / 加特征」走",640,300,"r");
+       boxNode(230,330,820,76,"② 可以的话，训练与测试差多少？","g");
+       note("差很多 ⇒ 高方差，往「加数据 / 减特征 / 加正则」走",640,395,"y");},"<b>⭐ 把它变成一个固定的判断流程，两步，而且顺序不能反：</b><br><b>第一步：训练误差本身可以接受吗？</b>不行 ⇒ <b>高偏差</b>，该往「增强模型、加特征」的方向走。<br><b>第二步（只有第一步通过了才问）：训练误差和测试误差差多少？</b>差很多 ⇒ <b>高方差</b>，该往「加数据、减特征、加强正则」的方向走。<br><b>⚠ 为什么顺序不能反？</b>因为<b>高偏差的时候，训练误差和测试误差本来就都很高、差距很小</b>——你要是直接看差距，会误以为「方差不大，没问题」，<b>从而完全错过真正的病。</b>");
+  SUM(434,5,{h:"★★ 两步判断：先看训练误差本身，再看差距",k:"<b>① 训练误差本身高</b> ⇒ 高偏差（欠拟合）；<b>② 训练误差低但与测试差距大</b> ⇒ 高方差（过拟合）。",m:"Ng 说这是他<b>用得最多的一个诊断</b>。只要两个数就能分开两种病。",w:"⚠ <b>顺序不能反</b>：高偏差时两个误差本来就都高、差距小，<b>直接看差距会误以为「没问题」，错过真正的病</b>。",e:"⭐⭐ 这是 M3 最可能考的一块。<b>给一组训练/验证误差的数字，要能判断是哪种病并给出对策。</b>"});
+  QUIZ(434,5,{t:"偏差/方差诊断的两步判断，为什么顺序不能反？",o:["因为训练误差总是小于测试误差","高偏差时两个误差本来就都高、差距很小；直接看差距会误以为「方差不大没问题」，从而错过真正的病","因为第一步计算更快","顺序其实可以反"],a:1,w:"⭐ <b>先问「训练误差本身可以接受吗」</b>，通过了再问差距。⚠ 反过来就会在高偏差的情况下得出错误结论。"});
+});
+KP("6 · 学习曲线怎么读（一）：高方差的样子",function(){
+  S(1092,function(){clearScene();setEq(null);setCap("横轴是训练集大小 m");
+       axes({x0:260,x1:1020,y0:390,y1:185});
+       lcurve(280,370,1000,230,370,"r");
+       lcurve(280,385,1000,340,385,"b");
+       note("测试误差",1000,215,"r");
+       note("训练误差",1000,355,"b");
+       note("⇒ 两条线差距很大",640,285,"y");
+       note("⇒ 测试误差还在往下走 —— 加数据会有帮助",640,395,"g");},"<b>把偏差/方差画成图，叫「学习曲线」：横轴是训练集大小 m，纵轴是误差。</b><br><b>高方差长这样</b>：<b>训练误差很低</b>（模型把训练集背下来了），<b>测试误差明显高一截</b>，<b>两条线之间差距很大</b>。<br><b>⭐ 而且注意测试误差还在往下走——没走平。</b>这说明<b>再加数据还能继续降</b>。<br><b>所以高方差的情况下，「收集更多数据」是真的有用的。</b>");
+  S(751,function(){clearScene();setEq(null);setCap("高方差的学习曲线：两条线隔得很开，但在靠拢");
+       says("12:31","this is a learning curve and what that means is, on the horizontal axis, you vary the number of");
+       axes(true);
+       curve([[260,420],[420,398],[600,382],[800,372],[1000,366]],"g");
+       curve([[260,210],[420,250],[600,282],[800,306],[1000,324]],"r");
+       note("测试误差（一路在降）",1050,350,"r");
+       note("训练误差（一路在升）",1050,210,"g");
+       note("差距还很大，但在缩小",640,176,"y");
+       note("⭐ 横轴是「训练样本数」—— 这是学习曲线和别的图最大的区别",640,398,"d");},"先把图读清楚：<b>横轴不是迭代次数，是「训练样本数」。</b>这是学习曲线和其它误差曲线最大的区别。<br><b>绿线是训练误差</b>：样本越多越难全部记住，<b>所以它一路在升</b>。<b>红线是测试误差</b>：样本越多泛化越好，<b>一路在降</b>。<br><b>⭐ 高方差的标志是：两条线之间还隔着一道明显的缝，而且这道缝还在继续缩小。</b><br><b>⚠ 「还在缩小」这四个字才是关键</b>——它意味着<b>再加数据，缝还会继续合拢</b>，所以这种情况下收集更多数据是真有用的。");
+  SUM(1092,6,{h:"高方差的学习曲线：差距大、测试误差还在降",k:"<b>训练误差很低</b>、<b>测试误差明显高一截</b>、<b>两条线差距大</b>，而且<b>测试误差还在往下走没走平</b>。",m:"测试误差没走平 ⇒ <b>再加数据还能继续降</b>。",w:"⭐ <b>所以高方差时「收集更多数据」是真的有用的。</b>",e:"⚠ 看图判断是高频题型。<b>先看两条线的差距，再看测试误差有没有走平。</b>"});
+  QUIZ(1092,6,{t:"高方差的学习曲线有什么特征？",o:["训练误差高于测试误差","两条线都已走平且很低","两条线都很高且几乎重合","训练误差很低、测试误差高一截、两线差距大，且测试误差还在下降没走平"],a:3,w:"⭐ <b>测试误差还在降</b>这一点很关键——它说明<b>加数据还有用</b>。"});
+});
+KP("7 · 学习曲线怎么读（二）：高偏差的样子",function(){
+  S(1092,function(){clearScene();setEq(null);setCap("完全不同的形状");
+       axes({x0:260,x1:1020,y0:390,y1:185});
+       lcurve(280,370,1000,255,370,"r");
+       lcurve(280,392,1000,270,392,"b");
+       curve([[260,330],[1020,330]],"g");
+       note("期望达到的水平",1000,318,"g");
+       note("测试误差",1000,243,"r");
+       note("训练误差",1000,282,"b");
+       note("⚠ 连训练误差都高过了期望水平",640,200,"r");
+       note("⚠ 两条线差距很小，而且都已经走平 ⇒ 加数据没用",640,395,"r");},"<b>高偏差的学习曲线形状完全不同</b>：<br><b>① 连训练误差都高得不可接受</b>——它甚至高过了你期望达到的水平线。<b>模型连训练集都学不好。</b><br><b>② 两条线差距很小</b>，而且<b>都已经走平了</b>。<br><b>⚠ 关键推论：既然都走平了，再加数据也不会降。</b><br><b>⭐ 这就是为什么「加数据」不是万能药</b>——它只在高方差时有用，<b>高偏差时是纯粹的浪费</b>。<b>这也是不做诊断就动手最常见的翻车方式。</b>");
+  S(1025,function(){clearScene();setEq(null);setCap("高偏差的学习曲线：两条线早早贴在一起，而且都高");
+       says("17:05","Now let's look at what the learning curve will look like, if you have a bias problem");
+       axes(true);
+       curve([[260,300],[420,286],[600,280],[800,278],[1000,277]],"g");
+       curve([[260,250],[420,266],[600,272],[800,274],[1000,275]],"r");
+       curve([[260,420],[1000,420]],"y");
+       note("两条线很快就贴上了",640,180,"r");
+       note("而且贴在一个很高的位置",1050,262,"d");
+       note("你想达到的水平",1050,420,"y");
+       note("⭐ 再加数据，两条线只会一起停在原地 —— 这就是「加数据没用」的样子",640,398,"d");},"高偏差的图长得完全不一样。<br><b>两条线很快就贴在一起了</b>——说明<b>再多数据也学不到新东西</b>。而且<b>它们贴在一个很高的位置</b>，离你想达到的水平（黄线）还差一大截。<br><b>⭐ 这张图把「加数据没用」画成了肉眼可见的样子</b>：缝已经没了，再往右走两条线都是平的。<br><b>⚠ 这正是不做诊断就动手最常见的翻车方式</b>——看到误差高就去收集数据，<b>而图早就告诉你那条路是死的</b>。");
+  SUM(1092,7,{h:"高偏差的学习曲线：两线贴近、都走平、都高",k:"<b>连训练误差都高得不可接受</b>（高过期望水平线）；<b>两条线差距很小且都已走平</b>。",m:"⚠ <b>都走平了 ⇒ 再加数据也不会降。</b>",w:"⭐ <b>「加数据」只在高方差时有用，高偏差时是纯粹的浪费</b>——这是不做诊断最常见的翻车方式。",e:"⚠ 高频失分点就是把「加数据」当万能药。<b>答题时务必先判断是哪种病。</b>"});
+  QUIZ(1092,7,{t:"高偏差时「收集更多训练数据」为什么没用？",o:["因为两条学习曲线已经走平了，再加数据也不会降——问题在模型能力不足，不在数据量","因为模型会过拟合","因为数据太贵","因为训练误差会上升"],a:0,w:"⭐ <b>「加数据」只在高方差时有用。</b>⚠ 这是不做诊断就动手最常见的翻车方式。"});
+});
+KP("8 · ⚠ 为什么「再弄点数据」常常是错的第一反应",function(){
+  S(751,function(){clearScene();setEq(null);setCap("最常见的第一反应，也是最常踩空的那个");
+       says("12:31","let's say that you're hoping to achieve a certain level of desired performance");
+       boxNode(150,204,460,70,"模型效果不好 ⇒ 去收集更多数据","b");
+       note("高方差：两条线在靠拢 ⇒ 加数据有用",960,232,"g");
+       note("高偏差：两条线早就贴平 ⇒ 加数据没用",960,290,"r");
+       note("⭐ 同一个动作，在两种病上一个有效、一个完全无效",640,370,"y");
+       note("⚠ 而收集数据恰恰是这四个办法里最贵、最慢的一个",640,402,"d");},"「效果不好就去弄更多数据」是绝大多数人的第一反应，<b>也是最容易踩空的那个</b>。<br><b>看学习曲线就能当场判断</b>：<b>高方差时两条线之间还有缝、而且在靠拢</b>，加数据确实有用；<b>高偏差时两条线早就贴平了</b>，再加多少都只是让两条平线更长。<br><b>⭐ 同一个动作，在两种病上一个有效、一个完全无效。</b><br><b>⚠ 更要命的是，收集数据是这四个办法里最贵、最慢的一个</b>——标注要钱、要时间。<b>所以它恰恰是最该先诊断、最不该凭感觉上的那一个。</b>");
+  SUM(1092,8,{h:"⚠「再弄点数据」要先看学习曲线",k:"<b>高方差</b>（两条线有缝且在靠拢）⇒ <b>加数据有用</b>；<b>高偏差</b>（两条线早已贴平）⇒ <b>加数据没用</b>。",m:"⭐ 同一个动作在两种病上<b>一个有效、一个完全无效</b>，而光看「误差高」分不出是哪种。",w:"⚠ 收集数据是这几个办法里<b>最贵最慢</b>的，所以最不该凭感觉上。",e:"答题时写「<b>先画学习曲线判断是高偏差还是高方差，再决定要不要加数据</b>」比直接说「加数据」稳得多。"});
+  QUIZ(1092,8,{t:"模型效果不好，什么时候「收集更多训练数据」才真的有用？",o:["只有在用深度模型时才有用","任何时候都有用，数据总是越多越好","高方差时有用（学习曲线两条线之间还有缝且在靠拢）；高偏差时没用","高偏差时有用，高方差时没用"],a:2,w:"⚠ 高偏差时两条线早就贴平了，<b>再加数据只是让两条平线更长</b>。而且收集数据是<b>最贵最慢</b>的办法，最不该凭感觉上。"});
+});
+KP("9 · ★ 哪个办法治哪个病（这张表最实用）",function(){
+  S(434,function(){clearScene();setEq(null);setCap("把开头那张清单逐条标上「治什么」");
+       matrix({rows:5,cols:2,cw:400,ch:54,x:240,y:200,
+         cell:function(i,j){var t=[
+           ["想试的办法","它治的是"],
+           ["收集更多训练数据","高方差"],
+           ["减少特征数量","高方差"],
+           ["增加特征 / 换邮件头特征","高偏差"],
+           ["换一个更复杂的模型","高偏差"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===1&&i>0?"hl":"";}});
+       note("⚠ 注意「减少特征」和「增加特征」是对立的两条",640,374,"r");},"<b>现在把开头那张「可以试的办法」清单，逐条标上它治什么病。</b><br><b>治高方差的</b>：收集更多数据、减少特征数量（降低模型复杂度）、加强正则化。<br><b>治高偏差的</b>：增加特征、换一组更有信息量的特征（比如邮件头）、换更复杂的模型、减弱正则化。<br><b>⚠ 请特别注意「减少特征」和「增加特征」在表里是对立的两条。</b><br><b>这就是不诊断的代价</b>：<b>你有一半的概率朝加重病情的方向使劲</b>——明明是高偏差却去减特征，只会更糟。");
+  S(1155,function(){clearScene();setEq(null);setCap("Ng 的原话：每一条只治一种病");
+       says("19:15","for each of the four bullets here, each of the first four ideas fixes either a high variance or a high bias");
+       boxNode(140,200,460,66,"更多训练数据","g");
+       boxNode(140,286,460,66,"减少特征","g");
+       boxNode(720,200,460,66,"增加特征","r");
+       boxNode(720,286,460,66,"换更复杂的模型","r");
+       note("↓ 这两条治高方差（限制模型）",370,178,"g");
+       note("↓ 这两条治高偏差（放开模型）",950,178,"r");
+       note("⚠ 拿左边的办法去治右边的病，只会更糟 —— 这就是不诊断的代价",640,396,"y");},"Ng 讲这张清单时有一句很要紧的话：<b>这四条里，每一条都只治一种病。</b><br><b>左边两条治高方差</b>：更多数据、减少特征——都是在<b>限制模型</b>。<b>右边两条治高偏差</b>：增加特征、换更复杂的模型——都是在<b>放开模型</b>。<br><b>⭐ 它们的方向是相反的。</b><br><b>⚠ 所以拿错了不是「没效果」，是「更糟」</b>：明明是高偏差（模型不够用）却去减特征，<b>等于把本来就不够用的模型再砍一刀</b>。<b>这就是不做诊断的真实代价。</b>");
+  SUM(434,9,{h:"★ 病↔药对照表",k:"<b>治高方差</b>：加数据、减特征、加强正则。<b>治高偏差</b>：加特征、换更有信息量的特征、换更复杂的模型、减弱正则。",m:"⚠ <b>「减少特征」和「增加特征」是对立的两条。</b>",w:"⭐ <b>不诊断的代价</b>：你有一半概率朝<b>加重病情</b>的方向使劲——高偏差却去减特征，只会更糟。",e:"⭐⭐ 这张表值得背。<b>大题给了症状要能开出对的药。</b>"});
+  QUIZ(434,9,{t:"「减少特征数量」治的是哪种病？",o:["高偏差","优化算法问题","高方差","目标函数选错"],a:2,w:"减特征＝降低模型复杂度 ⇒ <b>治高方差（过拟合）</b>。⚠ 和「增加特征」正好对立——<b>不诊断就乱试，有一半概率用反药</b>。"});
+});
+KP("10 · 先铺词：「目标函数」和「优化算法」是两回事",function(){
+  S(1692,function(){clearScene();setEq(null);setCap("训练一个模型，其实是两件事拼起来的");
+       boxNode(180,205,440,84,"目标函数 J(θ)","b");
+       boxNode(700,205,440,84,"优化算法","g");
+       note("你让模型去追求什么",390,320,"d");
+       note("用什么办法去追",910,320,"d");
+       note("⭐ 两件事会各自出问题，而且修法完全不同",640,388,"y");},"接下来是另一类诊断，<b>但要先把两个词分清楚</b>。<br><b>训练一个模型，其实是两件事拼起来的</b>：<br><b>① 目标函数 J(θ)</b>——<b>你让模型去追求什么</b>。比如「让对数似然最大」。<br><b>② 优化算法</b>——<b>用什么办法去追</b>。比如梯度下降、牛顿法。<br><b>⭐ 关键在于：这两件事会各自出问题，而且修法完全不同。</b><br><b>目标函数选错了</b>，那优化得再好也没用——<b>你在拼命追求一个错的东西</b>。<b>优化算法不给力</b>，那目标再对也达不到。<b>所以必须先分清是哪一种。</b>");
+  S(1879,function(){clearScene();setEq(null);setCap("用考试打个比方");
+       says("31:19","there is a second diagnostic which I end up using");
+       boxNode(140,200,470,72,"目标函数 J 定错了","r");
+       boxNode(740,200,440,72,"优化算法没跑好","b");
+       note("= 题目出错了",375,316,"r");
+       note("= 题目没错，但你没算对",960,316,"b");
+       note("⭐ 两种病的症状可能一模一样：模型表现不好",640,370,"d");
+       note("⚠ 但治法完全相反 —— 一个改目标，一个改求解",640,402,"y");},"这两件事容易混，用考试打个比方最清楚。<br><b>目标函数 J 定错了</b>，相当于<b>题目本身出错了</b>——你算得再准，答的也是个错问题。<br><b>优化算法没跑好</b>，相当于<b>题目没错，但你没算对</b>。<br><b>⭐ 麻烦在于：这两种病的症状可能一模一样</b>，都表现为「模型效果不好」。<br><b>⚠ 但治法完全相反</b>：前者要改目标函数（换损失、加正则、改特征），后者要改求解方式（多迭代、换优化器、调学习率）。<b>所以 Ng 专门给了第二个诊断来分辨它们。</b>");
+  SUM(1692,10,{h:"★ 目标函数 ≠ 优化算法",k:"<b>目标函数 J(θ)</b>：你让模型追求什么。<b>优化算法</b>：用什么办法去追。",m:"⭐ <b>两者会各自出问题，修法完全不同。</b>",w:"<b>目标选错</b> ⇒ 优化得再好也没用（在追一个错的东西）；<b>优化不力</b> ⇒ 目标再对也达不到。",e:"⚠ 必须先分清是哪一种，<b>下一节给出判断方法</b>。"});
+  QUIZ(1692,10,{t:"「目标函数」和「优化算法」的区别是什么？",o:["两者是同一件事的不同叫法","目标函数是「让模型追求什么」，优化算法是「用什么办法去追」——两者会各自出问题且修法不同","目标函数是数据，优化算法是模型","目标函数用于训练，优化算法用于测试"],a:1,w:"⭐ <b>目标选错 ⇒ 优化再好也没用；优化不力 ⇒ 目标再对也达不到。</b>必须先分清是哪一种。"});
+});
+KP("11 · 诊断一：算法到底收敛了没有",function(){
+  S(1692,function(){clearScene();setEq(null);setCap("最直接的办法：把目标函数画出来");
+       says("28:12","draw a plot of the training optimization objective, of J of Theta");
+       axes({x0:280,x1:1000,y0:385,y1:190});
+       var i,p=[];
+       for(i=0;i<=50;i++){var x=300+i*13;
+         p.push([x, 370-150*(1-Math.exp(-2.2*i/50))]);}
+       curve(p,"b");
+       note("迭代次数 →",640,395,"d");
+       note("J(θ) ↑",250,290,"d");
+       note("⚠ 看起来平了 —— 但真的收敛了吗？",830,250,"r");},"<b>第一个诊断：算法跑够了吗？</b>最直接的办法 Ng 也说了——<b>把训练时的目标函数 J(θ) 随迭代次数画出来</b>，看它有没有走平。<br><b>⚠ 但他紧接着给了一个很实在的提醒：光看这条曲线，常常根本看不出算法收敛没收敛。</b><br><b>为什么？</b>因为<b>曲线看起来「平了」，可能只是进入了一段平台期</b>——再多跑一会儿它可能还会继续降。<b>也可能是真的到头了。光看这条线分不出来。</b><br><b>⭐ 所以这个诊断是「必要但不充分」的</b>：它能帮你排除「明显还在降」的情况，<b>但不能确认「真的收敛了」</b>。");
+  S(1692,function(){clearScene();setEq(null);setCap("「看起来平了」不等于「收敛了」");
+       axes(true);
+       curve([[260,250],[380,300],[500,340],[620,362],[740,372],[860,376],[1000,378]],"g");
+       note("看起来已经平了",820,340,"d");
+       note("⚠ 但它可能只是走得很慢，再跑十倍迭代还会继续降",640,180,"y");
+       note("⭐ 稳妥的做法：换一个更强的优化器再跑一遍，看结果动不动",640,402,"g");},"这是一个很常见的自欺。<b>曲线看起来平了，就宣布「收敛了」</b>——可<b>平和收敛不是一回事</b>。<br><b>它可能只是走得很慢</b>：再跑十倍的迭代，说不定还会继续往下降一截。<br><b>⭐ 所以更稳妥的做法不是盯着曲线看，而是换一个更强的优化器（比如牛顿法）再跑一遍</b>：<b>如果结果几乎不动，那才说明真的收敛了；如果结果明显更好，说明之前根本没跑到底。</b><br><b>⚠ 这一条很值钱</b>，因为「以为收敛了」会让你把一个优化问题误判成模型问题，<b>然后去改一个本来没错的模型</b>。");
+  SUM(1692,11,{h:"诊断一：画出 J(θ) 随迭代的曲线",k:"把训练目标 <b>J(θ) 随迭代次数画出来</b>，看有没有走平。",m:"⚠ Ng 的提醒：<b>光看这条曲线常常看不出收敛没收敛</b>——「看起来平了」<b>可能只是一段平台期</b>。",w:"⭐ 所以这个诊断<b>必要但不充分</b>：能排除「明显还在降」，<b>不能确认「真的收敛」</b>。",e:"⚠ 答题时别把「曲线平了」直接等同于「已收敛」。"});
+  QUIZ(1692,11,{t:"关于「画出目标函数曲线判断是否收敛」，Ng 的提醒是什么？",o:["光看这条曲线常常看不出收敛没收敛——看起来平了可能只是一段平台期","曲线平了就一定收敛了","应该改看准确率曲线","收敛与否无关紧要"],a:0,w:"⭐ 这个诊断<b>必要但不充分</b>：能排除「明显还在降」，但<b>不能确认「真的收敛」</b>。"});
+});
+KP("12 · 一个真实的两难：两个模型各有各的好",function(){
+  S(3285,function(){clearScene();setEq(null);setCap("反垃圾邮件的另一组数字");
+       matrix({rows:3,cols:3,cw:300,ch:58,x:185,y:200,
+         cell:function(i,j){var t=[
+           ["模型","垃圾邮件错误率","正常邮件错误率"],
+           ["贝叶斯逻辑回归","2%","2%"],
+           ["线性核 SVM","10%","0.01%"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===2&&j===2)?"hl":"";}});
+       note("⚠ 误杀一封正常邮件，比漏掉一封垃圾邮件严重得多",640,330,"r");
+       note("⭐ 所以 SVM 虽然漏得多，整体上却更可接受",640,392,"g");},"<b>换一组数字，看一个更微妙的情况。</b><br><b>贝叶斯逻辑回归</b>：垃圾邮件错 2%，正常邮件也错 2%。<b>线性核 SVM</b>：垃圾邮件错 10%（漏得更多），<b>但正常邮件只错 0.01%</b>。<br><b>⚠ 关键在于这两类错误的代价不一样</b>：<b>漏掉一封垃圾邮件</b>只是烦一下；<b>把一封重要的正常邮件误判成垃圾扔掉</b>，后果严重得多。<br><b>⭐ 所以虽然 SVM 的「总错误率」更高，它在你真正关心的指标上反而更好。</b><br><b>可问题来了：你因为计算效率等原因，还是想用逻辑回归。那该怎么办？</b>");
+  S(2100,function(){clearScene();setEq(null);setCap("把这个两难摆成一张表");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","SVM","贝叶斯逻辑回归"],
+           ["你关心的指标","更好","差一些"],
+           ["J(θ) 这个目标","差一些","更好"],
+           ["你想用的","—","✓（更快更简单）"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===1||i===2?"hl":"";}});
+       note("⭐ 两行打架：按指标该选 SVM，按 J 该选逻辑回归",640,396,"y");},"把这个两难摆成一张表就很清楚了。<br><b>按你真正关心的指标看，SVM 更好</b>；<b>但按 J(θ) 这个目标函数看，逻辑回归反而更好</b>。<br><b>⭐ 两行打架了</b>——而你出于速度、简单、上线成本等现实原因，<b>还是想用逻辑回归</b>。<br><b>⚠ 这时候最糟的反应是「随便挑一个」</b>。Ng 的做法是：<b>这个矛盾本身就是一条诊断信息</b>——它恰好能告诉你，问题出在目标函数还是出在优化算法上。<b>下一节就用这组数把它分清。</b>");
+  SUM(3285,12,{h:"两个模型各有各的好",k:"<b>逻辑回归</b> 2%/2%；<b>SVM</b> 10%/0.01%。<b>误杀正常邮件的代价远大于漏掉垃圾邮件。</b>",m:"⭐ 所以<b>SVM 虽然总错误率更高，在你真正关心的指标上反而更好</b>。",w:"<b>但你因为计算效率等原因还是想用逻辑回归</b>——这就是接下来要解决的两难。",e:"⚠ 「两类错误代价不同」是现实中极常见的情形。<b>总错误率常常不是你真正关心的指标。</b>"});
+  QUIZ(3285,12,{t:"为什么说 SVM 在这个例子里「更好」，尽管它的垃圾邮件错误率高达 10%？",o:["因为 SVM 训练更快","因为 10% 其实很低","因为 SVM 参数更少","因为误杀正常邮件的代价远大于漏掉垃圾邮件，而 SVM 的正常邮件错误率只有 0.01%"],a:3,w:"⭐ <b>两类错误的代价不一样。</b>总错误率常常<b>不是你真正关心的指标</b>。"});
+});
+KP("13 · 先铺词：你关心的指标 ≠ 模型在优化的损失",function(){
+  S(1879,function(){clearScene();setEq(null);setCap("两个不同的「分数」");
+       boxNode(180,205,440,84,"a(θ)：你关心的指标","y");
+       boxNode(700,205,440,84,"J(θ)：模型在最大化的","b");
+       note("加权准确率（正常邮件权重更高）",390,320,"d");
+       note("贝叶斯逻辑回归自己的目标函数",910,320,"d");
+       note("⚠ 算法勤勤恳恳最大化 J —— 但 J 未必是你要的",640,390,"r");},"<b>要解决上一节那个两难，先把两个「分数」分开。</b><br><b>a(θ)</b>：<b>你真正关心的指标</b>。在这个例子里是<b>加权准确率</b>——正常邮件判错要扣更多分。<br><b>J(θ)</b>：<b>贝叶斯逻辑回归自己在最大化的那个目标函数</b>。它眼里两类错误<b>一样重</b>。<br><b>⚠ 现在矛盾清楚了：算法勤勤恳恳地最大化 J，可 J 并不是你要的东西。</b><b>它优化得越好，可能离你的需求越远。</b><br><b>⭐ 这个区分本身就很值钱</b>：很多实际问题里，<b>「模型的损失函数」和「业务真正关心的指标」就是两回事</b>。");
+  S(1764,function(){clearScene();setEq(null);setCap("为什么不干脆直接优化你关心的那个指标");
+       says("29:44","what you care about is this weighted accuracy criteria");
+       boxNode(140,202,460,70,"你关心的：加权准确率","y");
+       boxNode(740,202,440,70,"模型优化的：J(θ)","b");
+       note("常常不可导、难优化",370,318,"d");
+       note("光滑、可导、好优化",960,318,"d");
+       note("⭐ 用 J 是一种「代理」—— 优化它是因为它好优化，不是因为它就是目标",640,372,"y");
+       note("⚠ 代理和真目标不一致时，模型会朝着代理使劲",640,402,"r");},"很自然的疑问是：<b>既然你关心的是加权准确率，为什么不直接优化它？</b><br><b>因为它常常不可导、难优化</b>——准确率是一个个台阶，梯度要么是 0 要么不存在。<b>而 J(θ) 光滑、可导、好优化。</b><br><b>⭐ 所以 J 是一个「代理目标」</b>：我们优化它，<b>是因为它好优化，不是因为它就是我们要的东西</b>。<br><b>⚠ 这就埋下了隐患</b>：代理和真目标不一致时，<b>模型会老老实实朝着代理使劲，把真目标丢在一边</b>——而你看到的症状只是「效果不好」。");
+  SUM(1879,13,{h:"★ a(θ) 你关心的 vs J(θ) 模型优化的",k:"<b>a(θ)</b>＝你真正关心的指标（这里是加权准确率）；<b>J(θ)</b>＝模型自己在最大化的目标函数（两类错误一样重）。",m:"⚠ <b>算法勤勤恳恳最大化 J，可 J 未必是你要的</b>——它优化得越好，可能离需求越远。",w:"⭐ 很多实际问题里，<b>「模型的损失函数」和「业务真正关心的指标」就是两回事</b>。",e:"⭐ 类比到 M2：<b>k-means 优化的是 J（簇内平方和），而你关心的可能是可解释性</b>——J 降了不代表聚类对你有用。"});
+  QUIZ(1879,13,{t:"a(θ) 和 J(θ) 的区别是什么？",o:["两者是同一个函数","a 是准确率，J 一定是平方误差","a(θ) 是你真正关心的指标，J(θ) 是模型自己在最大化的目标函数——两者可能不一致","a 用于训练，J 用于测试"],a:2,w:"⚠ <b>算法优化的是 J，不是 a。</b>⭐ 类比 M2：k-means 优化簇内平方和，<b>而你关心的可能是聚类好不好解释</b>。"});
+});
+KP("14 · ★★★ 两种情形：比一次 J 值就能分清",function(){
+  S(1879,function(){clearScene();setEq(null);setCap("把 SVM 的参数，代进逻辑回归自己的 J 里算一次");
+       says("31:19","Or is the problem that you're just optimizing the wrong function?");
+       boxNode(230,200,820,76,"已知：a(θ_SVM) > a(θ_BLR)　—— SVM 在你关心的指标上更好","y");
+       boxNode(170,310,440,76,"情形 1：J(θ_SVM) > J(θ_BLR)","b");
+       boxNode(700,310,440,76,"情形 2：J(θ_SVM) ≤ J(θ_BLR)","g");
+       note("⇒ 问题在优化算法",390,395,"b");
+       note("⇒ 问题在目标函数",920,395,"g");},"<b>⭐ 现在是这一讲最巧妙的一招。</b>办法是：<b>把 SVM 学到的参数，代进逻辑回归「自己的」目标函数 J 里去算一个分数。</b>让两个模型<b>在同一把尺子上比一次</b>。<br><b>情形 1：J(θ_SVM) 更大。</b>SVM 根本没在优化 J，<b>却在 J 上得分更高</b>——这说明<b>逻辑回归连自己的功课都没做完</b>。<b>问题在优化算法</b>（没收敛、轮数不够）。<br><b>情形 2：J(θ_SVM) 更小。</b>说明<b>逻辑回归确实把 J 最大化得很好</b>。可是 J 更小的 SVM，在你真正关心的 a 上反而更好——<b>那只能说明 J 本身就不是该优化的那个函数</b>。<b>问题在目标函数。</b>");
+  S(1879,function(){clearScene();setEq(null);setCap("换成一句能带走的话");
+       boxNode(230,215,820,90,"让别人的答案，到我的考卷上考一次","y");
+       note("他分数更高 ⇒ 是我不会做题（优化算法的问题）",640,350,"b");
+       note("他分数更低却更受好评 ⇒ 是这张考卷出错了（目标函数的问题）",640,398,"g");},"<b>⭐ 把这个套路抽象成一句能带进考场的话：</b><br><b>「让别人的答案，到我的考卷上考一次。他分数更高，说明是我不会做题；他分数更低却更受好评，说明是这张考卷出错了。」</b><br><b>⚠ 注意这个方法有个前提</b>：必须<b>先确认 SVM 在你关心的指标上确实更好</b>，否则无从比起。<br><b>⭐ 这个套路可以套到任何「模型 A 比模型 B 更合心意，但你想用 B」的场景</b>，不限于垃圾邮件。<b>下一节的直升机例子就是同一招换了个场景。</b>");
+  SUM(1879,14,{h:"★★★ 比 J 值：分清是算法的锅还是目标的锅",k:"把 <b>SVM 的参数代进逻辑回归自己的 J</b> 算一次。<b>J(θ_SVM) 更大</b> ⇒ BLR 连自己的功课都没做完 ⇒ <b>优化算法的问题</b>；<b>更小</b> ⇒ J 本身选错了 ⇒ <b>目标函数的问题</b>。",m:"⭐ 一句话记法：<b>「让别人的答案到我的考卷上考一次。他分更高＝我不会做题；他分更低却更受好评＝这张卷子出错了。」</b>",w:"⚠ <b>前提</b>：必须先确认对方在你关心的指标上确实更好，否则无从比起。",e:"⭐⭐ 这是最能体现理解深度的一问。<b>标准答法就是上面那两种情形。</b>"});
+  QUIZ(1879,14,{t:"已知 SVM 在你关心的指标上优于 BLR。若发现 J(θ_SVM) > J(θ_BLR)，说明问题在哪？",o:["训练数据太少","优化算法——BLR 连自己的目标函数都没最大化好","目标函数 J 选错了","特征选得不好"],a:1,w:"⭐ SVM <b>根本没在优化 J，却在 J 上得分更高</b> ⇒ BLR 没做完功课。⚠ 反过来（J 更小却表现更好）才是<b>目标函数的问题</b>。"});
+});
+KP("15 · 直升机：同一套路，换一个场景",function(){
+  S(2443,function(){clearScene();setEq(null);setCap("Ng 说这架直升机就放在他办公室里");
+       says("40:43","this helicopter actually sits in my office");
+       boxNode(150,205,290,76,"① 造一个模拟器","b");
+       boxNode(500,205,290,76,"② 选一个代价函数","g");
+       boxNode(850,205,290,76,"③ 跑强化学习","y");
+       link(440,243,500,243); link(790,243,850,243);
+       note("在模拟器里最小化代价",640,320,"d");
+       note("⚠ 结果：学出来的控制器，飞得比人类飞手差很多",640,390,"r");},"<b>Ng 换了个完全不同的场景，但用的是同一套路。</b>（他顺带说了句很接地气的——<b>这架直升机就放在他办公室里</b>。）<br><b>任务</b>：让直升机自主飞行。做法三步：<b>① 造一个飞行模拟器；② 选一个代价函数</b>（比如「离目标位置越远代价越大」）；<b>③ 在模拟器里跑强化学习，最小化这个代价。</b><br><b>⚠ 结果：学出来的控制器，飞得比人类飞手差很多。</b><br><b>下一步做什么？改进模拟器？换代价函数？换强化学习算法？</b><b>——又是那个「该先试哪个」的问题。</b>");
+  S(2443,function(){clearScene();setEq(null);setCap("先把「本该成立」的条件列出来");
+       boxNode(200,200,880,66,"① 模拟器是准的","b");
+       boxNode(200,285,880,66,"② 强化学习在模拟器里确实最小化了代价","g");
+       boxNode(200,370,880,66,"③ 最小化这个代价，确实对应「飞得好」","y");
+       note("⭐ 这三条都成立的话，它本该在真机上飞得好",640,170,"d");},"<b>⭐ Ng 的办法很有章法：先把「本该成立」的条件显式列出来。</b><br><b>① 模拟器是准的；② 强化学习确实在模拟器里最小化了代价；③ 最小化这个代价确实对应「飞得好」。</b><br><b>如果这三条都成立，那学出来的控制器本该在真机上飞得好。</b><br><b>现在它飞得不好，说明这三条里至少有一条不成立。</b><b>于是问题从「漫无边际地试」变成了「挨个检查三个条件」——一个有限的、可穷尽的清单。</b>");
+  SUM(2443,15,{h:"直升机：先列出「本该成立」的条件",k:"任务三步：<b>造模拟器 → 选代价函数 → 跑强化学习</b>。结果飞得比人类差。",m:"⭐ <b>先把「本该成立」的三个条件显式列出来</b>：① 模拟器准；② RL 确实最小化了代价；③ 最小化代价确实对应飞得好。",w:"<b>三条都成立 ⇒ 本该飞得好。现在不好 ⇒ 至少有一条不成立。</b>",e:"⭐ <b>这把「漫无边际地试」变成了「挨个检查三个条件」——一个有限、可穷尽的清单。</b>"});
+  QUIZ(2443,15,{t:"直升机例子里，Ng 的第一步做法是什么？",o:["收集更多飞行数据","立刻改进模拟器","换一个强化学习算法","先把「本该成立」的三个条件显式列出来，再逐条检验"],a:3,w:"⭐ <b>这把开放的搜索问题，变成了有限、可穷尽的检查表。</b>这是整个诊断思路的精髓。"});
+});
+KP("16 · ★ 三层逐一排除",function(){
+  S(2443,function(){clearScene();setEq(null);setCap("每一条都要有一个能单独验证的办法");
+       boxNode(170,195,940,66,"① θ_RL 在模拟里飞得好、真机上不好？ ⇒ 模拟器的问题","b");
+       boxNode(170,278,940,66,"② 否则：J(θ_human) < J(θ_RL)？ ⇒ RL 算法没优化到位","g");
+       boxNode(170,361,940,66,"③ 都不是 ⇒ 代价函数选错了","y");},"<b>⭐ 三层逐一排除，关键在于每一条都有一个能单独验证的办法：</b><br><b>第一层：模拟器准吗？</b>验法——<b>看 θ_RL 在模拟器里飞得好不好</b>。模拟里好、真机上不好 ⇒ <b>模拟器和现实之间有鸿沟</b>。<br><b>第二层：RL 真的最小化了代价吗？</b>验法很巧——<b>拿人类飞手的策略去算代价 J</b>。如果 <b>J(θ_human) 比 J(θ_RL) 还小</b>，说明<b>存在一个更好的解（人就是），而 RL 没找到</b> ⇒ <b>优化没到位</b>。<br><b>第三层：前两条都没问题</b>，模拟器准、RL 也确实最小化了 J，<b>可人还是飞得比它好</b> ⇒ <b>只剩一个可能：J 根本没刻画「飞得好」。</b>");
+  S(2443,function(){clearScene();setEq(null);setCap("⭐ 注意第二层和前面是同一招");
+       boxNode(170,215,440,84,"垃圾邮件：把 SVM 的参数代进 BLR 的 J","b");
+       boxNode(700,215,440,84,"直升机：把人类的策略代进 RL 的 J","g");
+       note("别人得分更好 ⇒ 我的优化没做到位",640,340,"y");
+       note("⭐ 换了场景，招式一模一样",640,395,"g");},"<b>⭐ 请注意第二层和前面那个垃圾邮件的诊断是同一招。</b><br><b>垃圾邮件那边</b>：把 SVM 的参数，代进逻辑回归自己的 J 里打分。<br><b>直升机这边</b>：把人类飞手的策略，代进 RL 自己的代价函数里打分。<br><b>共同的逻辑是：拿一个你认可的、外来的解，到你自己的目标函数上考一次。它得分更好，就说明你的优化没做到位。</b><br><b>⭐ 换了场景，招式一模一样——这就是为什么值得把它当成一个「模板」记住，而不是当成两个孤立的例子。</b>");
+  SUM(2443,16,{h:"★★ 三层逐一排除",k:"<b>① 模拟里好、真机不好 ⇒ 模拟器的问题；② 否则 J(θ_human) &lt; J(θ_RL) ⇒ RL 没优化到位；③ 都不是 ⇒ 代价函数选错。</b>",m:"⭐ 关键在于<b>每一条都有一个能单独验证的办法</b>——这是设计诊断的难点。",w:"⭐ <b>第二层和垃圾邮件那个诊断是同一招</b>：<b>拿一个你认可的外来解，到自己的目标函数上考一次</b>。得分更好 ⇒ 你的优化没到位。",e:"⭐ 「列条件 → 逐条验」是通用模板。<b>M3 遇到「系统表现不好怎么定位」照这个结构答。</b>"});
+  QUIZ(2443,16,{t:"直升机例子里，怎么判断是「RL 算法」还是「代价函数」的问题？",o:["拿人类飞手的策略算代价 J：若 J(θ_human) 更小，说明存在更好的解而 RL 没找到 ⇒ 算法问题；否则 ⇒ 代价函数的问题","换一个 RL 算法试试","再训练一次看是否稳定","增大模拟器精度"],a:0,w:"⭐ 这和「把 SVM 参数代进 BLR 的 J」是<b>同一招</b>：<b>拿一个认可的外来解到自己的目标函数上考一次</b>。"});
+});
+KP("17 · 先铺词：什么是「流水线」",function(){
+  S(3536,function(){clearScene();setEq(null);setCap("很多真实系统是好几个组件串起来的");
+       says("58:56","instead you have a pipeline, you string together many different steps");
+       pipe(165,230,170,70,["相机图像","预处理","人脸检测","分割五官","分类"],
+            ["d","b","b","b","g"]);
+       note("每个方框都是一个独立的组件，前一个的输出喂给后一个",640,350,"d");
+       note("⚠ 整体准确率 85% —— 可到底是谁拖了后腿？",640,398,"r");},"<b>接下来讲「误差分析」，但先要有「流水线」这个概念。</b><br>Ng 的说法是：<b>很多实际系统不是一个模型，而是一条流水线——好几个步骤串起来</b>。<br><b>以人脸识别为例</b>：相机图像 → 去背景预处理 → 检测人脸位置 → 分割出眼睛鼻子嘴 → 分类出是谁。<b>每一步都是一个独立的组件，前一个的输出喂给后一个。</b><br><b>⚠ 现在整个系统的准确率是 85%。问题是：这 15% 的错误，到底是哪个组件造成的？</b><br><b>你总不能五个组件一起改——那又回到「碰运气」了。</b>");
+  S(3536,function(){clearScene();setEq(null);setCap("流水线的定义：上一环的输出就是下一环的输入");
+       says("64:33","for a lot of practical applications, if you don't have a gazillion examples, you end up designing");
+       boxNode(110,210,200,64,"原始输入","b");
+       boxNode(360,210,200,64,"组件 A","g");
+       boxNode(610,210,200,64,"组件 B","g");
+       boxNode(860,210,200,64,"组件 C","g");
+       boxNode(1090,210,120,64,"输出","y");
+       link(310,242,360,242); link(560,242,610,242);
+       link(810,242,860,242); link(1060,242,1090,242);
+       note("⭐ 误差会一路往下传 —— 前面错了，后面再好也救不回来",640,330,"y");
+       note("⚠ 所以「整体效果不好」这句话，本身说不出是哪一环的锅",640,396,"d");},"先把「流水线」这个词说清楚。<b>它就是一串首尾相接的组件：上一环的输出，就是下一环的输入。</b><br>Ng 说这在实际应用里非常常见——<b>除非你有海量数据能端到端地训，否则多半要自己设计这样一条流水线</b>。<br><b>⭐ 流水线有个要命的性质：误差会一路往下传。</b>前面那一环错了，<b>后面的组件做得再好也救不回来</b>。<br><b>⚠ 所以「整体效果不好」这句话本身毫无信息量</b>——它说不出是哪一环的锅。<b>接下来两节的误差分析和消融分析，就是来定位这件事的。</b>");
+  SUM(3536,17,{h:"流水线：好几个组件串起来",k:"<b>很多真实系统不是一个模型，而是一条流水线。</b>人脸识别：图像 → 预处理 → 人脸检测 → 分割五官 → 分类。",m:"<b>每个方框是独立组件，前一个的输出喂给后一个。</b>",w:"⚠ 整体准确率 85%，<b>但这 15% 的错误是哪个组件造成的？</b>五个一起改又回到碰运气了。",e:"⭐ 下一节的「误差分析」就是回答这个问题的工具。"});
+  QUIZ(3536,17,{t:"什么是机器学习里的「流水线」？",o:["好几个组件串起来的系统，前一个的输出作为后一个的输入","模型的层数","训练数据的加载顺序","超参数搜索的流程"],a:0,w:"⚠ 流水线的麻烦在于：<b>整体表现不好时，你不知道是哪个组件拖后腿</b>。下一节的误差分析就是解决这个的。"});
+});
+KP("18 · 一个具体的流水线：人脸识别的几个环节",function(){
+  S(3536,function(){clearScene();setEq(null);setCap("Ng 举的例子：从一张照片到认出是谁");
+       says("58:56","you start with a camera image like this, and then, you could do");
+       boxNode(90,212,190,62,"相机图像","b");
+       boxNode(310,212,190,62,"去掉背景","g");
+       boxNode(530,212,190,62,"检测人脸","g");
+       boxNode(750,212,230,62,"切出眼睛/鼻子/嘴","g");
+       boxNode(1010,212,170,62,"认出是谁","y");
+       link(280,243,310,243); link(500,243,530,243);
+       link(720,243,750,243); link(980,243,1010,243);
+       note("⭐ 眼睛是识别一个人最重要的线索之一 —— 所以专门切出来做一环",640,330,"y");
+       note("⚠ 五个环节 ⇒ 五个可能出错的地方，不能一起改",640,396,"d");},"Ng 用人脸识别把「流水线」讲成了一件具体的事。<br><b>从一张相机图像开始</b>：先<b>去掉背景</b>，再<b>检测人脸的位置</b>，然后<b>把眼睛、鼻子、嘴分别切出来</b>，最后才<b>判断这是谁</b>。<br><b>⭐ 为什么专门切眼睛？</b>Ng 说<b>眼睛的样子是认人最重要的线索之一</b>，所以值得单独做成一个环节。<br><b>⚠ 这条流水线有五个环节，就有五个可能出错的地方。</b>整体准确率不好看时，<b>你没法一次把五个都改</b>——<b>这正是下面两节要解决的问题。</b>");
+  SUM(3400,18,{h:"人脸识别流水线：五个环节",k:"<b>相机图像 → 去背景 → 检测人脸 → 切出眼睛/鼻子/嘴 → 认出是谁。</b>",m:"⭐ 眼睛单独成一环，是因为 Ng 说<b>眼睛的样子是认人最重要的线索之一</b>。",w:"⚠ <b>五个环节 = 五个可能出错的地方</b>，而「整体不好」这句话指不出是哪一个。",e:"这个例子是下面误差分析/消融分析的<b>底板</b>——那两节算的就是这五个环节各值多少分。"});
+  QUIZ(3400,18,{t:"Ng 用人脸识别流水线主要想说明什么？",o:["眼睛比鼻子和嘴更容易检测","应该用深度学习端到端地做","人脸识别是最难的机器学习问题","实际系统常由多个环节串成，所以「整体效果不好」指不出是哪一环的锅"],a:3,w:"⭐ 这个例子是<b>误差分析与消融分析的底板</b>：先有一条多环节的流水线，才谈得上「逐个换成完美」或「逐个拿掉」。"});
+});
+KP("19 · ★★ 误差分析：逐个换成「完美」，看涨多少",function(){
+  S(4029,function(){clearScene();setEq(null);setCap("把某个组件的输出换成标准答案，看整体涨多少");
+       says("67:09","go in and for every one of your examples");
+       matrix({rows:7,cols:2,cw:390,ch:46,x:250,y:185,
+         cell:function(i,j){var t=[
+           ["依次换成标准答案","整体准确率"],
+           ["（原样）","85%"],
+           ["+ 预处理","85.1%"],
+           ["+ 人脸检测","91%"],
+           ["+ 眼部分割","95%"],
+           ["+ 鼻、嘴分割","97%"],
+           ["+ 分类器","100%"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===3||i===4)?"hl":"";}});},"<b>⭐ 误差分析的做法干净利落：沿着流水线，把某个组件的输出换成「标准答案」（人工标注的正确结果），看整体准确率涨多少。</b>涨得越多，说明这个组件<b>原本拖后腿越严重</b>。<br>表里是 Ng 给的数字：原样 85%，换上完美的预处理涨到 85.1%，再换上完美的人脸检测涨到 91%，再换上完美的眼部分割涨到 95%……一路换到底就是 100%。<br><b>⚠ 注意这张表是「累积」的</b>——每一行都是「前面那些都已经换成标准答案，再加上这一个」。");
+  S(4029,function(){clearScene();setEq(null);setCap("⚠ 读这张表最容易犯的错");
+       boxNode(170,205,440,84,"❌ 盯着绝对数值看","r");
+       boxNode(700,205,440,84,"✓ 看相邻两行的涨幅","g");
+       note("「眼部分割 95%」这个数没有意义",390,325,"d");
+       note("人脸检测 +5.9，眼部分割 +4.0，预处理只有 +0.1",920,325,"g");
+       note("⭐ 结论：该改人脸检测和眼部分割；预处理做到完美也只涨 0.1",640,392,"y");},"<b>⚠ 读这张表最容易犯的错，是盯着绝对数值看。</b>「眼部分割那行是 95%」——这个数单独拿出来<b>毫无意义</b>，因为它是在「前面几个都已完美」的前提下得到的。<br><b>⭐ 真正要看的是相邻两行的「涨幅」</b>：人脸检测 <b>+5.9</b>（最大）、眼部分割 <b>+4.0</b>、分类器 +3.0、鼻嘴各 +1.0、<b>预处理只有 +0.1</b>。<br><b>⭐ 结论因此很明确</b>：<b>该把精力投在人脸检测和眼部分割上</b>。而<b>预处理那一行（+0.1）其实是最有价值的信息</b>——它告诉你<b>这个组件哪怕做到完美，整体也只涨 0.1 个点，根本不值得投入</b>。<b>这种「别做什么」的结论往往比「该做什么」更省时间。</b>");
+  S(4029,function(){clearScene();setEq(null);setCap("做之前先问一句：天花板有多高");
+       boxNode(140,204,460,70,"组件 A 换成完美：+0.1%","d");
+       boxNode(740,204,440,70,"组件 B 换成完美：+11%","g");
+       note("⇒ 这一环再怎么优化也没用",370,320,"r");
+       note("⇒ 时间该花在这里",960,320,"g");
+       note("⭐ 误差分析最省时间的产出，常常是「哪些事不用做」",640,392,"y");},"误差分析真正省时间的地方，往往不在「该做什么」，而在「<b>不用做什么</b>」。<br>看这组数：<b>把组件 A 换成完美，整体只涨 0.1%</b>——这意味着<b>就算你花一个月把 A 做到极致，收益也接近于零</b>。而 <b>B 换成完美能涨 11 个点</b>，时间显然该花在那儿。<br><b>⭐ 所以每次动手之前先问一句：这一环的天花板有多高？</b><br><b>⚠ 注意「换成完美」是一个上界</b>——<b>实际改进只会比它小</b>。所以它能用来否定一条路（上界都很低），<b>但不能用来保证一条路一定成功</b>。");
+  SUM(4029,19,{h:"★★ 误差分析：换成完美，看涨幅",k:"<b>沿流水线把某个组件的输出换成标准答案，看整体准确率涨多少。</b>涨得越多 ⇒ 这个组件原本拖后腿越严重。",m:"⚠⚠ <b>表是累积的，要看相邻两行的涨幅，不是绝对数值。</b>",w:"⭐ 例中：人脸检测 +5.9、眼部分割 +4.0、<b>预处理只有 +0.1</b>。<b>「预处理做到完美也只涨 0.1」这条「别做什么」的结论最省时间。</b>",e:"⭐⭐ M3 的 L12 直接考这个。<b>务必说明是看涨幅不是看绝对值。</b>"});
+  QUIZ(4029,19,{t:"读误差分析那张表时，最容易犯的错误是什么？",o:["忘记做交叉验证","混淆准确率和召回率","盯着绝对数值看——表是累积的，真正要看的是相邻两行之间的涨幅","没有对数据标准化"],a:2,w:"⚠ 每一行都是「前面那些都已换成标准答案，<b>再加上这一个</b>」的结果，所以<b>单个绝对值毫无意义</b>。"});
+});
+KP("20 · ★★ 消融分析：逐个拿掉，看掉多少",function(){
+  S(4472,function(){clearScene();setEq(null);setCap("和误差分析方向相反");
+       says("74:32","ablative analysis which figures out the difference between where you are and something much worse");
+       matrix({rows:7,cols:2,cw:390,ch:46,x:250,y:185,
+         cell:function(i,j){var t=[
+           ["依次拿掉","整体准确率"],
+           ["完整系统","99.9%"],
+           ["− 拼写纠正","99.0%"],
+           ["− 发件主机特征","98.9%"],
+           ["− 邮件头特征","98.9%"],
+           ["− 邮件正文解析","95.0%"],
+           ["− 其余（基线）","94.0%"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===5?"hl":"";}});},"<b>误差分析的「镜像」叫消融分析。</b>Ng 的定义是：<b>它量的是「你现在的位置」和「某个差得多的位置」之间的差距</b>。<br><b>场景</b>：你给逻辑回归加了一堆聪明的特征，把反垃圾邮件从 94% 做到了 99.9%。<b>问题是：这 5.9 个百分点，各自是谁的功劳？</b><br><b>做法：一次拿掉一个组件，看系统坏成什么样。</b>掉得越多，说明这个组件贡献越大。<br><b>⚠ 和上一节一样，这张表也是累积的，要看相邻两行的跌幅。</b>");
+  S(4472,function(){clearScene();setEq(null);setCap("结果相当反直觉");
+       note("拼写纠正 −0.9　　发件主机 −0.1　　邮件头 −0.0",640,215,"d");
+       note("邮件正文解析 −3.9　← 绝大部分提升都来自它",640,275,"y");
+       note("⭐ 实际意义：要精简系统时，邮件头特征可以直接砍掉",640,340,"g");
+       note("而正文解析必须留着",640,392,"g");},"<b>⭐ 结果相当反直觉</b>：拼写纠正只值 0.9 个点，<b>邮件头特征几乎一文不值（掉了 0.0）</b>，而<b>邮件正文解析一项就值 3.9——绝大部分提升都来自它</b>。<br><b>⭐ 这个结论的实际意义很直接</b>：如果你要<b>精简系统</b>（提速、降复杂度），<b>邮件头特征可以直接砍掉</b>，而<b>正文解析必须留着</b>。<b>没有这个分析，你根本不知道该砍谁。</b><br><b>⚠ 补一个讲义没提但实践中要留心的点：消融的顺序会影响归因。</b>如果两个组件功能有重叠，<b>先拿掉的那个会显得更重要</b>。");
+  SUM(4472,20,{h:"★★ 消融分析：拿掉，看跌幅",k:"<b>一次拿掉一个组件，看系统坏成什么样。</b>掉得越多 ⇒ 这个组件贡献越大。Ng：它量的是<b>「现在」和「某个差得多的位置」之间的差距</b>。",m:"例中：拼写纠正 −0.9、<b>邮件头 −0.0</b>、<b>邮件正文解析 −3.9（绝大部分提升来自它）</b>。",w:"⭐ <b>实际意义</b>：精简系统时<b>邮件头可以砍、正文解析必须留</b>。⚠ <b>消融顺序会影响归因</b>：功能重叠时先拿掉的显得更重要。",e:"⚠ 和误差分析一样，<b>表是累积的，看相邻行的跌幅</b>。"});
+  QUIZ(4472,20,{t:"消融分析的做法是什么？",o:["同时去掉所有组件","从完整系统出发，一次拿掉一个组件，看性能掉多少——掉得多的就是真正起作用的","把每个组件逐个换成标准答案","对每个组件单独训练一个模型"],a:1,w:"⚠ 别和误差分析搞反：<b>误差分析是「换成完美看涨幅」，消融是「拿掉看跌幅」</b>。"});
+});
+KP("21 · ★ 两者是镜像：一个朝上看，一个朝下看",function(){
+  S(247,function(){clearScene();setEq(null);setCap("合起来才是对系统的完整认识");
+       matrix({rows:5,cols:3,cw:290,ch:54,x:185,y:195,
+         cell:function(i,j){var t=[
+           ["","误差分析","消融分析"],
+           ["量哪一段差距","当前 → 完美","基线 → 当前"],
+           ["操作","逐个换成标准答案","逐个拿掉"],
+           ["看什么","涨幅","跌幅"],
+           ["回答什么","还差在哪、改哪里值","好在哪、谁能砍"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===4?"hl":"";}});
+       note("⭐ 一个管「接下来做什么」，一个管「过去做的哪些有用」",640,370,"y");},"<b>⭐ 把两者并排放，关系就一目了然了。</b>Ng 在开场就点明过这个分工：<b>误差分析是搞懂「什么没 work」，消融分析是搞懂「什么在 work」</b>。<br><b>误差分析朝上看</b>：量「当前 → 完美」的差距，逐个换成标准答案，看涨幅，<b>回答「还差在哪、改哪里值得」</b>。<br><b>消融分析朝下看</b>：量「基线 → 当前」的差距，逐个拿掉，看跌幅，<b>回答「好在哪、哪些可以砍」</b>。<br><b>⭐ 两者合起来才构成对一个系统的完整认识</b>：<b>一个管「接下来做什么」，一个管「过去做的哪些有用」。</b>");
+  S(247,function(){clearScene();setEq(null);setCap("两张表并排：起点不同，方向相反");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","误差分析","消融分析"],
+           ["从哪儿出发","现在的系统","完整的系统"],
+           ["怎么动","逐个换成完美","逐个拿掉"],
+           ["回答什么","还能涨多少","过去哪些有用"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 一个朝上看「天花板在哪」，一个朝下看「地基是哪几块」",640,396,"y");},"两张表并排一放，镜像关系就清楚了。<br><b>误差分析从「现在的系统」出发，逐个把组件换成完美的，看指标能涨多少</b>——它<b>朝上看</b>，回答「<b>还有多少上升空间，在哪里</b>」。<br><b>消融分析从「完整的系统」出发，逐个把组件拿掉，看指标掉多少</b>——它<b>朝下看</b>，回答「<b>过去做的那些改进，哪些真的有用</b>」。<br><b>⭐ 一个找天花板，一个找地基。</b><br><b>⚠ 用途也不同</b>：误差分析指导<b>接下来做什么</b>，消融分析支撑<b>报告里「这个设计有用」的说法</b>。");
+  SUM(247,21,{h:"★★ 误差分析 vs 消融分析",k:"<b>误差分析</b>：量「当前→完美」，逐个<b>换成标准答案</b>，看<b>涨幅</b>，答「还差在哪、改哪里值」。<br><b>消融分析</b>：量「基线→当前」，逐个<b>拿掉</b>，看<b>跌幅</b>，答「好在哪、谁能砍」。",m:"Ng 的分工：<b>误差分析搞懂「什么没 work」，消融分析搞懂「什么在 work」</b>。",w:"⭐ <b>一个管「接下来做什么」，一个管「过去做的哪些有用」</b>，合起来才是完整认识。",e:"⭐⭐ 「两者有什么区别」是极可能出的概念题。<b>按这张表答，四条齐了就是满分。</b>"});
+  QUIZ(247,21,{t:"误差分析和消融分析的根本区别是什么？",o:["两者完全等价","误差分析用于分类，消融用于回归","误差分析量「当前→完美」（换成标准答案、看涨幅）；消融分析量「基线→当前」（逐个拿掉、看跌幅）","一个用训练集一个用测试集"],a:2,w:"⭐ <b>一个朝上看、一个朝下看。</b>Ng：误差分析搞懂「什么没 work」，消融搞懂「什么在 work」。"});
+});
+KP("22 · 怎么起步：先做个粗糙的，别过早优化",function(){
+  S(1442,function(){clearScene();setEq(null);setCap("Ng 给新应用的建议");
+       says("24:02","if you're working on a new application, implement a quick and dirty learning algorithm");
+       boxNode(170,205,440,84,"路线 A：精心设计","b");
+       boxNode(700,205,440,84,"路线 B：先搭再修","g");
+       note("想清楚特征、数据、架构再实现",390,325,"d");
+       note("先搭个能跑的，再靠诊断去修",920,325,"d");
+       note("⚠ 「过早的统计优化」：你往往根本不知道哪部分难做",640,392,"r");},"最后说怎么起步。<b>Ng 对做新应用的建议很直接：先实现一个 quick and dirty（又快又糙）的版本。</b><br><b>两条路线</b>：<b>路线 A 精心设计</b>——花很长时间想清楚特征、数据、架构，实现出来，期待它 work。<b>路线 B 先搭再修</b>——先做个能跑的，再用这一讲的诊断工具去找问题、修问题。<br><b>⚠ 他把路线 A 的风险叫「过早的统计优化」</b>（明显在套用编程界那句「过早优化是万恶之源」）：<b>你往往根本不知道系统哪部分难做、哪部分值得花时间——而唯一的办法是先快速实现出来，看看哪里会坏。</b>");
+  S(1442,function(){clearScene();setEq(null);setCap("⚠ 但他给建议打了个补丁");
+       boxNode(230,215,820,84,"如果你的目标是提出新的机器学习算法，这条建议可能不适用","y");
+       note("⭐ 这一讲通篇是经验之谈，不是定理",640,340,"d");
+       note("Ng 自己也说过「今天讲的有些是可争议的」",640,395,"d");},"<b>⚠ 但 Ng 紧接着给这条建议打了个补丁：如果你的目标是提出新的机器学习算法（而不是把一个应用做出来），这条建议可能不适用。</b><br><b>⭐ 这个补丁本身值得留意</b>：它提醒你<b>这一讲通篇是经验之谈，不是定理</b>。他在开场也说过——<b>今天讲的有些内容是可争议的</b>。<br><b>所以照搬到自己的场景之前，先想一想自己的目标是什么。</b>");
+  SUM(1442,22,{h:"先搭个粗糙的，别过早优化",k:"Ng 对新应用的建议：<b>先实现一个 quick and dirty 的版本</b>，再用诊断工具去找问题、修问题。",m:"<b>「过早的统计优化」</b>：你往往不知道哪部分难做、哪部分值得花时间，<b>唯一的办法是先快速实现出来看哪里会坏</b>。",w:"⚠ <b>他打了个补丁</b>：若你的目标是<b>提出新算法</b>而非做出应用，这条建议可能不适用。",e:"⭐ <b>这一讲通篇是经验之谈，不是定理</b>——Ng 自己说过「有些内容可争议」。照搬前先想想自己的目标。"});
+  QUIZ(1442,22,{t:"「过早的统计优化」指的是什么？",o:["过早使用正则化","在还不清楚系统哪部分难做、哪部分值得花时间时就投入大量精力精心设计——而唯一的办法是先快速实现出来看哪里会坏","在训练集上训练太久","过早停止梯度下降"],a:1,w:"明显在套用编程界那句「过早优化是万恶之源」。⚠ <b>Ng 打了补丁</b>：若目标是提出<b>新算法</b>，这条建议可能不适用。"});
+});
+KP("23 · 最后一条：诊断还能帮你把报告写得更有说服力",function(){
+  S(4657,function(){clearScene();setEq(null);setCap("Ng 收尾时提到的额外好处");
+       says("77:37","if you're publishing a paper or sending a report, this gives much more insight");
+       boxNode(170,205,440,84,"没做分析","r");
+       boxNode(700,205,440,84,"做了误差/消融分析","g");
+       note("「我们加了这些组件，效果变好了」",390,325,"d");
+       note("「正文解析贡献 3.9 个点，邮件头贡献 0」",920,325,"d");
+       note("⭐ 每一句「这个设计有用」背后都有一个数字撑着",640,392,"y");},"<b>最后 Ng 提到一个额外的好处：如果你要写论文或者交报告，这些分析能让你的报告有洞察力得多。</b><br><b>对比一下</b>：<b>没做分析的报告</b>只能写「我们加了这些组件，效果变好了」——<b>所有组件都被说成「很关键」，但没有任何依据</b>。<b>做了消融分析的报告</b>可以写「正文解析贡献了 3.9 个点，而邮件头特征贡献约为 0」。<br><b>⭐ 差别在于：每一句「这个设计有用」背后，都有一个数字撑着。</b><br><b>⚠ 这一点对你写 Practical 报告直接有用</b>——你们的评分口径里有「用可见证据支撑结论」这一步，<b>而这一讲讲的正是怎么造出那个证据</b>。");
+  S(4657,function(){clearScene();setEq(null);setCap("同一句结论，有没有数字撑着差很远");
+       says("77:37","if you're publishing a paper or sending a report, this gives much more insight to your report");
+       boxNode(130,200,470,76,"「我们的每个组件都很关键」","r");
+       boxNode(730,200,450,76,"「去掉 B 掉 11 个点，去掉 C 掉 1 个点」","g");
+       note("✗ 没有依据，读者只能选择信或不信",365,322,"r");
+       note("✓ 有数字，读者可以自己判断",955,322,"g");
+       note("⭐ 这和本课大题的评分口径完全一致：结论之后要跟证据",640,392,"y");},"最后把这件事落到写作上。<b>同一句结论，有没有数字撑着，分量完全不同。</b><br>左边那句「我们的每个组件都很关键」——<b>没有任何依据，读者只能选择信或不信</b>。右边那句「去掉 B 掉 11 个点，去掉 C 只掉 1 个点」——<b>读者可以自己判断，而且顺带知道了哪一块其实没那么重要</b>。<br><b>⭐ 这和本课大题的评分口径是完全一致的</b>：报出结果 → 解释它说明什么 → <b>用可见证据支撑</b> → 说出证据的局限。<br><b>⚠ 诊断的产出不只是「该做什么」，也是「怎么把做过的事说清楚」。</b>");
+  SUM(4657,23,{h:"诊断也是「造证据」的工具",k:"Ng：<b>写论文或交报告时，这些分析能让报告有洞察力得多</b>。",m:"<b>没做分析</b>：所有组件都被说成「很关键」，没有依据。<b>做了消融</b>：「正文解析贡献 3.9 点，邮件头贡献约 0」。",w:"⭐ <b>差别在于每一句「这个设计有用」背后都有一个数字撑着。</b>",e:"⭐⭐ <b>直接对应你们评分口径里「用可见证据支撑结论」那一步</b>——这一讲讲的正是怎么造出那个证据。"});
+  QUIZ(4657,23,{t:"Ng 提到误差/消融分析对写报告有什么帮助？",o:["能让每一句「这个设计有用」背后都有一个数字撑着，而不是笼统地说所有组件都很关键","能自动生成图表","能省去做实验的时间","能让报告更长"],a:0,w:"⭐ <b>直接对应「用可见证据支撑结论」</b>。⚠ 没做分析时很容易把所有组件都说成「很关键」——<b>那是没有依据的</b>。"});
+});
+KP("完 · 一套「先诊断再动手」的工具",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L12 · 完","调试模型与误差分析","不教算法，教怎么用证据决定下一步");},
+    "收一下。<b>这一讲不教任何新算法，教的是一件更值钱的事：效果不好时，怎么用证据决定下一步。</b><br><b>出发点</b>：那张「可以试的办法」清单上每一条都是<b>治疗手段</b>，而<b>没有诊断的治疗就是碰运气</b>——挨个试极其耗时，修没修到真毛病全看运气。<br><b>① 偏差/方差诊断</b>（Ng 说这是他用得最多的）：<b>高偏差＝欠拟合、高方差＝过拟合</b>。判断两步且<b>顺序不能反</b>——<b>先问训练误差本身可不可接受</b>（不行 ⇒ 高偏差），<b>再问训练与测试差多少</b>（差很多 ⇒ 高方差）。学习曲线上：<b>高方差是「差距大、测试误差还在降」，高偏差是「两线贴近、都走平、都高」</b>。⚠ <b>「加数据」只在高方差时有用，高偏差时纯属浪费</b>——这是最常见的翻车方式。<br><b>② 优化算法 vs 目标函数</b>：先分清<b>「你关心的指标 a」和「模型在最大化的 J」是两回事</b>。然后用那一招——<b>把表现更好的那个模型的参数，代进你自己的 J 里算一次</b>：<b>它的 J 更大 ⇒ 你没优化到位；它的 J 更小却表现更好 ⇒ 你的 J 选错了</b>。一句话记法：<b>「让别人的答案到我的考卷上考一次。他分更高＝我不会做题；他分更低却更受好评＝这张卷子出错了。」</b><br><b>③ 直升机</b>：同一招换个场景。做法是<b>先把「本该成立」的条件显式列出来，再逐条找一个能单独验证的办法</b>——这把开放的搜索变成了<b>有限、可穷尽的检查表</b>。<br><b>④ 误差分析与消融分析</b>（一对镜像）：<b>误差分析逐个换成标准答案、看涨幅，回答「还差在哪、改哪里值」；消融分析逐个拿掉、看跌幅，回答「好在哪、谁能砍」</b>。⚠ <b>两张表都是累积的，必须看相邻行的差值而不是绝对数值。</b><br><b>⑤ 怎么起步</b>：<b>先搭个 quick and dirty 的版本</b>，再用上面这些工具去修；精心设计有「<b>过早的统计优化</b>」的风险。<br><b>⭐ 最后一条对你直接有用</b>：这些分析能让<b>每一句「这个设计有用」背后都有一个数字撑着</b>——正好对上你们评分口径里「用可见证据支撑结论」那一步。<br><b>⚠ 但记住 Ng 自己的声明：这一讲通篇是经验之谈，有些内容可争议，而且对「提出新算法」这个目标未必适用。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

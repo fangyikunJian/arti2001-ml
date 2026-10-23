@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲义精读 · 感知机与大间隔分类器（讲义） · 逐页精读</title>
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --panel2:#FAF8F4; --sunken:#EDEAE3;
+  --stage:#E9E6DF; --hover:#F0EDE6;
+  --line:#E3DFD6; --line2:#D2CCC0;
+  --dot:#DDD8CE; --dot2:#B9B1A2; --errdot:#D08A8A;
+  --ink:#23272C; --ink2:#111417; --ink3:#4A525C; --dim:#616973;
+  --acc:#0E7355; --acc2:#845808; --warn:#B23540; --blue:#1C6AA6;
+  --mark:#FFF6DC; --codeink:#17506E; --eqink:#1E2833;
+  --okink:#0B5B43; --noink:#8F2A33; --violet:#6A4BA3; --tintviolet:rgba(106,75,163,.07);
+  --okfill:rgba(14,115,85,.10); --nofill:rgba(178,53,64,.09);
+  --missbg:rgba(245,243,238,.97);
+  --tintacc:rgba(14,115,85,.07); --tintacc2:rgba(14,115,85,.05);
+  --tintblue:rgba(28,106,166,.06); --tintwarn:rgba(178,53,64,.05);
+  --tintwarn2:rgba(178,53,64,.06);
+  --lift:rgba(60,54,44,.022); --lift2:rgba(60,54,44,.028);
+  --scrim:rgba(58,52,42,.40);
+  --shadow:0 1px 2px rgba(40,34,20,.05), 0 6px 18px rgba(40,34,20,.05);
+
+  --cjk:"PingFang SC","Microsoft YaHei","微软雅黑","Deng",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --bar:50px; --strip:36px;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f15; --panel:#121823; --panel2:#0d141c; --sunken:#0a0e14;
+  --stage:#070a0f; --hover:#0d141c;
+  --line:#212c3c; --line2:#2a3b4f;
+  --dot:#18212e; --dot2:#2c3c52; --errdot:#7a3a3a;
+  --ink:#e7eef7; --ink2:#f4f8fd; --ink3:#c3d2e3; --dim:#8b9ab0;
+  --acc:#6fd3bb; --acc2:#f2bd63; --warn:#ff8f8f; --blue:#7fb8ff;
+  --mark:#16202e; --codeink:#cfe3f5; --eqink:#dbe8f7;
+  --okink:#d8fff4; --noink:#ffdede; --violet:#B48BF5; --tintviolet:rgba(180,139,245,.08);
+  --okfill:rgba(111,211,187,.13); --nofill:rgba(255,143,143,.12);
+  --missbg:rgba(10,14,20,.97);
+  --tintacc:rgba(111,211,187,.09); --tintacc2:rgba(111,211,187,.07);
+  --tintblue:rgba(127,184,255,.055); --tintwarn:rgba(255,120,120,.055);
+  --tintwarn2:rgba(255,143,143,.08);
+  --lift:rgba(255,255,255,.022); --lift2:rgba(255,255,255,.025);
+  --scrim:rgba(6,9,13,.82);
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--cjk);font-size:15px;line-height:1.75}
+
+#bar{height:var(--bar);display:flex;align-items:center;gap:11px;padding:0 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+#bar h1{margin:0;font-size:14.5px;font-weight:650;white-space:nowrap}
+#bar h1 span{color:var(--acc)}
+.btn{background:var(--sunken);border:1px solid var(--line);border-radius:7px;color:var(--dim);
+  font:13px var(--cjk);padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{color:var(--acc);border-color:var(--acc)}
+#pnum{width:48px;background:var(--sunken);border:1px solid var(--line);border-radius:7px;
+  color:var(--ink);font:13px var(--mono);text-align:center;padding:5px 0}
+#bar .sp{flex:1}
+#tot{font:12px var(--mono);color:var(--dim)}
+
+#strip{height:var(--strip);display:flex;align-items:center;gap:2px;padding:0 14px;
+  background:var(--sunken);border-bottom:1px solid var(--line);overflow-x:auto}
+#strip::-webkit-scrollbar{height:0}
+#strip b{flex:0 0 auto;width:13px;height:16px;border-radius:3px;background:var(--dot);
+  cursor:pointer;font:0/0 a}
+#strip b.has{background:var(--dot2)}
+#strip b.on{background:var(--acc2)}
+#strip b:hover{background:var(--acc)}
+
+#main{display:flex;height:calc(100% - var(--bar) - var(--strip))}
+/* 左栏 = 一块板，板中央摆一张 4:3 的幻灯片。
+   幻灯片本身就是 363×272（4:3），把框裁成同样比例再用 view=FitH，
+   这一页正好铺满框，下一页落到框外 —— 这样才是「一页」，
+   而不是一个能上下滚、还露出半张下一页的阅读器。 */
+#left{width:50%;min-width:280px;position:relative;background:var(--stage);
+  display:flex;align-items:center;justify-content:center;padding:14px}
+#stage{aspect-ratio:4/3;width:100%;max-width:100%;max-height:100%;
+  border-radius:8px;overflow:hidden;background:#fff;
+  box-shadow:var(--shadow)}
+#stage iframe{width:100%;height:100%;border:0;display:block}
+#drag{width:6px;cursor:col-resize;background:var(--line);flex:0 0 6px}
+#drag:hover{background:var(--acc)}
+#right{flex:1;overflow-y:auto;padding:24px 28px 40px}
+
+.pg{font:11.5px var(--mono);color:var(--bg);background:var(--acc2);border-radius:999px;
+  padding:2px 11px;font-weight:700;display:inline-block;margin-bottom:12px}
+.pg.multi{background:var(--blue)}
+h2{margin:0 0 14px;font-size:21px;font-weight:680;line-height:1.4}
+.one{font-size:16.5px;line-height:1.7;color:var(--ink2);border-left:3px solid var(--acc);
+  padding:9px 0 9px 14px;margin:0 0 16px;
+  background:linear-gradient(90deg,var(--tintacc),transparent)}
+ul{margin:0 0 16px;padding-left:0;list-style:none}
+ul li{margin-bottom:11px;padding-left:22px;position:relative;line-height:1.72}
+ul li::before{content:"";position:absolute;left:6px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--acc)}
+b{font-weight:650;color:var(--ink2)}
+.k{color:var(--acc);font-weight:650}
+.w{color:var(--warn);font-weight:650}
+code{font-family:var(--mono);font-size:.9em;background:var(--mark);padding:1.5px 6px;
+  border-radius:4px;color:var(--codeink)}
+.eq{display:block;text-align:center;background:var(--mark);border-radius:8px;padding:12px 8px;
+  margin:14px 0;font-family:var(--mono);font-size:14px;color:var(--eqink);overflow-x:auto}
+.say{border:1px solid var(--line2);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;background:var(--tintblue);font-size:14px;line-height:1.72}
+.say .t{color:var(--blue);font-weight:700;font-size:12.5px;display:block;margin-bottom:5px;
+  letter-spacing:.5px}
+.tip{border:1px solid var(--line);border-radius:9px;padding:11px 15px;margin:14px 0;
+  background:var(--lift2);font-size:14px;line-height:1.72}
+.tip .t{font-weight:700;color:var(--acc);margin-right:7px}
+.tip.w2{border-color:var(--warnline);background:var(--tintwarn)}
+.tip.w2 .t{color:var(--warn)}
+.star{color:var(--acc2);font-size:14px;margin-left:8px;letter-spacing:1px}
+.nav{display:flex;gap:10px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+.nav .btn{flex:1;text-align:center;padding:9px}
+.empty{color:var(--dim);font-size:14px;padding:36px 0;text-align:center;line-height:2}
+#miss{position:absolute;inset:0;background:var(--missbg);z-index:5;display:none;
+  padding:26px;color:var(--dim);font-size:13.5px;line-height:1.9}
+#miss code{background:var(--mark);padding:2px 6px;border-radius:4px;color:var(--acc2)}
+
+
+.qbadge{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;
+  margin-left:9px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 9px;font:11.5px var(--mono);color:var(--acc);cursor:pointer;
+  background:var(--sunken);transition:border-color .12s}
+.qbadge:hover{border-color:var(--acc)}
+.qbadge.bad{color:var(--warn)}
+#wrongBox .tally{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+#wrongBox .tally span{border:1px solid var(--line);border-radius:8px;padding:5px 11px;
+  font-size:12.5px;color:var(--dim);background:var(--sunken)}
+#wrongBox .tally b{color:var(--ink);font-weight:650}
+#wrongBox .tally b.hot{color:var(--warn)}
+.wrow .h{gap:3px}
+.wrow .h u{display:flex;gap:2px;text-decoration:none;
+  padding-right:7px;margin-right:4px;border-right:1px solid var(--line)}
+.wrow .h u:last-child{border-right:0;padding-right:0;margin-right:0}
+#revChip{display:none;align-items:center;gap:9px;border:1px solid var(--warn);
+  border-radius:8px;padding:5px 11px;font-size:12.5px;color:var(--warn);
+  background:var(--tintwarn2);white-space:nowrap}
+#revChip.on{display:inline-flex}
+#revChip b{font:650 12px var(--mono)}
+#revChip button{background:none;border:0;color:var(--dim);cursor:pointer;
+  font:12px var(--cjk);text-decoration:underline;padding:0}
+#revChip button:hover{color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn:disabled:hover{border-color:var(--line)}
+
+/* ── 自测 ── */
+.quiz{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.quiz>h3{margin:0 0 12px;font-size:13px;color:var(--dim);letter-spacing:.16em;
+  display:flex;align-items:center;gap:8px}
+.quiz>h3 b{color:var(--acc2);font-weight:700}
+.qq{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:11px;
+  background:var(--lift)}
+.qq .t{font-size:14.5px;font-weight:600;margin-bottom:10px;line-height:1.6}
+.opt{display:block;width:100%;text-align:left;background:var(--sunken);border:1px solid var(--line);
+  border-radius:8px;color:var(--ink);font:14px var(--cjk);padding:8px 12px;margin-bottom:7px;
+  cursor:pointer;line-height:1.5;transition:border-color .12s,background .12s}
+.opt:hover:not(:disabled){border-color:var(--acc);background:var(--hover)}
+.opt:disabled{cursor:default}
+.opt.ok{border-color:var(--acc);background:var(--okfill);color:var(--okink)}
+.opt.no{border-color:var(--warn);background:var(--nofill);color:var(--noink)}
+.opt .m{float:right;font-weight:700;margin-left:10px}
+.why{font-size:13.5px;line-height:1.7;color:var(--ink3);border-left:3px solid var(--acc);
+  padding:8px 0 8px 12px;margin-top:9px;background:linear-gradient(90deg,var(--tintacc2),transparent)}
+.qhist{font:11px var(--mono);color:var(--dim);margin-top:8px;display:flex;
+  align-items:center;gap:5px}
+.qhist i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.qhist i.o{background:var(--acc)} .qhist i.x{background:var(--warn)}
+.qagain{background:none;border:0;color:var(--dim);font:12px var(--cjk);cursor:pointer;
+  text-decoration:underline;padding:0;margin-left:auto}
+.qagain:hover{color:var(--acc2)}
+#strip b.err{background:var(--errdot)}
+#strip b.err.on{background:var(--acc2)}
+/* 错题本 */
+#wrongPanel{position:fixed;inset:0;background:var(--scrim);z-index:80;display:none;
+  align-items:center;justify-content:center;padding:28px}
+#wrongPanel.on{display:flex}
+#wrongBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  width:min(760px,100%);max-height:84vh;overflow:auto;padding:22px 24px}
+#wrongBox h3{margin:0 0 4px;font-size:18px}
+#wrongBox .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+.wrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--line);margin-bottom:8px;cursor:pointer;background:var(--sunken)}
+.wrow:hover{border-color:var(--acc2)}
+.wrow .p{font:700 12px var(--mono);color:var(--acc2);flex:0 0 52px}
+.wrow.done{opacity:.5}
+.wrow.done .p{color:var(--acc)}
+.wrow .n2{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.wrow .s{font:11.5px var(--mono);color:var(--dim);flex:0 0 auto}
+.wrow .h{display:flex;gap:3px;flex:0 0 auto}
+.wrow .h i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.wrow .h i.o{background:var(--acc)} .wrow .h i.x{background:var(--warn)}
+#wrongBox .none{color:var(--dim);text-align:center;padding:30px 0;line-height:2}
+#wrongFoot{display:flex;gap:10px;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--line)}
+#wrongFoot .btn{flex:1;text-align:center}
+
+@media (max-width:900px){
+  #main{flex-direction:column} #left{width:100%;height:40%} #drag{display:none}
+  #right{padding:16px 16px 30px}
+}
+
+/* ══ EXTRA_CSS:BEGIN ══ */
+/* ══ 讲解区里的链接兜底 ══
+   ⚠ 2026-10-03 查出来的：原先只给 .ng a 上了色，放在 tip / say / pts / exam 里的链接
+   会退回浏览器默认的 #0000EE —— 浅色下还能看（8.47:1），**暗色下只有 1.95:1**。
+   做 notes2 时第一次往 tip 里放时间码链接就撞上了。这条规则管住所有其它位置。 */
+#card a{color:var(--blue);text-decoration:none;border-bottom:1px solid var(--blue)}
+#card a:hover{opacity:.75}
+
+/* ══ 「从零补基础 · Andrew Ng」栏 ══ */
+.ng{border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintviolet)}
+.ng .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--violet);
+  letter-spacing:.4px;margin-bottom:5px}
+/* ⚠ 要用 #card .ng a 而不是 .ng a —— 上面的兜底规则带了 #card 这个 id，
+   光写 .ng a（0,1,1）会被 #card a（1,0,1）压过去，紫色链接会变蓝。 */
+#card .ng a{color:var(--violet);text-decoration:none;border-bottom:1px solid var(--violet)}
+#card .ng a:hover{opacity:.75}
+.ng .src{display:block;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+:root:not([data-theme="dark"]) .ng{box-shadow:var(--shadow)}
+
+/* ══ 「课件原话」栏：引官方英文 ══ */
+.quote{border-left:3px solid var(--dim);background:var(--lift2);border-radius:0 8px 8px 0;
+  padding:10px 15px;margin:12px 0;font-size:13px;line-height:1.7;color:var(--ink3)}
+.quote .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--dim);
+  letter-spacing:.4px;margin-bottom:5px}
+.quote b{color:var(--ink2)}
+.quote em{font-style:normal;color:var(--ink2);font-weight:560}
+
+/* ══ 笔记表格：对比表 / 情况表 / 数值表 ══ */
+.tw{margin:13px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.tc{font-size:11.5px;font-family:var(--mono);color:var(--dim);letter-spacing:.3px;
+  padding:7px 12px;background:var(--sunken);border-bottom:1px solid var(--line)}
+table.nt{width:100%;border-collapse:collapse;font-size:12.8px;line-height:1.55}
+table.nt th{text-align:left;font-weight:620;font-size:11.5px;color:var(--dim);
+  background:var(--panel2);padding:7px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.nt td{padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.nt tbody tr:last-child td{border-bottom:none}
+table.nt td:first-child{font-weight:560;color:var(--ink2)}
+table.nt b{color:var(--ink2)}
+:root:not([data-theme="dark"]) .tw{box-shadow:var(--shadow)}
+
+/* ══ 「与考试的联系」栏 ══ */
+.exam{border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintacc2)}
+.exam .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--acc2);
+  letter-spacing:.4px;margin-bottom:5px}
+:root:not([data-theme="dark"]) .exam{box-shadow:var(--shadow)}
+
+/* ══ 双主题补丁：浅色下的可读性与质感 ══ */
+html{color-scheme:light dark}
+:root:not([data-theme="dark"]) #right{background:var(--bg)}
+:root:not([data-theme="dark"]) .quiz,
+:root:not([data-theme="dark"]) details,
+:root:not([data-theme="dark"]) .opt{box-shadow:var(--shadow)}
+:root:not([data-theme="dark"]) body{-webkit-font-smoothing:antialiased}
+:root:not([data-theme="dark"]) h2{letter-spacing:-.1px}
+:root:not([data-theme="dark"]) .one{font-weight:520}
+:root:not([data-theme="dark"]) .pg{color:#fff}
+:root:not([data-theme="dark"]) #strip b.on{background:var(--acc2)}
+/* 主题切换按钮 */
+#themeBtn{min-width:34px;text-align:center;font-size:14px;line-height:1}
+/* ══ EXTRA_CSS:END ══ */
+
+</style>
+</head>
+<body data-key="cs234-2019-l01">
+
+<div id="bar">
+  <h1>CS229 讲义精读 · <span>感知机与大间隔分类器（讲义）</span></h1>
+  <button class="btn" id="prev">← 上一页</button>
+  <input id="pnum" value="1" inputmode="numeric">
+  <span id="tot">/ 3</span>
+  <button class="btn" id="next">下一页 →</button>
+  <div class="sp"></div>
+  <span id="revChip">复习模式 <b></b><button id="revOff">退出</button></span>
+  <button class="btn" id="wrongBtn">错题本</button>
+  <button class="btn" id="themeBtn" title="切换主题">☾</button>
+  <button class="btn" id="help">打不开？</button>
+</div>
+
+<div id="strip"></div>
+
+
+<div id="wrongPanel"><div id="wrongBox">
+  <h3>错题本</h3>
+  <p class="sub">错过的题<b>连着答对两次就毕业</b>，自动从这里和复习模式里退出。<br>
+  还没毕业的排在前面，最近错得多的更靠前。点任意一行跳到那一页重看。</p>
+  <div class="tally" id="wrongTally"></div>
+  <div id="wrongList"></div>
+  <div id="wrongFoot">
+    <button class="btn" id="revOn">只复习这些页</button>
+    <button class="btn" id="wrongClose">关闭</button>
+    <button class="btn" id="wrongReset">清空全部记录</button>
+  </div>
+</div></div>
+
+<div id="main">
+  <div id="left">
+    <div id="stage"><iframe id="pdf" title="原课件"></iframe></div>
+    <div id="miss">
+      <p><b>左边没显示课件？</b></p>
+      <p>本页直接引用同目录下的 <code>slides/cs229-notes6.pdf</code>。</p>
+      <p>确认文件在即可。若浏览器拦本地 iframe 读 PDF，在 <code>精读</code> 目录下执行
+      <code>python -m http.server 8080</code>，再访问
+      <code>http://127.0.0.1:8080/CS229-notes6-精读.html</code>。</p>
+    </div>
+  </div>
+  <div id="drag"></div>
+  <div id="right"><div id="card"></div></div>
+</div>
+
+<script>
+
+/* ══ 主题切换：浅色默认，记住选择 ══ */
+(function(){
+  var KEY = "mlreader-theme";
+  var root = document.documentElement, btn = document.getElementById("themeBtn");
+  function apply(t){
+    root.setAttribute("data-theme", t);
+    if (btn) btn.textContent = (t === "dark" ? "☀" : "☾");
+    if (btn) btn.title = (t === "dark" ? "切到浅色" : "切到暗色");
+  }
+  var saved;
+  try { saved = localStorage.getItem(KEY); } catch(e){}
+  apply(saved === "dark" ? "dark" : "light");
+  if (btn) btn.addEventListener("click", function(){
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next);
+    try { localStorage.setItem(KEY, next); } catch(e){}
+  });
+})();
+
+/* 每页一条。r:[起,止] = 这几页是同一张图的不同阶段，点哪页都显示同一条。
+   one 一句话 · pts 要点 · say CS229 / 讲义补充（课件上没有）· tip 提醒 */
+
+/* ══ 题库。键 = 该单元的起始页；a 是正确项下标；why 是判完给的解释 ══ */
+var Q = {"1": [{"q": "在线学习（online learning）和批量学习最本质的区别是什么？", "o": ["在线学习用的数据更多", "在线学习只能用于线性模型", "在线学习边学边预测——每来一个样本先预测、再被告知答案，关心的是全过程累计犯错次数", "在线学习不需要标签"], "a": 2, "why": "批量学习是<b>先学完再评估</b>，关心测试集误差；在线学习<b>从第一个样本起就在对外输出预测</b>，所以<b>早期的错误也算数</b>，指标自然变成「一共错几次」。"}, {"q": "这份讲义为什么把标签取成 y ∈ {−1, +1} 而不是 {0, 1}？", "o": ["为了兼容 sigmoid", "为了让推导更顺手——有了 ±1，「预测正确」可以简洁地写成 y·(θᵀx) > 0", "因为感知机只能处理负数", "为了让 θ 是单位向量"], "a": 1, "why": "讲义明说是<b>为了让后续推导更容易</b>。⭐ 这个约定在 SVM 那边会反复出现——<b>y·(θᵀx) 这个「带符号的间隔」是整条线索的核心记号</b>。"}], "2": [{"q": "感知机的更新规则是什么？", "o": ["每轮用全部样本的梯度更新", "每看一个样本都更新 θ := θ + yx", "θ := θ − α∇J(θ)", "预测正确时不做任何改动；预测错误时才更新 θ := θ + yx"], "a": 3, "why": "<b>「错了才动」</b>。⚠️ 这不只是省事——第 3 页证明里「交叉项 ≤ 0 可以扔掉」<b>正是靠「这一步犯了错」才成立的</b>。若对的也更新，证明立刻垮掉。"}, {"q": "Block/Novikoff 定理的结论里，最令人意外的是什么？", "o": ["感知机一定能收敛到全局最优", "犯错次数的上界 (D/γ)² 既不含样本数 m 也不含维数 n", "犯错次数一定小于样本数", "犯错次数与学习率成反比"], "a": 1, "why": "讲义自己在这里加了感叹号。<b>喂一百万个一万维的样本，只要 D 和 γ 不变，上界就不变。</b>⭐ 因为 D/γ 是<b>无量纲比值</b>——它刻画数据的「形状」而非「大小」。"}, {"q": "为什么感知机里可以把学习率直接丢掉？", "o": ["因为感知机只看 θᵀx 的符号，而正的学习率只把 θ 整体缩放、不改变符号", "因为学习率总是 1", "因为 θ 被归一化了", "因为感知机不用梯度下降"], "a": 0, "why": "(αθ)ᵀx 与 θᵀx 在 α > 0 时<b>符号相同</b>，而感知机的输出只取决于符号。⚠️ <b>这是感知机的特殊性质</b>，对逻辑回归、神经网络都不成立，别迁移。"}, {"q": "定理的前提「存在单位向量 u 使 y⁽ⁱ⁾(uᵀx⁽ⁱ⁾) ≥ γ」在说什么？", "o": ["θ 的初值必须是 u", "数据线性可分，而且能以至少 γ 的间隔分开", "所有样本长度相等", "数据已经被标准化"], "a": 1, "why": "这就是<b>「线性可分且间隔不小于 γ」</b>。⚠️ 数据不可分时 γ 根本不存在，<b>定理完全不适用</b>——感知机在不可分数据上会永远振荡。"}], "3": [{"q": "证明中展开 ‖θ + yx‖² 后，交叉项 2y(x)ᵀθ 为什么可以直接扔掉？", "o": ["因为 x 与 θ 正交", "因为它恒等于 0", "因为它比 D² 小", "因为这一步是「犯了错」才更新的，而犯错意味着 y(x)ᵀθ ≤ 0，交叉项非正"], "a": 3, "why": "⭐ 这正是「<b>只有犯错才更新</b>」这个设定在证明里的用处。若预测对了也更新，交叉项是<b>正的</b>，这一步直接垮掉。"}, {"q": "√k·D ≥ ‖θ⁽ᵏ⁺¹⁾‖ ≥ (θ⁽ᵏ⁺¹⁾)ᵀu 中，第二个不等号依据什么？", "o": ["柯西–施瓦茨：zᵀu ≤ ‖z‖‖u‖，而 u 是单位向量，故 zᵀu ≤ ‖z‖", "D ≥ γ", "u 与 z 平行", "三角不等式"], "a": 0, "why": "<b>「投影不可能比向量本身还长」。</b>⭐ u 之所以被要求取<b>单位长度</b>，就是为了让 ‖u‖ = 1，使这一步成立。"}, {"q": "整个证明的核心思路可以概括为？", "o": ["找一个量，证明它的下界随 k 线性增长、上界只随 √k 增长，再用「投影 ≤ 长度」把两边夹住", "构造反例说明感知机不会出错", "用归纳法直接数出错误次数", "对损失函数求导并令其为零"], "a": 0, "why": "<b>下界靠间隔 γ（线性 kγ）、上界靠数据半径 D（√k·D）、接口靠柯西–施瓦茨。</b>⭐ 线性迟早超过平方根，矛盾就把 k 卡在 (D/γ)² 以内。这个「夹击」套路在学习理论里反复出现。"}, {"q": "从 k ≤ (D/γ)² 能读出「间隔」的什么作用？", "o": ["间隔越小越好，收敛越快", "间隔与犯错次数无关", "间隔 γ 越大，犯错次数上界越小——数据分得越宽松，试错越少", "间隔决定了特征维数"], "a": 2, "why": "γ 在<b>分母</b>上，γ 越小上界 (D/γ)² 越大。⭐ 这是<b>「大间隔」三个字在标题里的意义</b>，也是 M1 T4 学 SVM 最好的动机：<b>最大化间隔不是美学偏好，而是有定量保证的</b>。"}]};
+
+var N = [{"r": [1, 1], "star": 2, "t": "换一个设定：在线学习", "one": "不再是「先训练完再考试」，而是边学边考——每来一个样本就得先预测，再被告知答案。", "quote": "<em>the online learning setting in which the algorithm has to make predictions continuously even while it's learning</em>", "eq": "h(x) = g(θᵀx) ,   g(z) = +1 若 z ≥ 0 ；  −1 若 z < 0\n标签取 y ∈ {−1, +1}  （不是 {0,1}）", "pts": ["<b>先看设定变了什么</b>。前面所有讲义都是<b>批量学习</b>：先给一整个训练集，学完得到 h，再拿去测试集上评估。<b>学和考是分开的两段。</b>", "<b>在线学习把这两段揉在一起</b>：算法按顺序看到 (x⁽¹⁾,y⁽¹⁾), (x⁽²⁾,y⁽²⁾), …，但流程是——<b>先看到 x⁽¹⁾ 并被要求预测 y⁽¹⁾，预测完才告诉它真实答案</b>，它可以据此学习；然后是 x⁽²⁾，如此往复。", "⭐ <b>关心的指标也跟着变了</b>：批量学习关心「最终在测试集上错多少」，<b>在线学习关心「整个过程中一共错了多少次」</b>。因为它从第一个样本起就在对外输出预测，<b>早期的错误也是真实的错误</b>。", "<b>标签约定要留意</b>：这份讲义用 <b>y ∈ {−1, +1}</b>，不是逻辑回归那里的 {0, 1}。讲义明说这是<b>为了让后面的推导更顺手</b>——有了 ±1，「预测正确」就能写成简洁的 <b>y·(θᵀx) > 0</b>。", "<b>感知机的预测规则</b>：h(x) = g(θᵀx)，其中 g 是个<b>硬阈值</b>——大于等于 0 输出 +1，小于 0 输出 −1。⚠️ <b>注意它不是 sigmoid</b>：没有概率输出，只有非黑即白的一刀切。"], "tbl": [{"cap": "批量学习 vs 在线学习", "head": ["", "批量学习", "<b>在线学习</b>"], "rows": [["流程", "先学完，再评估", "<b>边学边预测</b>，交替进行"], ["关心的指标", "测试集上的误差", "<b>全过程累计犯错次数</b>"], ["早期的错误", "不计入（还没评估）", "<b>计入</b>"]]}], "say": "<b>为什么要专门设一个在线学习的框架</b>？因为有大量真实场景<b>没有「先训练后上线」的奢侈</b>：垃圾邮件过滤器从装上那天起就得判，推荐系统从第一个用户进来就得推。<b>它们必须在学习的同时对外负责。</b><br>⭐ <b>于是「一共错几次」就成了最自然的评价标准</b>——而这正是下一页那个定理要回答的问题：<b>感知机在这种设定下，最多会错多少次？</b>", "ng": "Ng 在 <a href=\"https://www.youtube.com/watch?v=iZTeva0WSTQ&t=95s\" target=\"_blank\">1:35</a> 开始讲感知机，先拿它和 <b>sigmoid 作对照</b>——同样是 g(z)，sigmoid 是光滑的 S 形，感知机是<b>硬阶跃</b>。⚠️ 但他讲的是<b>批量</b>语境下的感知机，<b>没有提「在线学习」这个设定</b>（全 21 讲字幕里搜 online learning 零命中）。<span class=\"src\">CS229/transcripts/L4.txt · 本地已下载</span>", "exam": "本课考纲里感知机本身分量很轻。⭐ 真正可迁移的是<b>「在线学习 vs 批量学习」这个区分</b>，以及<b>把标签取成 ±1 能让「分对了」写成 y·(θᵀx) > 0</b>——后者在 SVM 那边会反复出现。", "tip": {"t": "n 和 m 的用法", "v": "这份老讲义用 <b>m 表样本数、n 表特征维数</b>（θ ∈ R^(n+1)）。⚠️ 和 notes1 等新版讲义的 <b>n 表样本数、d 表维数</b><b>正好相反</b>，看定理时别搞混。"}}, {"r": [2, 2], "star": 3, "t": "★★★ 更新规则，与那个「不依赖样本数和维数」的误差界", "one": "错了才更新，而且总错误次数只由 D/γ 决定——和样本有多少、维数有多高都无关。", "quote": "<em>does not have an explicit dependence on the number of examples m in the sequence, or on the dimension n of the inputs (!)</em>", "eq": "更新规则：预测对了 ⇒ 什么都不做\n              预测错了 ⇒ θ := θ + y·x\n\n定理（Block 1962 / Novikoff 1962）：\n  若 ‖x⁽ⁱ⁾‖ ≤ D 对所有 i，\n  且存在单位向量 u（‖u‖₂ = 1）使 y⁽ⁱ⁾·(uᵀx⁽ⁱ⁾) ≥ γ 对所有 i，\n  则总犯错次数 ≤ (D/γ)²", "pts": ["<b>更新规则简单到极点</b>：<b>预测对了就一动不动</b>；预测错了，就把参数朝「这个样本的正确方向」推一把——<b>θ := θ + y·x</b>。注意 y 是 ±1，所以这一步是<b>加上或减去</b> x。", "<b>定理的两个前提</b>：① <b>所有样本长度有上界 D</b>（数据不会无限远）；② <b>存在一个单位向量 u 能把数据分开，而且间隔至少是 γ</b>——即对每个样本都有 y⁽ⁱ⁾(uᵀx⁽ⁱ⁾) ≥ γ。<b>前提 ② 就是「数据线性可分，且可分得还比较宽松」。</b>", "⭐⭐ <b>结论的震撼之处</b>：犯错次数的上界是 <b>(D/γ)²</b>——<b>里面既没有 m（样本数）也没有 n（维数）</b>。讲义自己在这里加了个感叹号。<b>哪怕你喂它一百万个样本、每个样本一万维，只要 D 和 γ 不变，错误次数的上界就不变。</b>", "<b>怎么理解 D/γ</b>：它是个<b>无量纲的比值</b>——数据的「尺度」除以间隔的「宽度」。把所有数据同时放大十倍，D 和 γ 一起放大十倍，<b>比值不变，上界也不变</b>。<b>所以这个界刻画的是数据的「形状」而不是「大小」。</b>", "<b>脚注里的两点交代</b>：这个更新式和课程前面写过的看起来不同，<b>是因为标签换成了 ±1</b>；另外<b>学习率被丢掉了</b>——理由是学习率只会把 θ 整体缩放一个常数，<b>而感知机只看 θᵀx 的符号，缩放不改变符号</b>，所以对行为毫无影响。", "<b>证明的上半部分</b>：设 θ⁽ᵏ⁾ 是犯第 k 次错时用的参数，θ⁽¹⁾ = 0。犯错意味着 <b>(x⁽ⁱ⁾)ᵀθ⁽ᵏ⁾y⁽ⁱ⁾ ≤ 0</b>。每次更新后把它和 u 做内积：<b>(θ⁽ᵏ⁺¹⁾)ᵀu = (θ⁽ᵏ⁾)ᵀu + y⁽ⁱ⁾(x⁽ⁱ⁾)ᵀu ≥ (θ⁽ᵏ⁾)ᵀu + γ</b>。<b>每错一次，θ 在 u 方向上的投影至少涨 γ</b>，归纳得 <b>(θ⁽ᵏ⁺¹⁾)ᵀu ≥ kγ</b>。"], "say": "⭐ <b>先把证明的「战术意图」说破，后面就好懂了</b>：<br>　　要证「错不了太多次」，办法是<b>找一个量，让它在「每错一次就涨很多」和「总共涨不了那么多」之间被夹住</b>。<br>　　这一页做的是<b>上半边</b>：证明 <b>θ 在 u 方向的投影每错一次至少涨 γ</b>，所以 k 次之后至少是 <b>kγ</b>——<b>线性增长</b>。<br>　　下一页做<b>下半边</b>：证明 <b>‖θ‖ 最多只能长到 √k·D</b>——<b>平方根增长</b>。<br>　　<b>线性迟早超过平方根</b>，而投影又不可能超过长度本身，矛盾就把 k 卡住了。<b>整个证明就这一个念头。</b>", "ng": "<b>⚠ 这一页的内容课上没讲。</b>用 <code>find_quote.py</code> 在全部 21 讲字幕里搜 <code>Novikoff</code>、<code>mistake bound</code>、<code>online learning</code>，<b>零命中</b>——这个定理只存在于讲义里，Ng 在 L4 只用十来分钟讲了感知机的<b>算法与几何</b>，没有碰误差界。<span class=\"src\">CS229/transcripts/L4.txt · 本地已下载</span><br>Ng 在 <a href=\"https://www.youtube.com/watch?v=iZTeva0WSTQ&t=452s\" target=\"_blank\">7:32</a> 说 <em>it's useful to see this picture</em>，然后在 <a href=\"https://www.youtube.com/watch?v=iZTeva0WSTQ&t=516s\" target=\"_blank\">8:36</a> 讲「<b>一个新样本进来</b>」时会发生什么——<b>他给的是更新规则的几何直觉</b>（θ 朝着分错的那个点转过去），这部分讲义里反而没有画。<b>两边正好互补：讲义有定理没图，课堂有图没定理。</b>", "exam": "本课不考这个定理。⭐ 但<b>「犯错次数只依赖 D/γ，与样本数和维数无关」这个结论值得记</b>——它是<b>「间隔越大越好」这一思想最早的严格证据</b>，和 M1 T4 的 SVM 直接同源。", "tip": {"t": "为什么学习率可以丢", "v": "感知机的输出只取决于 <b>θᵀx 的符号</b>。学习率 α 会把 θ 整体变成 αθ，而 <b>(αθ)ᵀx 和 θᵀx 符号相同</b>（α > 0）。⚠️ 这是感知机的特殊性质，<b>对逻辑回归、神经网络都不成立</b>，别迁移过去。"}}, {"r": [3, 3], "star": 3, "t": "★★ 证明的下半边：两边一夹，k 就被卡住了", "one": "‖θ‖ 最多按 √k 长，而投影至少按 k 长；投影又不能超过长度——于是 k ≤ (D/γ)²。", "quote": "<em>Hence, if the perceptron made a k-th mistake, then k ≤ (D/γ)².</em>", "eq": "‖θ⁽ᵏ⁺¹⁾‖² = ‖θ⁽ᵏ⁾ + y⁽ⁱ⁾x⁽ⁱ⁾‖²\n           = ‖θ⁽ᵏ⁾‖² + ‖x⁽ⁱ⁾‖² + 2y⁽ⁱ⁾(x⁽ⁱ⁾)ᵀθ⁽ᵏ⁾\n           ≤ ‖θ⁽ᵏ⁾‖² + ‖x⁽ⁱ⁾‖²        ← 交叉项 ≤ 0（因为犯了错）\n           ≤ ‖θ⁽ᵏ⁾‖² + D²\n⇒ ‖θ⁽ᵏ⁺¹⁾‖² ≤ k D²\n\n合起来：  √k · D  ≥  ‖θ⁽ᵏ⁺¹⁾‖  ≥  (θ⁽ᵏ⁺¹⁾)ᵀu  ≥  k γ\n⇒  k ≤ (D/γ)²", "pts": ["<b>展开平方是关键一步</b>：‖θ + yx‖² = ‖θ‖² + ‖x‖² + <b>2y(x)ᵀθ</b>。那个交叉项正是<b>上一页式 (2) 说的「犯错意味着 y(x)ᵀθ ≤ 0」</b>——<b>所以交叉项非正，可以直接扔掉</b>。", "⭐ <b>注意这里用上了「只有犯错才更新」这个设定</b>。如果预测对了也更新，交叉项就是正的，这一步<b>立刻垮掉</b>。<b>「错了才动」不是为了省事，是证明能走通的前提。</b>", "<b>再用 ‖x⁽ⁱ⁾‖ ≤ D</b>，于是每错一次 ‖θ‖² <b>最多涨 D²</b>，归纳得 <b>‖θ⁽ᵏ⁺¹⁾‖² ≤ kD²</b>，也就是 <b>‖θ⁽ᵏ⁺¹⁾‖ ≤ √k·D</b>。", "<b>最后的夹击</b>：把两边接起来——<b>√k·D ≥ ‖θ⁽ᵏ⁺¹⁾‖ ≥ (θ⁽ᵏ⁺¹⁾)ᵀu ≥ kγ</b>。", "<b>中间那个不等号靠的是柯西–施瓦茨</b>：zᵀu = ‖z‖‖u‖cos ≤ ‖z‖‖u‖，而 <b>u 是单位向量</b>，所以 <b>zᵀu ≤ ‖z‖</b>。<b>「投影不可能比向量本身还长」——u 取单位长度就是为了这一步。</b>", "<b>解出来</b>：√k·D ≥ kγ ⇒ 两边除以 √k ⇒ D ≥ √k·γ ⇒ <b>k ≤ (D/γ)²</b>。证毕。"], "tbl": [{"cap": "两个增长速度的较量", "head": ["量", "每错一次", "k 次之后", "增长阶"], "rows": [["(θ)ᵀu（在 u 上的投影）", "<b>至少涨 γ</b>", "≥ <b>kγ</b>", "<b>线性</b>"], ["‖θ‖（长度）", "平方最多涨 D²", "≤ <b>√k·D</b>", "<b>平方根</b>"], ["两者的关系", "—", "投影 ≤ 长度", "<b>线性迟早超过 √ ⇒ k 有上界</b>"]]}], "say": "⭐⭐ <b>这个证明值得记住它的「形状」，因为同一套路在机器学习理论里反复出现</b>：<br>　　<b>构造一个量，证明它「下界涨得快、上界涨得慢」，再用一个天然的大小关系把两边接起来，矛盾就逼出了结论。</b><br>这里的三要素是：<br>　　① <b>下界靠间隔 γ</b>——每错一次，θ 必须朝正确方向挪至少 γ；<br>　　② <b>上界靠数据半径 D</b>——每错一次，θ 的长度平方最多涨 D²；<br>　　③ <b>接起来靠柯西–施瓦茨</b>——投影不可能超过长度。<br>⚠️ <b>γ 越小，上界 (D/γ)² 越大</b>：数据分得越勉强（间隔越窄），感知机要试错的次数就越多。<b>这正是「大间隔」三个字在标题里的意义。</b>", "ng": "<b>⚠ 这一页的内容课上没讲。</b>用 <code>find_quote.py</code> 在全部 21 讲字幕里搜 <code>Novikoff</code>、<code>mistake bound</code>、<code>online learning</code>，<b>零命中</b>——这个定理只存在于讲义里，Ng 在 L4 只用十来分钟讲了感知机的<b>算法与几何</b>，没有碰误差界。<span class=\"src\">CS229/transcripts/L4.txt · 本地已下载</span>", "exam": "本课不考这个证明。⭐ 但<b>「间隔 γ 越大、犯错越少」这个定量结论，是 M1 T4 学 SVM 时最好的动机</b>：SVM 要最大化间隔，不是美学偏好——<b>间隔大，泛化与收敛的保证就强</b>。", "tip": {"t": "这个界有多紧", "v": "它是<b>最坏情况</b>的上界，而且<b>只在数据线性可分时成立</b>。⚠️ 数据不可分时 γ 根本不存在，定理<b>完全不适用</b>——感知机在不可分数据上会永远振荡下去。"}}];
+
+(function(){
+  var PDF="slides/cs229-notes6.pdf", MAX=3;
+  var frame=document.getElementById("pdf"), card=document.getElementById("card"),
+      pnum=document.getElementById("pnum"), strip=document.getElementById("strip"),
+      right=document.getElementById("right");
+  var cur=0, map={}, cells=[];
+
+  /* 存档键带课程前缀 —— file:// 下所有本地页面共用一个 origin，
+     两门课都用 "cs229-notes6quiz" 会互相覆盖。 */
+  var KEY = document.body.dataset.key;
+  try {                       // 一次性迁移：早期版本用的是不带课程前缀的键
+    if(!localStorage.getItem(KEY+"quiz")){
+      var _old = localStorage.getItem("cs229-notes6quiz");
+      if(_old){
+        localStorage.setItem(KEY+"quiz", _old);
+        var _p = localStorage.getItem("cs229-notes6p");
+        if(_p) localStorage.setItem(KEY+"p", _p);
+      }
+      /* 搬完就把旧键删掉。不删的话它会一直躺在那儿，
+         用户「清空全部记录」之后下次打开又被复活一遍。 */
+      localStorage.removeItem("cs229-notes6quiz");
+      localStorage.removeItem("cs229-notes6p");
+    }
+  } catch(e) {}
+
+  N.forEach(function(n,i){ for(var p=n.r[0];p<=n.r[1];p++) map[p]=i; });
+
+  for(var p=1;p<=MAX;p++){
+    var b=document.createElement("b");
+    b.title="第 "+p+" 页";
+    if(map[p]!=null) b.className="has";
+    b.onclick=(function(x){ return function(){ go(x); }; })(p);
+    strip.appendChild(b); cells.push(b);
+  }
+
+  function navHtml(){
+    return '<div class="nav"><button class="btn" id="p2">← 上一页</button>'+
+           '<button class="btn" id="n2">下一页 →</button></div>';
+  }
+  function bindNav(){
+    var a=document.getElementById("p2"), b=document.getElementById("n2");
+    if(a) a.onclick=function(){ step(-1); };
+    if(b) b.onclick=function(){ step(1); };
+  }
+  function render(p){
+    var i=map[p];
+    if(i==null){
+      card.innerHTML='<div class="empty">这一页没有单独的讲解。<br>'+
+        '它多半是上一页的<b>增量构建</b>——往前翻一页即可。</div>'+navHtml();
+      bindNav(); return;
+    }
+    var n=N[i], multi=n.r[0]!==n.r[1], h="";
+    h+='<span class="pg'+(multi?" multi":"")+'">p'+n.r[0]+(multi?"–"+n.r[1]:"")+'</span>';
+    h+='<h2>'+n.t+(n.star?'<span class="star">'+Array(n.star+1).join("★")+'</span>':'')+
+        qBadge(n.r[0])+'</h2>';
+    if(n.one) h+='<div class="one">'+n.one+'</div>';
+    if(n.quote) h+='<div class="quote"><span class="t">课件原话</span>'+n.quote+'</div>';
+    if(n.eq)  h+='<span class="eq">'+n.eq.replace(/\n/g,"<br>")+'</span>';
+    if(n.pts) h+='<ul>'+n.pts.map(function(x){ return "<li>"+x+"</li>"; }).join("")+'</ul>';
+    if(n.tbl) h+=n.tbl.map(function(T){var s='<div class="tw">'+(T.cap?'<div class="tc">'+T.cap+'</div>':"")+'<table class="nt">';if(T.head) s+='<thead><tr>'+T.head.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead>';s+='<tbody>'+T.rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>';}).join("")+'</tr>';}).join("")+'</tbody></table></div>';return s;}).join("");
+    if(n.say) h+='<div class="say"><span class="t">CS229 / 讲义补充</span>'+n.say+'</div>';
+    if(n.ng) h+='<div class="ng"><span class="t">从零补基础 · Andrew Ng CS229</span>'+n.ng+'</div>';
+    if(n.exam) h+='<div class="exam"><span class="t">与考试的联系</span>'+n.exam+'</div>';
+    if(n.tip) h+='<div class="tip'+(n.tip.w?" w2":"")+'"><span class="t">'+n.tip.t+'</span>'+n.tip.v+'</div>';
+    card.innerHTML=h+quizHtml(n.r[0])+navHtml();
+    bindNav();
+    bindQuiz();
+    bindBadge();
+  }
+  function go(p){
+    p=Math.max(1,Math.min(MAX,parseInt(p,10)||1));
+    if(p===cur) return;
+    cur=p; pnum.value=p;
+    // 只改 #hash 不会让 Chrome 内置 PDF 阅读器翻页 —— 实测 src 已是 #page=49
+    // 而工具栏仍停在 1/78。必须让它认为这是一次**新的导航**，所以加查询参数。
+    frame.src=PDF+"?p="+p+"#page="+p+"&toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    render(p);
+    paintStrip();
+    revPaint();
+    right.scrollTop=0;
+    var on=strip.querySelector("b.on");
+    if(on) on.scrollIntoView({block:"nearest",inline:"center"});
+    try{ localStorage.setItem(KEY+"p",p); }catch(e){}
+  }
+
+
+  /* ══ 自测与错题记录 ══════════════════════════════════════════════
+     记录形状： ST["起始页#题号"] = {n:做过几次, w:错过几次, r:[最近 6 次 1/0]}
+     全部存 localStorage，纯本地。 */
+  var ST = {};
+  try { ST = JSON.parse(localStorage.getItem(KEY+"quiz") || "{}") || {}; } catch(e){ ST = {}; }
+  function save(){ try{ localStorage.setItem(KEY+"quiz", JSON.stringify(ST)); }catch(e){} }
+
+  function rec(key, ok){
+    var d = ST[key] || {n:0, w:0, r:[]};
+    d.n++; if(!ok) d.w++;
+    d.r.push(ok ? 1 : 0);
+    if(d.r.length > 6) d.r = d.r.slice(-6);
+    ST[key] = d; save();
+  }
+  /* 最近错次数 —— 薄弱点排序用的就是它，不是历史总错数：
+     一个月前错过三次但最近三次全对，不该再排在最前面。 */
+  function recentWrong(d){ return (d.r||[]).filter(function(x){ return x===0; }).length; }
+  /* 「还算不算薄弱」：错过、且最近两次没有连对。
+     用连对而不是「最近窗口里没有 0」，是为了让规则能一句话说清楚，
+     用户看得见自己离毕业还差几次；也挡住了蒙对一次就算掌握。 */
+  function isWeak(d){
+    if(!d || !d.w) return false;
+    var r = d.r || [];
+    return !(r.length >= 2 && r[r.length-1] === 1 && r[r.length-2] === 1);
+  }
+  function unitWrong(start){
+    var qs = Q[start] || [], rw = 0, w = 0, n = 0, qw = 0;
+    qs.forEach(function(_,i){
+      var d = ST[start+"#"+i]; if(!d) return;
+      rw += recentWrong(d); w += d.w; n += d.n; if(isWeak(d)) qw++;
+    });
+    // rw 数的是最近错的**次数**（只用来排序，谁更该先复习）；
+    // qw 数的是**还没毕业的题数**（给人看，也决定标红和进不进复习队列）。
+    return {rw:rw, w:w, n:n, qw:qw};
+  }
+  function histHtml(d){
+    var h = "";
+    for(var i=0;i<6;i++){
+      var v = d && d.r ? d.r[d.r.length-6+i] : undefined;
+      h += '<i class="'+(v===1?"o":v===0?"x":"")+'"></i>';
+    }
+    return h;
+  }
+
+  function quizHtml(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var h = '<div class="quiz"><h3>自测 <b>'+qs.length+'</b> 题</h3>';
+    qs.forEach(function(q,i){
+      var key = start+"#"+i, d = ST[key];
+      h += '<div class="qq" data-k="'+key+'" data-a="'+q.a+'">';
+      h += '<div class="t">'+q.q+'</div>';
+      q.o.forEach(function(o,j){
+        h += '<button class="opt" data-j="'+j+'">'+o+'</button>';
+      });
+      h += '<div class="why" style="display:none"></div>';
+      h += '<div class="qhist">'+histHtml(d)+
+           '<span style="margin-left:6px">'+
+           (d ? "做过 "+d.n+" 次 · 错 "+d.w : "还没做过")+'</span>'+
+           '<button class="qagain">重做</button></div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  function bindQuiz(){
+    document.querySelectorAll(".qq").forEach(function(box){
+      var key = box.dataset.k, ans = +box.dataset.a;
+      var why = box.querySelector(".why"), opts = box.querySelectorAll(".opt");
+      var qs = Q[key.split("#")[0]], q = qs[+key.split("#")[1]];
+      opts.forEach(function(b){
+        b.onclick = function(){
+          var j = +b.dataset.j, ok = (j === ans);
+          opts.forEach(function(x){
+            x.disabled = true;
+            if(+x.dataset.j === ans){ x.classList.add("ok"); x.innerHTML += '<span class="m">✓</span>'; }
+          });
+          if(!ok){ b.classList.add("no"); b.innerHTML += '<span class="m">✗</span>'; }
+          why.innerHTML = q.why; why.style.display = "block";
+          rec(key, ok);
+          box.querySelector(".qhist").innerHTML =
+            histHtml(ST[key]) + '<span style="margin-left:6px">做过 '+ST[key].n+
+            ' 次 · 错 '+ST[key].w+'</span><button class="qagain">重做</button>';
+          bindAgain(box); paintStrip(); revSync();
+          var bd = document.querySelector('#card>h2 .qbadge');
+          if(bd) bd.outerHTML = qBadge(+key.split('#')[0]);
+          bindBadge();
+        };
+      });
+      bindAgain(box);
+    });
+  }
+  function bindBadge(){
+    var b = document.querySelector("#card>h2 .qbadge");
+    if(b) b.onclick = function(){
+      var q = document.querySelector(".quiz");
+      if(q) q.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+  }
+  function bindAgain(box){
+    var a = box.querySelector(".qagain");
+    if(a) a.onclick = function(){ render(cur); };
+  }
+
+  /* 页条上标红：这一单元最近还在错 */
+  function paintStrip(){
+    cells.forEach(function(c,k){
+      var i = map[k+1];
+      var cls = (i!=null ? "has" : "");
+      if(i!=null){
+        if(unitWrong(N[i].r[0]).qw > 0) cls += " err";
+      }
+      if(k+1===cur) cls += " on";
+      c.className = cls;
+    });
+  }
+
+
+  /* ── 标题角标：不用滚到底就知道这页有没有题、错没错过 ── */
+  function qBadge(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var st = unitWrong(start);
+    return '<span class="qbadge'+(st.qw?" bad":"")+'" title="跳到自测">'+
+      (st.qw ? "还错 "+st.qw+"/"+qs.length+" 题" : qs.length+" 题")+' ↓</span>';
+  }
+
+  /* ── 复习模式：前进/后退只在「最近还在错」的页之间跳 ──
+     用户要的是「专项针对薄弱部分复习」。光有一张错题清单还得自己一条条点，
+     所以把它接到翻页上：开了之后 ← → 就只在这些页里走。
+     依据是**最近**错次，不是累计——早就改对的题不该再拦路。 */
+  var rev = false, revList = [];
+  function weakPages(){
+    return N.filter(function(n){ return unitWrong(n.r[0]).qw > 0; })
+            .map(function(n){ return n.r[0]; });
+  }
+  function revPaint(){
+    var chip = document.getElementById("revChip");
+    chip.classList.toggle("on", rev);
+    if(!rev) return;
+    var i = revList.indexOf(mapStart(cur));
+    chip.querySelector("b").textContent =
+      (i < 0 ? "?" : (i+1)) + " / " + revList.length + " 页";
+  }
+  function mapStart(p){ var i = map[p]; return i==null ? -1 : N[i].r[0]; }
+
+  function step(d){
+    if(!rev) return go(cur + d);
+    if(!revList.length) return exitRev(true);
+    var here = mapStart(cur), i = revList.indexOf(here);
+    if(i < 0){                       // 当前不在清单里：跳到顺着方向最近的一页
+      var t = null;
+      for(var k=0;k<revList.length;k++){
+        if(d > 0 ? revList[k] > cur : revList[k] < cur){ t = revList[k]; if(d>0) break; }
+      }
+      return go(t == null ? revList[d>0 ? 0 : revList.length-1] : t);
+    }
+    go(revList[(i + d + revList.length) % revList.length]);
+  }
+  function enterRev(){
+    revList = weakPages();
+    if(!revList.length){ alert("没有待复习的页——错过的题都连对两次毕业了。"); return; }
+    rev = true; wp.classList.remove("on");
+    go(revList.indexOf(mapStart(cur)) >= 0 ? cur : revList[0]);
+    revPaint();
+  }
+  function exitRev(done){
+    rev = false; revPaint();
+    if(done) alert("待复习的页都毕业了，已退出复习模式。");
+  }
+  document.getElementById("revOff").onclick = function(){ exitRev(false); };
+
+  /* 答完一题就重算一次清单：刚改对的页当场从复习队列里消失。 */
+  function revSync(){
+    if(!rev) return;
+    revList = weakPages();
+    if(!revList.length) exitRev(true); else revPaint();
+  }
+
+  /* 错题本 */
+  var wp = document.getElementById("wrongPanel");
+  function openWrong(){
+    var list = [];
+    N.forEach(function(n){
+      var st = unitWrong(n.r[0]);
+      if(st.n === 0 || st.w === 0) return;
+      list.push({n:n, rw:st.rw, w:st.w, tot:st.n, qw:st.qw});
+    });
+    // 还没毕业的一律排前面；同样没毕业的，最近错得多的更靠前。
+    list.sort(function(a,b){
+      return (b.qw > 0) - (a.qw > 0) || (b.rw - a.rw) || (b.w - a.w); });
+    var box = document.getElementById("wrongList");
+    if(!list.length){
+      box.innerHTML = '<div class="none">还没有错题。<br>做几道自测再回来看。</div>';
+    } else {
+      box.innerHTML = list.map(function(it){
+        var qs = Q[it.n.r[0]] || [];
+        // 每道题的六格单独成一组，多题的单元才不会连成一片看不出边界
+        var h = qs.map(function(_,i){
+          return "<u>"+histHtml(ST[it.n.r[0]+"#"+i])+"</u>"; }).join("");
+        return '<div class="wrow'+(it.qw ? "" : " done")+'" data-p="'+it.n.r[0]+'">'+
+          '<span class="p">p'+it.n.r[0]+'</span>'+
+          '<span class="n2">'+it.n.t+'</span>'+
+          '<span class="h">'+h+'</span>'+
+          '<span class="s">'+(it.qw ? "还差 "+it.qw+" 题毕业" : "已毕业")+
+          ' · 累计错 '+it.w+'/'+it.tot+'</span></div>';
+      }).join("");
+      box.querySelectorAll(".wrow").forEach(function(r){
+        r.onclick = function(){ wp.classList.remove("on"); go(+r.dataset.p); };
+      });
+    }
+    // 总账。三个数分工明确：做了多少、还有多少没过关、一共栽过几次。
+    var done=0, tot=0, weak=0, wsum=0;
+    Object.keys(Q).forEach(function(k){
+      Q[k].forEach(function(_,i){
+        tot++;
+        var d = ST[k+"#"+i]; if(!d) return;
+        done++; wsum += d.w; if(isWeak(d)) weak++;
+      });
+    });
+    document.getElementById("wrongTally").innerHTML =
+      '<span>做过 <b>'+done+'</b> / '+tot+' 题</span>'+
+      '<span>没毕业 <b class="hot">'+weak+'</b> 题</span>'+
+      '<span>累计错 <b>'+wsum+'</b> 次</span>'+
+      '<span>待复习 <b>'+weakPages().length+'</b> 页</span>';
+    document.getElementById("revOn").disabled = !weakPages().length;
+    wp.classList.add("on");
+  }
+  document.getElementById("wrongBtn").onclick = openWrong;
+  document.getElementById("revOn").onclick = enterRev;
+  document.getElementById("wrongClose").onclick = function(){ wp.classList.remove("on"); };
+  document.getElementById("wrongReset").onclick = function(){
+    if(!confirm("清空全部自测记录？此操作不可撤销。")) return;
+    ST = {}; save(); exitRev(false); paintStrip(); openWrong(); render(cur);
+  };
+  wp.onclick = function(e){ if(e.target === wp) wp.classList.remove("on"); };
+
+  document.getElementById("prev").onclick=function(){ step(-1); };
+  document.getElementById("next").onclick=function(){ step(1); };
+  pnum.addEventListener("change",function(){ go(pnum.value); });
+  pnum.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ go(pnum.value); this.blur(); }
+  });
+  document.addEventListener("keydown",function(e){
+    if(document.activeElement===pnum) return;
+    if(e.key==="ArrowLeft"||e.key==="PageUp"){ step(-1); e.preventDefault(); }
+    if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){ step(1); e.preventDefault(); }
+  });
+
+  var miss=document.getElementById("miss");
+  frame.addEventListener("error",function(){ miss.style.display="block"; });
+  frame.addEventListener("load", function(){ miss.style.display="none"; });
+  document.getElementById("help").onclick=function(){
+    miss.style.display = miss.style.display==="block" ? "none" : "block";
+  };
+
+  var drag=document.getElementById("drag"), left=document.getElementById("left"), dragging=0;
+  drag.addEventListener("mousedown",function(){ dragging=1; document.body.style.userSelect="none"; });
+  document.addEventListener("mouseup",function(){ dragging=0; document.body.style.userSelect=""; });
+  document.addEventListener("mousemove",function(e){
+    if(!dragging) return;
+    left.style.width=Math.max(20,Math.min(78,e.clientX/window.innerWidth*100))+"%";
+  });
+
+  var s=1; try{ s=parseInt(localStorage.getItem(KEY+"p"),10)||1; }catch(e){}
+  go(s);
+})();
+</script>
+
+
+
+
+
+
+<!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
+<style>
+#nopdf{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+#nopdf .in{max-width:380px;text-align:center;font-size:14px;line-height:1.85;
+  color:var(--dim,#6a7686)}
+#nopdf b{color:var(--ink,#23272c)}
+#nopdf code{font-size:12.5px}
+</style>
+<script>
+(function(){
+  /* 公开站上 slides/*.pdf 不在仓库里（著作权）。与其让左栏挂一个空 iframe，
+     不如说清楚它去哪了 —— 右栏的讲解和自测题完全不受影响。
+     本地预览同样加 ?public=1 。*/
+  if (!/\.github\.io$/.test(location.hostname)
+      && !/[?&]public=1\b/.test(location.search)) return;
+  function go(){
+    var stage = document.getElementById("stage");
+    var frame = document.getElementById("pdf");
+    if (!stage) return;
+    if (frame) frame.remove();
+    var d = document.createElement("div");
+    d.id = "nopdf";
+    d.innerHTML = '<div class="in"><p><b>原课件不在公开仓库里。</b></p>'
+      + '<p>课件著作权属于学校与各课作者，本仓库不转载。</p>'
+      + '<p>右栏的逐页讲解与自测题是自己写的，<b>照常可用</b>。</p>'
+      + '<p style="opacity:.75">要让这一栏显示出来：把原 PDF 放回 <code>精读/slides/</code>，'
+      + '用本地静态服务器打开即可。</p></div>';
+    stage.appendChild(d);
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+</script>
+<!-- deploy-public-mode : end -->
+</body></html>

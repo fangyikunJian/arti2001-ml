@@ -1,0 +1,798 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>官方讲义精读 · M2T1 PCA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+/* ── 等比坐标映射，安全区 y∈[90,470] ── */
+function PX(x){return 640+52*x;}
+function PY(y){return 285-52*y;}
+function ax(w,h){w=w||5.2;h=h||3.4;
+  link(PX(-w),PY(0),PX(w),PY(0));link(PX(0),PY(-h),PX(0),PY(h));
+  note("x₁",PX(w)+16,PY(0)+5,"","start");note("x₂",PX(0)+18,PY(h)+2,"","start");}
+function P(pts,cls,r){dots(pts.map(function(p){return [PX(p[0]),PY(p[1])];}),cls,r||9);}
+function dirLine(vx,vy,t,cls){var n=Math.sqrt(vx*vx+vy*vy),ux=vx/n,uy=vy/n;
+  curve([[PX(-t*ux),PY(-t*uy)],[PX(t*ux),PY(t*uy)]],cls||"fit g");}
+function feet(pts,vx,vy,cls){var n=Math.sqrt(vx*vx+vy*vy),ux=vx/n,uy=vy/n;
+  var F=pts.map(function(p){var s=p[0]*ux+p[1]*uy;return [s*ux,s*uy];});
+  pts.forEach(function(p,i){link(PX(p[0]),PY(p[1]),PX(F[i][0]),PY(F[i][1]));});
+  P(F,cls||"c",7);return F;}
+/* ── 一维高斯 ── */
+function bell(cx,cy,w,h,cls){var p=[],i;
+  for(i=0;i<=90;i++){var t=-3.4+6.8*i/90;
+    p.push([cx+w*t/6.8, cy-h*Math.exp(-t*t/2)]);}
+  curve(p,cls||"fit b");}
+/* ── 讲义页码标记（右上角）── */
+function src(s){note("讲义 "+s,1180,96,"","end");}
+
+var CFG={title:"官方讲义精读 · M2T1_PCA.pdf（47 页）",subtitle:"逐节讲透官方扩展讲义 · 含讲义独有的五点手算例 · 空格推进 · N 开关讲解",video:""};
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("官方讲义精读","M2T1_PCA.pdf · 47 页",
+      "先搞清楚这份文件怎么读");},
+    "这是 Canvas 上那份 <b>PCA expanded notes（47 页）</b>的逐节精读。<br>先说一件你打开文件就会到处找的事：<b>前 30 页是幻灯，文字很少；真正的讲解在 p31–p46</b>。<br>这部片子按讲义自己的七个小节走，<em>每一节开头先说它要回答什么</em>。");
+  S(0,function(){clearScene();setCap("这份讲义在你手里那堆材料里的位置");
+    boxNode(110,170,300,86,"Canvas 文字讲义","b");
+    boxNode(490,170,300,86,"本份：扩展讲义 PDF","y");
+    boxNode(870,170,300,86,"Tutorial 与手算","g");
+    note("定义、约定、评估框架",260,300,"");
+    note("六步流水线 + 独有的五点例",640,300,"");
+    note("原题与官方解答",1020,300,"");
+    note("三者内容重叠，但这份是唯一把 PCA 写成「一条流水线」的",640,398,"y");},
+    "三份材料各有分工。<b>Canvas 文字讲义</b>给定义与考试约定；<b>Tutorial</b> 给原题与官方解答；<br>而<b>这份扩展讲义的特产是两样</b>：把 PCA 写成<em>一条六步流水线</em>，以及一个<em>别处没有的五点手算例</em>。<br>重叠的部分我会快走，它独有的部分慢慢讲。");
+});
+KP("1 · 从监督到无监督（讲义 p4–p6）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("这一节回答：没有 y 之后，算法还能找什么");src("p4–p6");
+   ax();P([[-3,-2.4],[-2,-1.5],[-1,-0.7],[1,0.8],[2,1.7],[3,2.5]],"a",9);
+   curve([[PX(-3.4),PY(-2.8)],[PX(3.4),PY(2.8)]],"fit y");
+   note("有监督：每个点都带一个 y",PX(0),PY(-3.2),"y");},"先把这一节的问题摆出来：<b>训练数据里不再给目标标签了，算法还能找什么？</b><br>M1 整个模块都在有监督的框架里——每个样本配一个 y，好坏有唯一裁判：<em>预测准不准</em>。");
+  S(0,function(){clearScene();setCap("无监督：只有 N 个观测，没有任何 y");src("p6");
+   ax();P([[-3,2.1],[-2.6,2.7],[-2.2,1.8],[2.4,-1.7],[2.9,-2.3],[2.1,-2.6],[0.2,0.3]],"b",9);
+   note("没有裁判，只有数据本身",PX(0),PY(-3.2),"r");},"无监督学习只给你 {x₁,…,x_N}，<s>没有任何目标标签</s>。<br>算法要按自己的目标与假设，找出一个有用的<em>表示、分组或概率模型</em>。<br><b>注意：没有标签不等于没有目标函数</b>——每个方法仍然在优化某个准则。");
+  S(0,function(){clearScene();setEq(null);setCap("T1 要学的是「表示」这一支");src("p6");
+   boxNode(140,170,300,86,"表示 / 降维","b");note("PCA",290,290,"b");
+   boxNode(490,170,300,86,"分组 / 聚类","g");note("k-means · DBSCAN",640,290,"g");
+   boxNode(840,170,300,86,"概率密度模型","v");note("GMM",990,290,"v");
+   note("本页讲义只管最左边这一格",640,392,"y");},"Module 2 深考四个方法，分属三支。<em>这份讲义只讲最左边那一支：用 PCA 做线性降维。</em><br>聚类和 GMM 各有自己的讲义，<em>先把这一支走完再去碰别的</em>。");
+  SUM(0,1,{h:"无监督 = 无标签地找结构；T1 走「表示」这一支",k:"无监督只有 {x₁,…,x_N}，找的是<b>表示 / 分组 / 概率模型</b>。",m:"<b>没有标签 ≠ 没有目标函数</b>——每个方法都在优化某个准则。",w:"这份 47 页讲义<b>只管 PCA</b>；而且它的讲解文字在 <b>p31–p46</b>，前 30 页是幻灯。",e:"读法：先看 p33 的六步流水线，再回头逐步看 p34–p39。"});
+  QUIZ(0,1,{t:"这份 47 页讲义里，真正的讲解文字在哪？",o:["只在最后一页的总结里","集中在 p31–p46，前 30 页是幻灯","在每页幻灯下方的备注栏里（PDF 已带出）","均匀分布在全部 47 页上"],a:1,w:"PDF 导出时<em>没有带出备注栏</em>，官方把展开讲解单独放在了 p31–p46。知道这一点能省很多翻页时间。"});
+});
+KP("2 · 为什么要降维（讲义 p31）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("这一节回答：多出来的列到底浪费在哪");src("p31");
+   boxNode(150,160,250,76,"身高","b");
+   boxNode(500,160,250,76,"臂展","b");
+   boxNode(850,160,250,76,"腿长","b");
+   note("↓",640,274,"");
+   boxNode(430,300,420,76,"其实就是一件事：整体体型","g");
+   note("三列藏着一个想法",640,404,"y");},"讲义用一个很具体的例子开场：<b>身高、臂展、腿长</b>。<br>这三列<em>说的基本是同一件事</em>——整体体型。<b>相关的特征在重复同样的信息</b>，三列藏着一个想法。<br>这就是降维要处理的第一个毛病。");
+  S(0,function(){clearScene();setCap("维度灾难：同样的点，摄得越来越稀");src("p31、p9");
+   note("1 维：10 个点挤在一条线上",640,170,"g");
+   dots([[300,230],[345,230],[390,230],[435,230],[480,230],[525,230],[570,230],[615,230],[660,230],[705,230]],"b",8);
+   note("2 维：同样 10 个点要铺满一片面",640,290,"y");
+   dots([[320,330],[460,350],[610,325],[760,355],[900,330],[380,395],[540,380],[690,400],[840,378],[980,395]],"y",8);
+   note("每多一个特征，就把同一批观测摊到更大的空间里",640,400,"");},"第二个毛病叫<b>维度灾难</b>。讲义的一句话定义很好记：<br><em>每多一个特征，就把同一批观测摊到更大的空间里去。</em><br>点一稀疏，<em>距离就不再有信息量</em>，画图也看不出结构。");
+  S(0,function(){clearScene();setEq(null);setCap("四项收益，但都带前提");src("p31、p10");
+   matrix({rows:4,cols:2,cw:430,ch:52,x:210,y:176,
+     cell:function(i,j){var t=[
+       ["收益","具体是什么"],
+       ["更便宜的模型","特征少，存储与计算都省"],
+       ["人看得懂的图","降到 2–3 维才画得出来"],
+       ["更少的噪声与稀疏","丢掉主要是噪声的方向"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⚠ 最后一行的「主要是噪声」是假设，得自己去验",640,398,"y");},"讲义把收益列成三项：<em>更便宜的模型、人看得懂的图、更少的噪声与稀疏</em>。<br><b>但第三项是一个假设</b>：丢掉的方向真的主要是噪声吗？<br>这件事<b>讲义后面专门用一整节来泼冷水</b>，这里先记着。");
+  SUM(0,2,{h:"降维治两个毛病：信息重复、维度灾难",k:"相关特征<b>重复同样的信息</b>（身高/臂展/腿长 ≈ 体型）；维度灾难 = <b>每多一个特征就把同一批观测摊得更稀</b>。",m:"收益：更便宜的模型、看得懂的图、更少的噪声与稀疏。",w:"<s>「丢掉的方向就是噪声」不是自动成立的</s>——这是个要验证的假设。",e:"问「为什么要降维」时，<b>答「重复信息 + 稀疏」比只说「特征太多」具体得多</b>。"});
+  QUIZ(0,2,{t:"讲义给「维度灾难」的一句话定义是什么？",o:["每多一个特征，就把同一批观测摊到更大的空间里","特征之间的相关性会随维数上升","特征越多模型越容易过拟合","特征越多训练时间越长"],a:0,w:"点一稀疏，<em>距离就不再有信息量</em>，可视化也更难。其它三项有的也对，但不是讲义那句定义。"});
+});
+KP("3 · 先说清楚：一个「维度」是什么（讲义 p8–p9）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u300c\u7ef4\u5ea6\u300d\u5230\u5e95\u6307\u4ec0\u4e48");src("p8");
+   boxNode(140,170,440,80,"\u4e00\u4e2a\u7279\u5f81 = \u4e00\u4e2a\u7ef4\u5ea6","b");
+   boxNode(700,170,440,80,"d \u4e2a\u7279\u5f81 = \u6570\u636e\u4f4f\u5728 d \u7ef4\u7a7a\u95f4\u91cc","b");
+   note("\u8eab\u9ad8\u3001\u4f53\u91cd\u3001\u5e74\u9f84\u2026\u2026\u6bcf\u4e00\u5217\u5c31\u662f\u4e00\u4e2a\u8f74",360,306,"");
+   note("\u4e00\u4e2a\u89c2\u6d4b = \u90a3\u4e2a\u7a7a\u95f4\u91cc\u7684\u4e00\u4e2a\u70b9",920,306,"");
+   note("\u6240\u4ee5\u300c\u964d\u7ef4\u300d\u5b57\u9762\u610f\u601d\u5c31\u662f\uff1a\u5c11\u7528\u51e0\u6839\u8f74\u6765\u63cf\u8ff0\u540c\u4e00\u6279\u70b9",640,398,"y");},"讲义在讲维度灾难之前，先花了一页把词定清楚。<b>一个特征就是一个维度</b>：身高是一根轴，体重是另一根。<br>有 d 个特征，数据就住在 d 维空间里，<em>而每一个观测就是那个空间里的一个点</em>。<br>所以「降维」的字面意思很朴素：<b>少用几根轴来描述同一批点</b>。这一步听着废话，但后面讲「子空间」时全靠它。");
+  S(0,function(){clearScene();setCap("\u4e3a\u4ec0\u4e48\u7ef4\u6570\u4e00\u9ad8\uff0c\u8ddd\u79bb\u5c31\u4e0d\u597d\u7528\u4e86");src("p9");
+   note("\u4f4e\u7ef4\uff1a\u8fd1\u7684\u70b9\u771f\u7684\u633a\u8fd1\uff0c\u8fdc\u7684\u771f\u7684\u633a\u8fdc",640,170,"g");
+   dots([[300,240],[330,250],[360,235],[820,250],[860,238],[890,252]],"b",9);
+   note("\u9ad8\u7ef4\uff1a\u6240\u6709\u70b9\u4e24\u4e24\u4e4b\u95f4\u90fd\u5dee\u4e0d\u591a\u8fdc",640,310,"y");
+   dots([[300,370],[420,380],[540,365],[660,382],[780,368],[900,378]],"y",9);
+   note("\u4e8e\u662f\u300c\u6700\u8fd1\u90bb\u5c45\u300d\u8fd9\u4e2a\u6982\u5ff5\u5f00\u59cb\u5931\u6548",640,398,"");},"维度灾难最实在的后果是<b>距离失去区分力</b>。<br>低维时，近的点真的挨得近、远的真的隔得远；<em>而维数一高，所有点两两之间都差不多远</em>。<br>这会连累一大片方法：<em>k-means、DBSCAN、KNN 全都建立在「距离有意义」这个前提上</em>。<br>所以降维不只是省算力，<em>它可能是让后续方法还能工作的前提</em>。");
+  SUM(0,3,{h:"一个特征 = 一个维度；观测 = 空间里的一个点",k:"<b>降维 = 少用几根轴描述同一批点</b>。",m:"维度灾难最实在的后果：<b>距离失去区分力</b>，高维时所有点两两差不多远。",w:"连累面很广：<b>k-means、DBSCAN、KNN 都建立在「距离有意义」上</b>。",e:"所以降维有时<em>不是优化，而是让后续方法还能工作的前提</em>。"});
+  QUIZ(0,3,{t:"高维空间里「距离失去区分力」会直接连累哪些方法？",o:["不影响任何方法，只是画图不方便","只有 PCA 自己","只有有监督的回归方法","k-means、DBSCAN、KNN 这些依赖距离的方法"],a:3,w:"它们都建立在「近的点更相似」这个前提上。<em>降维因此有时是让这些方法还能工作的前提</em>，而不只是省算力。"});
+});
+KP("4 · ★ 大想法：把坐标轴转过去（讲义 p32）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("这一节回答：PCA 到底在干什么");src("p32");
+   ax();P([[-2.66,-1.34],[-1.95,-0.86],[-1.19,-0.71],[-0.47,-0.18],
+           [0.32,0.25],[1.10,0.47],[1.72,1.01],[2.48,1.25]],"b",9);
+   note("虚线轴 = 原来的两个特征",PX(0),PY(-2.6),"");
+   note("点云明显沿着右上方向排开，而坐标轴没有",640,398,"y");},"这一节是整份讲义的核心想法，标题就叫 <b>Rotate the Axes</b>。<br>看这片点云：它明显沿着<em>右上方向</em>排开，<b>可原来的两条坐标轴谁也没顺着这个方向</b>。<br>于是问题变成：<b>能不能换一组轴，让它们顺着数据的形状？</b>");
+  S(0,function(){clearScene();setCap("PC1：投影上去散得最开的那个方向");src("p32");
+   ax();P([[-2.66,-1.34],[-1.95,-0.86],[-1.19,-0.71],[-0.47,-0.18],
+           [0.32,0.25],[1.10,0.47],[1.72,1.01],[2.48,1.25]],"b",9);
+   dirLine(2,1,3.1,"fit g");
+   feet([[-2.66,-1.34],[-1.95,-0.86],[-1.19,-0.71],[-0.47,-0.18],
+         [0.32,0.25],[1.10,0.47],[1.72,1.01],[2.48,1.25]],2,1,"c");
+   note("PC1",PX(2.7),PY(1.5),"g","start");
+   note("它是所有原特征的加权组合，不是挑出来的某一列",640,398,"y");},"<b>PC1 = 投影之后散得最开的那个方向。</b><br>讲义特意强调一句容易误会的话：<em>它是所有原始特征的加权组合，不是从里面挑出来的某一列。</em><br>图上那些短线段就是每个点投到 PC1 上的垂足。");
+  S(0,function(){clearScene();setCap("PC2：剩下的散得最开，而且必须垂直");src("p32");
+   setEq("$$\\mathrm{PC1}^{\\top}\\,\\mathrm{PC2} = 0$$");
+   note("垂直 ⇒ 两个方向不会把同一份变异描述两遍",640,196,"b");
+   note("合起来就是一套「跟着点云形状走」的新坐标系",640,240,"y");},"PC2 取<em>剩余</em>变异里最大的方向，而且<b>必须和 PC1 垂直</b>。<br>垂直这个要求不是为了好看：<b>它保证两个方向不会把同一份变异描述两遍。</b><br>两者合起来，就是一套<em>跟着点云形状走</em>的新坐标系。");
+  SUM(0,4,{h:"★ PCA = 把坐标轴转到跟着数据形状走",k:"<b>PC1</b>：投影后散得最开的方向，是<b>所有特征的加权组合</b>，不是挑出来的某一列。",m:"<b>PC2</b>：剩余变异最大，且<b>与 PC1 垂直</b>（PC1ᵀPC2 = 0）。",w:"垂直的作用是<b>不把同一份变异描述两遍</b>，不是为了画图好看。",e:"答「PCA 在做什么」时，<em>「旋转坐标系去贴合点云形状」比「找最大方差方向」更好懂</em>，两句都写最稳。"});
+  QUIZ(0,4,{t:"关于 PC1，下列哪一项是讲义特意强调的？",o:["它一定是原始特征里方差最大的那一列","它的方向由目标变量 y 决定","它是所有原始特征的加权组合，不是挑出来的某一列","它必须与某条坐标轴平行"],a:2,w:"PCA <s>不使用任何标签</s>，所以 D 错。而 PC1 一般<em>不与任何原坐标轴重合</em>，这正是「旋转」的意义。"});
+});
+KP("5 · ★ PCA 是一条六步流水线（讲义 p33）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("这一节回答：整个流程有几步、顺序能不能变");src("p33");
+   matrix({rows:7,cols:2,cw:380,ch:40,x:240,y:150,
+     cell:function(i,j){var t=[
+       ["步","做什么"],
+       ["1 排好 X","行是观测，列是特征"],
+       ["2 中心化 + 需要时缩放","减均值；单位不同时标准化"],
+       ["3 协方差","总结特征怎样变化与共变"],
+       ["4 特征对","特征向量给轴，特征值排序"],
+       ["5 选 k","解释方差足够的才留"],
+       ["6 投影","算得分，再重构看丢了什么"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return (i===2||i===4)?"hl":"";}});},"讲义把 PCA 写成一条<b>六步流水线</b>，这是这份文件最值得抄下来的一页。<br>标黄的两步<em>最容易出错</em>：中心化漏了、或者特征向量没归一化。");
+  S(0,function(){clearScene();setCap("为什么顺序不能乱");src("p33");
+   boxNode(110,180,230,76,"上一步的输出","b");
+   boxNode(420,180,230,76,"下一步的输入","b");
+   boxNode(730,180,420,76,"所以错误会一路传下去","r");
+   link(340,218,420,218);link(650,218,730,218);
+   note("没中心化 ⇒ 协方差错 ⇒ 特征向量错 ⇒ 得分错 ⇒ 重构错",640,330,"y");
+   note("手算大题里，第一步错了后面全没分",640,398,"r");},"讲义原话是：<em>每一步都吃上一步的输出，所以顺序要紧，错误会一路往前传。</em><br>这句话在手算大题里很实在——<em>第一步中心化漏掉，后面五步全白做</em>。<br>所以开算之前，先把均值减干净并验一遍。");
+  SUM(0,5,{h:"★ 六步流水线：排 X → 中心化/缩放 → 协方差 → 特征对 → 选 k → 投影重构",k:"<b>每一步吃上一步的输出</b>，所以顺序不能乱。",m:"最易错的两步：<b>中心化</b>与<b>特征向量归一化</b>。",w:"<b>错误会一路往前传</b>——第一步错了，后面全错。",e:"手算大题可以直接按这六步分段写，<em>每步一行，阅卷人一眼看得见结构</em>。"});
+  QUIZ(0,5,{t:"讲义强调「顺序要紧」的理由是什么？",o:["因为特征值必须按升序排列","因为每一步都吃上一步的输出，错误会一路往前传","因为后面的步骤计算量更大","因为缩放必须放在中心化之前"],a:1,w:"顺带记住 D 是反的：<em>先中心化、再按需缩放</em>。标准化本身就含了减均值这一步。"});
+});
+KP("6 · 第一步：中心化，缩放看情况（讲义 p34）",function(){
+  S(0,function(){clearScene();setCap("中心化：点云搬到原点，形状不变");src("p34");
+   setEq("$$X_{c} = X - \\mu,\\qquad \\mu = \\tfrac{1}{n}\\sum_{i} x_{i}$$");
+   note("变异从此是「相对中心」量的，而不是相对某个任意原点",640,196,"b");
+   note("讲义原话：标准推导要求必须先做这一步",640,240,"y");},"中心化就一个动作：<b>每一列减掉它自己的均值</b>。<br>点云<em>平移到原点，形状一点没变</em>；但从此变异是相对中心量的。<br>讲义写得很硬气：<b>标准推导要求必须先做这一步。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("缩放：是选择，不是规则");src("p34");
+   setEq("$$z = \\frac{x-\\mu}{\\sigma}$$");
+   note("作用：别让「美元」这种大单位特征压过「厘米」",640,196,"b");
+   note("讲义：单位不同时，两种都跑一遍再比",640,240,"y");},"缩放是<b>把每一列再除以自己的标准差</b>。<br>它能挡住一件事：<em>大单位的特征（比如美元）压过小单位的（比如厘米）</em>。<br><b>但讲义明说这是建模选择，不是自动规则</b>——单位不同时，两种都跑一遍再比。");
+  S(0,function(){clearScene();setEq(null);setCap("两步的地位完全不同");src("p34");
+   boxNode(130,180,460,82,"中心化：几乎总要做","g");
+   boxNode(690,180,460,82,"缩放：只在单位不可比时做","y");
+   note("推导的前提",360,320,"");
+   note("一个建模决定",920,320,"");
+   note("把这两条分开记，考试里问「要不要标准化」就不会摸不着头脑",640,398,"y");},"把两步的地位分清楚：<em>中心化是推导的前提，几乎总要做；缩放是一个建模决定。</em><br>考试里问「要不要标准化」，答案<em>永远取决于单位是否可比</em>，而不是一句「要」或「不要」。");
+  SUM(0,6,{h:"中心化几乎总做；缩放只在单位不可比时做",k:"<b>Xc = X − µ</b>：点云平移到原点、形状不变，<b>标准推导要求必须先做</b>。",m:"<b>z = (x−µ)/σ</b>：挡住大单位特征主导，但这是<b>建模选择不是规则</b>。",w:"<s>「永远要标准化」是错的</s>。单位不同时，<em>两种都跑一遍再比</em>。",e:"自检：中心化做对了，<b>Xc 每一列加起来必须是 0</b>。"});
+  QUIZ(0,6,{t:"讲义怎么定位「缩放（标准化）」这一步？",o:["只有特征数超过 10 个时才需要","必须放在中心化之前完成","和中心化一样，是推导的必要前提","是一个建模选择，单位不可比时才做，并且最好两种都比一遍"],a:3,w:"<em>中心化</em>才是推导前提（几乎总做）；<em>缩放</em>是选择。两者地位不同，别混为一谈。"});
+});
+KP("7 · 先分清两个词：方差与协方差（讲义 p12）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u8fd9\u4e24\u4e2a\u8bcd\u5404\u81ea\u91cf\u4ec0\u4e48");src("p12");
+   matrix({rows:3,cols:3,cw:300,ch:56,x:170,y:180,
+     cell:function(i,j){var t=[
+       ["","\u65b9\u5dee Var(x)","\u534f\u65b9\u5dee Cov(x\u2081,x\u2082)"],
+       ["\u8ddf\u51e0\u4e2a\u7279\u5f81\u6709\u5173","\u4e00\u4e2a","\u4e24\u4e2a"],
+       ["\u56de\u7b54\u7684\u95ee\u9898","\u5b83\u81ea\u5df1\u6563\u5f97\u591a\u5f00","\u5b83\u4fe9\u4f1a\u4e0d\u4f1a\u4e00\u8d77\u6d6e\u6c89"]];return t[i][j];},
+     dim:function(i,j){return i===0||j===0;},
+     hl:function(i,j){return i===2?"hl":"";}});
+   note("\u534f\u65b9\u5dee\u6b63 \u21d2 \u540c\u589e\u540c\u51cf\uff1b\u8d1f \u21d2 \u4e00\u589e\u4e00\u51cf\uff1b\u63a5\u8fd1 0 \u21d2 \u51e0\u4e4e\u4e0d\u76f8\u5e72",640,398,"y");},"这两个词长得像，量的是完全不同的东西。<b>方差只跟一个特征有关</b>，问的是「它自己散得多开」；<b>协方差跟两个特征有关</b>，问的是「它俩会不会一起浮沉」。<br>符号的读法很直接：<em>正的是同增同减，负的是一增一减，接近 0 是几乎不相干</em>。");
+  S(0,function(){clearScene();setCap("\u4e3a\u4ec0\u4e48 PCA \u504f\u504f\u8981\u770b\u534f\u65b9\u5dee");src("p12\u3001p35");
+   ax(3.4,2.4);
+   P([[-2.6,-1.5],[-1.8,-0.9],[-1.0,-0.7],[-0.2,-0.1],[0.6,0.4],[1.4,0.8],[2.2,1.3]],"b",9);
+   note("\u534f\u65b9\u5dee\u5f88\u5927 \u21d2 \u70b9\u4e91\u659c\u7740\u6446",PX(0),PY(2.0),"y");
+   note("\u659c\u7740\u6446\uff0c\u5c31\u8bf4\u660e\u539f\u6765\u7684\u5750\u6807\u8f74\u4e0d\u662f\u63cf\u8ff0\u5b83\u7684\u597d\u8f74",640,398,"");},"PCA 关心协方差，是因为<b>协方差大就等于「点云是斜着摆的」</b>。<br>而斜着摆，<em>说明原来那两根坐标轴不是描述它的好轴</em>——转一下会更贴合。<br>反过来，如果所有协方差都接近 0，<em>点云本来就正对着坐标轴，PCA 转也转不出什么名堂</em>。");
+  SUM(0,7,{h:"方差管一个特征，协方差管两个特征的关系",k:"<b>Var 问「它自己散得多开」；Cov 问「它俩会不会一起浮沉」。</b>",m:"符号读法：<b>正 = 同增同减；负 = 一增一减；≈0 = 几乎不相干</b>。",w:"PCA 关心协方差，是因为<b>协方差大 = 点云斜着摆 = 原坐标轴不好用</b>。",e:"⚠ 反过来，<em>协方差都接近 0 时，PCA 转不出什么名堂</em>。"});
+  QUIZ(0,7,{t:"如果一份数据所有特征之间的协方差都接近 0，PCA 会怎样？",o:["点云本来就正对坐标轴，转轴带来的收益很小","PCA 无法计算，协方差矩阵不可逆","PCA 效果最好，能压缩掉绝大部分维度","所有特征值都会变成负数"],a:0,w:"协方差矩阵接近对角阵 ⇒ <em>原坐标轴已经是主方向</em>。极端情形下各特征还等方差，就会出现<b>特征值并列、没有优先轴</b>。"});
+});
+KP("8 · 第二步：协方差矩阵（讲义 p35、p12）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("一个矩阵总结整批数据");src("p35、p12");
+   matrix({rows:3,cols:3,cw:300,ch:58,x:170,y:176,
+     cell:function(i,j){var t=[
+       ["","对角元","非对角元"],
+       ["量的是","单个特征的方差","两个特征是否同浮同沉"],
+       ["PCA 看它干什么","每个轴散得多开","是否值得转轴"]];return t[i][j];},
+     dim:function(i,j){return i===0||j===0;},
+     hl:function(i,j){return i===2?"hl":"";}});
+   note("讲义：非对角元很大 = 原坐标轴没跟着数据走的证据",640,398,"y");},"协方差矩阵是<b>把整批准备好的数据总结成一个矩阵</b>。<br>讲义点出了 PCA 为什么要它：<em>非对角元很大，就是「原坐标轴没顺着数据」的证据</em>——<em>于是转轴才有意义</em>。");
+  S(0,function(){clearScene();setCap("两个写法，特征向量完全一样");src("p35");
+   setEq("$$S = X_{c}^{\\top}X_{c} \\qquad\\Longrightarrow\\qquad \\Sigma = S/(n-1)$$");
+   note("特征向量相同；特征值差一个 (n−1) 因子",640,196,"b");
+   note("讲义的要求：你用的是哪一个，写清楚",640,240,"y");},"同一堆数有两种写法：<b>散布矩阵 S = XcᵀXc</b> 和<b>样本协方差 Σ = S/(n−1)</b>。<br><b>两者特征向量完全相同</b>，只有特征值差一个因子，<em>解释方差比也一模一样</em>。<br>讲义只提一个要求：<b>说清楚你用的是哪一个。</b>");
+  SUM(0,8,{h:"协方差：对角是方差，非对角是共动",k:"<b>非对角元大 = 原坐标轴没跟着数据走</b>，这正是转轴有意义的依据。",m:"<b>S = XcᵀXc</b> 与 <b>Σ = S/(n−1)</b>：<b>特征向量相同</b>，特征值差 (n−1)，<b>解释方差比相同</b>。",w:"讲义要求<b>写明你用的是哪一个</b>——手算时直接用 S 可以省掉分数。",e:"⚠ 这份讲义 p37 自己就把 Σ 标成了「S =」，下一节会指出来。"});
+  QUIZ(0,8,{t:"S = XcᵀXc 与 Σ = S/(n−1) 的关系是？",o:["解释方差比也相差 (n−1) 倍","特征向量不同，特征值相同","特征向量相同，特征值差 (n−1)，解释方差比相同","两者完全相同，可以互换"],a:2,w:"所以手算时<em>直接对 S 做特征分解即可</em>——方向一样、比值一样，还省掉除法。"});
+});
+KP("9 · 第三步：特征对，与两个约定（讲义 p36、p13）",function(){
+  S(0,function(){clearScene();setCap("特征向量：矩阵只拉伸、不转向的那个方向");src("p36、p13");
+   setEq("$$\\Sigma v = \\lambda v$$");
+   note("v 是方向；λ 是被拉伸了多少倍",640,196,"b");
+   note("这一条是纯线性代数，跟 PCA 暂时没关系",640,240,"");},"先把这个词单独讲清楚。<em>特征向量 v 是「矩阵只把它拉伸、不把它转向」的那个方向</em>，<br><b>特征值 λ 就是拉伸了多少倍。</b><br>这是<em>纯线性代数的定义</em>，和 PCA 还没有关系。");
+  S(0,function(){clearScene();setEq(null);setCap("放到 PCA 里，λ 的含义就具体了");src("p36");
+   setEq("$$\\mathrm{Var}(z) = v^{\\top}\\Sigma v$$");
+   note("把数据投到方向 v 上，得分的方差就是这个量",640,196,"b");
+   note("它在最大特征向量处取到最大值 ⇒ λ 就是那个方向的投影方差",640,240,"y");},"换到协方差矩阵上，<em>v 是一条候选轴，而 λ 正好就是数据投到这条轴上之后的方差</em>。<br>理由在那一行式子里：<em>投影得分的方差是 vᵀΣv，它在最大特征向量处取到最大</em>。<br><b>所以挑最大的 λ，就是挑最散得开的方向。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("排序 + 两个必须记住的约定");src("p36");
+   boxNode(130,170,460,76,"按 λ 从大到小排","b");
+   boxNode(690,170,460,76,"每一个都垂直于前面所有","b");
+   note("① 用之前先归一化，使 ‖v‖ = 1",640,300,"y");
+   note("② 符号可能翻：v 和 −v 代表同一条轴",640,344,"y");
+   note("考试里答案符号和你算的相反，不是错",640,398,"");},"把特征对按 λ 降序排，<b>最大的是 PC1，其次 PC2</b>，每个都垂直于前面所有。<br>讲义给了两个约定，<b>都很爱考</b>：<b>用之前先归一化成单位长度</b>；<b>符号可能翻转，v 和 −v 是同一条轴</b>。");
+  SUM(0,9,{h:"Σv = λv：v 给轴，λ 就是该轴上的投影方差",k:"特征向量 = <b>只被拉伸、不被转向</b>的方向；特征值 = 拉伸倍数。",m:"在协方差矩阵上：<b>Var(z) = vᵀΣv</b>，在最大特征向量处取到最大 ⇒ <b>λ 就是投影方差</b>。",w:"两个约定：<b>先归一化 ‖v‖ = 1</b>；<b>v 与 −v 是同一条轴</b>（符号可翻）。",e:"⚠ 答案符号和你算的相反时<em>不要以为算错了</em>。"});
+  QUIZ(0,9,{t:"在 PCA 里，特征值 λ 的含义是什么？",o:["该方向与坐标轴的夹角","该方向上观测点的个数","数据投到该方向上之后，得分的方差","重构误差的平方根"],a:2,w:"依据是 <b>Var(z) = vᵀΣv</b>，它在最大特征向量处取到最大 —— 所以<em>最大特征值对应最散得开的方向</em>。"});
+});
+KP("10 · ★ 讲义独有的五点手算例（一）：数据与协方差",function(){
+  S(0,function(){clearScene();setEq(null);setCap("五个点，已经居中");src("p37");
+   matrix({rows:6,cols:3,cw:200,ch:40,x:340,y:146,
+     cell:function(i,j){var t=[
+       ["点","x₁","x₂"],["A","−2","−1"],["B","−1","−1"],
+       ["C","0","0"],["D","1","1"],["E","2","1"]];return t[i][j];},
+     dim:function(i,j){return i===0;}});
+   note("两列均值都是 0 ⇒ 第一步已经做完",640,398,"g");},"讲义在 p37–p39 给了一个<b>别处都没有的手算例</b>，很值得完整走一遍。<br>五个点，<b>两列的均值都已经是 0</b>——<em>所以中心化这一步天然满足</em>，可以直接进第二步。");
+  S(0,function(){clearScene();setCap("第二步：算协方差（用 n−1 = 4）");src("p37");
+   setEq("$$\\Sigma=\\begin{bmatrix}2.5 & 1.5\\\\ 1.5 & 1.0\\end{bmatrix}$$");
+   note("Var(x₁)=2.5　Var(x₂)=1.0　Cov=1.5",640,196,"b");
+   note("正的协方差 1.5，就是「两个特征一起浮沉」的数字证据",640,240,"y");},"方差和协方差都按 <b>n−1 = 4</b> 算：<em>Var(x₁)=2.5，Var(x₂)=1.0，Cov=1.5</em>。<br>讲义点评得很好：<em>肉眼看出的那个趋势，协方差 1.5 就是它的数字证据。</em>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 讲义这一页自己标错了一处");src("p37");
+   boxNode(120,170,470,82,"讲义写「S =」","r");
+   boxNode(690,170,470,82,"但同页说明用了 n−1 = 4","y");
+   note("‖ 所以那其实是协方差矩阵 Σ，不是散布矩阵 S",640,300,"r");
+   note("真正的 S = XᵀX = [[10, 6], [6, 4]]，恰好是 Σ 的 4 倍",640,344,"g");
+   note("不影响结论（特征向量、比值都一样），但别跟着记错名字",640,398,"");},"这里要给讲义挑一个小毛病：<em>它把这个矩阵标成「S =」，可同一页又写明用了 n−1 = 4。</em><br><em>所以那其实是协方差矩阵 Σ，不是散布矩阵 S。</em><br>真正的 S = XᵀX = [[10, 6], [6, 4]]，<em>正好是它的 4 倍</em>。<br>结论不受影响，<b>但名字别跟着记错</b>。");
+  SUM(0,10,{h:"★ 五点例：A(−2,−1) B(−1,−1) C(0,0) D(1,1) E(2,1)",k:"两列均值已是 0 ⇒ <b>中心化天然满足</b>。按 n−1 = 4：<b>Var=2.5 / 1.0，Cov=1.5</b>。",m:"正的协方差 1.5 = 「<b>两个特征一起浮沉</b>」的数字证据。",w:"⚠ <b>讲义 p37 把 Σ 标成了「S =」</b>。真正的 S = XᵀX = [[10,6],[6,4]]，是 Σ 的 4 倍。",e:"名字标错不影响特征向量与解释方差比，但<em>考试里写错名字会被扣</em>。"});
+  QUIZ(0,10,{t:"五点例里 [[2.5, 1.5], [1.5, 1.0]] 这个矩阵，正确的名字是？",o:["散布矩阵 S，因为讲义就是这么写的","样本协方差矩阵 Σ，因为它除过 n−1 = 4","这两个名字可以互换，没有区别","相关系数矩阵"],a:1,w:"真正的 <b>S = XᵀX = [[10,6],[6,4]]</b>，是它的 4 倍。<em>两者特征向量相同、解释方差比相同</em>，但不是同一个矩阵。"});
+});
+KP("11 · ★ 五点手算例（二）：一个方向压倒性胜出",function(){
+  S(0,function(){clearScene();setEq(null);setCap("解 Σv = λv，得两个特征对");src("p38");
+   setEq("$$\\lambda_{1}=3.427,\\ v_{1}=(0.851,\\,0.526)\\qquad \\lambda_{2}=0.073,\\ v_{2}=(-0.526,\\,0.851)$$");
+   note("v₁ 指向点云的长轴；v₂ 与它垂直",640,196,"b");
+   note("两个特征值相加 = 3.5 = 矩阵的迹（2.5 + 1.0）",640,240,"y");},"解出两个特征对：<em>λ₁ = 3.427，v₁ = (0.851, 0.526)</em>，这是点云的长轴；<b>λ₂ = 0.073</b>。<br>有个随手能做的校验：<em>两个特征值相加 = 3.5，正好等于矩阵的迹（2.5 + 1.0）。</em>");
+  S(0,function(){clearScene();setEq(null);setCap("解释方差比：一个方向就够了");src("p38");
+   setEq("$$r_{j} = \\lambda_{j}\\big/\\textstyle\\sum\\lambda$$");
+   note("PC1：3.427 / 3.5 = 97.9%　　PC2：2.1%",640,196,"b");
+   note("一个成分就保住了几乎全部变异 ⇒ 丢掉 PC2",640,240,"y");},"解释方差比就是<em>每个特征值除以总和</em>：<em>PC1 占 97.9%，PC2 只有 2.1%</em>。<br>讲义在这里说了一句很关键的话：<b>这一步 PCA 从「计算」变成了「建模选择」</b>——<em>保留几个，是你决定的</em>。");
+  S(0,function(){clearScene();setEq(null);setCap("两个随手能做的自检");src("p38");
+   boxNode(130,180,460,82,"① 所有 r 相加必须等于 1","g");
+   boxNode(690,180,460,82,"② 每个特征向量 ‖v‖ = 1","g");
+   note("97.9% + 2.1% = 100%",360,320,"");
+   note("0.851² + 0.526² ≈ 1",920,320,"");
+   note("手算时先验这两条，能挡掉大半的算错",640,398,"y");},"讲义特意列了两条校验，<b>手算时先验这两条最划算</b>：<br><b>所有解释方差比相加必须是 1</b>；<b>每个特征向量的长度必须是 1</b>。<br>0.851² + 0.526² ≈ 1，<em>对得上</em>。");
+  SUM(0,11,{h:"★ λ₁=3.427（97.9%），λ₂=0.073（2.1%）",k:"<b>v₁ = (0.851, 0.526)</b> 是长轴；v₂ = (−0.526, 0.851) 与它垂直。",m:"<b>λ₁ + λ₂ = 3.5 = 迹</b>（2.5 + 1.0）—— 随手可做的校验。",w:"讲义原话：<b>选保留几个成分，是 PCA 从「计算」变成「建模选择」的地方</b>。",e:"两条自检：<b>Σr = 1</b>；<b>‖v‖ = 1</b>（0.851²+0.526² ≈ 1）。"});
+  QUIZ(0,11,{t:"五点例里 PC1 保留了多少比例的变异？",o:["97.9%","3.427","85.1%","2.1%"],a:0,w:"3.427 是<em>特征值本身</em>，不是比例；要除以总和 3.5。0.851 是 v₁ 的第一个分量，和比例无关。"});
+});
+KP("12 · ★ 五点手算例（三）：投影、重构、残差",function(){
+  S(0,function(){clearScene();setEq(null);setCap("投影：每个点变成一个数");src("p39");
+   setEq("$$z_{i} = x_{i,c}^{\\top}v_{1},\\qquad Z = X_{c}v_{1}$$");
+   note("五个得分：−2.23　−1.38　　0　　1.38　　2.23",640,196,"b");
+   note("二维观测 ⇒ 一维坐标，这就是「压缩」",640,240,"y");},"投影就是<b>和那条轴做点积</b>。五个点各变成一个数：<em>−2.23、−1.38、0、1.38、2.23</em>。<br>注意这串数<em>关于 0 对称</em>——因为数据本来就居中。");
+  S(0,function(){clearScene();setEq(null);setCap("重构：所有点都落回 PC1 那条线上");src("p39");
+   setEq("$$\\hat{X} = Z\\,v_{1}^{\\top} + \\mu$$");
+   note("‖ 投的是中心化数据；均值只在重构时加回去",640,196,"r");
+   note("本例 μ = (0,0)，所以这一步看不出来 —— 别因此忘了它",640,240,"y");},"重构把得分映回原空间，<b>每个重构点都落在 PC1 那条直线上</b>。<br><em>讲义反复强调的纪律：投影用中心化数据，均值只在重构时加回去。</em><br>这个例子的 µ 恰好是 (0,0)，<em>所以这一步看不出效果——正因如此更容易忘</em>。");
+  S(0,function(){clearScene();setCap("残差：丢掉的恰好就是 PC2 的那份");src("p39");
+   ax(3.2,2.0);
+   P([[-2,-1],[-1,-1],[0,0],[1,1],[2,1]],"b",10);
+   dirLine(0.851,0.526,3.0,"fit g");
+   feet([[-2,-1],[-1,-1],[0,0],[1,1],[2,1]],0.851,0.526,"c");
+   note("点到它重构点的那段距离 = 被丢掉的信息",640,398,"y");},"图上那些短垂线就是<b>残差</b>：点和它的重构点之间的距离。<br>讲义一句话点透：<em>这段差距正好就是我们丢掉的 PC2 信息，在这里约占 2.1%。</em><br><em>残差小，反过来确认了 97.9% 那个数字</em>。");
+  SUM(0,12,{h:"★ 得分 −2.23 / −1.38 / 0 / 1.38 / 2.23；残差 = 丢掉的 2.1%",k:"<b>z = Xc v₁</b>：二维观测压成一个数。<b>X̂ = Z v₁ᵀ + µ</b>：重构点全落在 PC1 直线上。",m:"<b>残差 = 被丢掉的 PC2 信息</b>，本例约 2.1%，与解释方差比对得上。",w:"⚠ <b>投的是中心化数据；均值只在重构时加回去。</b>本例 µ=(0,0) 看不出来，<em>反而更容易忘</em>。",e:"大题答法：<b>报得分 → 报重构 → 用残差验证解释方差比</b>，三步闭环。"});
+  QUIZ(0,12,{t:"五点例里，点到它的重构点之间那段距离代表什么？",o:["该点到原点的距离","计算的舍入误差","该点的 PC1 得分","被丢掉的 PC2 信息，约占总变异的 2.1%"],a:3,w:"残差与解释方差比是<em>互相印证</em>的：残差小 ⇒ 97.9% 这个数字可信。"});
+});
+KP("13 · 投影与重构：两个动作的分工（讲义 p23–p24）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u538b\u7f29\u548c\u89e3\u538b\u5404\u505a\u4e86\u4ec0\u4e48");src("p23\u3001p24");
+   boxNode(110,176,290,80,"\u539f\u7279\u5f81\u7a7a\u95f4 d \u7ef4","b");
+   boxNode(495,176,290,80,"\u5f97\u5206 k \u7ef4","g");
+   boxNode(880,176,290,80,"\u91cd\u6784\u56de d \u7ef4","y");
+   link(400,216,495,216);link(785,216,880,216);
+   note("\u6295\u5f71\uff1aZ = Xc W",447,296,"");
+   note("\u91cd\u6784\uff1aX\u0302 = Z W\u1d40 + \u03bc",832,296,"");
+   note("\u2016 \u91cd\u6784\u56de\u6765\u7684\u7ef4\u6570\u548c\u539f\u6765\u4e00\u6837\uff0c\u4f46\u4fe1\u606f\u5df2\u7ecf\u5c11\u4e86",640,398,"y");},"这两个动作方向相反，职责也不同。<b>投影是压缩</b>：d 维观测变成 k 个得分；<b>重构是解压</b>：把得分映回 d 维。<br><em>⚠ 最容易误会的一点：重构回来的维数和原来一样，但信息已经少了</em>——<em>它落在 k 维子空间上，不可能还原被丢掉的那部分</em>。");
+  S(0,function(){clearScene();setCap("\u4e3a\u4ec0\u4e48\u8981\u91cd\u6784\uff1f\u4e3a\u4e86\u770b\u89c1\u4e22\u4e86\u4ec0\u4e48");src("p24");
+   ax(3.2,2.2);
+   P([[-2.6,-1.0],[-1.6,-1.1],[-0.4,0.1],[0.8,0.5],[2.0,1.4],[2.6,0.9]],"b",10);
+   dirLine(2,1,3.0,"fit g");
+   feet([[-2.6,-1.0],[-1.6,-1.1],[-0.4,0.1],[0.8,0.5],[2.0,1.4],[2.6,0.9]],2,1,"c");
+   note("\u84dd\u70b9\uff1a\u539f\u89c2\u6d4b\u3000\u3000\u6d45\u8272\u70b9\uff1a\u91cd\u6784\u540e\u7684\u4f4d\u7f6e",640,398,"y");},"重构的用处不是「还原数据」，而是<b>让损失变得看得见</b>。<br>图上每条短线段的长度，就是那个观测被丢掉的信息量；<em>把它们平方加起来，正是总重构误差</em>。<br><em>所以解释方差比给的是一个百分比，重构图给的是「具体哪些点被牺牲了」</em>——两者配合着看才完整。");
+  SUM(0,13,{h:"投影 = 压缩；重构 = 把损失显形",k:"<b>Z = Xc W</b>（d 维 → k 个得分）；<b>X̂ = Z Wᵀ + µ</b>（回到 d 维）。",m:"⚠ <b>重构的维数和原来一样，但信息已经少了</b>——它落在 k 维子空间上。",w:"重构真正的用处是<b>让损失看得见</b>：残差平方和 = 总重构误差。",e:"<em>解释方差比给百分比，重构图给「具体牺牲了哪些点」</em>，两者配合看。"});
+  QUIZ(0,13,{t:"用 k < d 个成分重构之后，得到的数据维数是多少？",o:["k 维，因为只保留了 k 个成分","取决于是否加回了均值","仍然是 d 维，但所有点都落在一个 k 维子空间上","d − k 维"],a:2,w:"这正是「重构」和「得分」的区别：<em>得分是 k 维坐标，重构是回到 d 维的近似</em>。信息的损失体现为残差，不是维数变少。"});
+});
+KP("14 · 怎么选 k（讲义 p40、p22）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("这一节回答：留几个成分算合适");src("p40、p22");
+   boxNode(120,170,470,78,"累计方差：加到 90% 或 95%","b");
+   boxNode(690,170,470,78,"肘部：再加收益很小就停","b");
+   note("从 PC1 往下累加 rⱼ",355,300,"");
+   note("讲义图里是 k = 4 之后",925,300,"");
+   note("两个都是诊断手段，不是自动规则",640,398,"y");},"讲义给了两条常规办法：<b>累计方差加到 90% 或 95% 为止</b>，或者<b>看肘部</b>——<em>再加成分收益明显变小就停</em>。<br>它举的那张图里，肘部在 k = 4 之后。");
+  S(0,function(){clearScene();setEq(null);setCap("但讲义多说了两条");src("p40");
+   matrix({rows:3,cols:2,cw:430,ch:52,x:210,y:186,
+     cell:function(i,j){var t=[
+       ["还要看","为什么"],
+       ["任务表现","最大方差的方向不总是最有用的"],
+       ["计算、存储、可解释性","都是真实成本"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===1?"hl":"";}});
+   note("全部留下 = 什么都没压缩，PCA 的意义就是「早点停」",640,398,"y");},"除了那两条，讲义还加了两点：<b>做预测流程时要用交叉验证确认 k</b>，因为<em>方差最大的方向不总是对目标最有用</em>；还要权衡<b>计算、存储与可解释性</b>。<br>最后一句很干脆：<b>全部留下就等于什么都没压缩。</b>");
+  SUM(0,14,{h:"选 k：累计方差 / 肘部，再加任务与成本",k:"<b>累计 r 加到 90–95%</b>，或<b>看肘部</b>——两个都是诊断，<b>不是自动规则</b>。",m:"预测流程里要<b>用交叉验证确认 k</b>：<em>方差最大 ≠ 对目标最有用</em>。",w:"还要权衡<b>计算、存储、可解释性</b>。",e:"<b>全部留下 = 什么都没压缩</b>，PCA 的意义就是早点停。"});
+  QUIZ(0,14,{t:"讲义为什么说预测流程里还要用交叉验证来确认 k？",o:["因为特征值可能为负","因为方差最大的方向不总是对目标最有用","因为累计方差的计算不够精确","因为肘部法在高维时失效"],a:1,w:"PCA <s>不使用标签</s>，所以它挑出的方向只保证「方差大」，<em>不保证「对预测有用」</em>。"});
+});
+KP("15 · ⚠ PCA 保方差，不保意义（讲义 p41–p42、p26）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("这一节是整份讲义里语气最重的一段");src("p41、p26");
+   boxNode(120,170,470,82,"高方差方向","y");
+   boxNode(690,170,470,82,"低方差方向","b");
+   note("可能只是单位、光照、批次效应",355,300,"");
+   note("可能恰恰带着类别信号",925,300,"");
+   note("PCA 只用 X 拟合，根本没看过标签",640,398,"r");},"讲义这一段的理由只有一句：<b>PCA 只从 X 拟合，根本没看过标签。</b><br>所以<b>高方差方向可能是测量单位、光照或批次效应</b>；<em>而低方差方向反而可能带着类别信号</em>。<br>结论：<em>信它之前，先比一比用和不用 PCA 的下游表现。</em>");
+  S(0,function(){clearScene();setEq(null);setCap("另外三个让结果变脸的因素");src("p41、p42");
+   matrix({rows:4,cols:2,cw:430,ch:52,x:210,y:176,
+     cell:function(i,j){var t=[
+       ["因素","后果"],
+       ["缩放","未缩放的大单位特征会主导 PC1"],
+       ["离群点","几个极端点就能转动协方差"],
+       ["线性","主方向是直线，弯曲流形表示得很差"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===1?"hl":"";}});
+   note("极端情形：等方差且不相关 ⇒ 特征值并列，根本没有优先轴",640,398,"y");},"讲义还列了三个会让结果变脸的因素：<b>缩放、离群点、线性假设</b>。<br>其中有一个极端情形值得记：<em>各特征等方差且互不相关时，特征值并列，根本不存在优先的轴。</em>");
+  S(0,function(){clearScene();setEq(null);setCap("最后澄清：PCA 不是回归");src("p42");
+   boxNode(120,180,470,86,"回归：最小化预测 y 的误差","b");
+   boxNode(690,180,470,86,"PCA：最大化投影方差","g");
+   note("量的是竖直距离",355,330,"");
+   note("等价于最小化垂直重构误差",925,330,"");
+   note("目标不同 ⇒ 画出来一般不是同一条线",640,398,"y");},"讲义用一句话收尾：<b>目标不同，线就不同。</b><br>回归最小化<em>预测 y 的误差（竖直距离）</em>；<em>PCA 最大化投影方差，等价于最小化垂直方向的重构误差</em>。<br>这是选择题的常客。");
+  SUM(0,15,{h:"⚠ PCA 只从 X 拟合，保的是方差不是意义",k:"<b>高方差可能是单位/光照/批次</b>；<b>低方差方向可能带着类别信号</b>。",m:"三个变脸因素：<b>缩放</b>（大单位主导 PC1）、<b>离群点</b>（转动协方差）、<b>线性</b>（弯曲流形表示差）。",w:"<b>PCA ≠ 回归</b>：回归最小化竖直预测误差，PCA 最小化<b>垂直</b>重构误差。",e:"⚠ 等方差且不相关 ⇒ <b>特征值并列，没有优先轴</b>。"});
+  QUIZ(0,15,{t:"讲义说「PCA 保方差不保意义」，核心理由是什么？",o:["因为累计方差永远小于 1","因为特征值总是正的","因为主成分之间互相垂直","因为 PCA 只从 X 拟合，根本没有用过标签"],a:3,w:"所以高方差方向<em>可能只是干扰</em>，而低方差方向<em>可能才是关键</em>。做法：比较用与不用 PCA 的下游验证表现。"});
+});
+KP("16 · 无标签怎么判断结果（讲义 p43、p27–p28）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("没有准确率，就同时看几个信号");src("p43");
+   matrix({rows:6,cols:2,cw:430,ch:44,x:210,y:150,
+     cell:function(i,j){var t=[
+       ["信号","对 PCA 具体是什么"],
+       ["内部证据","解释方差与重构误差"],
+       ["稳定性","换种子、换样本、换设置重拟"],
+       ["假设","缩放与线性这两项检查"],
+       ["检视","看投影图与重构图"],
+       ["有用性","接回原来的问题"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===2?"hl":"";}});},"没有标签就没有准确率，所以讲义要求<b>同时看五个信号</b>。<br>其中<b>稳定性</b>那一条给了一句很好的判据：<b>真的结构扛得过重拟合，假的不行。</b><br>注意这五条查的<em>不是同一件事</em>：内部证据问「拟合得好不好」，稳定性问「换个条件还在不在」，假设问「方法配不配这份数据」，而最后一条问的是<b>「这个结果到底有没有回答你的问题」</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("两句要背下来的话");src("p43");
+   boxNode(120,180,1050,76,"「没有回答任何问题的保留方差，不算一个结果」","y");
+   boxNode(120,300,1050,76,"「这些信号大致一致时，结论才站得住」","g");
+   note("大题收尾直接写这两句，比堆数字有用",640,420,"");},"这一页有两句话很适合直接搬进答案：<br><em>「没有回答任何问题的保留方差，不算一个结果。」</em><br><b>「这些信号大致一致时，结论才站得住。」</b><br><em>答大题时拿它收尾，比再堆一个数字有用</em>。");
+  SUM(0,16,{h:"五个信号：内部证据 / 稳定性 / 假设 / 检视 / 有用性",k:"没有标签 ⇒ <b>没有准确率</b> ⇒ 必须同时看几个信号。",m:"稳定性的判据：<b>真的结构扛得过重拟合，假的不行</b>。",w:"<b>没有回答任何问题的保留方差，不算一个结果。</b>",e:"收尾句：<b>这些信号大致一致时，结论才站得住</b>——这是有依据的判断，不是证明。"});
+  QUIZ(0,16,{t:"讲义给「稳定性」这一条的判据是什么？",o:["换种子、换样本、换邻近设置重拟合：真的结构活下来，假的不会","主成分个数必须小于特征数的一半","解释方差必须超过 90%","重构误差必须单调下降"],a:0,w:"注意这一条查的是<em>「结果稳不稳」</em>，和「拟合得好不好」是<b>两类不同的证据</b>。"});
+});
+KP("17 · 六条速记与收尾（讲义 p44–p46）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("讲义自带的自测表：盖住右边默一遍");src("p44");
+   matrix({rows:7,cols:2,cw:420,ch:40,x:220,y:150,
+     cell:function(i,j){var t=[
+       ["词","式子"],
+       ["中心化","Xc = X − μ"],
+       ["协方差","Σ = XcᵀXc / (n−1)"],
+       ["PC1","Σv = λv 中最大 λ 对应的 v"],
+       ["得分","zᵢ = xᵢ,cᵀ v₁"],
+       ["重构","x̂ᵢ = zᵢ v₁ᵀ + μ"],
+       ["解释方差比","rⱼ = λⱼ / Σ λ"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return (i===1||i===5)?"hl":"";}});},"讲义 p44 自带一张速记表，<em>用法它也写了：盖住右边，自己默写一遍再揭开核对。</em><br>标黄的两行<em>最容易写漏</em>：中心化那个减号，和重构那个加回均值。");
+  S(0,function(){clearScene();setEq(null);setCap("代码里对应哪几个名字");src("p45");
+   matrix({rows:5,cols:2,cw:430,ch:44,x:210,y:160,
+     cell:function(i,j){var t=[
+       ["数学","sklearn"],
+       ["μ","mean_"],
+       ["特征向量（每行一个）","components_"],
+       ["得分 Z","transform / fit_transform"],
+       ["rⱼ 与 重构","explained_variance_ratio_ / inverse_transform"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===2?"hl":"";}});
+   note("‖ components_ 是按行存的，和数学里的 W 差一个转置",640,398,"y");},"讲义最后把数学符号和 sklearn 的属性名对上。<br><em>只有一处要当心：`components_` 是按行存的，每一行是一个方向</em>，<em>和数学里列向量的 W 差一个转置</em>。");
+  S(0,function(){clearScene();setEq(null);setCap("讲义结尾：直接指向 Tutorial");src("p46");
+   boxNode(120,170,1050,66,"Q1：中心化，作散布矩阵与协方差矩阵","b");
+   boxNode(120,250,1050,66,"Q2：验证特征对，并把第一成分归一化","b");
+   boxNode(120,330,1050,66,"Q3：投影、重构，并解释保留的方差","b");
+   note("跟这部片子走过的五点例，步骤一模一样",640,420,"y");},"讲义的最后一页直接指向 Tutorial 的三问，<b>而它们的步骤和刚才那个五点例一模一样</b>：<br><em>Q1 中心化与两个矩阵，Q2 特征对与归一化，Q3 投影重构与解释</em>。<br>所以<em>把五点例走熟，Tutorial 就是换一组数字</em>。");
+  SUM(0,17,{h:"六条速记 + sklearn 对照 + 指向 Tutorial",k:"速记六条：<b>Xc = X−µ / Σ = XcᵀXc/(n−1) / Σv=λv / z = xᵀv₁ / x̂ = zv₁ᵀ+µ / r = λ/Σλ</b>。",m:"用法：<b>盖住右边默写一遍再核对</b>。最易漏：<b>中心化的减号</b>与<b>重构加回均值</b>。",w:"⚠ <b>`components_` 按行存</b>，和数学里的 W 差一个转置。",e:"Tutorial 三问的步骤<b>和五点例完全一致</b>，只是换了数字。"});
+  QUIZ(0,17,{t:"sklearn 的 `components_` 和数学里的 W 差在哪？",o:["存储方向差一个转置：components_ 每一行是一个主方向","components_ 没有归一化","数值差一个 (n−1) 因子","components_ 包含了均值"],a:0,w:"均值单独存在 <code>mean_</code> 里。<em>读别人的代码或答案时注意这个转置</em>，否则矩阵乘法会对不上。"});
+});
+KP("完",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("官方讲义精读 · M2T1_PCA.pdf","完",
+      "下一部：官方讲义精读 · GMM.pdf");},
+    "一句话收束这份讲义：<b>PCA 是一条六步流水线——排好 X、中心化（需要时缩放）、算协方差、解特征对、选 k、投影与重构。</b><br>它独有的两样东西记住：<b>那条流水线的「错误会一路往前传」</b>，和 <b>p37–p39 的五点例</b>（λ₁=3.427 占 97.9%，得分 −2.23…，残差就是丢掉的 2.1%）。<br>还有一处讲义自己标错了：<em>p37 的「S =」其实是 Σ</em>。<br>接下来走 GMM 那份。");
+});
+window.__startProjector(CFG);
+})();
+</script>

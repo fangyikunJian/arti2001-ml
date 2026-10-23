@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲义精读 · 核方法与支持向量机（讲义 Part V–VI） · 逐页精读</title>
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --panel2:#FAF8F4; --sunken:#EDEAE3;
+  --stage:#E9E6DF; --hover:#F0EDE6;
+  --line:#E3DFD6; --line2:#D2CCC0;
+  --dot:#DDD8CE; --dot2:#B9B1A2; --errdot:#D08A8A;
+  --ink:#23272C; --ink2:#111417; --ink3:#4A525C; --dim:#616973;
+  --acc:#0E7355; --acc2:#845808; --warn:#B23540; --blue:#1C6AA6;
+  --mark:#FFF6DC; --codeink:#17506E; --eqink:#1E2833;
+  --okink:#0B5B43; --noink:#8F2A33; --violet:#6A4BA3; --tintviolet:rgba(106,75,163,.07);
+  --okfill:rgba(14,115,85,.10); --nofill:rgba(178,53,64,.09);
+  --missbg:rgba(245,243,238,.97);
+  --tintacc:rgba(14,115,85,.07); --tintacc2:rgba(14,115,85,.05);
+  --tintblue:rgba(28,106,166,.06); --tintwarn:rgba(178,53,64,.05);
+  --tintwarn2:rgba(178,53,64,.06);
+  --lift:rgba(60,54,44,.022); --lift2:rgba(60,54,44,.028);
+  --scrim:rgba(58,52,42,.40);
+  --shadow:0 1px 2px rgba(40,34,20,.05), 0 6px 18px rgba(40,34,20,.05);
+
+  --cjk:"PingFang SC","Microsoft YaHei","微软雅黑","Deng",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --bar:50px; --strip:36px;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f15; --panel:#121823; --panel2:#0d141c; --sunken:#0a0e14;
+  --stage:#070a0f; --hover:#0d141c;
+  --line:#212c3c; --line2:#2a3b4f;
+  --dot:#18212e; --dot2:#2c3c52; --errdot:#7a3a3a;
+  --ink:#e7eef7; --ink2:#f4f8fd; --ink3:#c3d2e3; --dim:#8b9ab0;
+  --acc:#6fd3bb; --acc2:#f2bd63; --warn:#ff8f8f; --blue:#7fb8ff;
+  --mark:#16202e; --codeink:#cfe3f5; --eqink:#dbe8f7;
+  --okink:#d8fff4; --noink:#ffdede; --violet:#B48BF5; --tintviolet:rgba(180,139,245,.08);
+  --okfill:rgba(111,211,187,.13); --nofill:rgba(255,143,143,.12);
+  --missbg:rgba(10,14,20,.97);
+  --tintacc:rgba(111,211,187,.09); --tintacc2:rgba(111,211,187,.07);
+  --tintblue:rgba(127,184,255,.055); --tintwarn:rgba(255,120,120,.055);
+  --tintwarn2:rgba(255,143,143,.08);
+  --lift:rgba(255,255,255,.022); --lift2:rgba(255,255,255,.025);
+  --scrim:rgba(6,9,13,.82);
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--cjk);font-size:15px;line-height:1.75}
+
+#bar{height:var(--bar);display:flex;align-items:center;gap:11px;padding:0 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+#bar h1{margin:0;font-size:14.5px;font-weight:650;white-space:nowrap}
+#bar h1 span{color:var(--acc)}
+.btn{background:var(--sunken);border:1px solid var(--line);border-radius:7px;color:var(--dim);
+  font:13px var(--cjk);padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{color:var(--acc);border-color:var(--acc)}
+#pnum{width:48px;background:var(--sunken);border:1px solid var(--line);border-radius:7px;
+  color:var(--ink);font:13px var(--mono);text-align:center;padding:5px 0}
+#bar .sp{flex:1}
+#tot{font:12px var(--mono);color:var(--dim)}
+
+#strip{height:var(--strip);display:flex;align-items:center;gap:2px;padding:0 14px;
+  background:var(--sunken);border-bottom:1px solid var(--line);overflow-x:auto}
+#strip::-webkit-scrollbar{height:0}
+#strip b{flex:0 0 auto;width:13px;height:16px;border-radius:3px;background:var(--dot);
+  cursor:pointer;font:0/0 a}
+#strip b.has{background:var(--dot2)}
+#strip b.on{background:var(--acc2)}
+#strip b:hover{background:var(--acc)}
+
+#main{display:flex;height:calc(100% - var(--bar) - var(--strip))}
+/* 左栏 = 一块板，板中央摆一张 4:3 的幻灯片。
+   幻灯片本身就是 363×272（4:3），把框裁成同样比例再用 view=FitH，
+   这一页正好铺满框，下一页落到框外 —— 这样才是「一页」，
+   而不是一个能上下滚、还露出半张下一页的阅读器。 */
+#left{width:50%;min-width:280px;position:relative;background:var(--stage);
+  display:flex;align-items:center;justify-content:center;padding:14px}
+#stage{aspect-ratio:4/3;width:100%;max-width:100%;max-height:100%;
+  border-radius:8px;overflow:hidden;background:#fff;
+  box-shadow:var(--shadow)}
+#stage iframe{width:100%;height:100%;border:0;display:block}
+#drag{width:6px;cursor:col-resize;background:var(--line);flex:0 0 6px}
+#drag:hover{background:var(--acc)}
+#right{flex:1;overflow-y:auto;padding:24px 28px 40px}
+
+.pg{font:11.5px var(--mono);color:var(--bg);background:var(--acc2);border-radius:999px;
+  padding:2px 11px;font-weight:700;display:inline-block;margin-bottom:12px}
+.pg.multi{background:var(--blue)}
+h2{margin:0 0 14px;font-size:21px;font-weight:680;line-height:1.4}
+.one{font-size:16.5px;line-height:1.7;color:var(--ink2);border-left:3px solid var(--acc);
+  padding:9px 0 9px 14px;margin:0 0 16px;
+  background:linear-gradient(90deg,var(--tintacc),transparent)}
+ul{margin:0 0 16px;padding-left:0;list-style:none}
+ul li{margin-bottom:11px;padding-left:22px;position:relative;line-height:1.72}
+ul li::before{content:"";position:absolute;left:6px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--acc)}
+b{font-weight:650;color:var(--ink2)}
+.k{color:var(--acc);font-weight:650}
+.w{color:var(--warn);font-weight:650}
+code{font-family:var(--mono);font-size:.9em;background:var(--mark);padding:1.5px 6px;
+  border-radius:4px;color:var(--codeink)}
+.eq{display:block;text-align:center;background:var(--mark);border-radius:8px;padding:12px 8px;
+  margin:14px 0;font-family:var(--mono);font-size:14px;color:var(--eqink);overflow-x:auto}
+.say{border:1px solid var(--line2);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;background:var(--tintblue);font-size:14px;line-height:1.72}
+.say .t{color:var(--blue);font-weight:700;font-size:12.5px;display:block;margin-bottom:5px;
+  letter-spacing:.5px}
+.tip{border:1px solid var(--line);border-radius:9px;padding:11px 15px;margin:14px 0;
+  background:var(--lift2);font-size:14px;line-height:1.72}
+.tip .t{font-weight:700;color:var(--acc);margin-right:7px}
+.tip.w2{border-color:var(--warnline);background:var(--tintwarn)}
+.tip.w2 .t{color:var(--warn)}
+.star{color:var(--acc2);font-size:14px;margin-left:8px;letter-spacing:1px}
+.nav{display:flex;gap:10px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+.nav .btn{flex:1;text-align:center;padding:9px}
+.empty{color:var(--dim);font-size:14px;padding:36px 0;text-align:center;line-height:2}
+#miss{position:absolute;inset:0;background:var(--missbg);z-index:5;display:none;
+  padding:26px;color:var(--dim);font-size:13.5px;line-height:1.9}
+#miss code{background:var(--mark);padding:2px 6px;border-radius:4px;color:var(--acc2)}
+
+
+.qbadge{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;
+  margin-left:9px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 9px;font:11.5px var(--mono);color:var(--acc);cursor:pointer;
+  background:var(--sunken);transition:border-color .12s}
+.qbadge:hover{border-color:var(--acc)}
+.qbadge.bad{color:var(--warn)}
+#wrongBox .tally{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+#wrongBox .tally span{border:1px solid var(--line);border-radius:8px;padding:5px 11px;
+  font-size:12.5px;color:var(--dim);background:var(--sunken)}
+#wrongBox .tally b{color:var(--ink);font-weight:650}
+#wrongBox .tally b.hot{color:var(--warn)}
+.wrow .h{gap:3px}
+.wrow .h u{display:flex;gap:2px;text-decoration:none;
+  padding-right:7px;margin-right:4px;border-right:1px solid var(--line)}
+.wrow .h u:last-child{border-right:0;padding-right:0;margin-right:0}
+#revChip{display:none;align-items:center;gap:9px;border:1px solid var(--warn);
+  border-radius:8px;padding:5px 11px;font-size:12.5px;color:var(--warn);
+  background:var(--tintwarn2);white-space:nowrap}
+#revChip.on{display:inline-flex}
+#revChip b{font:650 12px var(--mono)}
+#revChip button{background:none;border:0;color:var(--dim);cursor:pointer;
+  font:12px var(--cjk);text-decoration:underline;padding:0}
+#revChip button:hover{color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn:disabled:hover{border-color:var(--line)}
+
+/* ── 自测 ── */
+.quiz{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.quiz>h3{margin:0 0 12px;font-size:13px;color:var(--dim);letter-spacing:.16em;
+  display:flex;align-items:center;gap:8px}
+.quiz>h3 b{color:var(--acc2);font-weight:700}
+.qq{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:11px;
+  background:var(--lift)}
+.qq .t{font-size:14.5px;font-weight:600;margin-bottom:10px;line-height:1.6}
+.opt{display:block;width:100%;text-align:left;background:var(--sunken);border:1px solid var(--line);
+  border-radius:8px;color:var(--ink);font:14px var(--cjk);padding:8px 12px;margin-bottom:7px;
+  cursor:pointer;line-height:1.5;transition:border-color .12s,background .12s}
+.opt:hover:not(:disabled){border-color:var(--acc);background:var(--hover)}
+.opt:disabled{cursor:default}
+.opt.ok{border-color:var(--acc);background:var(--okfill);color:var(--okink)}
+.opt.no{border-color:var(--warn);background:var(--nofill);color:var(--noink)}
+.opt .m{float:right;font-weight:700;margin-left:10px}
+.why{font-size:13.5px;line-height:1.7;color:var(--ink3);border-left:3px solid var(--acc);
+  padding:8px 0 8px 12px;margin-top:9px;background:linear-gradient(90deg,var(--tintacc2),transparent)}
+.qhist{font:11px var(--mono);color:var(--dim);margin-top:8px;display:flex;
+  align-items:center;gap:5px}
+.qhist i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.qhist i.o{background:var(--acc)} .qhist i.x{background:var(--warn)}
+.qagain{background:none;border:0;color:var(--dim);font:12px var(--cjk);cursor:pointer;
+  text-decoration:underline;padding:0;margin-left:auto}
+.qagain:hover{color:var(--acc2)}
+#strip b.err{background:var(--errdot)}
+#strip b.err.on{background:var(--acc2)}
+/* 错题本 */
+#wrongPanel{position:fixed;inset:0;background:var(--scrim);z-index:80;display:none;
+  align-items:center;justify-content:center;padding:28px}
+#wrongPanel.on{display:flex}
+#wrongBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  width:min(760px,100%);max-height:84vh;overflow:auto;padding:22px 24px}
+#wrongBox h3{margin:0 0 4px;font-size:18px}
+#wrongBox .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+.wrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--line);margin-bottom:8px;cursor:pointer;background:var(--sunken)}
+.wrow:hover{border-color:var(--acc2)}
+.wrow .p{font:700 12px var(--mono);color:var(--acc2);flex:0 0 52px}
+.wrow.done{opacity:.5}
+.wrow.done .p{color:var(--acc)}
+.wrow .n2{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.wrow .s{font:11.5px var(--mono);color:var(--dim);flex:0 0 auto}
+.wrow .h{display:flex;gap:3px;flex:0 0 auto}
+.wrow .h i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.wrow .h i.o{background:var(--acc)} .wrow .h i.x{background:var(--warn)}
+#wrongBox .none{color:var(--dim);text-align:center;padding:30px 0;line-height:2}
+#wrongFoot{display:flex;gap:10px;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--line)}
+#wrongFoot .btn{flex:1;text-align:center}
+
+@media (max-width:900px){
+  #main{flex-direction:column} #left{width:100%;height:40%} #drag{display:none}
+  #right{padding:16px 16px 30px}
+}
+
+/* ══ EXTRA_CSS:BEGIN ══ */
+/* ══ 讲解区里的链接兜底 ══
+   ⚠ 2026-10-03 查出来的：原先只给 .ng a 上了色，放在 tip / say / pts / exam 里的链接
+   会退回浏览器默认的 #0000EE —— 浅色下还能看（8.47:1），**暗色下只有 1.95:1**。
+   做 notes2 时第一次往 tip 里放时间码链接就撞上了。这条规则管住所有其它位置。 */
+#card a{color:var(--blue);text-decoration:none;border-bottom:1px solid var(--blue)}
+#card a:hover{opacity:.75}
+
+/* ══ 「从零补基础 · Andrew Ng」栏 ══ */
+.ng{border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintviolet)}
+.ng .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--violet);
+  letter-spacing:.4px;margin-bottom:5px}
+/* ⚠ 要用 #card .ng a 而不是 .ng a —— 上面的兜底规则带了 #card 这个 id，
+   光写 .ng a（0,1,1）会被 #card a（1,0,1）压过去，紫色链接会变蓝。 */
+#card .ng a{color:var(--violet);text-decoration:none;border-bottom:1px solid var(--violet)}
+#card .ng a:hover{opacity:.75}
+.ng .src{display:block;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+:root:not([data-theme="dark"]) .ng{box-shadow:var(--shadow)}
+
+/* ══ 「课件原话」栏：引官方英文 ══ */
+.quote{border-left:3px solid var(--dim);background:var(--lift2);border-radius:0 8px 8px 0;
+  padding:10px 15px;margin:12px 0;font-size:13px;line-height:1.7;color:var(--ink3)}
+.quote .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--dim);
+  letter-spacing:.4px;margin-bottom:5px}
+.quote b{color:var(--ink2)}
+.quote em{font-style:normal;color:var(--ink2);font-weight:560}
+
+/* ══ 笔记表格：对比表 / 情况表 / 数值表 ══ */
+.tw{margin:13px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.tc{font-size:11.5px;font-family:var(--mono);color:var(--dim);letter-spacing:.3px;
+  padding:7px 12px;background:var(--sunken);border-bottom:1px solid var(--line)}
+table.nt{width:100%;border-collapse:collapse;font-size:12.8px;line-height:1.55}
+table.nt th{text-align:left;font-weight:620;font-size:11.5px;color:var(--dim);
+  background:var(--panel2);padding:7px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.nt td{padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.nt tbody tr:last-child td{border-bottom:none}
+table.nt td:first-child{font-weight:560;color:var(--ink2)}
+table.nt b{color:var(--ink2)}
+:root:not([data-theme="dark"]) .tw{box-shadow:var(--shadow)}
+
+/* ══ 「与考试的联系」栏 ══ */
+.exam{border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintacc2)}
+.exam .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--acc2);
+  letter-spacing:.4px;margin-bottom:5px}
+:root:not([data-theme="dark"]) .exam{box-shadow:var(--shadow)}
+
+/* ══ 双主题补丁：浅色下的可读性与质感 ══ */
+html{color-scheme:light dark}
+:root:not([data-theme="dark"]) #right{background:var(--bg)}
+:root:not([data-theme="dark"]) .quiz,
+:root:not([data-theme="dark"]) details,
+:root:not([data-theme="dark"]) .opt{box-shadow:var(--shadow)}
+:root:not([data-theme="dark"]) body{-webkit-font-smoothing:antialiased}
+:root:not([data-theme="dark"]) h2{letter-spacing:-.1px}
+:root:not([data-theme="dark"]) .one{font-weight:520}
+:root:not([data-theme="dark"]) .pg{color:#fff}
+:root:not([data-theme="dark"]) #strip b.on{background:var(--acc2)}
+/* 主题切换按钮 */
+#themeBtn{min-width:34px;text-align:center;font-size:14px;line-height:1}
+/* ══ EXTRA_CSS:END ══ */
+
+</style>
+</head>
+<body data-key="cs234-2019-l01">
+
+<div id="bar">
+  <h1>CS229 讲义精读 · <span>核方法与支持向量机（讲义 Part V–VI）</span></h1>
+  <button class="btn" id="prev">← 上一页</button>
+  <input id="pnum" value="1" inputmode="numeric">
+  <span id="tot">/ 30</span>
+  <button class="btn" id="next">下一页 →</button>
+  <div class="sp"></div>
+  <span id="revChip">复习模式 <b></b><button id="revOff">退出</button></span>
+  <button class="btn" id="wrongBtn">错题本</button>
+  <button class="btn" id="themeBtn" title="切换主题">☾</button>
+  <button class="btn" id="help">打不开？</button>
+</div>
+
+<div id="strip"></div>
+
+
+<div id="wrongPanel"><div id="wrongBox">
+  <h3>错题本</h3>
+  <p class="sub">错过的题<b>连着答对两次就毕业</b>，自动从这里和复习模式里退出。<br>
+  还没毕业的排在前面，最近错得多的更靠前。点任意一行跳到那一页重看。</p>
+  <div class="tally" id="wrongTally"></div>
+  <div id="wrongList"></div>
+  <div id="wrongFoot">
+    <button class="btn" id="revOn">只复习这些页</button>
+    <button class="btn" id="wrongClose">关闭</button>
+    <button class="btn" id="wrongReset">清空全部记录</button>
+  </div>
+</div></div>
+
+<div id="main">
+  <div id="left">
+    <div id="stage"><iframe id="pdf" title="原课件"></iframe></div>
+    <div id="miss">
+      <p><b>左边没显示课件？</b></p>
+      <p>本页直接引用同目录下的 <code>slides/cs229-notes3.pdf</code>。</p>
+      <p>确认文件在即可。若浏览器拦本地 iframe 读 PDF，在 <code>精读</code> 目录下执行
+      <code>python -m http.server 8080</code>，再访问
+      <code>http://127.0.0.1:8080/CS229-notes3-精读.html</code>。</p>
+    </div>
+  </div>
+  <div id="drag"></div>
+  <div id="right"><div id="card"></div></div>
+</div>
+
+<script>
+
+/* ══ 主题切换：浅色默认，记住选择 ══ */
+(function(){
+  var KEY = "mlreader-theme";
+  var root = document.documentElement, btn = document.getElementById("themeBtn");
+  function apply(t){
+    root.setAttribute("data-theme", t);
+    if (btn) btn.textContent = (t === "dark" ? "☀" : "☾");
+    if (btn) btn.title = (t === "dark" ? "切到浅色" : "切到暗色");
+  }
+  var saved;
+  try { saved = localStorage.getItem(KEY); } catch(e){}
+  apply(saved === "dark" ? "dark" : "light");
+  if (btn) btn.addEventListener("click", function(){
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next);
+    try { localStorage.setItem(KEY, next); } catch(e){}
+  });
+})();
+
+/* 每页一条。r:[起,止] = 这几页是同一张图的不同阶段，点哪页都显示同一条。
+   one 一句话 · pts 要点 · say CS229 / 讲义补充（课件上没有）· tip 提醒 */
+
+/* ══ 题库。键 = 该单元的起始页；a 是正确项下标；why 是判完给的解释 ══ */
+var Q = {"1": [{"t": "把三次函数 θ₃x³+θ₂x²+θ₁x+θ₀ 看成 θᵀφ(x)，这说明了什么？", "o": ["三次函数其实等于一条直线", "φ(x) 必须是低维的", "它对参数 θ 仍是线性的，所以线性回归算法可以原封不动地用", "必须换一个非线性的优化算法"], "a": 2, "w": "核方法的全部出发点：不改算法，只改坐标系。这和 notes1 里「多项式回归仍算线性回归」是同一条性质，只是这里被用来主动造模型。"}, {"t": "讲义区分的 attributes 和 features 分别指什么？", "o": ["attributes 是连续特征，features 是离散特征", "attributes 是训练集的，features 是测试集的", "两者是同义词，讲义混用", "attributes 是原始输入 x，features 是映射后的 φ(x)"], "a": 3, "w": "φ 叫 feature map（特征映射）。⚠️ 讲义自己承认这个区分不通用：different authors use different terms in different contexts。"}], "3": [{"t": "讲义用归纳法证明 θ 始终可以写成 Σβᵢφ(x⁽ⁱ⁾)。这个结论的前提是什么？", "o": ["θ 初始化为 0（或任何样本的线性组合）", "样本数 n 必须大于特征维数 p", "特征映射 φ 必须是多项式", "没有任何前提，对任意初始化都成立"], "a": 0, "w": "讲义第一句就写了 we assume the initialize the value θ = 0。随机初始化一个不在样本张成子空间里的 θ，这条性质当场不成立。⚠️ 对比第 22 页：那里的 w=Σαᵢy⁽ⁱ⁾x⁽ⁱ⁾ 是最优解本身的性质，不依赖初始化，结论更强。"}, {"t": "d=1000、φ 含所有 ≤3 次单项式时，显式存 θ 和隐式存 β 的代价分别是多少？", "o": ["两者都是 n 个", "θ 约 10⁹ 个数，β 只有 n 个（n 是样本数）", "θ 是 n 个，β 是 10⁹ 个", "两者都是 10⁹"], "a": 1, "w": "讲义算过：d=1000 时每次更新要处理 10⁹ 维向量，比普通最小二乘慢 10⁶ 倍。而 θ 始终躺在 n 个样本张成的子空间里，所以有效自由度只有 n。"}], "5": [{"t": "⟨φ(x),φ(z)⟩ = 1 + ⟨x,z⟩ + ⟨x,z⟩² + ⟨x,z⟩³ 这个化简带来的最大好处是什么？", "o": ["不再需要训练数据", "内积的计算从 O(d³) 降到 O(d)，而且完全不用算出 φ(x)", "模型的表达能力变强了", "特征空间的维数降低了"], "a": 1, "w": "右边只要算一次 d 维点积 ⟨x,z⟩，再做常数次乘方加法。特征空间维数一点没变，变的只是算内积的方式。"}, {"t": "核化之后，SVM/核回归的主要计算瓶颈从什么变成了什么？", "o": ["瓶颈消失了", "从内存瓶颈变成通信瓶颈", "从「随特征维数增长」变成「随样本数增长」（n×n 核矩阵）", "从随样本数增长变成随特征维数增长"], "a": 2, "w": "n=10⁵ 时核矩阵有 10¹⁰ 个数（约 80GB），存不下。这解释了为什么核方法适合「样本少、特征多」，也解释了 sklearn 建议大数据用 LinearSVC 而不是 SVC(kernel='linear')。"}], "7": [{"t": "核 K(x,z) = (xᵀz)² 对应的特征空间里，包含一次项 xᵢ 吗？", "o": ["取决于 d 的大小", "包含，所有次数都有", "包含，但权重为 0", "不包含——只有二次项 xᵢxⱼ，想要一次项必须加常数 c"], "a": 3, "w": "(xᵀz)² 展开只有 Σ(xᵢxⱼ)(zᵢzⱼ)。加了 c 之后才多出 Σ(√(2c)xᵢ)(√(2c)zᵢ) + c²。这就是 sklearn 的 SVC(kernel='poly') 带 coef0 参数的原因，⚠️ 默认 coef0=0 也就是默认没有低次项。"}, {"t": "核展开里为什么常常冒出 √2 这个系数？", "o": ["展开平方时交叉项出现两次（系数 2），要写成内积就得把 2 平均分给两边各一个 √2", "纯粹是约定俗成", "因为高斯分布的归一化常数含 √2", "因为用了二范数"], "a": 0, "w": "例如 (a₁b₁+a₂b₂)² = a₁²b₁² + 2a₁a₂b₁b₂ + a₂²b₂²，所以 φ([a₁,a₂]) = [a₁², √2·a₁a₂, a₂²]。⚠️ 本课 M1T4 的核技巧手算题就考这个，漏了 √2 等式不成立。"}], "9": [{"t": "Mercer 定理说一个函数 K 是合法核的充要条件是什么？", "o": ["必须能显式写出对应的 φ", "K 必须在 [0,1] 取值", "对任意有限点集，对应的核矩阵都对称半正定", "K 必须能写成多项式"], "a": 2, "w": "定理的价值在「充分」那一半：半正定 ⇒ 一定存在某个 φ。于是挑核的接口彻底变了——不用构造 φ，只要验证半正定。"}, {"t": "高斯核 exp(−‖x−z‖²/2σ²) 对应的特征空间是多少维？", "o": ["d² 维", "d 维", "n 维", "无穷维"], "a": 3, "w": "这正是「永远不要显式算 φ」从「不划算」升级成「不可能」的地方。⚠️ sklearn 用的是 gamma = 1/(2σ²)，所以 σ 小 ⇔ gamma 大，两套记号别记反。"}, {"t": "讲义说「核可以看成相似度」时加了一句括号自嘲，为什么？", "o": ["因为这个直觉完全错误", "因为核其实是距离", "因为相似度必须在 [0,1] 内", "因为内积大不完全等于相似——一个超长向量和任何向量的内积都可能很大"], "a": 3, "w": "原文：Intuitively, (and there are things wrong with this intuition, but nevermind)… ⚠️ 本课 M1T4 也专门提醒：核起的是相似度度量的作用，但核一般不是一个距离。"}], "11": [{"t": "判断一个学习算法能不能被核化，看什么？", "o": ["算法有没有闭式解", "把算法写出来，数据是不是只以内积 ⟨x,z⟩ 的形式出现", "算法是不是线性的", "算法是不是凸优化"], "a": 1, "w": "只要有一处 x 单独出现（没有配对成内积）就不行。这正是 SVM 原始形式不能直接核化、对偶形式能的原因——原始里是 wᵀx⁽ⁱ⁾，w 和 x 分开站着。"}, {"t": "Ng 在 L7 给 SVM 下的那个定义是什么？", "o": ["最优间隔分类器 + 核技巧 = 支持向量机", "SVM 就是带正则化的逻辑回归", "SVM 就是最大化似然的线性分类器", "SVM 就是感知机加上软间隔"], "a": 0, "w": "原话：optimal margin classifier plus the kernel trick, that is the support vector machine。一句话把 Part V 和 Part VI 缝在一起，讲义全篇都没这么干脆地说过。"}], "12": [{"t": "讲义用 A、B、C 三个点想说明什么？", "o": ["点越多模型越准", "离决策边界越远，预测越可信——「把握」有了几何含义", "三个点都会成为支持向量", "决策边界必须穿过这三点"], "a": 1, "w": "A 离边界很远（很有把握），C 紧贴边界（边界微动就翻），B 居中。这一页为后面的函数间隔和几何间隔做铺垫。"}, {"t": "SVM 和逻辑回归在「看哪些点」上的根本差别是什么？", "o": ["逻辑回归看所有点的总体似然，SVM 只盯最靠近边界的那个（最差的点）", "两者完全相同", "SVM 只看正类，逻辑回归看两类", "逻辑回归只看支持向量，SVM 看所有点"], "a": 0, "w": "SVM 最大化的是「最小」几何间隔。这个「看最差」的设计既带来稀疏性（解只由少数点决定），也带来对离群点的敏感——Ng 在 L7 70:00 把它说成 optimizes for the worst-case margin。"}], "13": [{"t": "SVM 这一部分把标签从 {0,1} 改成 {−1,+1}，主要好处是什么？", "o": ["「分对」可以写成 y·f(x) > 0 一个乘法", "减少参数个数", "让 sigmoid 的输出范围对称", "让损失函数变成凸的"], "a": 0, "w": "乘积的符号直接编码了对错。本课 M1T3 讲感知机时给的理由一样：若用 0/1，y=0 会把乘积压成 0，这个机制就失效了。"}, {"t": "SVM 把 b 从参数向量里单独拿出来、废掉 x₀=1 的约定，带来一个重要后果是什么？", "o": ["模型变成了非线性的", "决策边界必须过原点", "正则项 ½‖w‖² 里不含 b，所以 SVM 从一开始就不正则化截距", "不再需要训练数据"], "a": 2, "w": "和 notes1 第 3 页讨论的「别罚截距」是同一个道理，只是这里通过记号直接实现了。b 控制边界位置，把它往 0 拉没有「让模型更简单」的含义。"}], "14": [{"t": "函数间隔 γ̂ = y(wᵀx+b) 为什么不能用来衡量模型好坏？", "o": ["因为它不可导", "因为它可能是负数", "把 (w,b) 同乘 2，分类器完全没变但 γ̂ 翻倍——可以靠缩放任意放大", "因为它和样本数有关"], "a": 2, "w": "g 只看符号不看大小，所以 (w,b) 和 (2w,2b) 是同一个分类器。Ng 把这叫「cheat on the functional margin」。"}, {"t": "整个训练集的函数间隔定义为所有样本中的哪一个？", "o": ["中位数", "平均值", "最小的那一个", "最大的那一个"], "a": 2, "w": "γ̂ = min_i γ̂⁽ⁱ⁾。这是 SVM「只看最差那个点」的第一处体现，后面的稀疏性和对离群点的敏感都源于此。"}], "15": [{"t": "几何间隔 γ = γ̂/‖w‖ 相比函数间隔的关键优势是什么？", "o": ["它不需要标签", "它对参数缩放免疫——(w,b)→(2w,2b) 时分子分母同时乘 2，约掉了", "它永远是正数", "它计算更快"], "a": 1, "w": "这正是函数间隔缺的性质，也是几何间隔能拿来当优化目标的原因。‖w‖=1 时两者相等。"}, {"t": "⚠️ 在规范形式（令支持向量的函数间隔为 1）下，支持向量到决策边界的几何距离是多少？", "o": ["2/‖w‖", "‖w‖", "1/‖w‖", "1"], "a": 2, "w": "本课 M1T4 把这个标成★考点并明说「这是最容易混淆的一点：函数间隔=1，几何间隔=1/‖w‖」。两侧支持超平面之间的总宽度则是 2/‖w‖。三个数要分清。"}, {"t": "为什么 w 一定垂直于分离超平面？", "o": ["边界上任意两点满足 wᵀx+b=0，相减得 wᵀ(x₁−x₂)=0", "这只是一个约定", "因为 b=0", "因为 w 是单位向量"], "a": 0, "w": "讲义让你自己确认（You should convince yourself that this must be the case）。这一步是推导几何间隔公式的起点。"}], "16": [{"t": "从 max γ s.t. ‖w‖=1 到 min ½‖w‖² s.t. y(wᵀx+b)≥1，关键的一步是什么？", "o": ["利用缩放自由度规定 γ̂=1，把非凸问题变成凸二次规划", "用拉格朗日乘子法", "假设数据线性可分", "把约束从等式改成不等式"], "a": 0, "w": "讲义试了三版：第 1 版 ‖w‖=1 约束非凸；第 2 版目标 γ̂/‖w‖ 非凸；第 3 版令 γ̂=1 才成功。因为几何间隔对缩放免疫，这个规定不损失任何东西。"}, {"t": "目标写成 ½‖w‖² 而不是 ‖w‖，两处改动分别为了什么？", "o": ["为了让问题变成线性规划", "为了加入正则化", "为了让目标非负", "平方去掉根号让目标光滑，½ 是为了求导时和平方的 2 抵消"], "a": 3, "w": "两处改动都不改变最优解的位置（单调变换 + 正常数倍）。本课 M1T4 几乎逐字给了同样的解释，是标准答案。"}], "18": [{"t": "弱对偶 d* ≤ p* 说的是什么？", "o": ["max-min 永远小于等于 min-max", "对偶问题永远比原始问题好解", "原始问题永远无解", "对偶问题的解永远等于原始问题的解"], "a": 0, "w": "原始是 min-max，对偶是 max-min，差别只有顺序。强对偶（取等号）需要额外条件：f 和 gᵢ 凸、hᵢ 仿射、约束严格可行。"}, {"t": "SVM 为什么非要推对偶形式？最主要的理由是什么？", "o": ["对偶里数据只以内积出现，这样才能把核塞进去", "因为对偶问题永远更快", "因为对偶问题的变量更少", "因为原始问题无法求解"], "a": 0, "w": "⚠️ 「对偶更好解」不是主要理由——原始本身就是标准 QP，sklearn 的 LinearSVC 走的就是原始路径。真正不可替代的是核化。而且对偶有 n 个变量，n 很大时反而更多。"}], "20": [{"t": "KKT 互补松弛条件 αᵢ·gᵢ(w)=0 直接解释了 SVM 的哪个性质？", "o": ["凸性", "收敛性", "核函数的存在性", "稀疏性——只有约束取等号（落在支持超平面上）的点 α 才非零"], "a": 3, "w": "两个数至少有一个是 0：要么 αᵢ=0（约束没起作用），要么 gᵢ(w)=0（函数间隔恰好等于 1）。所以「支持向量只有几个」是推出来的，不是观察出来的。"}, {"t": "把所有非支持向量从训练集里删掉再训练一次，结果会怎样？", "o": ["间隔会变大", "得到完全相同的决策边界", "模型无法训练", "边界会明显变化"], "a": 1, "w": "因为 w=Σαᵢy⁽ⁱ⁾x⁽ⁱ⁾ 里那些点的 αᵢ 本来就是 0，对 w 没有贡献。⚠️ 但别把稀疏性当成鲁棒：解只由少数点决定，意味着挪动其中一个就可能让边界大变。"}], "21": [{"t": "对 L(w,b,α) 关于 w 求梯度置零，得到什么？", "o": ["‖w‖ = 1", "Σᵢ αᵢ y⁽ⁱ⁾ = 0", "αᵢ = C", "w = Σᵢ αᵢ y⁽ⁱ⁾ x⁽ⁱ⁾"], "a": 3, "w": "本课 M1T4 给这个式子标了「★考点，极其重要」：w 是训练样本的线性组合，系数是 α。另一个式子 Σαᵢy⁽ⁱ⁾=0 来自对 b 求偏导，两个都要写出来。"}, {"t": "SVM 的拉格朗日函数里为什么只有 α 没有 β？", "o": ["因为 β 都等于 0", "因为问题只有不等式约束，β 是给等式约束用的", "讲义写漏了", "因为 β 被吸收进了 α"], "a": 1, "w": "讲义明说：there're only αᵢ but no βᵢ Lagrange multipliers, since the problem has only inequality constraints。"}], "23": [{"t": "对偶问题 max Σαᵢ − ½ΣΣ y⁽ⁱ⁾y⁽ʲ⁾αᵢαⱼ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩ 的哪个特点最关键？", "o": ["它是一个最大化问题", "数据只以内积 ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩ 出现，所以能换成核函数", "它只有 n 个变量", "它的约束都是线性的"], "a": 1, "w": "这正是第 11 页「能核化的判据」。把每个内积换成 K，SVM 立刻变成核 SVM——Ng 所说的「最优间隔分类器 + 核技巧」。"}, {"t": "核 SVM 预测一个新点 x 时，为什么可以不需要 w？", "o": ["因为预测时不需要参数", "预测式 f(x)=Σαᵢy⁽ⁱ⁾K(x⁽ⁱ⁾,x)+b 只用到核，而且多数 αᵢ=0", "因为 w 总是 0 向量", "因为 b 包含了 w 的信息"], "a": 1, "w": "在无穷维特征空间里 w 根本写不出来，但预测照样能算——这就是「隐式地在高维空间工作」的字面含义。而且只需要算 x 和少数几个支持向量的核。"}], "24": [{"t": "引入软间隔（ℓ1 正则）后，对偶问题发生了什么变化？", "o": ["等式约束消失了", "多出了 ξ 和 r 两组对偶变量", "只多了一个上界：αᵢ ≥ 0 变成 0 ≤ αᵢ ≤ C", "目标函数完全改变"], "a": 2, "w": "讲义自己都觉得意外，用了 somewhat surprisingly。ξ 和 r 在对偶里全消失了。⚠️ 但 b* 的计算公式（式 25）失效了，软间隔下要用 0<αᵢ<C 的点来反解。"}, {"t": "⚠️ 在软间隔 SVM 里，αᵢ = C 的点是什么样的点？", "o": ["在间隔内部或被误分类的点——它们也是支持向量", "不存在这样的点", "在间隔之外的安全点", "恰好落在支持超平面上的点"], "a": 0, "w": "三档 KKT：α=0 ⇒ yf≥1（安全区）；0<α<C ⇒ yf=1（支持超平面上）；α=C ⇒ yf≤1（间隔内或误分类）。所以「支持向量=离边界最近的点」在软间隔下是错的，正确定义是「α 非零的点」。"}, {"t": "本课 M1T4 给的 C 的记忆口诀是什么？", "o": ["C 只影响训练速度，不影响边界", "C 大 = 严格 = 窄间隔（可能过拟合）；C 小 = 宽松 = 宽间隔（可能欠拟合）", "C 必须等于 1", "C 大 = 宽间隔；C 小 = 窄间隔"], "a": 1, "w": "C 是违规的单价。C 大就重罚违规，宁可缩窄间隔也要迁就每个点。⚠️ 课程还强调 C 和 gamma 机制不同：C 管「容不容忍违规」，gamma 管「单个点的影响范围」，必须一起用交叉验证搜。"}, {"t": "本课 M1T4 把 ξ = 1 标成★考点，此时点在哪里？", "o": ["被严重误分类", "在支持超平面上", "在间隔之外的安全区", "恰好在决策边界上（y·f(x)=0），不能说它「在正确的一侧」"], "a": 3, "w": "ξᵢ = max(0, 1−yᵢf(xᵢ))，ξ=1 对应 yf=0。课程的说法：f(x)=0 意味着没有严格的类别归属，它不在任何一侧。本课在感知机那里也反复考过「边界上的点」。"}], "26": [{"t": "坐标上升和梯度上升的区别是什么？", "o": ["坐标上升不需要目标函数可导", "两者完全等价", "坐标上升每步只动一个变量，但把它一次性优化到最优", "坐标上升每步动所有变量"], "a": 2, "w": "所以轨迹是横竖交替的折线，每段都平行于某个坐标轴。它划算的前提是「固定其余变量后，对单个变量的最优解有闭式解」。"}, {"t": "本课 M2 里哪个算法本质上就是坐标下降？", "o": ["层次聚类", "PCA", "DBSCAN", "k-means——固定质心更新分配、固定分配更新质心"], "a": 3, "w": "CS229 的 k-means 讲义明说 k-means is exactly coordinate descent on J。EM 也是同一个模式（E 步固定参数优化 Q，M 步固定 Q 优化参数）。这个框架比「分配方式有限」更能解释 k-means 为什么收敛。"}], "28": [{"t": "SMO 为什么必须一次更新两个 α，不能只动一个？", "o": ["因为标签只有两类", "因为核矩阵是二维的", "因为计算两个更快", "等式约束 Σαᵢy⁽ⁱ⁾=0 使得任一个 α 被其余的完全决定"], "a": 3, "w": "由 Σαᵢy⁽ⁱ⁾=0 可得 α₁ = −y⁽¹⁾Σ_{i≥2}αᵢy⁽ⁱ⁾，固定其余 α 时 α₁ 没有任何活动余地。而这个等式约束正是第 22 页对 b 求偏导得到的。"}, {"t": "SMO 处理两变量子问题的方法是什么？", "o": ["先忽略框约束求一元二次函数的闭式最优解，再把结果裁剪到 [L,H]", "穷举所有可能的取值", "用梯度下降迭代求解", "调用通用 QP 求解器"], "a": 0, "w": "因为一元二次函数在区间上的最大值要么在内部驻点、要么在端点，所以「算完再裁剪」是正确的。这个闭式解正是 SMO 高效的关键。"}, {"t": "SMO 和这一节在本课的考试地位是什么？", "o": ["是大题的必答内容", "会在 M2 考到", "完全不在考纲——M1T4 讲的是工作流程，不涉及求解器内部", "是 M1T4 的核心考点"], "a": 2, "w": "讲义把 §9 标成 (optional reading)，Ng 课堂上也没讲（字幕里搜不到 SMO）。⭐ 唯一值得带走的是：SVM 训练代价随样本数快速增长，所以适合中小数据集——这是「什么时候选 SVM」的标准答案之一。"}]};
+
+var N = [{"r": [1, 2], "star": 2, "t": "特征映射：三次函数其实也是「线性」模型", "one": "把 x 换成 φ(x)，非线性模型就变回线性模型——换的是坐标，不是算法。", "quote": "<em>Thus, a cubic function of the variable x can be viewed as a <b>linear function over the variables φ(x)</b>.</em>", "eq": "φ(x) = [ 1, x, x², x³ ]ᵀ ∈ R⁴\n\nθ₃x³ + θ₂x² + θ₁x + θ₀ = θᵀφ(x)\n\n术语：\n  原始输入 x        → input <b>attributes</b>（属性）\n  映射后的 φ(x)     → <b>features</b>（特征）\n  φ 本身            → <b>feature map</b>（特征映射）", "pts": ["⭐ <b>这一页是整份讲义的起点，而且想法极简单</b>：要拟合三次函数，不用发明新算法——<b>造四个新「特征」1, x, x², x³，然后照旧跑线性回归</b>。模型对 x 是三次的，<b>但对参数 θ 仍是线性的</b>。", "⚠️ <b>讲义在这里重新定义了两个你以为已经懂的词</b>：<b>attributes</b> 指原始输入（房子面积 x），<b>features</b> 指映射后的量 φ(x)。<b>讲义自己也承认这个区分不通用</b>——<em>different authors use different terms in different contexts</em>。", "<b>带特征的 LMS 只是把 x 换成 φ(x)</b>：原来 θ := θ + αΣ(y⁽ⁱ⁾−θᵀx⁽ⁱ⁾)x⁽ⁱ⁾，现在 θ := θ + αΣ(y⁽ⁱ⁾−θᵀφ(x⁽ⁱ⁾))φ(x⁽ⁱ⁾)。<b>算法一个字没改，只是喂进去的向量换了。</b>", "<b>维数要分清</b>：φ : R^d → R^p，<b>d 是原始属性维数，p 是特征维数</b>。三次函数那个例子里 d=1、p=4。<b>后面所有的麻烦都来自 p ≫ d。</b>"], "tbl": [{"cap": "同一个模型的两种读法", "head": ["看作", "自变量", "是线性的吗", "参数"], "rows": [["x 的三次函数", "x", "<b>不是</b>", "θ₀..θ₃"], ["<b>φ(x) 的线性函数</b>", "φ(x)=[1,x,x²,x³]", "<b>是</b>", "同一组 θ"]]}], "say": "⭐ <b>「对参数线性」这个说法在 notes1 的 GLM 那一节出现过，这里是它的第二次登场</b>，而且用法更积极：notes1 用它来说明「多项式回归仍算线性回归」，这里用它来<b>造出一整套非线性模型</b>。<b>这就是核方法的全部出发点</b>——<b>不改算法，只改坐标系</b>。⭐ 顺带回答一个常见困惑：既然加特征这么容易，为什么还要核？<b>因为下一页就会看到，有用的 φ 往往大得算不动。</b>核技巧解决的不是「能不能做」，是「<b>做得起做不起</b>」。", "ng": "Ng 在 L7 开场 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=0s\" target=\"_blank\">00:00</a> 就把这一讲的目标说死了：<em>to teach you how to represent feature vectors and how to represent parameters that may be, you know, <b>100 billion dimensional, or 100 trillion dimensional</b></em>，并在 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=616s\" target=\"_blank\">10:16</a> 补了一句 <em>or <b>infinite dimensional</b></em>。⭐ <b>注意他的措辞是「如何表示」而不是「如何计算」</b>——这正是核技巧的精髓：<b>θ 根本不存下来，只存一组系数。</b><span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "本课 M1T4 第 8 页讲核函数时用的是同一个思路，课程原话：<b>「把数据映射到更高维的空间，在那里它可能变得线性可分」</b>，并举了<b>圆环数据</b>的例子（圆内一类、圆外一类，二维里没有任何直线能分开）。⭐ <b>这个圆环例子比讲义的三次函数更贴本课考点</b>，因为它直接对应「为什么需要核」这个问法。", "tip": {"t": "讲义版本不同", "v": "这份是 <em>updated by <b>Tengyu Ma</b> on April 21, 2019</em> 的版本，<b>Part V 核方法是这次新加的</b>。老版讲义直接从 SVM 的间隔开始讲，核放在 SVM 内部。<b>新版把核独立出来放在前面，更合理</b>——因为核技巧本来就不只用于 SVM（第 11 页会说这一点）。"}}, {"r": [3, 4], "star": 3, "t": "★ 维数爆炸，与那个救命的观察：θ 永远是样本的线性组合", "one": "d=1000 时 θ 有十亿维——但它始终躺在 n 个样本张成的空间里。", "quote": "<em>when d = 1000, each update requires at least computing and storing a 1000³ = 10⁹ dimensional vector, which is <b>10⁶ times slower</b> than the update rule for ordinary least squares.</em>", "eq": "含所有 ≤3 次单项式的 φ(x)：维数 p ≈ d³\n（精确地说 1 + d + d² + d³ 项，含重复）\n\n关键观察（可用归纳法证明）：\n  θ = Σ_{i=1}^{n} βᵢ φ(x⁽ⁱ⁾)\n\n更新后仍然成立：\n  θ := θ + α Σᵢ ( y⁽ⁱ⁾ − θᵀφ(x⁽ⁱ⁾) ) φ(x⁽ⁱ⁾)\n     = Σᵢ ( βᵢ + α(y⁽ⁱ⁾ − θᵀφ(x⁽ⁱ⁾)) ) φ(x⁽ⁱ⁾)\n            └──────── 新的 βᵢ ────────┘", "pts": ["⭐ <b>归纳法的两步都要看清</b>：<b>起点</b>——初始化 θ=0，而 0 = Σᵢ 0·φ(x⁽ⁱ⁾)，所以初始时成立（系数全为 0）；<b>归纳步</b>——假设当前 θ = Σβᵢφ(x⁽ⁱ⁾)，更新量又是 φ(x⁽ⁱ⁾) 的线性组合，<b>两个线性组合相加还是线性组合</b>。", "<b>所以 θ 从来没有离开过那个 n 维子空间</b>。p 可能是十亿，但 <b>θ 的「有效自由度」只有 n 个</b>（n 是样本数）。⭐ <b>这就是能把 θ 压缩成 β 的根本原因。</b>", "<b>β 的更新规则</b>：βᵢ := βᵢ + α(y⁽ⁱ⁾ − θᵀφ(x⁽ⁱ⁾))。把右边残留的 θ 也换成 Σβⱼφ(x⁽ʲ⁾)，就得到<b>完全不含 θ 的递推式</b>——出现的只有 <b>⟨φ(x⁽ʲ⁾), φ(x⁽ⁱ⁾)⟩</b> 这种内积。", "⚠️ <b>讲义特意把 φ(x⁽ʲ⁾)ᵀφ(x⁽ⁱ⁾) 改写成尖括号 ⟨·,·⟩</b>，理由是 <em>to emphasize that it's the <b>inner product</b> of the two feature vectors</em>。<b>这个改写是下一页定义核函数的铺垫，不是排版偏好。</b>", "<b>讲义点名了两条「来救场」的性质</b>：① 所有 n² 个内积可以<b>在循环开始前预先算好</b>；② 对很多有用的 φ，<b>算 ⟨φ(x),φ(z)⟩ 根本不需要先把 φ(x) 算出来</b>（下一页就证）。"], "tbl": [{"cap": "两种表示法的代价（d=1000，三次多项式特征）", "head": ["", "显式存 θ", "<b>隐式存 β</b>"], "rows": [["要存多少个数", "<b>p ≈ 10⁹</b>", "<b>n 个</b>（样本数）"], ["每次更新", "O(p) = 10⁹", "<b>O(n)</b>"], ["要不要算出 φ(x)", "要", "<b>不要</b>"], ["前提", "—", "θ 初始化为 0（或任一样本的线性组合）"]]}], "say": "⭐ <b>「θ 是样本的线性组合」这条结论有个正式名字：表示定理（representer theorem）</b>，CS229 本地另有一份专门讲义 <code>CS229/notes/representer-function.pdf</code>。讲义这里只用归纳法对<b>这一个具体算法</b>证了它，但<b>一般结论要强得多</b>：只要目标函数是「损失 + ‖θ‖² 的正则项」这种形式，<b>最优解就一定落在样本张成的子空间里</b>，和你用什么优化算法无关。⚠️ <b>这里有个前提容易忽略：θ 必须从 0（或样本的线性组合）出发</b>。如果随机初始化一个不在那个子空间里的 θ，这条性质当场就不成立了——<b>讲义第一句话就写了 「we assume the initialize the value θ = 0」，不是随口一说。</b>", "ng": "Ng 在 L7 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=1444s\" target=\"_blank\">24:04</a> 讲了为什么非要把算法写成只含内积的形式：<em>the reason we want to write the whole algorithm in terms of inner products is, there'll be important cases where the feature vectors are <b>100 trillion</b> [dimensional]</em>。⭐ <b>课堂的叙述顺序和讲义不同</b>：Ng 先讲「把 w 写成样本的线性组合」这个表示，再讲内积；讲义是先推 β 的递推式，内积自己冒出来。<b>两条路殊途同归，课堂那条更有动机感。</b><span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "<b>本课不考这段推导</b>（M1T4 的核部分从「K(x,z)=φ(x)ᵀφ(z)」直接开始）。⭐ <b>但「w 是训练样本的线性组合」这条结论本课要考</b>——M1T4 第 4.5 节把 <b>w = Σᵢ αᵢyᵢxᵢ</b> 标成了「★ 考点，极其重要」。<b>这一页提前让你看见这条性质的来源</b>：它不是 SVM 独有的巧合，<b>而是一大类算法共有的结构</b>。"}, {"r": [5, 6], "star": 3, "t": "★ 核函数：把 O(d³) 的内积变成 O(d)", "one": "⟨φ(x),φ(z)⟩ = 1 + ⟨x,z⟩ + ⟨x,z⟩² + ⟨x,z⟩³ —— 右边只要算一次 d 维点积。", "quote": "<em>K(x, z) ≜ ⟨φ(x), φ(z)⟩</em> … <em>fundamentally all we need to know about the feature map φ(·) is <b>encapsulated in the corresponding kernel function</b> K(·,·).</em>", "eq": "⟨φ(x),φ(z)⟩ = 1 + Σᵢ xᵢzᵢ + Σ_{i,j} xᵢxⱼzᵢzⱼ + Σ_{i,j,k} xᵢxⱼxₖzᵢzⱼzₖ\n            = 1 + (Σᵢ xᵢzᵢ) + (Σᵢ xᵢzᵢ)² + (Σᵢ xᵢzᵢ)³\n            = 1 + ⟨x,z⟩ + ⟨x,z⟩² + ⟨x,z⟩³\n\n算法（完全不含 φ）：\n  1. 预先算好 Kᵢⱼ = K(x⁽ⁱ⁾, x⁽ʲ⁾)，令 β := 0\n  2. 循环：βᵢ := βᵢ + α( y⁽ⁱ⁾ − Σⱼ βⱼ K(x⁽ⁱ⁾,x⁽ʲ⁾) )\n     向量形式：β := β + α( y⃗ − Kβ )\n  3. 预测：θᵀφ(x) = Σᵢ βᵢ K(x⁽ⁱ⁾, x)", "pts": ["⭐ <b>那三行代数是全篇最该亲手验一遍的地方</b>。关键是第二个等号：<b>Σ_{i,j} xᵢxⱼzᵢzⱼ 可以拆成 (Σᵢxᵢzᵢ)(Σⱼxⱼzⱼ) = ⟨x,z⟩²</b>。因为双重求和跑遍所有 (i,j) 组合，正好是两个单重求和的乘积展开。<b>三次项同理。</b>", "<b>代价对比要算清</b>：显式算 φ(x) 要 O(d³)；<b>算 ⟨x,z⟩ 只要 O(d)</b>，再做常数次乘方加法。<b>所以核函数把三次方的代价降成了一次方。</b>", "<b>训练完全核化了</b>：算法里出现的只有 Kᵢⱼ，<b>φ 从头到尾没露过面</b>。向量形式 β := β + α(y⃗ − Kβ) 很漂亮——<b>K 是 n×n 矩阵，每轮更新 O(n²)（或按讲义说法每个分量 O(n)）</b>。", "⭐ <b>预测也核化了</b>（式 12）：θᵀφ(x) = Σᵢ βᵢ K(x⁽ⁱ⁾, x)。<b>这一步同样不需要 φ</b>。于是整个算法——训练和预测——<b>只通过 K 接触数据</b>。", "<b>讲义由此提出了接下来要回答的问题</b>：既然算法只用 K，那<b>能不能跳过 φ，直接挑一个 K？</b>——前提是得知道<b>什么样的函数 K 才真的对应某个 φ</b>。"], "tbl": [{"cap": "核化前后 · 代价对照", "head": ["", "显式特征", "<b>核化</b>"], "rows": [["算一次内积", "O(p)=O(d³)", "<b>O(d)</b>"], ["存参数", "O(p)", "<b>O(n)</b>"], ["预处理", "无", "<b>算 n×n 的 K，O(n²d)</b>"], ["什么时候划算", "<b>n 很大、p 很小</b>", "<b>p 很大（甚至无穷）</b>"]]}], "say": "⭐ <b>表格最后两行是讲义没说、但实践中决定一切的事</b>：核化把代价<b>从「随特征维数增长」换成了「随样本数增长」</b>。n×n 的核矩阵在 n=10⁵ 时就是 10¹⁰ 个数（约 80GB），<b>根本存不下</b>。所以<b>核方法是「样本少、特征多」场景的工具</b>——这恰好是 SVM 在 2000 年代流行、在大数据时代被神经网络取代的原因：<b>数据规模变了，划算的那一边就翻过去了。</b>⭐ <b>这条也解释了 sklearn 的一个常见建议</b>：样本量大时用 <code>LinearSVC</code>（不核化）而不是 <code>SVC(kernel='linear')</code>（走核化路径）。", "ng": "Ng 在 L7 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=1700s\" target=\"_blank\">28:20</a> 把这整套操作总结成了一个「<b>配方</b>」：<em>we're now ready to apply kernels and sometimes in machine learning we call this a <b>kernel trick</b>, and let me just [give] the recipe for it</em>。⭐ <b>课堂给的配方是三步</b>：① 把算法写成只含 ⟨x,z⟩ 的形式；② 把每个 ⟨x,z⟩ 换成 K(x,z)；③ 完事。<b>讲义第 11 页用文字说了同一件事，但课堂把它明确列成了可照做的步骤。</b><span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "本课 M1T4 第 8 页给的定义和这里一字不差：<b>K(x,z) = φ(x)ᵀφ(z)</b>，并点明「<b>核函数直接给出两点在特征空间中的点积，而不必真的算出 φ(x)</b>」。⭐ <b>课程标了★考点的那句</b>：核技巧让我们<b>「在一个隐式的特征空间中工作，而不必显式计算每一个变换后的坐标」</b>。⚠️ 课程还专门提醒：<b>核起的是「相似度度量」的作用，但核一般不是一个距离</b>——这句话容易被忽略，却很适合出判断题。"}, {"r": [7, 8], "star": 2, "t": "两个具体的核：(xᵀz)² 与 (xᵀz+c)^k", "one": "c 控制一次项与二次项的相对权重；k 次核对应 O(d^k) 维空间，但仍只要 O(d)。", "quote": "<em>whereas calculating the high-dimensional φ(x) requires O(d²) time, finding K(x,z) takes only <b>O(d) time—linear in the dimension of the input attributes</b>.</em>", "eq": "K(x,z) = (xᵀz)² = Σ_{i,j} (xᵢxⱼ)(zᵢzⱼ)\n  ⇒ φ(x) = [ x₁x₁, x₁x₂, x₁x₃, x₂x₁, …, x₃x₃ ]ᵀ   （d=3 时 9 维）\n\nK(x,z) = (xᵀz + c)²\n       = Σ_{i,j}(xᵢxⱼ)(zᵢzⱼ) + Σᵢ(√(2c)·xᵢ)(√(2c)·zᵢ) + c²\n  ⇒ φ(x) 在上面 9 维后面再接 [ √(2c)x₁, √(2c)x₂, √(2c)x₃, c ]ᵀ\n\n一般地：K(x,z) = (xᵀz + c)^k  ⇒  特征空间维数 C(d+k, k)", "pts": ["⭐ <b>第一个例子的推导只有两行</b>：(xᵀz)² = (Σᵢxᵢzᵢ)(Σⱼxⱼzⱼ) = Σ_{i,j}(xᵢxⱼ)(zᵢzⱼ)。<b>最后这个形式一眼就能读出 φ</b>——每个 (i,j) 组合贡献一维，内容是 xᵢxⱼ。<b>d=3 时 9 维</b>。", "<b>注意 φ 里有重复项</b>：x₁x₂ 和 x₂x₁ 都在，值一样。<b>讲义是故意的</b>（脚注说明为了简单「含重复」），这让计数变成 d² 而不是组合数。", "⭐ <b>c 的作用讲义说得很准</b>：<em>the parameter c controls the <b>relative weighting</b> between the xᵢ (first order) and the xᵢxⱼ (second order) terms</em>。<b>c 越大，一次项的权重 √(2c) 越大</b>，模型就越偏向线性；c=0 则完全没有一次项。", "<b>k 次核的维数是 C(d+k, k)</b>（组合数）。⚠️ <b>和前面 d^k 的说法并不矛盾</b>：C(d+k,k) 是<b>不含重复</b>的单项式个数，d^k 是含重复的计数方式。<b>两者同阶，讲义在不同地方用了不同的计数口径。</b>", "<b>最该记的结论</b>：<b>特征空间 O(d^k) 维，算 K 仍然只要 O(d)</b>——<em>hence we never need to explicitly represent feature vectors in this very high dimensional feature space</em>。"], "tbl": [{"cap": "多项式核家族（d 维输入）", "head": ["核", "特征空间含什么", "维数", "算 K 的代价"], "rows": [["<b>xᵀz</b>（线性核）", "原始特征本身", "d", "O(d)"], ["<b>(xᵀz)²</b>", "<b>只有</b>二次项 xᵢxⱼ", "d²", "O(d)"], ["<b>(xᵀz+c)²</b>", "二次项 ＋ 一次项 ＋ 常数", "d²+d+1", "O(d)"], ["<b>(xᵀz+c)^k</b>", "所有 ≤k 次单项式", "<b>C(d+k,k)</b>", "<b>O(d)</b>"]]}], "say": "⭐ <b>表格第二行和第三行的差别值得单独想一层</b>：<b>(xᵀz)² 的特征空间里一次项是缺席的</b>，所以它<b>学不出任何纯线性的关系</b>——想同时保留线性和二次项，<b>必须加那个 c</b>。这正是 sklearn 的 <code>SVC(kernel='poly')</code> 带一个 <code>coef0</code> 参数的原因（默认 <code>coef0=0</code>，⚠️ <b>也就是默认没有低次项</b>）。⭐ <b>实践中还有一个坑讲义没提</b>：高次多项式核的数值范围极大（⟨x,z⟩ 稍大于 1，k 次方就爆炸），<b>所以用多项式核前必须做特征缩放</b>，否则核矩阵会病态。<b>这和本课强调的「SVM 必须缩放」是同一个理由的延伸。</b>", "ng": "⚠️ <b>Ng 在 L7 讲多项式核的顺序和讲义相反</b>：他先从 <b>(xᵀz)^k</b> 这类「看起来能算」的函数出发，再倒推它对应什么 φ；讲义是先给 φ 再算 K。到 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=4200s\" target=\"_blank\">70:00</a> 他做总结时把两个主力核并排点名：<em>this thing is called a <b>polynomial kernel</b>, and this is called a <b>Gaussian kernel</b>, which is really the most widely used one</em>。⭐ <b>但他在 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=3564s\" target=\"_blank\">59:24</a> 给了一句更实在的话</b>：<em>actually the most widely used kernel is maybe the <b>linear kernel</b>, which just uses K(x,z) = xᵀz</em>——<b>最常用的其实是「不用核」。</b><span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "⭐ <b>本课 M1T4 第 8 页有一道完全对应的手算题</b>：用 <b>degree-2 多项式核 K(xᵢ,xⱼ) = (xᵢ·xⱼ + c)²</b>，c=0 时把 2D 点 [a₁,a₂] 映射成 3D，要你<b>验证 φ(x)ᵀφ(z) 确实等于 (x·z)²</b>。<b>做法就是这一页第一个例子的二维版</b>：展开 (a₁b₁+a₂b₂)² = a₁²b₁² + 2a₁a₂b₁b₂ + a₂²b₂²，于是 φ([a₁,a₂]) = [a₁², √2·a₁a₂, a₂²]。⚠️ <b>那个 √2 不能漏</b>——它是交叉项系数 2 开根号来的，漏了等式就不成立。", "tip": {"t": "为什么是 √(2c) 和 √2", "v": "展开平方时<b>交叉项会出现两次</b>（xᵢxⱼ 和 xⱼxᵢ），系数是 2。要把它写成「某个数的平方」好塞进内积，<b>就得把 2 平均分给两边各一个 √2</b>。⭐ <b>只要看到核展开里冒出 √2，几乎都是这个原因。</b>"}}, {"r": [9, 10], "star": 3, "t": "★ 核作为相似度、高斯核，与 Mercer 定理", "one": "K 合法 ⟺ 核矩阵对任意有限点集都对称半正定——不用找出 φ，只要确认它存在。", "quote": "<em>Theorem (Mercer). … for K to be a valid (Mercer) kernel, it is <b>necessary and sufficient</b> that for any {x⁽¹⁾,…,x⁽ⁿ⁾}, (n &lt; ∞), the corresponding kernel matrix is <b>symmetric positive semi-definite</b>.</em>", "eq": "高斯核（RBF）：K(x,z) = exp( −‖x−z‖² / (2σ²) )\n   x,z 接近 ⇒ K ≈ 1 ；  x,z 很远 ⇒ K ≈ 0\n   对应的 φ 是<b>无穷维</b>的\n\n半正定的证明（三步）：\n  zᵀKz = Σᵢ Σⱼ zᵢ φ(x⁽ⁱ⁾)ᵀφ(x⁽ʲ⁾) zⱼ\n       = Σₖ Σᵢ Σⱼ zᵢ φₖ(x⁽ⁱ⁾) φₖ(x⁽ʲ⁾) zⱼ\n       = Σₖ ( Σᵢ zᵢ φₖ(x⁽ⁱ⁾) )²  ≥ 0", "pts": ["⭐ <b>「核是相似度」这个直觉，讲义给得很谨慎</b>：<em>Intuitively, (<b>and there are things wrong with this intuition, but nevermind</b>), if φ(x) and φ(z) are close together, then we might expect K(x,z) to be large.</em> <b>括号里那句自嘲值得注意</b>——内积大不完全等于「相似」，比如一个超长向量和任何向量的内积都可能很大。", "<b>高斯核的性质</b>：x 和 z 接近时 K≈1，远离时 K≈0，<b>取值永远在 (0,1]</b>。它对应的 φ 是<b>无穷维</b>的——<b>这正是「永远不要显式算 φ」从「不划算」升级成「不可能」的地方</b>。", "⭐ <b>必要性的证明只有五行，而且关键在最后一步</b>：Σᵢ Σⱼ zᵢ φₖ(x⁽ⁱ⁾) φₖ(x⁽ʲ⁾) zⱼ 可以配方成 <b>(Σᵢ zᵢφₖ(x⁽ⁱ⁾))²</b>——<b>平方必非负，再对 k 求和仍非负</b>。讲义用的恒等式是 Σ_{i,j} aᵢaⱼ = (Σᵢaᵢ)²。", "<b>对称性更简单</b>：Kᵢⱼ = φ(x⁽ⁱ⁾)ᵀφ(x⁽ʲ⁾) = φ(x⁽ʲ⁾)ᵀφ(x⁽ⁱ⁾) = Kⱼᵢ，<b>因为内积可交换</b>。", "⭐ <b>Mercer 定理的价值在「充分」那一半</b>：必要性说明「合法核 ⇒ 半正定」，<b>充分性反过来说「半正定 ⇒ 一定存在某个 φ」</b>。于是<b>挑核的接口彻底换了</b>：不用再去构造 φ，<b>只要验证半正定即可</b>。"], "tbl": [{"cap": "常见核 · 对应的特征空间", "head": ["核", "公式", "特征空间维数"], "rows": [["线性", "xᵀz", "d"], ["多项式", "(xᵀz+c)^k", "C(d+k,k)，有限"], ["<b>高斯 / RBF</b>", "exp(−‖x−z‖²/2σ²)", "<b>无穷维</b>"]]}], "say": "⭐ <b>讲义在第 10 页讲了两个课堂上提过、很能说明核方法威力的例子</b>。① <b>手写数字识别</b>：16×16 像素的图，只用多项式核或高斯核的 SVM 就能做得极好——讲义说这<b>特别令人惊讶</b>，因为输入只是 256 维的像素强度，<b>系统对视觉一无所知，甚至不知道哪些像素是相邻的</b>。② <b>字符串核</b>：x 是一串氨基酸（蛋白质），长度还不一样，很难造「小而合理」的特征集。办法是让 <b>φ(x) 数出每个长度为 k 的子串出现了多少次</b>——26^k 维（k=4 就约 46 万维），<b>但用动态规划能高效算出 K</b>。⭐ <b>第二个例子最能说明问题：核方法让「非向量的对象」（字符串、图、树）也能用线性算法处理</b>，只要你能定义它们之间的相似度。", "ng": "Ng 在 L7 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=3441s\" target=\"_blank\">57:21</a> 念出定理名字：<em>This is called a <b>Mercer's Theorem</b>, M-E-R-C-E-R</em>（他特意拼了一遍），<a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=3502s\" target=\"_blank\">58:22</a> 给出高斯核。⭐ 他在 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=3564s\" target=\"_blank\">59:24</a> 给的实用排序值得记：<b>最常用的其实是线性核</b>（＝不用核），<b>其次才是高斯核</b>。⚠️ <b>讲义完全没有给这种「实践中该选哪个」的排序</b>，它只罗列了可能性。<b>考试里问「怎么选核」时，课堂这条排序比讲义有用得多。</b><span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "⭐ <b>本课 M1T4 第 8 页的选核原则和 Ng 的排序一致</b>，课程原话：<b>「先做线性基线，只有当验证结果支持时才增加灵活度」</b>。⚠️ 本课<b>不考 Mercer 定理</b>（课件里没有），但<b>考 RBF 的 gamma</b>：课程说 <b>γ 大 → 影响范围窄 → 边界更弯曲；γ 小 → 影响范围广 → 边界更平滑</b>。<b>注意 γ 和这里的 σ 是倒数关系</b>（γ = 1/(2σ²)），<b>所以 σ 小 ⇔ γ 大</b>，两套记号别记反。", "tip": {"t": "半正定怎么直观理解", "v": "zᵀKz ≥ 0 对所有 z 成立，意思是 <b>K 不会把任何方向「翻到负的那边」</b>。⭐ 更有用的等价说法：<b>K 的所有特征值 ≥ 0</b>。这和 M2 T1 PCA 里协方差矩阵「对称半正定、特征值非负」是<b>同一个性质</b>——事实上<b>协方差矩阵本身就是一种核矩阵</b>（用线性核算出来的）。"}}, {"r": [11, 11], "star": 2, "t": "核技巧的普适性，以及 SVM 这一部的路线图", "one": "任何只用到内积的算法都能被核化——这才是「kernel trick」这个名字的由来。", "quote": "<em>if you have <b>any</b> learning algorithm that you can write in terms of only inner products ⟨x,z⟩ between input attribute vectors, then by replacing this with K(x,z) … you can “magically” allow your algorithm to work efficiently in the high dimensional feature space corresponding to K.</em>", "pts": ["⭐ <b>这一段是整个 Part V 的收束，而且结论比 SVM 大得多</b>：核技巧<b>不是 SVM 的一个特性</b>，而是一个<b>可以套在任何「内积形式算法」上的通用改造</b>。讲义举的例子是<b>核感知机</b>（kernel perceptron）。", "<b>判断一个算法能不能核化，只看一件事</b>：<b>把它写出来，数据 x 是不是只以 ⟨x,z⟩ 的形式出现</b>。是，就能核化；只要有一处单独出现了 x 本身，就不行。", "<b>Part VI 的路线图</b>（讲义自己列的）：间隔与「大间隔」直觉 → <b>最优间隔分类器</b> → 拉格朗日对偶的插叙 → 核 → <b>SMO 算法</b>。⭐ <b>注意「最优间隔分类器」和「SVM」在讲义里是两个词</b>：前者是没有核的版本。", "<b>讲义对 SVM 的定位相当高</b>：<em>SVMs are among the best (and many believe are indeed <b>the best</b>) “off-the-shelf” supervised learning algorithms</em>。⚠️ <b>这是 2000 年代末的判断</b>，今天在大多数表格数据任务上梯度提升树更常胜出，在感知类任务上则是神经网络。"], "tbl": [{"cap": "能不能核化 · 看数据是怎么出现的", "head": ["算法", "能核化吗", "为什么"], "rows": [["线性回归", "<b>能</b>", "本讲义 Part V 刚做完"], ["感知机", "<b>能</b>", "更新量是 x 的线性组合（讲义点名）"], ["<b>SVM 对偶形式</b>", "<b>能</b>", "<b>目标和预测都只含 ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩</b>"], ["<b>SVM 原始形式</b>", "<b>不能直接核化</b>", "目标里 w 和 x 是分开出现的"], ["PCA", "能（kernel PCA）", "可写成 Gram 矩阵的特征分解"]]}], "say": "⭐ <b>表格第 3、4 行就是「为什么非要推对偶」的全部答案</b>，而且是这份讲义最关键的一条逻辑链：<b>原始形式 min ½‖w‖² 里出现的是 wᵀx⁽ⁱ⁾，w 和 x 分开站着，没法换成 K</b>；<b>对偶形式里数据只以 ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩ 的形式出现，整个算法立刻可核化</b>。<b>所以对偶不是为了「换个角度看问题」这种审美理由，是为了把核塞进去。</b>⚠️ <b>这一点讲义要到第 21 页才明说</b>（「one key idea to watch out for is that we'll try to write our algorithm in terms of only the inner product」），<b>但现在先记住，后面那十页的动机就全清楚了</b>。", "ng": "⭐ <b>Ng 在 L7 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=2563s\" target=\"_blank\">42:43</a> 给了一句定义，讲义全篇都没有这么干脆地说过</b>：<em>what a support vector machine is, is taking the <b>optimal margin classifier</b> that we derived earlier, and applying the <b>kernel trick</b> to it … <b>optimal margin classifier plus the kernel trick, that is the support vector machine</b></em>。<b>一句话把 Part V 和 Part VI 缝在了一起，值得抄下来。</b><span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "本课 M1T4 的路线图（第 3 页）也是同一条链：<b>感知机 → 最大间隔 → 软间隔 → 对偶视角 → 核技巧</b>，课程还特意写了「<b>顺序不能乱跳，因为后面的计算假设前面的定义和约定已经清楚</b>」。⭐ <b>课程的一句话串联</b>：「感知机随便找条线 → SVM 要找最宽的那条 → 数据分不开就允许违规（用 C 调节）→ 从对偶视角看只有支持向量说了算 → 换个核函数就能画曲线」。<b>这句话几乎可以直接当大题的开头段。</b>"}, {"r": [12, 12], "star": 3, "t": "★ 间隔的直觉：A、B、C 三个点", "one": "离边界越远，预测越可信——「可信」这个词在这里第一次有了几何含义。", "quote": "<em>if a point is far from the separating hyperplane, then we may be significantly more <b>confident</b> in our predictions.</em>", "pts": ["<b>先从逻辑回归接上</b>：hθ(x)=g(θᵀx)，θᵀx ≫ 0 时我们「很有把握 y=1」，θᵀx ≪ 0 时「很有把握 y=0」。<b>所以「把握」原本是通过 θᵀx 的大小来表达的。</b>", "⭐ <b>图上三个点的意思要能复述</b>：<b>A 离边界很远</b>——预测 y=1 很有把握；<b>C 紧贴边界</b>——虽然也在 y=1 这一侧，<b>但边界稍微动一点，预测就翻成 y=0 了</b>；<b>B 在两者之间</b>。", "<b>于是目标被改写了</b>：不只是「分对」，而是「<b>分对而且离边界远</b>」——讲义的说法是 <em>all correct and confident (meaning far from the decision boundary) predictions</em>。", "<b>讲义在这里埋了两个伏笔</b>：θᵀx 的大小会形式化成<b>函数间隔</b>（第 13 页），「离边界远」会形式化成<b>几何间隔</b>（第 14 页）。⭐ <b>这两个词的分工从这一页就定了：一个管「分数」，一个管「距离」。</b>", "<b>术语</b>：θᵀx = 0 这条线叫<b>决策边界</b>，也叫<b>分离超平面（separating hyperplane）</b>。"], "tbl": [{"cap": "三个点 · 讲义想让你读出什么", "head": ["点", "位置", "预测", "把握"], "rows": [["<b>A</b>", "离边界<b>很远</b>", "y=1", "<b>很有把握</b>"], ["<b>B</b>", "中间", "y=1", "一般"], ["<b>C</b>", "<b>紧贴边界</b>", "y=1", "<b>很没把握</b>——边界微动就翻"]]}], "say": "⭐ <b>这一页其实在偷偷换掉一个标准</b>。逻辑回归的训练目标是<b>最大化似然</b>，它会让所有点的 θᵀx 尽量往正确方向大——<b>但它不特别在意「最差的那个点」</b>。SVM 的目标将是<b>最大化「最近那个点」的间隔</b>，<b>只盯最差的一个</b>。<b>这个「看平均 vs 看最差」的差别，就是两个算法性格的全部来源</b>：SVM 的解只由少数几个点决定（支持向量），<b>也因此对离群点特别敏感</b>（第 24 页要解决的正是这个）。⭐ <b>Ng 在课上把它说成「优化最坏情况的间隔」，见第 24 页那一条的 ng 栏。</b>", "ng": "Ng 在 L6 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=2507s\" target=\"_blank\">41:47</a> 转入 SVM，<a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=3371s\" target=\"_blank\">56:11</a> 讲这个直觉：<em>the functional margin captures this idea that if a classifier has a large functional margin, it means [it is confident]</em>。⭐ 他在 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=3528s\" target=\"_blank\">58:48</a> 用了一个比讲义更直观的对比：<b>红线和绿线都能完美分开正负例，但绿线有大得多的几何间隔</b>——<em>there's a much bigger geometric margin meaning a <b>physical separation</b> from the training examples even as it separates them</em>。<b>「物理上的分离」这个说法很好记。</b><span class=\"src\">CS229/transcripts/L6.txt · 本地已下载</span>", "exam": "本课 M1T4 第 4 页讲的是同一件事，但切入点是<b>和感知机对比</b>：两者<b>用同一个线性打分函数 f(x)=wᵀx+b</b>，<b>变的不是模型形式，变的是训练目标</b>（课程标了★考点：<em>the training objective changes</em>）。⭐ 课程列的感知机四特征：<b>找到一条能分开的就行 · 只在犯错或打平时更新 · 解不唯一 · 没有显式的间隔目标</b>；SVM 四特征：<b>挑间隔最大的 · 硬间隔要求完美可分 · 软间隔用 C 取平衡 · 由支持向量决定</b>。⚠️ 课程还有一句容易被忽略的提醒：<b>「两种目标都不保证在测试集上表现稳健，最大间隔只是训练集上的一个几何标准，不是泛化保证」</b>。"}, {"r": [13, 13], "star": 3, "t": "★ 记号大改：y 变成 ±1，θ 拆成 w 和 b", "one": "这一页换掉了前两份讲义的全套记号，不看会全程对不上。", "quote": "<em>This “w, b” notation allows us to explicitly treat the intercept term b separately from the other parameters. (We also <b>drop the convention</b> we had previously of letting x₀ = 1 …)</em>", "eq": "标签：y ∈ { −1, +1 }     （不再是 {0,1}）\n分类器：h_{w,b}(x) = g(wᵀx + b)\n其中 g(z) = +1 若 z ≥ 0，  g(z) = −1 否则\n\n对应关系：b ↔ 原来的 θ₀ ，  w ↔ 原来的 [θ₁ … θ_d]ᵀ\n⚠ x₀ = 1 这个约定<b>作废了</b>", "pts": ["⭐ <b>三处改动，每一处都有理由</b>：① <b>y 改成 ±1</b>——这样「分对」可以写成 <b>y·f(x) > 0</b> 一个乘法；② <b>b 单独拿出来</b>——因为后面要对 w 和 b <b>分别</b>求偏导，而且 ‖w‖ 里<b>不包含 b</b>；③ <b>废掉 x₀=1</b>——既然 b 已经分开写了，就不需要那个假特征了。", "⚠️ <b>第 ② 条的后果比看起来大</b>：正则项是 ½‖w‖²，<b>b 不在里面</b>。所以 <b>SVM 从一开始就不正则化截距</b>——这和 notes1 第 3 页讨论过的「别罚截距」是同一个道理，<b>但这里是通过记号直接实现的</b>。", "<b>g 现在输出 ±1 而不是 0/1</b>，而且<b>直接给类别，不经过概率</b>。讲义明说这一点：<em>our classifier will directly predict either 1 or −1 (cf. the perceptron algorithm), <b>without first going through the intermediate step of estimating p(y=1)</b></em>。", "⭐ <b>所以 SVM 和逻辑回归的根本差别在这里就定了</b>：<b>SVM 不是概率模型</b>。它给不出「这个点有 87% 的把握是正类」。"], "tbl": [{"cap": "⚠️ 三套记号对照（notes1 / notes3 / 本课课件）", "head": ["", "notes1（线性/逻辑回归）", "<b>notes3（SVM）</b>", "<b>本课 M1T4</b>"], "rows": [["标签", "y ∈ {0,1}", "<b>y ∈ {−1,+1}</b>", "<b>y ∈ {−1,+1}</b> ✓"], ["参数", "θ（含 θ₀）", "<b>w 和 b 分开</b>", "<b>w 和 b 分开</b> ✓"], ["打分", "θᵀx", "<b>wᵀx + b</b>", "<b>f(x)=wᵀx+b</b> ✓"], ["x₀=1", "用", "<b>不用</b>", "不用 ✓"], ["样本数", "n", "n", "<b>N</b> ⚠"]]}], "say": "⭐ <b>好消息是：从这一页起，CS229 的记号和本课课件基本对上了</b>（只剩样本数 n/N 的差别）。<b>前两份讲义里那些 θ、x₀=1、y∈{0,1} 造成的翻译负担，在 SVM 这一块消失了</b>——因为两边都采用了 SVM 文献的标准记号。<b>这让 notes3 成为四份 M1 讲义里最好读的一份。</b>⚠️ 但有一个反向的坑：<b>如果你先读了 notes3 再回头看 notes1，会觉得 notes1 的记号很怪</b>。记住它们服务于不同目的：<b>θᵀx 写推导短（适合 GLM 那种要反复化简的场合），w 和 b 分开写几何意义清楚（适合 SVM 这种要算距离的场合）</b>。", "ng": "Ng 在 L6 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=2771s\" target=\"_blank\">46:11</a> 正式开讲 SVM 并换记号。⚠️ <b>课堂上他把换记号这件事一带而过</b>，没有解释为什么要废掉 x₀=1——<b>讲义这一页比课堂清楚</b>。⭐ 不过他在 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=2990s\" target=\"_blank\">49:50</a> 给了一个讲义没有的结构说明：<em>the <b>optimal margin classifier is the basic building block</b> for the support vector machine</em>——<b>先有最优间隔分类器这块积木，加上核才是 SVM</b>。<span class=\"src\">CS229/transcripts/L6.txt · 本地已下载</span>", "exam": "本课 M1T4 用的就是这套记号，<b>直接可用，不用翻译</b>。⚠️ 但本课 M1T3 的<b>逻辑回归</b>部分用的是 <b>0/1</b> 标签，课程专门警告过「<b>一旦选定不能中途换——这是最常见的失分点</b>」。⭐ <b>所以在本课范围内，判据是「看算法」</b>：<b>感知机和 SVM 用 ±1，逻辑回归用 0/1</b>。做题时第一件事是确认题目在问哪个算法。"}, {"r": [14, 14], "star": 3, "t": "★ 函数间隔，与它那个可以作弊的缺陷", "one": "把 (w,b) 同乘 2，边界没动但函数间隔翻倍——所以它不能用来衡量「有多好」。", "quote": "<em>by exploiting our freedom to scale w and b, we can make the functional margin <b>arbitrarily large without really changing anything meaningful</b>.</em>", "eq": "单个样本的函数间隔：\n  γ̂⁽ⁱ⁾ = y⁽ⁱ⁾ ( wᵀx⁽ⁱ⁾ + b )\n\n整个训练集的函数间隔 = 最小的那一个：\n  γ̂ = min_{i=1..n} γ̂⁽ⁱ⁾\n\n⚠ 缺陷：g 只看符号不看大小 ⇒ h_{w,b}(x) = h_{2w,2b}(x)\n   但 γ̂ 却变成了 2 倍", "pts": ["⭐ <b>函数间隔为什么要乘 y⁽ⁱ⁾</b>：y=+1 时希望 wᵀx+b 是个<b>大正数</b>，y=−1 时希望它是个<b>大负数</b>。<b>乘上 y 之后，两种情况统一成「越大越好」</b>。", "<b>符号本身就编码了对错</b>：<b>y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) > 0 ⟺ 这个样本分对了</b>。讲义让你自己验证（Check this yourself）——验证方法是分 y=+1 和 y=−1 两种情况看符号。", "⚠️ <b>缺陷的来源是 g 只看符号</b>：g(wᵀx+b) 和 g(2wᵀx+2b) 完全相同，<b>所以 (w,b) 和 (2w,2b) 是同一个分类器</b>。但函数间隔 γ̂ 却<b>翻了一倍</b>。<b>一个能靠缩放任意放大的量，不能用来衡量模型好坏。</b>", "<b>讲义提了一个修法但没展开</b>：加一个<b>归一化条件</b>，比如要求 ‖w‖₂ = 1，或者直接用 (w/‖w‖, b/‖w‖) 的函数间隔。<b>这正是下一页「几何间隔」的做法。</b>", "⭐ <b>整个训练集的间隔取「最小值」而不是平均值</b>——<b>这是 SVM 只看最差那个点的第一处体现</b>。"], "tbl": [{"cap": "函数间隔能干什么、不能干什么", "head": ["问题", "函数间隔能回答吗"], "rows": [["这个样本<b>分对了吗</b>", "<b>能</b>——看 γ̂⁽ⁱ⁾ 的符号"], ["这两个<b>样本</b>谁更靠边界（同一模型内）", "<b>能</b>——比大小有意义"], ["这个<b>模型</b>好不好", "<b>不能</b>——缩放就能让它任意大"], ["这两个<b>模型</b>谁更好", "<b>不能</b>——同上"]]}], "say": "⭐ <b>这张表的第 2 行和第 3 行并不矛盾，值得想清楚</b>：<b>固定一个模型</b>时，γ̂ 在不同样本之间比大小是有意义的（都乘了同一个缩放因子，顺序不变）；<b>跨模型</b>比就没意义了（缩放因子不同）。<b>这和本课 M1T3 讲感知机时说的「同一个模型内部比较 |z| 有意义，两个不同模型的 z 值直接比大小没有意义」是一模一样的道理</b>——<b>M1T3 和 M1T4 在这里接上了</b>。⭐ <b>再往前一层</b>：这个「缩放自由度」不是缺陷，<b>是一种可以利用的资源</b>。第 16 页会把它用掉——既然可以任意缩放，<b>干脆规定 γ̂ = 1</b>，整个优化问题立刻变简单。", "ng": "Ng 在 L6 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=4113s\" target=\"_blank\">68:33</a> 用了一个很到位的词：<em>one way to <b>cheat</b> on the functional margin is just by scaling the parameters by 2</em>——<b>「作弊」</b>。他接着说解法：<em>one thing you could do would be to <b>normalize the length</b> of your parameters</em>。⭐ 在 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=4216s\" target=\"_blank\">70:16</a> 他列了几种等价的规范化方式：<b>令 ‖w‖=1，或者把 (w,b) 换成 (w/‖w‖, b/‖w‖)</b>。<b>讲义第 15 页还补了两个更随意的例子（|w₁|=5、|w₁+b|+|w₂|=2），说明「约束怎么定都行，只要能固定住那个自由度」。</b><span class=\"src\">CS229/transcripts/L6.txt · 本地已下载</span>", "exam": "⭐ <b>本课 M1T4 第 5 页把这件事讲得比讲义还细</b>，标题就点题：<b>「距离只有在除以 ‖w‖ 之后才是几何量」</b>。课程要求分清<b>四个量</b>：<b>原始分数 f(x)</b>（随缩放变）· <b>有符号距离 f(x)/‖w‖</b> · <b>点到边界距离 |f(x)|/‖w‖</b> · <b>带标签几何间隔 γᵢ = yᵢf(xᵢ)/‖w‖</b>。⚠️ 课程标的★考点：<b>y·f(x) 大于 1 才算完全安全，大于 0 只说明分对了，不代表没有违规</b>。"}, {"r": [15, 15], "star": 3, "t": "★ 几何间隔：除以 ‖w‖ 之后才是真距离", "one": "γ = γ̂ / ‖w‖，而且它对缩放免疫——这才是能拿来最大化的量。", "quote": "<em>the geometric margin is <b>invariant to rescaling</b> of the parameters; i.e., if we replace w with 2w and b with 2b, then the geometric margin does not change.</em>", "eq": "推导：w/‖w‖ 是 w 方向的单位向量\n  B = x⁽ⁱ⁾ − γ⁽ⁱ⁾ · w/‖w‖   （B 在边界上）\n  ⇒ wᵀ( x⁽ⁱ⁾ − γ⁽ⁱ⁾ w/‖w‖ ) + b = 0\n  ⇒ γ⁽ⁱ⁾ = ( wᵀx⁽ⁱ⁾ + b ) / ‖w‖\n\n带标签的几何间隔：\n  γ⁽ⁱ⁾ = y⁽ⁱ⁾ · ( (w/‖w‖)ᵀ x⁽ⁱ⁾ + b/‖w‖ )\n\n训练集的几何间隔：γ = min_i γ⁽ⁱ⁾\n关系：‖w‖ = 1 时，函数间隔 = 几何间隔", "pts": ["⭐ <b>推导的第一步是「w 垂直于分离超平面」</b>。讲义让你自己确认（<em>You should convince yourself that this must be the case</em>）——<b>理由</b>：边界上任意两点 x₁、x₂ 都满足 wᵀx+b=0，相减得 <b>wᵀ(x₁−x₂)=0</b>，<b>所以 w 和边界内任意方向都垂直</b>。", "<b>第二步的构造很巧</b>：从 A（即 x⁽ⁱ⁾）沿 <b>−w/‖w‖ 方向走 γ⁽ⁱ⁾ 的距离</b>就到了边界上的 B。<b>把 B 代进边界方程，解出来的就是 γ⁽ⁱ⁾。</b>", "⭐ <b>为什么它对缩放免疫</b>：分子 wᵀx+b 乘 2，分母 ‖w‖ 也乘 2，<b>约掉了</b>。<b>这正是函数间隔缺的那个性质。</b>", "<b>两个间隔的桥梁</b>：<b>‖w‖=1 时两者相等</b>。更一般地 <b>γ = γ̂ / ‖w‖</b>。", "⭐ <b>讲义点出了这个不变性的用处</b>：既然缩放不影响几何间隔，<b>拟合时就可以随便加一个缩放约束而不损失任何东西</b>——<em>we can impose an arbitrary scaling constraint on w without changing anything important</em>。<b>这是第 16–17 页三步化简的通行证。</b>"], "tbl": [{"cap": "★ 函数间隔 vs 几何间隔（这组对比本课必考）", "head": ["", "函数间隔 γ̂", "几何间隔 γ"], "rows": [["公式", "y(wᵀx+b)", "<b>y(wᵀx+b)/‖w‖</b>"], ["单位", "无（纯分数）", "<b>长度</b>"], ["缩放 (w,b)→(2w,2b)", "<b>变成 2 倍</b>", "<b>不变</b>"], ["能衡量模型好坏吗", "不能", "<b>能</b>"], ["规范形式下取值", "<b>支持向量上 = 1</b>", "<b>支持向量上 = 1/‖w‖</b>"]]}], "say": "⭐ <b>表格最后一行是全课最高频的混淆点</b>，本课 M1T4 把它标成了★考点并直接点名：<b>「函数间隔 = 1，几何间隔 = 1/‖w‖。这是最容易混淆的一点」</b>。<b>再往下一层</b>：两侧支持超平面之间的<b>总宽度是 2/‖w‖</b>（每侧 1/‖w‖）。<b>所以「最大化间隔」＝最大化 2/‖w‖ ＝最小化 ‖w‖</b>——<b>这条换算链是下一页的全部内容，现在先记住三个数：1、1/‖w‖、2/‖w‖，分别是函数间隔、单侧几何间隔、总间隔宽度。</b>", "ng": "⚠️ <b>Ng 在 L6 讲几何间隔用的是白板画图，讲义这一页的代数推导课堂上没有逐步写</b>。他在 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=3528s\" target=\"_blank\">58:48</a> 主要讲几何直觉（红线 vs 绿线的「物理分离」），把推导留给了讲义。⭐ <b>所以这一页是讲义比课堂细的地方</b>——<b>想看「为什么是除以 ‖w‖」的代数理由，只能读讲义。</b><span class=\"src\">CS229/transcripts/L6.txt · 本地已下载</span>", "exam": "⭐ <b>本课 M1T4 Tutorial Q1 就是这一页的手算版</b>，原题：f(x)=x₁+x₂−3，w=(1,1)，四个点 (1,2,+1)、(2,3,+1)、(3,3,−1)、(1,1,−1)。<b>课程答案的第一句话是「第一步永远是算范数」：‖w‖=√2≈1.414</b>。然后逐点算 f(x)、有符号距离 f/‖w‖、y·f(x)、判定、ξ。⚠️ <b>其中 (1,2) 这个点 f=0</b>，课程专门说明：<b>点在边界上，没有严格类别归属，说「分类正确」不准确</b>。<b>这一类「边界上的点」在本课是反复出现的考点（感知机那里也是）。</b>"}, {"r": [16, 17], "star": 3, "t": "★★ 三步化简：从难解的 argmax 到标准二次规划", "one": "两次「换个写法」都失败，第三次用掉缩放自由度才成功。", "quote": "<em>noting that maximizing γ̂/‖w‖ = 1/‖w‖ is the same thing as minimizing ‖w‖², we now have the following optimization problem</em>", "eq": "第 1 版（直接写出想要的）：\n  max_{γ,w,b} γ   s.t. y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) ≥ γ,  <b>‖w‖ = 1</b>\n  ⚠ ‖w‖=1 是<b>非凸</b>约束，解不了\n\n第 2 版（去掉 ‖w‖=1）：\n  max_{γ̂,w,b} <b>γ̂/‖w‖</b>   s.t. y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) ≥ γ̂\n  ⚠ 目标函数 γ̂/‖w‖ <b>非凸</b>，还是解不了\n\n第 3 版（用掉缩放自由度，令 γ̂ = 1）：\n  <b>min_{w,b} ½‖w‖²   s.t. y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) ≥ 1</b>\n  ✓ 凸二次目标 + 线性约束 = 标准 QP", "pts": ["⭐ <b>这两页的结构是「试了三次」，而不是「一步到位」</b>——讲义把失败的两步<b>都写了出来</b>，这比直接给结论有用得多，<b>因为它说明了每一处改动在解决什么问题</b>。", "<b>第 1 版的问题</b>：<em>the “‖w‖=1” constraint is a nasty (<b>non-convex</b>) one</em>——<b>单位球面不是凸集</b>，没有现成的求解器能处理。", "<b>第 2 版的问题</b>：去掉了讨厌的约束，<b>但把麻烦转移到了目标函数上</b>——γ̂/‖w‖ 同样非凸。<b>讲义的措辞是「The downside is that we now have a nasty objective」。</b>", "⭐ <b>第 3 版的关键动作</b>：既然缩放不改变几何间隔（第 15 页），<b>那就规定 γ̂ = 1</b>。代入后目标变成 max 1/‖w‖，<b>而这等价于 min ‖w‖，也等价于 min ½‖w‖²</b>。", "<b>为什么要平方、为什么要 ½</b>：<b>平方是为了去掉根号</b>（‖w‖ 含开方，不光滑），<b>½ 是为了求导时和平方的 2 抵消</b>。<b>两处改动都不改变最优解的位置</b>（单调变换 + 正常数倍）。", "<b>结果是一个标准的凸二次规划（QP）</b>：<em>an optimization problem with a <b>convex quadratic objective and only linear constraints</b></em>，现成的商用 QP 求解器就能解。<b>它的解就叫「最优间隔分类器」。</b>"], "tbl": [{"cap": "三版对照 · 每一步在修什么", "head": ["版本", "目标", "约束", "卡在哪"], "rows": [["第 1 版", "max γ", "≥γ 且 <b>‖w‖=1</b>", "<b>约束非凸</b>"], ["第 2 版", "max <b>γ̂/‖w‖</b>", "≥γ̂", "<b>目标非凸</b>"], ["<b>第 3 版</b>", "<b>min ½‖w‖²</b>", "<b>≥1</b>", "<b>✓ 凸 QP，能解</b>"]]}], "say": "⭐ <b>「令 γ̂=1」这一步常被当成一个技巧记住，但它其实是一个很一般的思路：当问题里存在一个不影响答案的自由度时，把它固定成最方便的值。</b>同样的手法在别处也见过：<b>PCA 里要求 ‖u‖=1</b>（否则投影方差可以任意大）、<b>softmax 里约定 θ_k=0</b>（否则参数不唯一，见 notes1 第 25 页）。<b>三处都是「先发现有自由度，再用掉它」。</b>⚠️ <b>但要注意一个前提：固定自由度不能改变可行域的本质。</b>这里成立是因为任何 (w,b) 都能通过缩放满足 γ̂=1——<b>前提是数据线性可分，γ̂ > 0</b>。<b>数据不可分时 γ̂ ≤ 0，这步就塌了，这正是第 24 页要处理的情况。</b>", "ng": "Ng 在 L6 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=3588s\" target=\"_blank\">59:48</a> 说明这个优化问题的地位：<em>what the rudimentary SVM does — also called the <b>optimal margin classifier</b> — is pose an optimization problem [like this]</em>。到 <a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=4722s\" target=\"_blank\">78:42</a>–<a href=\"https://www.youtube.com/watch?v=lDwow4aOrtg&t=4816s\" target=\"_blank\">80:16</a> 他收尾：<em>this turns out to be a <b>convex optimization problem</b>, and if you optimize this, then you will have the optimal margin classifier</em>。⚠️ <b>课堂没有念出「二次规划 QP」这个词</b>（字幕里搜不到 quadratic programming），<b>讲义的脚注比课堂具体</b>：它专门对比了线性规划，说明 QP 允许凸二次目标 + 线性约束。<span class=\"src\">CS229/transcripts/L6.txt · 本地已下载</span>", "exam": "⭐⭐ <b>本课 M1T4 第 4 章就是这两页，而且课程明说它「是整个 T4 唯一需要写推导的部分」</b>。课程的四步和讲义的三版略有不同但等价：<b>① argmax 形式 ② 引入规范形式（令支持向量的函数间隔=1）③ 目标变成 min ½‖w‖² ④ 拉格朗日</b>。⭐ <b>课程专门解释了「为什么是 ½‖w‖² 而不是 ‖w‖」</b>：<b>½ 是为了简化后面求导（和平方的 2 抵消），平方是为了去掉根号让目标变成光滑的凸二次函数，两处都不改变最优解的位置</b>——<b>这句话几乎就是标准答案，背下来。</b>"}, {"r": [18, 19], "star": 1, "t": "拉格朗日对偶：原始、对偶，以及它们之间的不等号", "one": "max-min ≤ min-max 永远成立；在凸性条件下取等号。", "quote": "<em>d* = max_{α,β:αᵢ≥0} min_w L(w,α,β) <b>≤</b> min_w max_{α,β:αᵢ≥0} L(w,α,β) = p*</em>", "eq": "原始问题：min_w f(w)  s.t. gᵢ(w) ≤ 0 , hᵢ(w) = 0\n\n广义拉格朗日：\n  L(w,α,β) = f(w) + Σᵢ αᵢgᵢ(w) + Σᵢ βᵢhᵢ(w)\n\nθ_P(w) = max_{α,β:αᵢ≥0} L(w,α,β)\n       = f(w)   若 w 满足原始约束\n       = <b>∞</b>     否则            ← 违反约束就被罚成无穷大\n\np* = min_w θ_P(w)        （原始问题的值）\nd* = max_{α,β:αᵢ≥0} min_w L(w,α,β)   （对偶问题的值）\n\n弱对偶：d* ≤ p*     强对偶（条件满足时）：d* = p*", "pts": ["⚠️ <b>讲义把这一整节标成了「(optional reading)」</b>，而且坦白说了原因：<em>Due to time constraints, we won't really be able to do the theory of Lagrange duality justice in this class</em>。⭐ <b>但本课恰恰要考对偶推导</b>（见 exam 栏），<b>所以这个 optional 标记不能照搬</b>。", "⭐ <b>θ_P 那个「要么等于 f(w)、要么等于 ∞」的构造是全节最巧的一步</b>。<b>原理</b>：若某个 gᵢ(w) > 0，就把对应的 αᵢ 取到 +∞，L 就被推到 +∞；若 hᵢ(w) ≠ 0，βᵢ 取 ±∞ 同理。<b>所以「违反约束」被自动翻译成了「目标值无穷大」</b>——<b>约束消失了，变成了惩罚。</b>", "<b>原始和对偶的差别只有一处：max 和 min 的顺序</b>。p* 是 <b>min-max</b>，d* 是 <b>max-min</b>。", "<b>弱对偶永远成立</b>，讲义让你自己信服（<em>this follows from the “max min” of a function always being less than or equal to the “min max”</em>）。⭐ <b>一个直观说法</b>：「每一列的最小值里挑最大的」≤「每一行的最大值里挑最小的」。", "<b>强对偶需要的条件</b>：<b>f 和 gᵢ 是凸的、hᵢ 是仿射的、约束严格可行</b>（存在 w 使所有 gᵢ(w) < 0）。⚠️ <b>仿射 = 线性 + 允许截距项</b>，讲义脚注专门定义了。"], "tbl": [{"cap": "原始 vs 对偶", "head": ["", "原始 primal", "对偶 dual"], "rows": [["记号", "p*", "d*"], ["顺序", "<b>min_w max_α</b>", "<b>max_α min_w</b>"], ["变量", "w（SVM 里是 w,b）", "<b>α（拉格朗日乘子）</b>"], ["关系", "—", "<b>d* ≤ p*，凸性条件下取等</b>"]]}], "say": "⭐ <b>为什么非要绕这一大圈？</b>讲义在第 17 页末尾给了两个理由，<b>第一个才是真正的理由</b>：① <b>对偶形式让核技巧能塞进去</b>（因为对偶里数据只以内积出现）；② 对偶能导出比通用 QP 更快的算法（SMO）。⚠️ <b>注意「对偶更容易解」不是主要理由</b>——SVM 的原始问题本身就是标准 QP，直接解也完全可行（sklearn 的 <code>LinearSVC</code> 走的就是原始路径）。<b>真正不可替代的是核化</b>。⭐ <b>这一条值得记牢：如果有人问「为什么 SVM 要用对偶」，答「为了能用核」比答「为了好解」准确得多。</b>", "ng": "⚠️ <b>Ng 在 L6/L7 没有讲拉格朗日对偶的一般理论</b>——他直接写出 SVM 的拉格朗日函数就开始求导。<b>这一整节在课堂上是跳过的。</b>⭐ <b>想补这块基础，CS229 另有两份专门讲义，本地都有</b>：<code>CS229/notes/cs229-cvxopt.pdf</code>（凸优化 I）和 <code>cs229-cvxopt2.pdf</code>（凸优化 II）。<b>讲义自己也在脚注里推荐了 Rockafellar 的 Convex Analysis，但那本对本课来说太重了。</b><span class=\"src\">CS229/transcripts/L6.txt · 本地已下载</span>", "exam": "⭐ <b>本课对这一节的态度写得非常明确</b>，M1T4 第 4.4 节的课程网页备注原话：<b>「拉格朗日乘子是一个便利的数学工具，但超出本课程范围；感兴趣可参阅 Bishop 附录 E。考试不会要求你从零推导拉格朗日理论，但要求你能看懂并复述这条推导链。」</b>⇒ <b>结论很清楚：不用会证，但要会「照着走一遍」。</b>所以这两页<b>读懂 θ_P 那个构造的意思即可，不必深究强对偶的条件</b>。<b>下一页的 KKT 互补松弛才是真要用的。</b>"}, {"r": [20, 20], "star": 2, "t": "★ KKT 互补松弛：支持向量为什么「只有几个」", "one": "αᵢ > 0 ⟹ 约束取等号 —— 一行条件就解释了稀疏性。", "quote": "<em>We draw attention to Equation (17), which is called the <b>KKT dual complementarity condition</b>. Specifically, it implies that if α*ᵢ &gt; 0, then gᵢ(w*) = 0.</em>", "eq": "KKT 条件（五条）：\n  ∂L/∂wᵢ = 0                     （对原始变量的梯度为零）\n  ∂L/∂βᵢ = 0                     （等式约束）\n  <b>α*ᵢ · gᵢ(w*) = 0</b>              ← 互补松弛，本页重点\n  gᵢ(w*) ≤ 0                     （原始可行）\n  α*ᵢ ≥ 0                        （对偶可行）", "pts": ["⭐ <b>互补松弛 αᵢgᵢ(w)=0 的意思是「两个数至少有一个是 0」</b>。于是只有两种可能：<b>要么 αᵢ=0</b>（这个约束没起作用），<b>要么 gᵢ(w)=0</b>（约束<b>取等号</b>，讲义说这叫 <b>active</b>，起作用的约束）。", "<b>翻译到 SVM 上就是</b>：gᵢ(w) = −y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) + 1 ≤ 0，<b>取等号意味着 y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) = 1</b>——<b>也就是这个点恰好落在支持超平面上</b>。", "⭐ <b>所以 αᵢ > 0 的点，一定是函数间隔恰好等于 1 的点</b>。<b>其余所有点的 αᵢ 都是 0</b>。<b>这就是「支持向量只有几个」的全部原因</b>，而且<b>它是从 KKT 条件推出来的，不是观察出来的。</b>", "<b>讲义说这条件还有第二个用处</b>：<b>它是 SMO 算法的收敛判据</b>（第 28 页会用）。", "<b>KKT 是双向的</b>：满足条件 ⇒ 是最优解；是最优解（且凸性条件成立）⇒ 满足条件。<b>所以它既能用来求解，也能用来验证。</b>"], "tbl": [{"cap": "互补松弛的两种情况 · 对应什么样的点", "head": ["αᵢ", "约束状态", "这个点在哪", "是支持向量吗"], "rows": [["<b>= 0</b>", "松弛（inactive）", "<b>间隔之外</b>，y·f(x) > 1", "<b>不是</b>"], ["<b>&gt; 0</b>", "<b>取等（active）</b>", "<b>支持超平面上</b>，y·f(x) = 1", "<b>是</b>"]]}], "say": "⭐ <b>稀疏性是 SVM 最实用的性质之一，而它完全来自这一行条件。</b>后果有三：① <b>预测只需要算 x 和少数几个支持向量的核</b>（第 23 页会看到），<b>所以 SVM 预测很快</b>；② <b>删掉所有非支持向量再训练一次，得到的边界完全一样</b>——这是一个很好的自测，也是常考的判断题；③ <b>反过来，支持向量数量太多（接近 n）说明模型可能过拟合或 C 设得不合适</b>，这是实践中的一个诊断信号。⚠️ <b>但别把稀疏性和「鲁棒」混为一谈</b>：解只由少数点决定，<b>意味着挪动其中一个点就可能让边界大变</b>——<b>这正是第 24 页要修的毛病。</b>", "ng": "⚠️ <b>Ng 在课堂上没有逐条列 KKT 条件</b>，但他在讲对偶结果时反复用到了「只有支持向量的 α 非零」这个结论。⭐ <b>所以 KKT 这一节是「讲义给出理由、课堂只用结论」的典型</b>。想看完整的 KKT 理论仍然要去 <code>cs229-cvxopt2.pdf</code>。<span class=\"src\">CS229/transcripts/L6.txt · 本地已下载</span>", "exam": "⭐ <b>本课 M1T4 对支持向量的定义就是从这里来的</b>：课程原文把支持向量定义为<b>「具有非零对偶影响（nonzero dual influence）的训练观测」</b>——<b>注意它定义的是「α 非零」，不是「离边界最近」</b>。⚠️ <b>这个措辞差别在软间隔下很重要</b>：软间隔里<b>被误分类的点 α=C 也非零，它们同样是支持向量</b>，但它们<b>不在</b>支持超平面上。<b>所以「支持向量 = 离边界最近的点」这个说法在软间隔下是错的。</b>"}, {"r": [21, 22], "star": 3, "t": "★★ 构造拉格朗日、求导，得到 w = Σ αᵢy⁽ⁱ⁾x⁽ⁱ⁾", "one": "这一页的两个式子是整份讲义最该背的——而且本课标了同样的★。", "quote": "<em>Note: The equivalence of optimization problem (20) and the optimization problem (24), and the relationship between the primary and dual variables in equation (22) are <b>the most important take home messages of this section</b>.</em>", "eq": "约束改写成标准形式：\n  gᵢ(w) = −y⁽ⁱ⁾(wᵀx⁽ⁱ⁾ + b) + 1 ≤ 0\n\n拉格朗日（只有不等式约束，所以只有 α 没有 β）：\n  L(w,b,α) = ½‖w‖² − Σᵢ αᵢ [ y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) − 1 ]\n\n对 w 求梯度并令其为零：\n  ∇_w L = w − Σᵢ αᵢ y⁽ⁱ⁾ x⁽ⁱ⁾ = 0\n  ⇒ <b>w = Σᵢ αᵢ y⁽ⁱ⁾ x⁽ⁱ⁾</b>              …(22)\n\n对 b 求偏导并令其为零：\n  ∂L/∂b = − Σᵢ αᵢ y⁽ⁱ⁾ = 0\n  ⇒ <b>Σᵢ αᵢ y⁽ⁱ⁾ = 0</b>                  …(23)", "pts": ["⭐ <b>讲义在这一节开头破例加了一个「Note:」，直接告诉你哪三件事最重要</b>（见 quote）。<b>整份 30 页讲义只有这一处这么做</b>，分量不言自明。", "<b>为什么只有 α 没有 β</b>：讲义点名——<em>there're only “αᵢ” but no “βᵢ” Lagrange multipliers, since the problem has <b>only inequality constraints</b></em>。<b>β 是给等式约束用的，这里一个等式约束都没有。</b>", "⭐ <b>式 (22) 的含义</b>：<b>w 是训练样本的线性组合，系数是 αᵢy⁽ⁱ⁾</b>。结合上一页的互补松弛——<b>αᵢ 大多是 0</b>——所以 <b>w 实际上只由少数几个支持向量决定</b>。", "⚠️ <b>式 (23) 容易被当成「副产品」忽略，其实它很关键</b>：它是对偶问题的一个<b>等式约束</b>，而且正是它<b>使得 SMO 不能一次只动一个 α</b>（第 28 页）。", "<b>代回去化简的结果</b>：L = Σᵢαᵢ − ½ΣᵢΣⱼ y⁽ⁱ⁾y⁽ʲ⁾αᵢαⱼ(x⁽ⁱ⁾)ᵀx⁽ʲ⁾ − b·Σᵢαᵢy⁽ⁱ⁾，<b>而最后一项因为式 (23) 整个是 0</b>，于是只剩前两项。", "⭐ <b>讲义提前预告了要盯什么</b>（第 21 页）：<em>one key idea to watch out for is that we'll try to write our algorithm in terms of <b>only the inner product</b> ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩</em>。<b>化简后的 L 里确实只剩内积了。</b>"], "tbl": [{"cap": "两个零梯度条件 · 各自的后果", "head": ["条件", "得到", "后果"], "rows": [["∇_w L = 0", "<b>w = Σαᵢy⁽ⁱ⁾x⁽ⁱ⁾</b>", "<b>w 由支持向量决定；可核化</b>"], ["∂L/∂b = 0", "<b>Σαᵢy⁽ⁱ⁾ = 0</b>", "<b>对偶多一条等式约束；逼出 SMO 成对更新</b>"]]}], "say": "⭐ <b>式 (22) 和 Part V 第 3 页那条「θ 是 φ(x⁽ⁱ⁾) 的线性组合」是同一件事的两次出现</b>。第一次是用<b>归纳法</b>对梯度下降证出来的；这一次是从<b>最优性条件</b>直接解出来的。<b>两条路径、同一个结论，这就是表示定理的普遍性</b>。⚠️ <b>但有一个差别要分清</b>：Part V 那次<b>依赖「θ 从 0 出发」这个初始化条件</b>；这一次<b>不依赖任何初始化</b>，它是<b>最优解本身的性质</b>。<b>后者更强。</b>", "ng": "Ng 在 L7 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=4107s\" target=\"_blank\">68:27</a> 附近提到了这一段，用的说法是 <em>if you go through the <b>representer theorem</b> derivation, represent w as a function of the Alphas and so on</em>——⭐ <b>他直接用了「表示定理」这个名字</b>，而讲义在这里<b>没有</b>点出这个术语（只在 Part V 用归纳法证了一次）。<b>两边合起来看才完整：讲义给推导，课堂给名字。</b><span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "⭐⭐ <b>本课 M1T4 第 4.5 节和这一页逐步对应，而且课程给 w = Σᵢ αᵢyᵢxᵢ 标了「★ 考点，极其重要」</b>，理由写的是<b>「w 是训练样本的线性组合，系数是 α」</b>。课程的四步是：<b>① argmax → ② 规范形式 → ③ min ½‖w‖² → ④ 拉格朗日 → ⑤ 对 w 和 b 求偏导</b>。⚠️ <b>两个偏导结果都要写出来</b>，只写 w 那个会丢掉 Σαᵢyᵢ=0，<b>而后者是对偶问题的约束之一，少了对偶就写不完整。</b>"}, {"r": [23, 23], "star": 3, "t": "★★ 对偶问题，以及「预测只需要内积」这个关键后果", "one": "数据从此只以 ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩ 出现——核技巧的门就是在这里打开的。", "quote": "<em>By examining the dual form of the optimization problem, we gained significant insight into the structure of the problem, and were also able to <b>write the entire algorithm in terms of only inner products between input feature vectors</b>.</em>", "eq": "对偶问题：\n  max_α W(α) = Σᵢ αᵢ − ½ Σ_{i,j} y⁽ⁱ⁾y⁽ʲ⁾ αᵢαⱼ <b>⟨x⁽ⁱ⁾, x⁽ʲ⁾⟩</b>\n  s.t.  αᵢ ≥ 0 ,  Σᵢ αᵢy⁽ⁱ⁾ = 0\n\n求出 α 后回代：\n  w* = Σᵢ αᵢ y⁽ⁱ⁾ x⁽ⁱ⁾\n  b* = −( max_{i: y⁽ⁱ⁾=−1} w*ᵀx⁽ⁱ⁾ + min_{i: y⁽ⁱ⁾=1} w*ᵀx⁽ⁱ⁾ ) / 2\n\n预测：\n  wᵀx + b = Σᵢ αᵢ y⁽ⁱ⁾ <b>⟨x⁽ⁱ⁾, x⟩</b> + b\n  （αᵢ 多半为 0 ⇒ <b>只需要算 x 和支持向量的内积</b>）", "pts": ["⭐ <b>对偶问题里数据只以 ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩ 出现</b>——<b>x 本身再也没有单独露面</b>。<b>这正是第 11 页说的「能核化的判据」</b>：把每个 ⟨·,·⟩ 换成 K(·,·)，SVM 立刻变成核 SVM。", "<b>b* 的公式很直观</b>：<b>取负类里打分最高的、正类里打分最低的，取中点</b>。⚠️ <b>这个公式只在可分情形成立</b>，讲义在第 25 页明说软间隔下 <em>Equation 25 is no longer valid</em>。", "⭐ <b>预测式 (27) 是最该理解的一行</b>：wᵀx+b = Σᵢαᵢy⁽ⁱ⁾⟨x⁽ⁱ⁾,x⟩ + b。<b>要预测一个新点，不需要 w，只需要它和每个训练点的内积</b>——而且<b>绝大多数 αᵢ=0，所以实际只需要少数几个</b>。", "<b>讲义的总结句点明了两个收获</b>：① 对问题的结构有了<b>深刻洞察</b>（支持向量、稀疏性）；② <b>整个算法写成了只含内积的形式</b>。<b>第二点才是下一步的入口。</b>", "<b>讲义还提醒</b>：强对偶和 KKT 的条件在这个问题上<b>确实都满足</b>（<em>You should also be able to verify that…</em>），<b>所以解对偶等价于解原始。</b>"], "tbl": [{"cap": "原始形式 vs 对偶形式 · 为什么非要对偶", "head": ["", "原始", "<b>对偶</b>"], "rows": [["变量个数", "d+1（w 和 b）", "<b>n（每个样本一个 α）</b>"], ["数据怎么出现", "wᵀx⁽ⁱ⁾（<b>分开</b>）", "<b>⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩（成对）</b>"], ["<b>能换成核吗</b>", "<b>不能</b>", "<b>能 ✓</b>"], ["适合什么情况", "<b>d 小 n 大</b>", "<b>d 大（甚至无穷）n 小</b>"]]}], "say": "⭐ <b>表格第一行揭示了一个常被忽略的事实：对偶把「维数」换成了「样本数」。</b>原始问题有 d+1 个变量，对偶有 n 个。<b>所以在 d ≫ n 时对偶小得多，在 n ≫ d 时反而是原始更小</b>——<b>这就是 sklearn 的 <code>LinearSVC</code> 有个 <code>dual</code> 参数、而且文档建议「n_samples > n_features 时设 dual=False」的原因</b>。⚠️ <b>但注意：选原始就放弃了核</b>。所以实际的决策树是：<b>要不要核？要 → 必须对偶；不要 → 看 n 和 d 谁大。</b>", "ng": "⭐ <b>Ng 在 L7 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=2563s\" target=\"_blank\">42:43</a> 的那句定义在这里兑现了</b>：<em>optimal margin classifier <b>plus the kernel trick</b>, that is the support vector machine</em>。<b>这一页推完的就是「optimal margin classifier」的对偶形式，而「plus the kernel trick」就是把 ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩ 换成 K(x⁽ⁱ⁾,x⁽ʲ⁾) 这一个动作</b>。⭐ 他在 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=1444s\" target=\"_blank\">24:04</a> 还说明了为什么值得为此费这么大劲：<em>there'll be important cases where the feature vectors are 100 trillion [dimensional]</em>。<span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "⭐ <b>本课 M1T4 第 6 页「对偶视角」要求能复述这条链</b>，课程的一句话总结是<b>「从对偶视角看只有支持向量说了算」</b>。⚠️ <b>答题时最该写出的一句是「对偶形式里数据只以内积出现，所以可以把内积换成核函数」</b>——<b>这句话把对偶和核两个知识点连起来了，而大多数人会把它们当成两件独立的事来答。</b>", "tip": {"t": "核 SVM 的预测式", "v": "把预测式里的内积换成核就是 <b>f(x) = Σᵢ αᵢ y⁽ⁱ⁾ K(x⁽ⁱ⁾, x) + b</b>。⭐ <b>注意这个式子里根本没有 w</b>——在无穷维特征空间里 w 写不出来，<b>但预测照样能算</b>。<b>这就是「隐式地在高维空间工作」的字面含义。</b>"}}, {"r": [24, 25], "star": 3, "t": "★★ 软间隔：一个离群点就能毁掉整条边界", "one": "ℓ1 正则 + 松弛变量 ξ；神奇的是对偶形式只改了一个约束。", "quote": "<em>when a single outlier is added in the upper-left region (right figure), it causes the decision boundary to make a <b>dramatic swing</b>, and the resulting classifier has a much smaller margin.</em>", "eq": "原始问题（ℓ1 正则 / 软间隔）：\n  min_{w,b,ξ} ½‖w‖² + <b>C Σᵢ ξᵢ</b>\n  s.t.  y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) ≥ <b>1 − ξᵢ</b> ,   ξᵢ ≥ 0\n\n对偶问题（⚠ 和硬间隔比，只改了一处）：\n  max_α W(α) = Σᵢαᵢ − ½Σ_{i,j} y⁽ⁱ⁾y⁽ʲ⁾αᵢαⱼ⟨x⁽ⁱ⁾,x⁽ʲ⁾⟩\n  s.t.  <b>0 ≤ αᵢ ≤ C</b>  ,  Σᵢαᵢy⁽ⁱ⁾ = 0\n              ↑ 原来只有 αᵢ ≥ 0，现在多了上界 C\n\nKKT 互补条件（三档）：\n  αᵢ = 0      ⇒ y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) ≥ 1\n  αᵢ = C      ⇒ y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) ≤ 1\n  0 < αᵢ < C  ⇒ y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b) = 1", "pts": ["⭐ <b>讲义给了两个动机，第二个常被忽略</b>：① 数据可能<b>根本不可分</b>（映射到高维虽然增加可分的可能性，<b>但不保证</b>）；② <b>就算可分，硬要分开也未必是好事</b>——<em>that might be susceptible to outliers</em>。<b>左右两张图说的就是第二点。</b>", "<b>ξᵢ 叫松弛变量</b>：约束从 ≥1 放松成 ≥1−ξᵢ，<b>代价是目标函数增加 Cξᵢ</b>。所以 ξ 是「<b>买来的违规额度</b>」，C 是<b>单价</b>。", "⭐ <b>C 的含义讲义说得很准</b>：<em>C controls the relative weighting between the twin goals of making ‖w‖² small (which makes the margin large) and of ensuring that most examples have functional margin at least 1</em>。<b>两个目标在拔河，C 决定谁的力气大。</b>", "⭐ <b>最漂亮的结论</b>：对偶形式<b>只多了一个上界</b>，讲义自己都觉得意外——<em><b>somewhat surprisingly</b>, in adding ℓ1 regularization, the only change to the dual problem is that what was originally a constraint that 0 ≤ αᵢ has now become 0 ≤ αᵢ ≤ C</em>。<b>ξ 和 r 这两组新变量在对偶里全消失了。</b>", "⚠️ <b>b* 的公式失效了</b>：讲义明说 <em>The calculation for b* also has to be modified (Equation 25 is no longer valid)</em>。<b>软间隔下要用 0 < αᵢ < C 的那些点（恰好落在支持超平面上的点）来反解 b。</b>", "<b>三档 KKT 条件是 SMO 的收敛判据</b>，也是理解支持向量分类的钥匙（见下表）。"], "tbl": [{"cap": "★ 三档 α 对应三种点（软间隔下「支持向量」的完整分类）", "head": ["αᵢ", "y·f(x)", "点在哪", "是支持向量吗"], "rows": [["<b>αᵢ = 0</b>", "<b>≥ 1</b>", "间隔之外，安全区", "<b>不是</b>"], ["<b>0 &lt; αᵢ &lt; C</b>", "<b>= 1</b>", "<b>恰好在支持超平面上</b>", "<b>是</b>（自由支持向量）"], ["<b>αᵢ = C</b>", "<b>≤ 1</b>", "<b>间隔内部或被误分类</b>", "<b>是</b>（界上支持向量）"]]}], "say": "⭐ <b>这张表解决了一个常见误解</b>：很多人以为「支持向量 = 离边界最近的点」，<b>但第三行那些被误分类的点 α=C 也是支持向量，而且它们离边界可能很远（在错误的一侧）</b>。<b>正确的定义是「α 非零的点」</b>——本课 M1T4 用的正是这个说法（「<b>具有非零对偶影响的训练观测</b>」）。⭐ <b>第二行也有实用价值</b>：求 b 时<b>只能用 0<α<C 的那些点</b>，因为只有它们满足 y·f(x) 恰好等于 1。<b>sklearn 内部就是这么算 intercept 的。</b>", "ng": "⭐ <b>Ng 在 L7 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=4200s\" target=\"_blank\">70:00</a> 给了一句比讲义更深刻的诊断</b>：<em>because the original optimal margin classifier <b>optimizes for the worst-case margin</b>, [that] allows one example — by being the worst case training example — to have a <b>huge impact</b> on your decision boundary</em>。<b>一个离群点之所以能掀翻整条边界，根子在「只看最差的那个点」这个目标设计上。</b>他在 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=3913s\" target=\"_blank\">65:13</a> 给出算法名 <b>L1 norm soft margin SVM</b>，并在 <a href=\"https://www.youtube.com/watch?v=8NYoQiRANpg&t=4200s\" target=\"_blank\">70:00</a> 说 <em>this parameter C is something you need to choose</em>、软间隔 <em>makes it much more robust to outliers</em>。<span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "⭐⭐ <b>本课 M1T4 第 7 页就是这两页，而且比讲义更细</b>。课程给了 <b>ξᵢ = max(0, 1 − yᵢf(xᵢ))</b>（即 <b>hinge loss</b>），并由此列出<b>四档</b>（比讲义的三档多一档）：<b>ξ=0 ⇔ yf≥1（在支持超平面上或之外）· 0<ξ<1 ⇔ 0<yf<1（分对但在间隔内，属违规）· ξ=1 ⇔ yf=0（正好在边界上）· ξ>1 ⇔ yf<0（误分类）</b>。⚠️ <b>课程标的★考点是 ξ=1</b>：此时点<b>恰好在决策边界上，不能说它「在正确的一侧」，因为它不在任何一侧</b>。⭐ <b>C 的记忆口诀（课程给的）</b>：<b>C 大 = 严格 = 窄间隔（可能过拟合）；C 小 = 宽松 = 宽间隔（可能欠拟合）</b>。", "tip": {"t": "C 和 gamma 是两码事", "v": "本课 M1T4 专门区分：<b>C 管「容不容忍违规」，gamma 管「单个点的影响范围」</b>——两者都能提升模型复杂度<b>但机制不同</b>，<b>必须一起用交叉验证搜索</b>。⚠️ 另一条课程★考点：<b>SVC 的 decision_function 给出的是 f(x)，一个可以任意大的带符号实数，不是概率</b>；要概率必须做校准（Platt scaling，sklearn 里 <code>probability=True</code>）。"}}, {"r": [26, 27], "star": 1, "t": "坐标上升：一次只动一个变量", "one": "每一步都平行于某个坐标轴——因为别的方向全被固定住了。", "quote": "<em>Notice that on each step, coordinate ascent takes a step that's <b>parallel to one of the axes</b>, since only one variable is being optimized at a time.</em>", "eq": "坐标上升：\n  Loop until convergence {\n    For i = 1, …, n {\n      αᵢ := arg max_{α̂ᵢ} W(α₁,…,α_{i−1}, α̂ᵢ, α_{i+1},…,αₙ)\n    }\n  }", "pts": ["<b>和梯度上升、牛顿法并列的第三种优化算法</b>。差别在于：<b>梯度法每步让所有变量一起动；坐标上升每步只动一个，但把它一次性优化到底</b>（arg max 而不是走一小步）。", "⭐ <b>什么时候划算</b>：讲义点明——<em>when the function W happens to be of such a form that the “arg max” in the inner loop can be <b>performed efficiently</b></em>。<b>也就是「固定其它变量后，对单个变量的最优解有闭式解」时。</b>", "<b>图要会读</b>：从 (2,−2) 出发，轨迹是一串<b>横竖交替的折线</b>，<b>每一段都平行于某个坐标轴</b>。<b>因为只有一个变量在变，点只能沿那个轴移动。</b>", "<b>讲义提了可以改进的地方</b>：内层循环<b>不一定要按 1,2,…,n 的顺序</b>，<em>we may choose the next variable to update according to which one we expect to allow us to make the <b>largest increase</b></em>。<b>这正是 SMO 挑 α 对时用的启发式。</b>"], "tbl": [{"cap": "三种优化算法对照（本课 CS229 讲义里出现过的全部）", "head": ["算法", "每步动几个变量", "每步走多远", "出现在"], "rows": [["梯度上升/下降", "<b>全部</b>", "一小步（α 控制）", "notes1"], ["牛顿法", "<b>全部</b>", "二阶信息定步长", "notes1 §7"], ["<b>坐标上升</b>", "<b>一个</b>", "<b>直接到该方向最优</b>", "<b>本页</b>"]]}], "say": "⭐ <b>坐标下降在本课其实出现过，只是没点名</b>：<b>M2 T2 的 k-means 就是对失真函数 J 做坐标下降</b>——固定质心更新分配、固定分配更新质心，<b>两步各自都是「其余不动，这一组取到最优」</b>。CS229 的 k-means 讲义（notes7a）明确用了 <em>k-means is exactly coordinate descent on J</em> 这个说法。⭐ <b>EM 也是同一个模式</b>：E 步固定参数优化 Q，M 步固定 Q 优化参数。<b>所以「坐标上升/下降」是贯穿 M1 和 M2 的一个通用模式，值得单独记住它的形状：把变量分组，每次只动一组，动到该组的最优。</b>", "ng": "⚠️ <b>Ng 在 L7 没有讲坐标上升，也没有讲 SMO</b>（字幕里搜不到 SMO）。<b>第 26–30 页整段在课堂上是跳过的</b>，这和讲义把 §9 标成「(optional reading)」 一致。⭐ <b>所以这几页按「了解」读即可</b>——但坐标上升这个<b>模式</b>本身值得记，因为 k-means 和 EM 都是它。<span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "<b>坐标上升本身不在本课考纲</b>（M1T4 的工作流程讲的是 sklearn 调用，不涉及求解器内部）。⭐ <b>但如果 M2 大题问「为什么 k-means 一定收敛」，「它是对 J 的坐标下降，每一步都不增」是比「分配方式有限」更准确的答法</b>——<b>这一页正好给了这个框架。</b>"}, {"r": [28, 30], "star": 2, "t": "SMO：为什么必须一次动两个 α", "one": "Σαᵢy⁽ⁱ⁾ = 0 这条约束把每个 α 都锁死了——只动一个等于不动。", "quote": "<em>Hence, α₁ is <b>exactly determined</b> by the other αᵢ's, and if we were to hold α₂,…,αₙ fixed, then we <b>can't make any change to α₁</b> without violating the constraint.</em>", "eq": "从 Σᵢ αᵢy⁽ⁱ⁾ = 0 可得：\n  α₁y⁽¹⁾ = − Σ_{i≥2} αᵢy⁽ⁱ⁾\n  ⇒ α₁ = −y⁽¹⁾ Σ_{i≥2} αᵢy⁽ⁱ⁾     （用了 (y⁽¹⁾)² = 1）\n\nSMO：\n  Repeat till convergence {\n    1. 用启发式挑一对 αᵢ, αⱼ\n    2. 固定其余 αₖ，对这两个重新优化 W(α)\n  }\n\n两个变量的子问题：\n  α₁y⁽¹⁾ + α₂y⁽²⁾ = ζ（常数）⇒ α₁ = (ζ − α₂y⁽²⁾)y⁽¹⁾\n  代入后 W 变成 α₂ 的<b>一元二次函数</b> aα₂² + bα₂ + c\n  求导置零得 α₂^{new,unclipped}，再<b>裁剪</b>到 [L, H]：\n    α₂^{new} = H              若 unclipped > H\n             = unclipped      若 L ≤ unclipped ≤ H\n             = L              若 unclipped < L", "pts": ["⭐ <b>「只动一个不行」的证明只有两行</b>：等式约束 Σαᵢy⁽ⁱ⁾=0 意味着 <b>α₁ 被其余的 α 完全决定</b>。所以固定 α₂..αₙ 时，α₁ <b>根本没有活动余地</b>。<b>⇒ 至少要同时动两个。</b>", "<b>几何图像很清楚</b>：α₁ 和 α₂ 必须同时满足两个条件——① 落在<b>方格 [0,C]×[0,C]</b> 内（框约束）；② 落在<b>直线 α₁y⁽¹⁾+α₂y⁽²⁾=ζ</b> 上（等式约束）。<b>两者的交集是一条线段，端点给出 α₂ 的下界 L 和上界 H。</b>", "⭐ <b>「先不管框、算完再裁剪」这个做法是 SMO 高效的关键</b>：不带框约束时，W 是 α₂ 的一元二次函数，<b>求导置零有闭式解</b>；<b>带框约束的最优解就是把这个闭式解裁剪到 [L,H]</b>。<b>因为一元二次函数在区间上的最大值要么在内部驻点、要么在端点。</b>", "<b>收敛判据是 KKT 条件</b>（第 25 页那三档），<b>容差 tol 典型取 0.01 到 0.001</b>。", "<b>讲义留了两件事给 Platt 的论文</b>：<b>挑 α 对的启发式</b>，和 <b>b 怎么跟着更新</b>。"], "tbl": [{"cap": "SMO 为什么比通用 QP 快", "head": ["", "通用 QP 求解器", "<b>SMO</b>"], "rows": [["一次处理", "全部 n 个 α", "<b>2 个</b>"], ["子问题", "n 维二次规划", "<b>一元二次函数 + 裁剪</b>"], ["子问题有闭式解吗", "没有", "<b>有</b>"], ["内存", "要存 n×n 核矩阵", "<b>可按需计算</b>"]]}], "say": "⭐ <b>SMO 的历史地位值得一提：它是 SVM 从「理论上很美」变成「实际能用」的那一步。</b>1998 年之前训练 SVM 要调用通用 QP 求解器，n 稍大就跑不动；<b>Platt 的 SMO 把子问题缩到两个变量、每步都有闭式解，内存也不必一次装下整个核矩阵</b>。<b>libsvm（sklearn 的 SVC 底层）用的就是 SMO 的改进版。</b>⭐ <b>顺带解释了一个实用现象</b>：<code>SVC</code> 的训练时间大致随 <b>n² 到 n³</b> 增长，<b>所以样本上万就明显变慢</b>——这不是实现不好，<b>是对偶 + 核矩阵这条路径的固有代价</b>。<b>数据大时该换 <code>LinearSVC</code> 或 <code>SGDClassifier</code>。</b>", "ng": "⚠️ <b>SMO 在 L6/L7 的字幕里完全查不到</b>——<b>Ng 课堂上没讲这个算法</b>。讲义也把 §9 标成了「(optional reading)」，并说细节留给作业和 Platt 的论文。⭐ <b>所以这三页是全份讲义里「课堂支持最少」的一段</b>，按了解处理即可。<span class=\"src\">CS229/transcripts/L7.txt · 本地已下载</span>", "exam": "<b>SMO 完全不在本课考纲</b>——M1T4 讲的是<b>工作流程</b>（缩放 → 交叉验证搜 C 和 gamma → 用验证证据选模型），不涉及求解器内部。⭐ <b>这三页唯一值得带走的一句</b>：<b>「SVM 的训练代价随样本数快速增长，所以它适合中小数据集」</b>——这是「什么时候该选 SVM」这类问题的标准答案之一，<b>而它的根子就在这里。</b>", "tip": {"t": "整份讲义的一句话总结", "v": "<b>核方法</b>：把 x 换成 φ(x) 就能拟合非线性，但 φ 太大算不动；<b>只要算法只用到内积，就能用 K(x,z) 代替 ⟨φ(x),φ(z)⟩，隐式地在高维里工作</b>。<b>SVM</b>：最大化几何间隔 → 用缩放自由度化成 min ½‖w‖² → <b>推对偶是为了让数据只以内积出现，从而能上核</b> → 离群点问题用软间隔 ξ 和 C 解决。⭐ <b>一句话：SVM = 最优间隔分类器 + 核技巧（Ng, L7 42:43）。</b>"}}];
+
+(function(){
+  var PDF="slides/cs229-notes3.pdf", MAX=30;
+  var frame=document.getElementById("pdf"), card=document.getElementById("card"),
+      pnum=document.getElementById("pnum"), strip=document.getElementById("strip"),
+      right=document.getElementById("right");
+  var cur=0, map={}, cells=[];
+
+  /* 存档键带课程前缀 —— file:// 下所有本地页面共用一个 origin，
+     两门课都用 "cs229-notes3quiz" 会互相覆盖。 */
+  var KEY = document.body.dataset.key;
+  try {                       // 一次性迁移：早期版本用的是不带课程前缀的键
+    if(!localStorage.getItem(KEY+"quiz")){
+      var _old = localStorage.getItem("cs229-notes3quiz");
+      if(_old){
+        localStorage.setItem(KEY+"quiz", _old);
+        var _p = localStorage.getItem("cs229-notes3p");
+        if(_p) localStorage.setItem(KEY+"p", _p);
+      }
+      /* 搬完就把旧键删掉。不删的话它会一直躺在那儿，
+         用户「清空全部记录」之后下次打开又被复活一遍。 */
+      localStorage.removeItem("cs229-notes3quiz");
+      localStorage.removeItem("cs229-notes3p");
+    }
+  } catch(e) {}
+
+  N.forEach(function(n,i){ for(var p=n.r[0];p<=n.r[1];p++) map[p]=i; });
+
+  for(var p=1;p<=MAX;p++){
+    var b=document.createElement("b");
+    b.title="第 "+p+" 页";
+    if(map[p]!=null) b.className="has";
+    b.onclick=(function(x){ return function(){ go(x); }; })(p);
+    strip.appendChild(b); cells.push(b);
+  }
+
+  function navHtml(){
+    return '<div class="nav"><button class="btn" id="p2">← 上一页</button>'+
+           '<button class="btn" id="n2">下一页 →</button></div>';
+  }
+  function bindNav(){
+    var a=document.getElementById("p2"), b=document.getElementById("n2");
+    if(a) a.onclick=function(){ step(-1); };
+    if(b) b.onclick=function(){ step(1); };
+  }
+  function render(p){
+    var i=map[p];
+    if(i==null){
+      card.innerHTML='<div class="empty">这一页没有单独的讲解。<br>'+
+        '它多半是上一页的<b>增量构建</b>——往前翻一页即可。</div>'+navHtml();
+      bindNav(); return;
+    }
+    var n=N[i], multi=n.r[0]!==n.r[1], h="";
+    h+='<span class="pg'+(multi?" multi":"")+'">p'+n.r[0]+(multi?"–"+n.r[1]:"")+'</span>';
+    h+='<h2>'+n.t+(n.star?'<span class="star">'+Array(n.star+1).join("★")+'</span>':'')+
+        qBadge(n.r[0])+'</h2>';
+    if(n.one) h+='<div class="one">'+n.one+'</div>';
+    if(n.quote) h+='<div class="quote"><span class="t">课件原话</span>'+n.quote+'</div>';
+    if(n.eq)  h+='<span class="eq">'+n.eq.replace(/\n/g,"<br>")+'</span>';
+    if(n.pts) h+='<ul>'+n.pts.map(function(x){ return "<li>"+x+"</li>"; }).join("")+'</ul>';
+    if(n.tbl) h+=n.tbl.map(function(T){var s='<div class="tw">'+(T.cap?'<div class="tc">'+T.cap+'</div>':"")+'<table class="nt">';if(T.head) s+='<thead><tr>'+T.head.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead>';s+='<tbody>'+T.rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>';}).join("")+'</tr>';}).join("")+'</tbody></table></div>';return s;}).join("");
+    if(n.say) h+='<div class="say"><span class="t">CS229 / 讲义补充</span>'+n.say+'</div>';
+    if(n.ng) h+='<div class="ng"><span class="t">从零补基础 · Andrew Ng CS229</span>'+n.ng+'</div>';
+    if(n.exam) h+='<div class="exam"><span class="t">与考试的联系</span>'+n.exam+'</div>';
+    if(n.tip) h+='<div class="tip'+(n.tip.w?" w2":"")+'"><span class="t">'+n.tip.t+'</span>'+n.tip.v+'</div>';
+    card.innerHTML=h+quizHtml(n.r[0])+navHtml();
+    bindNav();
+    bindQuiz();
+    bindBadge();
+  }
+  function go(p){
+    p=Math.max(1,Math.min(MAX,parseInt(p,10)||1));
+    if(p===cur) return;
+    cur=p; pnum.value=p;
+    // 只改 #hash 不会让 Chrome 内置 PDF 阅读器翻页 —— 实测 src 已是 #page=49
+    // 而工具栏仍停在 1/78。必须让它认为这是一次**新的导航**，所以加查询参数。
+    frame.src=PDF+"?p="+p+"#page="+p+"&toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    render(p);
+    paintStrip();
+    revPaint();
+    right.scrollTop=0;
+    var on=strip.querySelector("b.on");
+    if(on) on.scrollIntoView({block:"nearest",inline:"center"});
+    try{ localStorage.setItem(KEY+"p",p); }catch(e){}
+  }
+
+
+  /* ══ 自测与错题记录 ══════════════════════════════════════════════
+     记录形状： ST["起始页#题号"] = {n:做过几次, w:错过几次, r:[最近 6 次 1/0]}
+     全部存 localStorage，纯本地。 */
+  var ST = {};
+  try { ST = JSON.parse(localStorage.getItem(KEY+"quiz") || "{}") || {}; } catch(e){ ST = {}; }
+  function save(){ try{ localStorage.setItem(KEY+"quiz", JSON.stringify(ST)); }catch(e){} }
+
+  function rec(key, ok){
+    var d = ST[key] || {n:0, w:0, r:[]};
+    d.n++; if(!ok) d.w++;
+    d.r.push(ok ? 1 : 0);
+    if(d.r.length > 6) d.r = d.r.slice(-6);
+    ST[key] = d; save();
+  }
+  /* 最近错次数 —— 薄弱点排序用的就是它，不是历史总错数：
+     一个月前错过三次但最近三次全对，不该再排在最前面。 */
+  function recentWrong(d){ return (d.r||[]).filter(function(x){ return x===0; }).length; }
+  /* 「还算不算薄弱」：错过、且最近两次没有连对。
+     用连对而不是「最近窗口里没有 0」，是为了让规则能一句话说清楚，
+     用户看得见自己离毕业还差几次；也挡住了蒙对一次就算掌握。 */
+  function isWeak(d){
+    if(!d || !d.w) return false;
+    var r = d.r || [];
+    return !(r.length >= 2 && r[r.length-1] === 1 && r[r.length-2] === 1);
+  }
+  function unitWrong(start){
+    var qs = Q[start] || [], rw = 0, w = 0, n = 0, qw = 0;
+    qs.forEach(function(_,i){
+      var d = ST[start+"#"+i]; if(!d) return;
+      rw += recentWrong(d); w += d.w; n += d.n; if(isWeak(d)) qw++;
+    });
+    // rw 数的是最近错的**次数**（只用来排序，谁更该先复习）；
+    // qw 数的是**还没毕业的题数**（给人看，也决定标红和进不进复习队列）。
+    return {rw:rw, w:w, n:n, qw:qw};
+  }
+  function histHtml(d){
+    var h = "";
+    for(var i=0;i<6;i++){
+      var v = d && d.r ? d.r[d.r.length-6+i] : undefined;
+      h += '<i class="'+(v===1?"o":v===0?"x":"")+'"></i>';
+    }
+    return h;
+  }
+
+  function quizHtml(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var h = '<div class="quiz"><h3>自测 <b>'+qs.length+'</b> 题</h3>';
+    qs.forEach(function(q,i){
+      var key = start+"#"+i, d = ST[key];
+      h += '<div class="qq" data-k="'+key+'" data-a="'+q.a+'">';
+      h += '<div class="t">'+q.q+'</div>';
+      q.o.forEach(function(o,j){
+        h += '<button class="opt" data-j="'+j+'">'+o+'</button>';
+      });
+      h += '<div class="why" style="display:none"></div>';
+      h += '<div class="qhist">'+histHtml(d)+
+           '<span style="margin-left:6px">'+
+           (d ? "做过 "+d.n+" 次 · 错 "+d.w : "还没做过")+'</span>'+
+           '<button class="qagain">重做</button></div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  function bindQuiz(){
+    document.querySelectorAll(".qq").forEach(function(box){
+      var key = box.dataset.k, ans = +box.dataset.a;
+      var why = box.querySelector(".why"), opts = box.querySelectorAll(".opt");
+      var qs = Q[key.split("#")[0]], q = qs[+key.split("#")[1]];
+      opts.forEach(function(b){
+        b.onclick = function(){
+          var j = +b.dataset.j, ok = (j === ans);
+          opts.forEach(function(x){
+            x.disabled = true;
+            if(+x.dataset.j === ans){ x.classList.add("ok"); x.innerHTML += '<span class="m">✓</span>'; }
+          });
+          if(!ok){ b.classList.add("no"); b.innerHTML += '<span class="m">✗</span>'; }
+          why.innerHTML = q.why; why.style.display = "block";
+          rec(key, ok);
+          box.querySelector(".qhist").innerHTML =
+            histHtml(ST[key]) + '<span style="margin-left:6px">做过 '+ST[key].n+
+            ' 次 · 错 '+ST[key].w+'</span><button class="qagain">重做</button>';
+          bindAgain(box); paintStrip(); revSync();
+          var bd = document.querySelector('#card>h2 .qbadge');
+          if(bd) bd.outerHTML = qBadge(+key.split('#')[0]);
+          bindBadge();
+        };
+      });
+      bindAgain(box);
+    });
+  }
+  function bindBadge(){
+    var b = document.querySelector("#card>h2 .qbadge");
+    if(b) b.onclick = function(){
+      var q = document.querySelector(".quiz");
+      if(q) q.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+  }
+  function bindAgain(box){
+    var a = box.querySelector(".qagain");
+    if(a) a.onclick = function(){ render(cur); };
+  }
+
+  /* 页条上标红：这一单元最近还在错 */
+  function paintStrip(){
+    cells.forEach(function(c,k){
+      var i = map[k+1];
+      var cls = (i!=null ? "has" : "");
+      if(i!=null){
+        if(unitWrong(N[i].r[0]).qw > 0) cls += " err";
+      }
+      if(k+1===cur) cls += " on";
+      c.className = cls;
+    });
+  }
+
+
+  /* ── 标题角标：不用滚到底就知道这页有没有题、错没错过 ── */
+  function qBadge(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var st = unitWrong(start);
+    return '<span class="qbadge'+(st.qw?" bad":"")+'" title="跳到自测">'+
+      (st.qw ? "还错 "+st.qw+"/"+qs.length+" 题" : qs.length+" 题")+' ↓</span>';
+  }
+
+  /* ── 复习模式：前进/后退只在「最近还在错」的页之间跳 ──
+     用户要的是「专项针对薄弱部分复习」。光有一张错题清单还得自己一条条点，
+     所以把它接到翻页上：开了之后 ← → 就只在这些页里走。
+     依据是**最近**错次，不是累计——早就改对的题不该再拦路。 */
+  var rev = false, revList = [];
+  function weakPages(){
+    return N.filter(function(n){ return unitWrong(n.r[0]).qw > 0; })
+            .map(function(n){ return n.r[0]; });
+  }
+  function revPaint(){
+    var chip = document.getElementById("revChip");
+    chip.classList.toggle("on", rev);
+    if(!rev) return;
+    var i = revList.indexOf(mapStart(cur));
+    chip.querySelector("b").textContent =
+      (i < 0 ? "?" : (i+1)) + " / " + revList.length + " 页";
+  }
+  function mapStart(p){ var i = map[p]; return i==null ? -1 : N[i].r[0]; }
+
+  function step(d){
+    if(!rev) return go(cur + d);
+    if(!revList.length) return exitRev(true);
+    var here = mapStart(cur), i = revList.indexOf(here);
+    if(i < 0){                       // 当前不在清单里：跳到顺着方向最近的一页
+      var t = null;
+      for(var k=0;k<revList.length;k++){
+        if(d > 0 ? revList[k] > cur : revList[k] < cur){ t = revList[k]; if(d>0) break; }
+      }
+      return go(t == null ? revList[d>0 ? 0 : revList.length-1] : t);
+    }
+    go(revList[(i + d + revList.length) % revList.length]);
+  }
+  function enterRev(){
+    revList = weakPages();
+    if(!revList.length){ alert("没有待复习的页——错过的题都连对两次毕业了。"); return; }
+    rev = true; wp.classList.remove("on");
+    go(revList.indexOf(mapStart(cur)) >= 0 ? cur : revList[0]);
+    revPaint();
+  }
+  function exitRev(done){
+    rev = false; revPaint();
+    if(done) alert("待复习的页都毕业了，已退出复习模式。");
+  }
+  document.getElementById("revOff").onclick = function(){ exitRev(false); };
+
+  /* 答完一题就重算一次清单：刚改对的页当场从复习队列里消失。 */
+  function revSync(){
+    if(!rev) return;
+    revList = weakPages();
+    if(!revList.length) exitRev(true); else revPaint();
+  }
+
+  /* 错题本 */
+  var wp = document.getElementById("wrongPanel");
+  function openWrong(){
+    var list = [];
+    N.forEach(function(n){
+      var st = unitWrong(n.r[0]);
+      if(st.n === 0 || st.w === 0) return;
+      list.push({n:n, rw:st.rw, w:st.w, tot:st.n, qw:st.qw});
+    });
+    // 还没毕业的一律排前面；同样没毕业的，最近错得多的更靠前。
+    list.sort(function(a,b){
+      return (b.qw > 0) - (a.qw > 0) || (b.rw - a.rw) || (b.w - a.w); });
+    var box = document.getElementById("wrongList");
+    if(!list.length){
+      box.innerHTML = '<div class="none">还没有错题。<br>做几道自测再回来看。</div>';
+    } else {
+      box.innerHTML = list.map(function(it){
+        var qs = Q[it.n.r[0]] || [];
+        // 每道题的六格单独成一组，多题的单元才不会连成一片看不出边界
+        var h = qs.map(function(_,i){
+          return "<u>"+histHtml(ST[it.n.r[0]+"#"+i])+"</u>"; }).join("");
+        return '<div class="wrow'+(it.qw ? "" : " done")+'" data-p="'+it.n.r[0]+'">'+
+          '<span class="p">p'+it.n.r[0]+'</span>'+
+          '<span class="n2">'+it.n.t+'</span>'+
+          '<span class="h">'+h+'</span>'+
+          '<span class="s">'+(it.qw ? "还差 "+it.qw+" 题毕业" : "已毕业")+
+          ' · 累计错 '+it.w+'/'+it.tot+'</span></div>';
+      }).join("");
+      box.querySelectorAll(".wrow").forEach(function(r){
+        r.onclick = function(){ wp.classList.remove("on"); go(+r.dataset.p); };
+      });
+    }
+    // 总账。三个数分工明确：做了多少、还有多少没过关、一共栽过几次。
+    var done=0, tot=0, weak=0, wsum=0;
+    Object.keys(Q).forEach(function(k){
+      Q[k].forEach(function(_,i){
+        tot++;
+        var d = ST[k+"#"+i]; if(!d) return;
+        done++; wsum += d.w; if(isWeak(d)) weak++;
+      });
+    });
+    document.getElementById("wrongTally").innerHTML =
+      '<span>做过 <b>'+done+'</b> / '+tot+' 题</span>'+
+      '<span>没毕业 <b class="hot">'+weak+'</b> 题</span>'+
+      '<span>累计错 <b>'+wsum+'</b> 次</span>'+
+      '<span>待复习 <b>'+weakPages().length+'</b> 页</span>';
+    document.getElementById("revOn").disabled = !weakPages().length;
+    wp.classList.add("on");
+  }
+  document.getElementById("wrongBtn").onclick = openWrong;
+  document.getElementById("revOn").onclick = enterRev;
+  document.getElementById("wrongClose").onclick = function(){ wp.classList.remove("on"); };
+  document.getElementById("wrongReset").onclick = function(){
+    if(!confirm("清空全部自测记录？此操作不可撤销。")) return;
+    ST = {}; save(); exitRev(false); paintStrip(); openWrong(); render(cur);
+  };
+  wp.onclick = function(e){ if(e.target === wp) wp.classList.remove("on"); };
+
+  document.getElementById("prev").onclick=function(){ step(-1); };
+  document.getElementById("next").onclick=function(){ step(1); };
+  pnum.addEventListener("change",function(){ go(pnum.value); });
+  pnum.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ go(pnum.value); this.blur(); }
+  });
+  document.addEventListener("keydown",function(e){
+    if(document.activeElement===pnum) return;
+    if(e.key==="ArrowLeft"||e.key==="PageUp"){ step(-1); e.preventDefault(); }
+    if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){ step(1); e.preventDefault(); }
+  });
+
+  var miss=document.getElementById("miss");
+  frame.addEventListener("error",function(){ miss.style.display="block"; });
+  frame.addEventListener("load", function(){ miss.style.display="none"; });
+  document.getElementById("help").onclick=function(){
+    miss.style.display = miss.style.display==="block" ? "none" : "block";
+  };
+
+  var drag=document.getElementById("drag"), left=document.getElementById("left"), dragging=0;
+  drag.addEventListener("mousedown",function(){ dragging=1; document.body.style.userSelect="none"; });
+  document.addEventListener("mouseup",function(){ dragging=0; document.body.style.userSelect=""; });
+  document.addEventListener("mousemove",function(e){
+    if(!dragging) return;
+    left.style.width=Math.max(20,Math.min(78,e.clientX/window.innerWidth*100))+"%";
+  });
+
+  var s=1; try{ s=parseInt(localStorage.getItem(KEY+"p"),10)||1; }catch(e){}
+  go(s);
+})();
+</script>
+
+
+
+
+
+
+<!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
+<style>
+#nopdf{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+#nopdf .in{max-width:380px;text-align:center;font-size:14px;line-height:1.85;
+  color:var(--dim,#6a7686)}
+#nopdf b{color:var(--ink,#23272c)}
+#nopdf code{font-size:12.5px}
+</style>
+<script>
+(function(){
+  /* 公开站上 slides/*.pdf 不在仓库里（著作权）。与其让左栏挂一个空 iframe，
+     不如说清楚它去哪了 —— 右栏的讲解和自测题完全不受影响。
+     本地预览同样加 ?public=1 。*/
+  if (!/\.github\.io$/.test(location.hostname)
+      && !/[?&]public=1\b/.test(location.search)) return;
+  function go(){
+    var stage = document.getElementById("stage");
+    var frame = document.getElementById("pdf");
+    if (!stage) return;
+    if (frame) frame.remove();
+    var d = document.createElement("div");
+    d.id = "nopdf";
+    d.innerHTML = '<div class="in"><p><b>原课件不在公开仓库里。</b></p>'
+      + '<p>课件著作权属于学校与各课作者，本仓库不转载。</p>'
+      + '<p>右栏的逐页讲解与自测题是自己写的，<b>照常可用</b>。</p>'
+      + '<p style="opacity:.75">要让这一栏显示出来：把原 PDF 放回 <code>精读/slides/</code>，'
+      + '用本地静态服务器打开即可。</p></div>';
+    stage.appendChild(d);
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+</script>
+<!-- deploy-public-mode : end -->
+</body></html>

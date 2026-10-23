@@ -1,0 +1,518 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>T3 分类放映厅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(98ch,93%);max-height:85vh;overflow:auto;
+  background:rgba(13,18,26,.94);border:1px solid #253044;border-radius:14px;padding:24px 30px 22px;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 5px}
+#sum h3{font-size:clamp(17px,2.1vw,28px);font-weight:800;margin:0 0 15px;letter-spacing:-.02em;line-height:1.2}
+#sum .rows{display:grid;gap:11px}
+@media(min-width:900px){#sum .rows{grid-template-columns:1fr 1fr;gap:12px 26px}}
+#sum .row{border-left:2px solid #2A3546;padding-left:13px}
+#sum .rk{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 3px}
+#sum .rv{font-size:clamp(11.5px,1.1vw,15px);font-weight:300;line-height:1.7;color:#C3CEDD;margin:0}
+#sum .rv b{color:#F0F4FA;font-weight:600}
+#sum .rv i{font-style:normal;color:var(--blue)}
+#sum .rv em{font-style:normal;color:var(--green)}
+#sum .rv s{text-decoration:none;color:var(--coral)}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"ARTI2001 · T3 分类：感知机与逻辑回归（官方课件·逐张精读）",
+  subtitle:"逐张一个知识点 · 每镜都有详解 · Study check 作检验 · 空格推进",video:""};
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("M1 T3 · 分类","官方课件逐张精读",
+      "对应课件 S4–S24 · 每张一个知识点 · 每个讲解镜头都有详细说明");},
+    "这部逐张跟着你课程的 M1T3 分类课件走——去掉封面、致辞、路线图和章节页，把实质内容做成逐个知识点。T3 是全 Module 概念最密的一块：<b>感知机</b>用硬决策、<b>逻辑回归</b>用概率，两者共享同一个线性打分但输出、损失、更新信号都不同。每个讲解镜头下方有一段详细说明（按 N 开关），每个知识点末尾配总结卡和用官方 Study check 改编的必答检验。记号约定和考试一致——注意感知机/SVM 用 y∈{−1,+1}，逻辑回归用 y∈{0,1}。");
+});
+KP("1 · 回归与分类共享 pipeline（S4）",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap("<b>课件：回归和分类共用同一条 pipeline，只是输出不同。</b>");boxNode(150,230,300,100,"回归","b");boxNode(830,230,300,100,"分类","y");note("输出：连续的数",300,390,"b");note("输出：离散的类别",980,390,"y");note("两者都：特征 → 线性打分 wᵀx+b → 学参数",640,180,"");},"课件开门见山：<b>回归和分类共用同一条流程</b>——都从特征出发、都用线性打分 wᵀx+b、都靠数据学参数。它们最重要的区别只有一个：<em>目标变量是连续的还是离散的</em>。回归预测一个数（价格、时长），分类预测一个类别（垃圾/正常、良性/恶性）。课件问的第三点很关键——<i>这个区别什么时候重要</i>？答案是：它决定了你用什么损失、什么输出变换、怎么评估。同一个线性打分，回归里直接当预测值，分类里要么取符号（感知机）、要么过 sigmoid（逻辑回归）。");
+  S(0,function(){clearScene();setCap(null);setEq(null);setBig("离散 vs 连续","这个区别决定损失、输出、评估");},"为什么「离散还是连续」这个看似简单的区别如此重要？因为它<b>牵动整条下游</b>。连续目标用平方误差、直接输出数值、用 RMSE/R² 评估；离散目标不能用平方误差（会被远处样本拽歪），要用<em>交叉熵或错误驱动的损失</em>，输出要压成类别或概率，用准确率/精确率/召回率评估。一个常见陷阱：<s>输出是数字不等于是回归</s>——用 1/2/3 编码三个类别，那还是分类，因为这些数字之间的大小和距离没有意义。判断任务类型，永远看<b>目标变量本身</b>是不是有序的连续量。");
+  SUM(0,1,{h:"回归与分类：共享 pipeline、目标不同（S4）",k:"两者<b>共用同一条流程</b>：特征 → 线性打分 wᵀx+b → 学参数。唯一本质区别是<em>目标变量连续（回归）还是离散（分类）</em>。",m:"这个区别牵动整条下游：损失函数、输出变换、评估指标全都不同。分类不能用平方误差，要用交叉熵或错误驱动的损失。",w:"<s>输出是数字 ≠ 回归</s>。用 1/2/3 编码类别仍是分类，因为数字间大小无意义。判断类型看目标变量本身。",e:"T3 常考「回归与分类的共同点与区别」：共用线性打分/pipeline；区别在目标变量连续还是离散、以及由此决定的损失和输出。"});
+  QUIZ(0,1,{t:"课件 Study check：回归和分类共享什么？最重要的区别是什么？这个区别什么时候重要？",o:["共享损失函数；区别在特征数量","<b>共享 pipeline 和线性打分；区别在目标连续还是离散；它决定损失、输出变换和评估方式</b>","毫无共同点","区别在于分类更快"],a:1,w:"两者<b>共用特征→线性打分→学参数</b>这条 pipeline。最重要区别是<em>目标变量连续（回归）还是离散（分类）</em>。这个区别在<b>选损失、选输出变换、选评估指标</b>时都起决定作用——分类不能用平方误差，要用交叉熵或错误驱动损失。"});
+});
+KP("2 · ★ 线性打分是共同核心（S5–6）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$s = w^{\\top}x + b$$","top");setCap("<b>课件：分类从「表示」开始——把样本变成特征向量 x。</b>");},"课件强调分类<b>从表示（representation）开始</b>：先把每个样本变成一个数值特征向量 x，才谈得上打分。核心量是<b>线性打分</b> s=wᵀx+b——这和回归里的假设函数<em>完全一样</em>。它的输入是特征向量 x，输出是一个实数 s；唯一的假设是「类别可以用特征的线性组合来区分」。感知机和逻辑回归<b>都建立在这个 s 上</b>，区别只在于怎么用它：感知机取符号得硬类别，逻辑回归过 sigmoid 得概率。理解「线性打分是共享核心」，就抓住了 T3 的主线。");
+  S(0,function(){clearScene();setEq(null);setCap(null);var P={l:360,r:940,t:150,b:430};axes(P);note("x₁",930,455,"");note("x₂",340,160,"");var r=E.rng(7),a=[],c=[];for(var i=0;i<8;i++)a.push([420+r()*170,190+r()*90]);for(var j=0;j<8;j++)c.push([560+r()*190,290+r()*110]);dots(a,"b",7);dots(c,"c",7);curve([[400,430],[900,170]],"fit");note("s > 0 一侧",840,220,"b");note("s < 0 一侧",470,410,"c");setCap("<b>边界把特征空间切成两半</b>：s 的符号决定判到哪一类。");},"线性打分在几何上就是一条<b>分界</b>（decision boundary）：s=wᵀx+b=0 这条线（二维）、平面（三维）或超平面（更高维）把特征空间切成两半。<b>s>0 的一侧判一类、s<0 的一侧判另一类</b>。课件要求你能<i>从特征走到打分、再走到预测</i>，并且<b>标签约定要一致</b>——这是最容易出错的地方：感知机和 SVM 用 y∈{−1,+1}，逻辑回归用 y∈{0,1}。做题前先看清题目用哪一套，否则符号会全乱。边界的方向由 w 决定（w 垂直于边界），位置由 b 决定。");
+  SUM(0,2,{h:"★ 线性打分 s=wᵀx+b 是共同核心（S5–6）",k:"分类从<b>表示</b>（把样本变成特征向量）开始。核心量是<b>线性打分 s=wᵀx+b</b>，和回归的假设一样。感知机和逻辑回归都建立在它上，区别只在怎么用 s。",m:"s=0 是决策边界——线/平面/超平面把特征空间切两半，s 的符号决定判到哪一类。边界方向由 w 定（w⊥边界）、位置由 b 定。",w:"<s>标签约定要一致</s>：感知机/SVM 用 y∈{−1,+1}，逻辑回归用 y∈{0,1}。做题前先看清用哪套，否则符号全乱。",e:"T3、T4 所有计算题都建立在 s=wᵀx+b 上，务必练熟代入求值。「为什么边界是 s=0」是常考点。"});
+  QUIZ(0,2,{t:"感知机、逻辑回归、SVM 三者在<b>模型核心</b>上共享什么？",o:["共享损失函数","<b>共享线性打分 s=wᵀx+b 和线性决策边界</b>","共享输出概率","共享标签约定"],a:1,w:"三者都基于<b>同一个线性打分 s=wᵀx+b</b>，都给出<b>线性决策边界</b>（s=0）。区别在于怎么用 s：感知机取符号、逻辑回归过 sigmoid、SVM 最大间隔。<s>标签约定并不共享</s>——逻辑回归用 0/1，感知机和 SVM 用 −1/+1。"});
+});
+KP("3 · ★ 感知机：用符号预测（S8）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$\\hat y = \\mathrm{sign}(s),\\quad s=w^{\\top}x+b$$","top");matrix({rows:4,cols:2,cw:360,ch:52,y:250,cell:function(i,j){var t=[["y·s 的符号","含义（课件约定）"],["y·s > 0","正确一侧 · 不更新"],["y·s < 0","分错 · 更新"],["y·s = 0","恰在边界上 · 也触发更新"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return i===3?"hl":"";}});setCap("<b>本课约定：y·s ≤ 0 触发更新（含等号）。</b>");},"感知机的预测极简：<b>ŷ = sign(s)</b>，s>0 判 +1、s<0 判 −1。要判断预测对不对，把打分乘上真实标签 y，看<b>带符号得分 y·s</b>：<b>y·s>0</b> 说明预测和标签同号、分对了，不更新；<b>y·s<0</b> 分错了，更新；<b>y·s=0</b> 点恰好落在边界上。<s>这里有一个必须记准的课程约定</s>：本课用 <b>y·s ≤ 0 触发更新（含等号）</b>——也就是说，正好落在边界上（y·s=0）的点<em>也会</em>触发一次更新。很多人漏掉等号，把边界上的点当成「不更新」，这在手算题里会直接算错。");
+  S(0,function(){clearScene();setEq(null);setCap(null);setBig("y·s ≤ 0","更新条件 · 含等号 · 更新后立刻用新参数");},"为什么边界上的点也要更新？直觉是：<b>y·s=0 意味着模型对这个点毫无把握</b>——它正好骑在边界上，随便一点扰动就会翻到错误一侧。感知机的目标是把每个训练点推到「有余量地分对」，所以对零把握的点也要推一把。更新规则是 <b>w ← w + η·y·x，b ← b + η·y</b>（η 是学习率）。它的效果是把这个样本的得分朝<i>正确的方向</i>推：如果该判 +1（y=+1）就增大它的得分，该判 −1 就减小。更新之后要立刻用<b>新的 w、b</b> 去处理下一个样本——这是 T3 Tutorial Q1 的关键，很多人用旧参数算下一步就错了。");
+  SUM(0,3,{h:"★ 感知机：sign 预测 + y·s≤0 更新（S8）",k:"预测 <b>ŷ=sign(s)</b>。判对错看<b>带符号得分 y·s</b>：>0 分对不更新、<0 分错更新、=0 在边界上。本课约定 <em>y·s≤0 触发更新（含等号）</em>。",m:"更新 w←w+η·y·x、b←b+η·y，把样本得分朝正确方向推。更新后立刻用<b>新参数</b>处理下一个样本。边界上（y·s=0）的点毫无把握，也要推一把。",w:"<s>漏掉等号是高频错误</s>：y·s=0 也更新。<s>用旧参数算下一步</s>也是常见错——更新后必须用新 w、b。",e:"<b>T3 Tutorial Q1</b>：逐样本追踪状态、判 y·s、更新、carry forward。手算务必：含等号、更新后用新参数。感知机输出硬类别、<s>不是概率</s>。"});
+  QUIZ(0,3,{t:"课件约定：感知机的更新在什么条件下触发？",o:["y·s > 0","y·s < 0","<b>y·s ≤ 0（含等号，边界上的点也更新）</b>","|s| > 1"],a:2,w:"本课明确约定 <b>y·s ≤ 0 触发更新</b>——注意<em>含等号</em>：y·s=0 表示点恰好落在边界上、模型毫无把握，也要更新。<s>只写 y·s<0 会漏掉边界点</s>，在手算题里直接算错。更新后要用新的 w、b 处理下一个样本。"});
+});
+KP("4 · 带符号得分定义感知机损失（S9）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$L = \\max(0,\\,-y\\,s)$$","top");matrix({rows:3,cols:2,cw:380,ch:56,y:250,cell:function(i,j){var t=[["y·s 的符号","损失 L = max(0,−y·s)"],["y·s > 0（分对）","−y·s < 0 → L = 0"],["y·s < 0（分错）","−y·s > 0 → L = −y·s > 0"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return i===2?"hl":"";}});},"感知机的损失把「对错」和「离边界多远」压进一个量：<b>L = max(0, −y·s)</b>。读公式分两层。第一层看符号：分对时 y·s>0，于是 −y·s<0，取 max(0, 负数)=<b>0</b>，正确的点没有损失。分错时 y·s<0，于是 −y·s>0，损失就等于这个正数 <b>−y·s</b>——错得越离谱（负得越多）、损失越大。第二层看含义：损失为 0 的点<em>不产生梯度</em>、参数不动；只有分错的点才推动更新。这正好对应「y·s≤0 才更新」。注意它和 SVM 的 hinge loss max(0, 1−y·s) 形状一样，只是感知机的门槛在 0、SVM 在 1（留了间隔）。");
+  S(0,function(){clearScene();setEq(null);setCap(null);var P={l:300,r:980,t:150,b:430};axes(P);note("y·s",950,455,"");note("L",280,160,"");curve([[300,430],[640,430]],"fit");curve([[640,430],[980,180]],"fit c");note("分对：L=0（平）",470,410,"b");note("分错：L 线性上升",840,250,"c");dots([[640,430]],"y",7);note("折点在 y·s=0",640,470,"y");},"把感知机损失画出来，它是一条<b>折线（hinge 形状）</b>：在 y·s>0 一侧完全贴着横轴、损失恒为 0；过了 y·s=0 这个<b>折点</b>之后，损失随 y·s 变负而<em>线性上升</em>。这张图解释了感知机的两个性质。其一，为什么它只在犯错时学习——右半边平坦、梯度为零，分对的点不贡献任何更新。其二，为什么损失对「错得多离谱」敏感——左半边是斜线，离边界越远的错误点损失越大、推力越强。对比逻辑回归的交叉熵（处处光滑、连分对的点都还有微小梯度），感知机的损失是<b>分段线性、只惩罚错误</b>，这也是它可能来回震荡、不像逻辑回归那样平稳收敛的原因。");
+  SUM(0,4,{h:"感知机损失 L=max(0,−y·s)（S9）",k:"一个量同时说明「对错」和「离边界多远」。<b>分对（y·s>0）→ L=0；分错（y·s<0）→ L=−y·s>0</b>，错得越远损失越大。",m:"图像是折线（hinge）：y·s>0 段平贴横轴、梯度为零→不更新；y·s=0 是折点；左侧线性上升→只有错误点推动更新。",w:"和 SVM 的 hinge max(0,1−y·s) 同形状，但<s>门槛不同</s>：感知机在 0，SVM 在 1（留了间隔 → 更稳、更抗噪）。",e:"理解「损失=0 不更新」正好对应「y·s≤0 才更新」。T3 可能考「感知机 vs SVM 损失的异同」——都 hinge，门槛差 1。"});
+  QUIZ(0,4,{t:"感知机损失 L=max(0,−y·s)。一个被<b>正确</b>分类的点（y·s>0）贡献多少损失？",o:["等于 y·s","<b>0（因为 −y·s<0，max 取 0）</b>","等于 1","负值"],a:1,w:"分对时 y·s>0，则 −y·s<0，<b>max(0, 负数)=0</b>——正确的点损失为零、梯度为零、不推动更新。只有分错的点（y·s<0）产生正损失 −y·s 并触发更新。这正是「y·s≤0 才更新」的损失版本。"});
+});
+KP("5 · 感知机训练是顺序的（S10）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap(null);boxNode(70,240,250,90,"① 初始化 w,b","");boxNode(360,240,250,90,"② 算 s=wᵀx+b","b");boxNode(650,240,250,90,"③ 检查 y·s","y");boxNode(940,240,270,90,"④ 更新 & 带入下一个","g");link(320,285,360,285);link(610,285,650,285);link(900,285,940,285);note("每个样本用的都是「前一个样本更新后」的参数",640,400,"y");},"感知机训练是<b>顺序（sequential）</b>进行的，这一点极其重要。流程四步：①初始化 w、b（常取零或小随机值）；②对当前样本算打分 s=wᵀxᵢ+b；③检查带符号得分 y·s；④若 y·s≤0 就更新，然后<b>带着更新后的参数去下一个样本</b>。关键在最后一句：<em>每个样本看到的都是它前一个样本处理完之后的参数</em>——不是同一套固定参数扫全表。这和批量方法（一次用全部样本算一个平均梯度再更新）完全不同。因为是顺序的，<b>样本的先后次序会影响训练轨迹</b>，甚至影响最终落在哪条边界上。");
+  S(0,function(){clearScene();setBig("状态在样本间传递","上一个的输出参数 = 下一个的输入参数");},"「顺序」在做题时意味着一件事：<b>状态（w、b）在样本之间传递</b>。做 Tutorial Q1 这类手算题时，最稳的方法是列一张表，每一行记下：当前的 w 和 b、算出的 s、y·s 的符号、是否更新、更新后的新 w 和 b。下一行直接抄上一行的「新参数」作为「当前参数」。<s>最常见的错误</s>就是每个样本都从最初的参数重新算——那是批量思维，感知机不是这样。第二个易错点是漏判等号（y·s=0 也更新）。第三个是更新方向搞反——记住 w←w+η·y·x，y 带着自己的符号进去，y=−1 时其实是在<em>减</em>。把这三点盯住，顺序更新题基本不会错。");
+  SUM(0,5,{h:"感知机训练是顺序的、状态逐样本传递（S10）",k:"四步：初始化 → 算 s → 检查 y·s → 更新并带入下一个。核心：<b>每个样本用的是前一个样本更新后的参数</b>，不是固定的一套参数扫全表。",m:"因为顺序更新，<b>样本次序会影响训练轨迹和最终边界</b>。手算时列表逐行传递 w、b：上一行的新参数 = 下一行的当前参数。",w:"<s>别每个样本都从初始参数重算</s>（那是批量思维）。还要盯住：含等号更新、方向 w←w+η·y·x（y 带符号）。",e:"<b>Tutorial Q1</b> 就是顺序更新手算。列一张「w,b→s→y·s→是否更新→新 w,b」的表逐行推，是拿满分的标准做法。"});
+  QUIZ(0,5,{t:"课件 Study check（S10）：感知机训练是顺序的——第 i+1 个样本用的参数是什么？",o:["永远用最初的初始参数","<b>第 i 个样本更新之后产生的参数</b>","所有样本的平均参数","随机重置的参数"],a:1,w:"感知机<b>顺序处理</b>样本：第 i 个样本更新后得到的 w、b，正是第 i+1 个样本的起始参数——状态逐样本传递。<s>不是每次都从初始参数重算</s>（那是批量思维）。因此样本次序会影响训练轨迹。手算时列表逐行把「新参数」抄成下一行的「当前参数」。"});
+});
+KP("6 · 一次更新可让点越过边界（S11 算例）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap("<b>算例（非 tutorial 数据）：w=[−0.5,0.2], b=0, x=[2,0], y=+1, η=0.5</b>");note("初始打分 s = (−0.5)(2)+(0.2)(0)+0 = −1.0",640,220,"c");note("y·s = (+1)(−1.0) = −1.0 < 0  →  分错，触发更新",640,290,"y");note("预测 sign(−1.0) = −1，但真实 y = +1",640,360,"");},"课件用一个<b>算例</b>把「一次更新能把点推过边界」讲透（注意这不是 tutorial 的数据）。给定 w=[−0.5, 0.2]、b=0、样本 x=[2, 0]、真实标签 y=+1、学习率 η=0.5。先算打分：s = (−0.5)(2) + (0.2)(0) + 0 = <b>−1.0</b>。预测 sign(−1.0)=−1，但真实标签是 +1，所以分错了；验证一下 y·s = (+1)(−1.0) = <b>−1.0 < 0</b>，确实满足更新条件。这一步的意义在于：打分是负的，模型把这个本该是正类的点判到了错误一侧，接下来的更新要把它的得分<em>拉成正的</em>。");
+  S(0,function(){clearScene();setCap(null);note("更新权重： w ← [−0.5,0.2] + 0.5·(+1)·[2,0] = [0.5, 0.2]",640,200,"g");note("更新偏置： b ← 0 + 0.5·(+1) = 0.5",640,265,"g");note("新打分： s = (0.5)(2)+(0.2)(0)+0.5 = 1.5 > 0",640,345,"b");note("预测变为 sign(1.5)=+1 ✓ —— 点已越过边界",640,410,"y");},"现在做更新。权重：w ← w + η·y·x = [−0.5, 0.2] + 0.5·(+1)·[2, 0] = [−0.5+1.0, 0.2] = <b>[0.5, 0.2]</b>。偏置：b ← b + η·y = 0 + 0.5·(+1) = <b>0.5</b>。用新参数重算这个点的打分：s = (0.5)(2) + (0.2)(0) + 0.5 = <b>1.5 > 0</b>。预测从 −1 翻成 sign(1.5)=+1，<em>正好等于真实标签</em>——一次更新就把这个点从错误一侧推过了边界。这解释了感知机为什么「有效」：每次更新都精准地朝把当前错误点分对的方向调参。当然，这一步的修正可能让别的点变错，所以要多轮扫描；但只要数据线性可分，这个过程保证在有限步内收敛。");
+  SUM(0,6,{h:"一次更新让点越过边界（S11 算例）",k:"算例：w=[−0.5,0.2],b=0,x=[2,0],y=+1,η=0.5。初始 s=−1（分错）→ 更新后 w=[0.5,0.2],b=0.5 → 新 s=1.5>0，点<b>越过边界、变分对</b>。",m:"更新规则 w←w+η·y·x、b←b+η·y 精准地把当前错误点的得分朝正确方向推。y 带符号进入，决定加还是减。",w:"一次更新可能<s>让别的点变错</s>，所以要多轮扫描。但线性可分时保证有限步收敛（下一 KP）。别忘更新后要用新参数重算验证。",e:"这套代入正是 <b>Tutorial Q1</b> 的手算模板：算 s → 判 y·s → 代更新公式 → 用新参数验证。把每步数值写清楚，方便查错。"});
+  QUIZ(0,6,{t:"算例中 w=[−0.5,0.2],b=0,x=[2,0],y=+1,η=0.5。更新后新的打分 s 是多少？",o:["−1.0（不变）","0","<b>1.5（点越过边界，变为正确）</b>","0.5"],a:2,w:"更新：w←[−0.5,0.2]+0.5(+1)[2,0]=<b>[0.5,0.2]</b>，b←0+0.5(+1)=<b>0.5</b>。新打分 s=(0.5)(2)+(0.2)(0)+0.5=<b>1.5>0</b>。预测从 −1 翻成 +1，与真实标签 +1 一致——一次更新把点推过了边界。"});
+});
+KP("7 · 感知机能保证与不能保证什么（S12）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap(null);matrix({rows:4,cols:2,cw:400,ch:56,y:230,cell:function(i,j){var t=[["情形","感知机的行为"],["线性可分","有限次错误后收敛"],["类别重叠（不可分）","没有完美直线，更新可能永不停止"],["样本次序","顺序更新使结果依赖数据顺序"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return i===2&&j===1?"hl":"";}});},"感知机有一个漂亮但<b>有条件</b>的保证。条件是<em>线性可分</em>——存在某条直线能把所有训练点完全分对。满足时，感知机保证在<b>有限次错误之后收敛</b>（找到一条分对全部的边界），不会无限循环。但反过来：如果类别<b>重叠、线性不可分</b>，根本不存在完美直线，那么总有点被分错、<em>更新可能永远不停</em>，参数在几条边界间来回震荡。第三点：因为更新是顺序的，<b>最终结果依赖样本次序</b>——同样的数据换个顺序，可能收敛到不同的边界。考试常把这三条放在一起考「感知机的保证及其前提」。");
+  S(0,function(){clearScene();setBig("收敛 ⟸ 线性可分","不可分 → 可能永不停止；顺序 → 结果依赖次序");},"把这三条记成一句话：<b>感知机的收敛保证，前提是线性可分</b>。这引出它的历史局限——最经典的反例是 <b>XOR</b>（异或）：四个点两两对角同类，没有任何一条直线能分开，单层感知机永远学不会。正是这个局限在上世纪推动了两条路线：一是加<em>特征变换/核</em>把数据映到可分的空间（T4 的 SVM 核技巧就是干这个），二是<em>叠加多层</em>（神经网络）。另外，和逻辑回归对比很有启发：逻辑回归即使在不可分数据上也能<b>平稳收敛到一个概率模型</b>（靠交叉熵这个处处光滑的损失），不会像感知机那样震荡不停——这是两者一个重要的实践差异。");
+  SUM(0,7,{h:"感知机的保证有前提：线性可分（S12）",k:"<b>线性可分 → 有限次错误后收敛</b>。类别重叠（不可分）→ 没有完美直线，更新可能<em>永不停止</em>。顺序更新 → 结果依赖样本次序。",m:"经典反例是 XOR：无一直线可分，单层感知机学不会。破解靠特征变换/核（→T4 SVM）或叠加多层（神经网络）。",w:"<s>别把收敛当无条件</s>：只有线性可分才保证收敛。不可分时感知机震荡，而逻辑回归靠光滑的交叉熵仍能平稳收敛。",e:"常考「感知机的收敛保证及其前提」。答题三要点：可分才收敛、不可分可能不停、结果依赖顺序。可延伸提 XOR 与核/多层。"});
+  QUIZ(0,7,{t:"感知机的收敛保证成立的<b>前提条件</b>是什么？",o:["学习率足够小","<b>训练数据线性可分</b>","样本已归一化","类别数为 2"],a:1,w:"感知机只在<b>线性可分</b>时保证有限次错误后收敛。若类别重叠、不存在完美分隔直线，更新可能<em>永不停止</em>、参数震荡（经典反例 XOR）。<s>学习率、归一化、类别数都不是这个保证的条件</s>。不可分时可改用核/多层，或用平稳收敛的逻辑回归。"});
+});
+KP("8 · ★ 逻辑回归：sigmoid 把打分变概率（S13）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$p=\\sigma(z)=\\dfrac{1}{1+e^{-z}},\\quad z=w^{\\top}x+b$$","top");var P={l:300,r:980,t:170,b:420};axes(P);note("z",960,445,"");note("p",280,180,"");var pts=[];for(var k=0;k<=60;k++){var z=-6+12*k/60;var p=1/(1+Math.exp(-z));pts.push([300+(z+6)/12*680, 420-p*250]);}curve(pts,"fit b");dots([[640,295]],"y",7);note("z=0 → p=0.5",640,275,"y");note("p→1",930,190,"b");note("p→0",340,410,"c");},"逻辑回归从<b>和感知机一模一样的线性打分</b> z=wᵀx+b 出发，但不取符号，而是把它送进 <b>sigmoid</b> 函数：p = σ(z) = 1/(1+e⁻ᶻ)。这条 S 形曲线把任意实数<em>挤进 (0,1) 区间</em>，于是输出可以解释成<b>「属于正类的概率」</b>。读图三个要点：z 很大时 p→1（很有把握是正类），z 很小（负）时 p→0，<b>z=0 时 p 恰好 0.5</b>（正好在边界上、五五开）。这就是逻辑回归的核心——它不是给你一个硬标签，而是给你一个<b>带把握程度的概率</b>，这在需要排序、设阈值、量化风险时比感知机的硬判有用得多。");
+  S(0,function(){clearScene();setEq(null);setBig("z：实数打分","σ(·) 压成 (0,1) 概率 · z=0↔p=0.5");setCap("<b>同一个 z，感知机取 sign 得硬标签，逻辑回归过 σ 得概率。</b>");},"把逻辑回归的「输入—输出—假设」讲清楚，正好回答课件的 Study check。<b>输入</b>：特征向量 x，经线性打分得到实数 z=wᵀx+b。<b>输出</b>：一个概率 p∈(0,1)，表示模型认为该样本属于正类的可能性。<b>关键假设/局限</b>：sigmoid 只是把 z 单调地压成概率，<em>决策边界仍然是线性的</em>（因为 p=0.5 ⟺ z=0，下一个 KP 会证）——所以逻辑回归本质还是个线性分类器，处理不了本质非线性的边界，除非先做特征变换。另一个要点：sigmoid 处处光滑可导，这让逻辑回归能用梯度下降平稳训练，也让它即使在不可分数据上也不会像感知机那样震荡。记住：<b>σ 改变的是输出的解释（概率），没有改变边界的形状（线性）</b>。");
+  SUM(0,8,{h:"★ 逻辑回归：p=σ(z)，把打分变概率（S13）",k:"从同一个线性打分 z=wᵀx+b 出发，过 <b>sigmoid</b>：p=σ(z)=1/(1+e⁻ᶻ)∈(0,1)。输出是<b>属于正类的概率</b>，不是硬标签。z=0↔p=0.5。",m:"z→+∞ 时 p→1、z→−∞ 时 p→0、z=0 时 p=0.5。sigmoid 处处光滑可导 → 可用梯度下降平稳训练、不可分数据也不震荡。",w:"<s>σ 没把模型变非线性</s>：p=0.5⟺z=0，决策边界仍是线性的。逻辑回归本质仍是线性分类器，非线性边界要靠特征变换。",e:"Study check「用自己的话讲核心、说输入输出、指出一个假设/局限」：输入 x→z、输出概率 p、局限是边界仍线性。"});
+  QUIZ(0,8,{t:"逻辑回归的 sigmoid 输出 p=σ(z) 表示什么？决策边界是什么形状？",o:["p 是打分本身；边界非线性","<b>p 是属于正类的概率∈(0,1)；边界仍是线性的（p=0.5↔z=0）</b>","p 是类别标签 ±1；边界线性","p 是损失；边界圆形"],a:1,w:"sigmoid 把线性打分 z 压进 (0,1)，得到<b>属于正类的概率</b> p。但它<em>没有</em>改变边界形状——因为 σ(0)=0.5，所以 p=0.5 等价于 z=0，<b>决策边界仍是线性的</b>。逻辑回归本质仍是线性分类器，输出的是带把握的概率而非硬标签。"});
+});
+KP("9 · 阶跃 vs Sigmoid（S14）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap(null);var P={l:300,r:980,t:170,b:420};axes(P);note("z",960,445,"");note("输出",300,160,"");curve([[300,420],[640,420]],"fit c");curve([[640,170],[980,170]],"fit c");curve([[640,420],[640,170]],"fit c");var pts=[];for(var k=0;k<=60;k++){var z=-6+12*k/60;var p=1/(1+Math.exp(-z));pts.push([300+(z+6)/12*680, 420-p*250]);}curve(pts,"fit b");note("感知机：阶跃（硬跳）",470,150,"c");note("逻辑回归：sigmoid（平滑）",860,320,"b");note("阈值 0.5 在 z=0",640,445,"y");},"把两者叠在一张图上，区别一目了然。<b>感知机是阶跃函数</b>（红）：在边界 z=0 处从一类<em>硬跳</em>到另一类，输出直接就是硬标签 ±1，中间没有过渡。<b>逻辑回归是 sigmoid</b>（蓝）：同一个 z，输出<em>平滑地</em>从 0 爬到 1，给出连续的概率。两者<b>用的是同一个打分 z</b>，只是把它「读」成了不同的东西。这带来两个后果。表示上：阶跃给硬类别、sigmoid 给带把握的概率。学习上：阶跃在边界处不可导、别处导数为零，没法直接用梯度下降（所以感知机用特制的错误驱动更新）；sigmoid 处处可导，能顺畅地跑梯度下降。");
+  S(0,function(){clearScene();setBig("同一个 z，不同的读法","硬跳 → 类别 · 平滑 → 概率 · 光滑 → 可梯度下降");},"为什么这个「阶跃 vs 平滑」的差别在实践中如此关键？根子在<b>学习信号</b>。阶跃函数除了边界处几乎处处平坦，梯度是零，你没法通过「输出对参数的导数」来知道该往哪调——所以感知机只能用「分错了就往正确方向推一把」的启发式更新，而且只在犯错时才有信号。sigmoid 则处处有非零梯度，<b>连分对的点都还带一点点梯度</b>，模型能持续、平稳地微调，误差项恰好化简成漂亮的 p−y（后面 KP 会推）。这也解释了为什么逻辑回归在不可分数据上不震荡、能收敛到稳定的概率模型，而感知机会来回跳。一句话：<b>平滑不只是让输出好看，它让「可导→可梯度下降→可平稳训练」成为可能。</b>");
+  SUM(0,9,{h:"阶跃 vs Sigmoid：硬标签 vs 平滑概率（S14）",k:"两者从同一个 z 出发。<b>感知机=阶跃</b>：z=0 处硬跳、输出硬标签 ±1。<b>逻辑回归=sigmoid</b>：平滑爬升、输出概率∈(0,1)。阈值 0.5 在 z=0。",m:"差别根子在学习信号：阶跃几乎处处梯度为零→只能用错误驱动更新、仅犯错时学习；sigmoid 处处可导→可平稳跑梯度下降、误差化简成 p−y。",w:"<s>别以为平滑只是外观</s>：可导性决定了能否用梯度下降。感知机不可导，所以用特制更新而非标准梯度。",e:"常考「感知机与逻辑回归的输出/学习差异」。核心对比：硬 vs 概率、不可导 vs 可导、错误驱动 vs 梯度、震荡 vs 平稳。"});
+  QUIZ(0,9,{t:"感知机（阶跃）与逻辑回归（sigmoid）都用同一个 z。它们最本质的差别导致了什么训练后果？",o:["感知机更精确","<b>阶跃几乎处处梯度为零→只能错误驱动更新；sigmoid 可导→能平稳跑梯度下降</b>","两者训练方式完全相同","sigmoid 不能分类"],a:1,w:"阶跃函数除边界外梯度为零、边界处不可导，<b>无法直接用梯度下降</b>，所以感知机用「分错才推一把」的错误驱动更新。sigmoid <b>处处可导</b>，逻辑回归因此能平稳跑梯度下降，误差项还化简成 p−y。这也是逻辑回归在不可分数据上不震荡的原因。"});
+});
+KP("10 · p=0.5 时逻辑回归仍是线性的（S15）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$p=0.5\\;\\Longleftrightarrow\\;\\sigma(z)=0.5\\;\\Longleftrightarrow\\;z=0$$","top");note("σ(0)=0.5，所以 p=0.5 等价于 z=0",640,250,"y");note("两个特征时边界： w₁x₁ + w₂x₂ + b = 0",640,320,"b");note("整理成直线： x₂ = −(w₁/w₂)x₁ − b/w₂",640,385,"g");},"很多人误以为「逻辑回归输出概率，边界一定是弯的」——错。用标准阈值 0.5 时，逻辑回归的<b>决策边界仍是线性的</b>，这里给出证明。因为 sigmoid 的中点 σ(0)=0.5，所以「p=0.5」这件事<em>等价于</em>「z=0」。而 z=wᵀx+b 是 x 的<b>线性</b>函数，z=0 就是一个线性方程。以两个特征为例，边界方程是 w₁x₁ + w₂x₂ + b = 0，整理一下就是一条标准直线 x₂ = −(w₁/w₂)x₁ − b/w₂。所以概率虽然是弯的 S 形，<b>「概率=0.5」的那条等高线却是笔直的</b>。sigmoid 改的是「离边界多远→多大把握」，没改边界本身的形状。");
+  S(0,function(){clearScene();setEq(null);setCap(null);var P={l:360,r:940,t:150,b:430};axes(P);note("x₁",930,455,"");note("x₂",340,160,"");curve([[400,430],[900,170]],"fit y");note("z>0 → p>0.5 判正类",820,220,"b");note("z<0 → p<0.5 判负类",470,410,"c");note("边界 z=0 就是这条直线",640,300,"y");},"从几何上收尾：<b>z 的符号决定落在边界哪一侧</b>，也就决定判哪一类。z>0 的一侧 p>0.5、判正类；z<0 的一侧 p<0.5、判负类；边界 z=0 上 p=0.5。这条边界就是上面那条直线。有两个延伸值得记。其一：0.5 只是<b>默认阈值</b>，你可以调——比如医疗筛查宁可多召回，把阈值降到 0.3，此时边界平移（b 等效变化）但<em>仍是直线</em>。其二：要得到<b>非线性</b>边界，唯一的办法是先对特征做变换（加 x₁²、x₁x₂ 之类），让 z 在原空间里表现为曲线——这和 T4 SVM 的核技巧是同一个思路。核心结论一句话：<b>逻辑回归 = 线性边界 + 概率化的输出。</b>");
+  SUM(0,10,{h:"p=0.5 时逻辑回归的边界仍是线性（S15）",k:"σ(0)=0.5 ⟹ p=0.5 ⟺ z=0。而 z=wᵀx+b 是线性的，所以<b>决策边界是直线/超平面</b>。两特征时 x₂=−(w₁/w₂)x₁−b/w₂。",m:"z 的符号决定判哪类：z>0→p>0.5 判正、z<0→p<0.5 判负。sigmoid 改的是「离边界多远→多大把握」，没改边界形状。",w:"<s>「输出概率」不等于「边界弯」</s>。要非线性边界必须先做特征变换（加 x²、xᵢxⱼ）——同 T4 核思路。0.5 只是可调的默认阈值。",e:"课件明确「At p=0.5, logistic regression is still linear」。会推 p=0.5⟺z=0 并写出两特征的边界直线，是常考点。"});
+  QUIZ(0,10,{t:"课件 Study check（S15）：逻辑回归输出概率，为什么它的决策边界（阈值 0.5）仍是线性的？",o:["因为 sigmoid 是弯的所以边界也弯","<b>因为 σ(0)=0.5，p=0.5⟺z=0，而 z=wᵀx+b 线性，故边界线性</b>","因为概率总在 (0,1)","因为用了梯度下降"],a:1,w:"sigmoid 中点 σ(0)=0.5，所以「p=0.5」<em>等价于</em>「z=0」。z=wᵀx+b 是 x 的线性函数，z=0 就是线性方程——<b>边界是直线/超平面</b>。sigmoid 只把「离边界远近」映成「把握大小」，<s>没改变边界形状</s>。要非线性边界得先做特征变换。"});
+});
+KP("11 · ★ 交叉熵惩罚「自信的错误」（S16）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$L(y,p)=-\\big[y\\log p+(1-y)\\log(1-p)\\big],\\; y\\in\\{0,1\\}$$","top");matrix({rows:3,cols:2,cw:400,ch:56,y:250,cell:function(i,j){var t=[["情形","损失"],["p 接近真实 y","损失很小"],["自信却错（p→0 但 y=1）","损失 →  +∞（极大）"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return i===2?"hl":"";}});},"逻辑回归<em>不用</em>平方误差，而用<b>二元交叉熵（BCE）</b>：L(y,p) = −[y·log p + (1−y)·log(1−p)]，其中 y∈{0,1}。它比较预测概率 p 和真实标签 y。分两种情况读：当 <b>y=1</b>，第二项消失，L=−log p——p 越接近 1 损失越小，p→0（自信地判错）时 −log p→<b>+∞</b>。当 <b>y=0</b>，第一项消失，L=−log(1−p)——p 越接近 0 越好，p→1 时损失爆炸。<s>为什么不用平方误差？</s>平方误差配 sigmoid 会产生非凸、梯度饱和（错得离谱的点梯度反而很小）的问题；交叉熵则<b>对「自信的错误」施加极重惩罚</b>，梯度不饱和，训练又快又稳。");
+  S(0,function(){clearScene();setEq(null);setCap(null);var P={l:320,r:960,t:150,b:420};axes(P);note("p（预测概率）",900,445,"");note("L",300,160,"");var pts=[];for(var k=1;k<=60;k++){var p=k/61;var L=-Math.log(p);pts.push([320+p*640, 420-Math.min(L,4)/4*250]);}curve(pts,"fit c");note("y=1 时 L=−log p",760,220,"c");note("p→1：损失→0",840,400,"b");note("p→0：损失→∞",430,200,"y");},"把 y=1 时的损失 L=−log p 画出来：p 接近 1（判对且自信）时损失趋于 0；p 往 0 走（越来越坚定地判错）时损失<b>急剧冲向无穷</b>。这条曲线就是交叉熵的「人格」——它对<b>自信的错误零容忍</b>。对比一下：如果一个模型只是「犹豫地错」（p≈0.5），惩罚是温和的 −log0.5≈0.69；但「自信地错」（p≈0.01）会被罚到 −log0.01≈4.6，高出好几倍。这种设计逼着模型<em>不要在错误上过度自信</em>，从而学到校准良好的概率。加上它处处光滑、梯度不饱和，交叉熵成了分类任务的默认损失。记住三点：<b>只惩罚，与真值方向一致；自信的错惩罚极重；配 sigmoid 后梯度恰好是 p−y。</b>");
+  SUM(0,11,{h:"★ 二元交叉熵：惩罚自信的错误（S16）",k:"逻辑回归用 <b>BCE</b>：L=−[y·log p+(1−y)·log(1−p)]，y∈{0,1}。p 接近 y→损失小；<b>自信却错（如 p→0 而 y=1）→损失→+∞</b>。",m:"y=1 时 L=−log p、y=0 时 L=−log(1−p)。对自信的错误施加极重惩罚，逼模型别在错误上过度自信、学到校准的概率。",w:"<s>逻辑回归不用平方误差</s>：平方误差配 sigmoid 非凸且梯度饱和。交叉熵凸、梯度不饱和 → 又快又稳。",e:"课件标题就是「BCE penalizes confident mistakes」。会写公式、分 y=0/1 两种情况、说明为何不用平方误差，是高频考点。"});
+  QUIZ(0,11,{t:"课件 Study check（S16）：二元交叉熵对一个「自信却分错」的预测（如 y=1 但 p→0）给出多大损失？",o:["损失为 0","很小的损失","<b>损失 →+∞（极大惩罚）</b>","负损失"],a:2,w:"y=1 时 L=−log p。当模型<b>自信地判错</b>（p→0），−log p→<b>+∞</b>——交叉熵对自信的错误施加极重惩罚。这正是它优于平方误差之处：逼模型别在错误上过度自信，且梯度不饱和、训练稳定。犹豫地错（p≈0.5）只罚约 0.69，自信地错罚到数倍。"});
+});
+KP("12 · ★ 梯度由 p − y 驱动（S17）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$\\frac{\\partial L}{\\partial z}=p-y,\\quad \\frac{\\partial L}{\\partial w}=(p-y)x,\\quad \\frac{\\partial L}{\\partial b}=p-y$$","top");matrix({rows:3,cols:2,cw:400,ch:56,y:250,cell:function(i,j){var t=[["p−y 的符号","含义 / 调整方向"],["p − y < 0（概率偏低）","该增大打分 z"],["p − y > 0（概率偏高）","该减小打分 z"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return false;}});},"把交叉熵配 sigmoid 求导，会得到一个<b>惊人简洁</b>的误差项：∂L/∂z = <b>p − y</b>。再用链式法则往回传（z=wᵀx+b）：∂L/∂w = <b>(p−y)x</b>，∂L/∂b = <b>p−y</b>。这个 p−y 就是逻辑回归的「误差信号」，读它的符号：如果 <b>p−y<0</b>（预测概率低于真实标签），说明模型把握不足，梯度会<em>增大打分 z</em>；如果 <b>p−y>0</b>（概率偏高），就<em>减小 z</em>。这套 (p−y)x 的形式和线性回归的梯度 (ŷ−y)x <b>长得几乎一样</b>——这不是巧合，而是广义线性模型的统一结构。它也让手算变得简单：先算 z、再算 p=σ(z)、得 p−y、乘上 x 就是权重梯度。");
+  S(0,function(){clearScene();setEq(null);setBig("误差 = p − y","×x 得权重梯度 · 特征为 0 则该权重不更新");setCap("<b>一步步：z → p=σ(z) → p−y → (p−y)x → 更新 w ← w − η·(p−y)x</b>");},"梯度下降就用这个梯度更新：<b>w ← w − η·(p−y)x，b ← b − η·(p−y)</b>（注意是<em>减</em>梯度，往损失下降方向走）。有几个要点在做题时特别有用。其一，<b>某个特征 xⱼ=0 时，它对应的权重这一步不更新</b>——因为梯度分量是 (p−y)·xⱼ=0，特征没出现就不调它的权重。其二，误差 p−y 天然落在 (−1, 1) 区间（p∈(0,1), y∈{0,1}），越错误差绝对值越接近 1、推力越大，越准则越接近 0、几乎不动——这是一种自适应的步长。其三，这是 <b>Tutorial Q2</b> 的计算核心：逐样本算 z→p→(p−y)→(p−y)x，批量时再对所有样本的贡献<em>取平均</em>。把这条链背熟、写清楚每一步数值，Q2 就是送分题。");
+  SUM(0,12,{h:"★ 逻辑回归梯度 = (p−y)x（S17）",k:"交叉熵配 sigmoid 求导得误差项 <b>∂L/∂z=p−y</b>，于是 <b>∂L/∂w=(p−y)x、∂L/∂b=p−y</b>。形式和线性回归 (ŷ−y)x 几乎一样。",m:"读符号：p−y<0（概率偏低）→增大 z；p−y>0→减小 z。更新 w←w−η(p−y)x。误差∈(−1,1)，越错推力越大、越准几乎不动（自适应）。",w:"<s>特征 xⱼ=0 → 该权重这步不更新</s>（梯度分量为 0）。更新是<em>减</em>梯度。别把 y 当 ±1（逻辑回归 y∈{0,1}）。",e:"<b>Tutorial Q2</b> 核心链：z→p=σ(z)→(p−y)→(p−y)x，批量再平均。课件标题「gradient driven by p−y」，务必练熟手算。"});
+  QUIZ(0,12,{t:"逻辑回归 + 交叉熵，某样本 z、p=σ(z)。权重梯度 ∂L/∂w 是多少？p−y<0 时该怎么调 z？",o:["∂L/∂w=(y−p)；减小 z","<b>∂L/∂w=(p−y)x；p−y<0（概率偏低）→增大 z</b>","∂L/∂w=p·x；不调","∂L/∂w=x²；增大 z"],a:1,w:"求导得误差项 ∂L/∂z=<b>p−y</b>，链式法则给 ∂L/∂w=<b>(p−y)x</b>、∂L/∂b=p−y。若 p−y<0，说明<b>概率低于真实标签</b>、把握不够，梯度下降会<em>增大打分 z</em>（w←w−η(p−y)x，负号让 w 朝增大 z 的方向动）。特征为 0 的权重这步不更新。"});
+});
+KP("13 · 批量与随机：同一贡献，不同组合（S18）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap(null);setEq("$$\\text{每样本贡献：}(p_i-y_i)x_i$$","top");matrix({rows:3,cols:3,cw:280,ch:56,y:250,cell:function(i,j){var t=[["","批量 Batch","随机 Stochastic"],["每次用几个样本","全部 n 个","1 个"],["更新信号","平均梯度","单个贡献"]];return t[i][j];},dim:function(i,j){return i===0||j===0;},hl:function(i,j){return false;}});},"逻辑回归的梯度下降有两种节奏，但它们<b>用的是同一个每样本贡献</b> (pᵢ−yᵢ)xᵢ（偏置贡献是 pᵢ−yᵢ），区别只在<em>怎么把样本组合起来</em>。<b>批量（batch）</b>：每次更新用<b>全部 n 个</b>样本，把它们的贡献<em>取平均</em>得到一个平滑的梯度再走一步——方向稳、但每步要扫全表，慢。<b>随机（stochastic, SGD）</b>：每次只用<b>一个</b>样本的贡献就更新一步——每步极快、能在线学习，但方向带噪声、轨迹抖。还有折中的 <b>mini-batch</b>：每次用一小批（如 32 个）的平均，兼顾稳定与速度，是实际最常用的。关键认知：<b>换的是「用多少样本算这一步」，梯度公式本身没变。</b>");
+  S(0,function(){clearScene();setEq(null);setCap(null);setBig("贡献相同，组合不同","批量=平均(稳,慢) · 随机=单点(快,抖) · mini-batch 折中");},"怎么选？这也常出现在概念题里。<b>批量</b>梯度方向准、每步单调下降，适合数据量不大、要稳定收敛的情形；缺点是数据一大，每步都扫全表就太贵。<b>随机</b>每步只看一个样本，速度快、内存省、还能处理流式/在线数据，而且它的<em>噪声反而有好处</em>——能帮模型跳出较差的局部区域；缺点是收敛路径抖、末期需要减小学习率才能稳定停下。<b>mini-batch</b> 取两者之长，配合向量化在 GPU 上还特别高效，是深度学习的默认。做 Tutorial Q2 时如果题目说「用这两个样本算梯度并更新」，通常是<b>批量</b>——先分别算每个样本的 (p−y)x，再<em>平均</em>，然后走一步。看清题目要「单个」还是「平均」，别把两者搞混。");
+  SUM(0,13,{h:"批量 vs 随机梯度下降（S18）",k:"两者<b>共用每样本贡献 (pᵢ−yᵢ)xᵢ</b>。批量：用全部 n 个、取<b>平均梯度</b>（稳、慢）。随机(SGD)：每次用 <b>1 个</b>贡献（快、抖）。mini-batch 折中。",m:"区别只在「每步用多少样本组合」，梯度公式不变。批量方向准但扫全表贵；随机快且噪声能跳出差区域但轨迹抖；mini-batch 最常用。",w:"<s>别把「用几个样本」当成「不同的梯度公式」</s>——每样本贡献完全一样。Tutorial 说「用这两个样本」通常指批量：先各算 (p−y)x 再<em>平均</em>。",e:"概念题「batch vs stochastic 的异同」：同贡献、不同组合；权衡稳定 vs 速度。Tutorial Q2 两样本梯度→取平均是标准做法。"});
+  QUIZ(0,13,{t:"批量与随机梯度下降的关系是？",o:["用完全不同的梯度公式","<b>用同一个每样本贡献 (p−y)x，批量取全部的平均、随机每次用一个</b>","随机的更准","批量不需要学习率"],a:1,w:"两者<b>共用同一个每样本梯度贡献 (pᵢ−yᵢ)xᵢ</b>，区别只在如何组合：<b>批量</b>用全部 n 个样本的<em>平均</em>梯度（稳、慢），<b>随机(SGD)</b>每次只用一个样本的贡献（快、抖）。mini-batch 是折中。做题时「用给定几个样本算梯度」通常指批量——各算贡献再平均。"});
+});
+KP("14 · ★ 同一边界家族，不同学习信号（S19）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap(null);matrix({rows:5,cols:3,cw:300,ch:52,y:200,cell:function(i,j){var t=[["","感知机","逻辑回归"],["打分/边界","z=wᵀx+b, z=0","z=wᵀx+b, z=0"],["输出","sign(z) 硬标签","σ(z) 概率"],["标签约定","y∈{−1,+1}","y∈{0,1}"],["何时更新","仅在犯错/边界上","每个样本都更新"]];return t[i][j];},dim:function(i,j){return i===0||j===0;},hl:function(i,j){return i===1?"hl":"";}});},"这张对比表是 T3 的<b>枢纽</b>，把两个模型放在同一坐标下比较。<b>相同点</b>（高亮行）：都从同一个线性打分 z=wᵀx+b 出发，都用 z=0 作标准决策边界——所以它们属于<b>同一个「线性边界家族」</b>。<b>不同点</b>：输出上，感知机取 sign(z) 给<em>硬标签</em>，逻辑回归过 σ(z) 给<em>概率</em>；标签约定上，感知机用 {−1,+1}、逻辑回归用 {0,1}（这个差别直接影响误差项的写法）；学习信号上，感知机<b>只在犯错（y·s≤0）时更新</b>、用错误驱动，逻辑回归<b>对每个样本都更新</b>、用光滑的梯度 (p−y)x。比较时务必<em>控制变量</em>——同样的输入、输出定义、假设和目标——才不会流于表面。");
+  S(0,function(){clearScene();setBig("要概率/把握 → 逻辑回归","只要硬判且数据可分 → 感知机也够");},"什么时候这个差别会<b>改变你的建模决策</b>？这正是课件 Study check 的落点。<b>需要概率或置信度</b>时选逻辑回归——比如要对结果排序、按业务设不同阈值、量化风险（医疗、风控），感知机的硬标签给不了这些。<b>数据近似线性可分、只要一个快速的硬分界</b>时，感知机简单够用。<b>数据不可分</b>时逻辑回归更稳（交叉熵光滑、平稳收敛），感知机会震荡不停。<b>要校准的概率</b>还是逻辑回归。反过来，如果你根本不关心概率、只要边界，且能接受对顺序敏感，感知机的更新更省。一句话总结：<b>两者边界同族，但「要不要概率、数据可不可分」决定选谁。</b>记住这条，概念大题就能答到点子上。");
+  SUM(0,14,{h:"★ 感知机 vs 逻辑回归：同边界，不同信号（S19）",k:"<b>相同</b>：同 z=wᵀx+b、同 z=0 线性边界（同一家族）。<b>不同</b>：输出 sign(硬) vs σ(概率)；标签 {−1,+1} vs {0,1}；更新 仅犯错时 vs 每样本。",m:"选择依据：要概率/置信度/排序/可调阈值→逻辑回归；只要硬判且近似可分→感知机够；数据不可分→逻辑回归更稳（不震荡）。",w:"比较要<s>控制变量</s>（同输入/输出/假设/目标），别只比术语。标签约定不同会影响误差项写法，别混用。",e:"课件 Study check「共同点、最重要差异、何时改变决策」——这是 T3 概念大题的标准框架。逐条对比+给出选择场景即可满分。"});
+  QUIZ(0,14,{t:"课件 Study check（S19）：感知机与逻辑回归共同点、最重要差异、何时差异会改变建模决策？",o:["无共同点；差异在特征数","<b>共享 z=wᵀx+b 线性边界；差异在硬标签 vs 概率输出；需要概率/置信度或数据不可分时选逻辑回归</b>","共享损失；差异在学习率","完全等价"],a:1,w:"<b>共同</b>：同线性打分 z=wᵀx+b、同 z=0 线性边界。<b>最重要差异</b>：感知机输出<em>硬标签</em> sign(z) 且只在犯错时更新；逻辑回归输出<em>概率</em> σ(z) 且每样本用梯度 (p−y)x 更新。<b>何时重要</b>：需要概率/置信度/排序/可调阈值、或数据不可分时，选逻辑回归。"});
+});
+KP("15 · Checkpoint：连起五个量（S20）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap(null);boxNode(60,150,220,80,"① 表示 x","b");boxNode(60,270,220,80,"② 线性打分 z=wᵀx+b","b");boxNode(60,390,220,80,"③ 概率 p=σ(z)","y");boxNode(1000,210,220,80,"④ 预测类别","g");boxNode(1000,330,220,80,"⑤ 损失/梯度","c");link(280,190,1000,240);link(280,310,1000,310);link(280,430,1000,370);note("sign(z) 或 阈值化 p",640,250,"g");note("L=BCE，∇=(p−y)x",640,410,"c");},"这个 checkpoint 要求你<b>把五个量清清楚楚地分开</b>，别混成一团——这是 T3 最容易被搅浑的地方。<b>①表示</b>：把原始对象（邮件、图片、病例）变成数值特征向量 x。<b>②线性打分</b>：z=wᵀx+b，一个实数。<b>③概率</b>：逻辑回归再过 p=σ(z) 得到 (0,1) 的概率（感知机没有这一步）。<b>④预测类别</b>：感知机用 sign(z)，逻辑回归把 p 按阈值（默认 0.5）二值化。<b>⑤损失/梯度</b>：逻辑回归用交叉熵、梯度 (p−y)x；感知机用 max(0,−y·s)、错误驱动更新。每一步的输入是上一步的输出，但<em>它们是不同的东西</em>：x 是向量、z 是实数、p 是概率、类别是标签、损失是标量。混淆它们（比如把 z 当概率、把 p 当类别）是失分重灾区。");
+  S(0,function(){clearScene();setBig("x → z → p → 类别 → 损失/梯度","每步输入=上步输出，但含义各不相同");},"用主动回忆的方式过一遍这条链，能把整个 T3 串起来。给自己出题：<b>x 和 z 差在哪</b>？x 是特征向量、z 是它的线性组合（一个数）。<b>z 和 p 差在哪</b>？z 是任意实数、p 是 σ 压进 (0,1) 的概率；z=0 对应 p=0.5。<b>p 和「类别」差在哪</b>？p 是连续概率、类别是按阈值切出的离散标签。<b>感知机在这条链上缺了哪一环</b>？缺③概率——它从 z 直接 sign 到类别。<b>损失/梯度这一环两模型怎么不同</b>？逻辑回归=交叉熵+(p−y)x，感知机=hinge(门槛0)+错误驱动。把每个箭头都能双向解释——既能正着从 x 推到损失、也能反着说清每个量的定义和来处——你就真正掌握了这一节，Tutorial 的两道计算题也就水到渠成。");
+  SUM(0,15,{h:"Checkpoint：五个量 x→z→p→类别→损失/梯度（S20）",k:"务必分清五个量：<b>①x 特征向量 ②z=wᵀx+b 实数 ③p=σ(z) 概率 ④预测类别（sign 或阈值化）⑤损失/梯度</b>。每步输入=上步输出，但含义不同。",m:"感知机缺第③环（z 直接 sign 到类别）。损失/梯度环：逻辑回归=交叉熵+(p−y)x；感知机=max(0,−y·s)+错误驱动更新。",w:"<s>失分重灾区：把 z 当概率、把 p 当类别</s>。x 是向量、z 是实数、p∈(0,1)、类别是标签、损失是标量——五个不同的东西。",e:"用主动回忆过这条链（遮住解释、说定义、再核对）。能双向解释每个箭头，Tutorial 两道计算题就水到渠成。"});
+  QUIZ(0,15,{t:"课件 Study check（S20）：不看提示，逻辑回归里从 x 到损失的正确顺序是？",o:["x → 类别 → z → p → 损失","<b>x → z=wᵀx+b → p=σ(z) → 阈值化得类别 → 交叉熵损失/梯度(p−y)x</b>","x → p → z → 损失 → 类别","z → x → p → 类别 → 损失"],a:1,w:"正确链：<b>①</b>表示 x →<b>②</b>线性打分 z=wᵀx+b →<b>③</b>概率 p=σ(z) →<b>④</b>按阈值(0.5)二值化得类别 →<b>⑤</b>交叉熵损失、梯度 (p−y)x。五个量含义各不相同，别把 z 当概率或把 p 当类别。感知机缺③，从 z 直接 sign 到类别。"});
+});
+KP("16 · Tutorial Q1：追踪状态再更新（S23）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap(null);boxNode(60,240,230,90,"① 算 sᵢ=wᵀxᵢ+b","b");boxNode(330,240,230,90,"② 算 y·sᵢ","y");boxNode(600,240,250,90,"③ y·s≤0 则更新","c");boxNode(890,240,320,90,"④ 带新参数到下一个","g");link(290,285,330,285);link(560,285,600,285);link(850,285,890,285);note("每行记下：当前 w,b → s → y·s → 是否更新 → 新 w,b",640,400,"y");},"Tutorial Q1 考的是<b>状态管理</b>：一个样本更新后的参数，就是下一个样本的起始参数。标准做法是<b>列一张表逐行推</b>。每一行记五样东西：当前的 w 和 b、算出的打分 sᵢ=wᵀxᵢ+b、带符号得分 y·sᵢ、是否更新、以及更新后的新 w 和 b。下一行直接把这一行的「新参数」抄成「当前参数」。判定规则再强调一遍：<b>y·sᵢ>0 保持不动，y·sᵢ≤0（含等号）就用 w←w+η·y·x、b←b+η·y 更新</b>。把中间量都标注清楚——这样一旦某处算错，能顺着表格定位到是哪一步、是符号错还是算术错，而不用整题重来。这也是阅卷给步骤分的地方。");
+  S(0,function(){clearScene();setBig("逐行传递 · 含等号 · 方向 w←w+ηyx","标注每个中间量，方便定位错误");},"把 Q1 的三个高频失分点钉死。<b>第一，别用旧参数算下一步</b>：感知机是顺序更新，第 i 步更新完，第 i+1 步必须用<em>新</em>的 w、b。很多人惯性地拿最初的参数扫全表，全错。<b>第二，别漏等号</b>：y·s=0（点恰在边界上）也要更新，本课约定是 ≤0。<b>第三，别搞反方向</b>：更新是 w←w+η·y·x，标签 y 带着自己的符号进去——y=+1 时加、y=−1 时实际是减；偏置同理 b←b+η·y。附带提醒：如果一轮扫完还有样本被分错，要<b>再扫一轮</b>，直到某一整轮无更新（收敛）或题目指定的轮数用完。把这套表格+三条纪律练成肌肉记忆，Q1 就是稳拿的步骤分。");
+  SUM(0,16,{h:"Tutorial Q1：感知机顺序更新手算（S23）",k:"考状态管理：上一样本的输出参数=下一样本的输入参数。<b>列表逐行推</b>：当前 w,b → s=wᵀx+b → y·s → 是否更新(≤0) → 新 w,b。",m:"判定：y·s>0 不动；y·s≤0（含等号）更新 w←w+η·y·x、b←b+η·y。标注每个中间量→出错能定位到具体步骤，拿步骤分。",w:"三大失分点：<s>用旧参数算下一步</s>、<s>漏等号</s>、<s>更新方向搞反</s>（y 带符号）。一轮有错要再扫，直到无更新或指定轮数。",e:"这是 T3 <b>必考手算</b>。练熟表格模板+三条纪律，把每步数值写清楚，是稳拿满分的方法。"});
+  QUIZ(0,16,{t:"课件 Study check（S23）：做感知机顺序更新题，处理第 i+1 个样本时该用哪套参数？",o:["最初的初始参数","<b>第 i 个样本更新后得到的参数</b>","全表平均参数","随机参数"],a:1,w:"感知机<b>顺序更新</b>，状态逐样本传递：第 i 个样本更新后的 w、b 就是第 i+1 个样本的起始参数。<s>不能用最初参数扫全表</s>（批量思维）。列表逐行把「新参数」抄成下一行的「当前参数」，并记得含等号更新、方向 w←w+η·y·x。"});
+});
+KP("17 · Tutorial Q2：让误差走完链式法则（S24）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$\\frac{\\partial L}{\\partial w}=(p-y)x,\\quad \\frac{\\partial L}{\\partial b}=p-y$$","top");boxNode(60,250,230,90,"① z=wᵀx+b","b");boxNode(330,250,230,90,"② p=σ(z)","y");boxNode(600,250,230,90,"③ 误差 p−y","c");boxNode(870,250,320,90,"④ 梯度 (p−y)x，再平均","g");link(290,295,330,295);link(560,295,600,295);link(830,295,870,295);},"Tutorial Q2 是逻辑回归的<b>梯度手算</b>，对每个样本<em>分别</em>走完这条链，最后把两个样本的梯度贡献<b>取平均</b>（批量）。四步：①算打分 z=wᵀx+b；②过 sigmoid 得 p=σ(z)=1/(1+e⁻ᶻ)；③算<b>带符号的概率误差 p−y</b>（记住逻辑回归 y∈{0,1}，不是 ±1）；④误差乘特征得权重梯度 (p−y)x，误差本身就是偏置梯度 p−y。每个样本都这样算一遍，然后对所有样本的 (p−y)x <em>求平均</em>得到批量梯度，最后更新 w←w−η·(平均梯度)。把每一步的数值（z、p、p−y、(p−y)x）都写出来，既是拿步骤分的关键，也方便自己核对。");
+  S(0,function(){clearScene();setEq(null);setCap(null);setBig("z → p → p−y → (p−y)x → 平均 → 更新","y∈{0,1} · 更新是「减」梯度");},"把 Q2 的易错点也钉死。<b>第一，标签用 {0,1}</b>：逻辑回归的 y 是 0 或 1，别套用感知机的 ±1，否则 p−y 全错。<b>第二，sigmoid 要算准</b>：p=1/(1+e⁻ᶻ)，注意负号；z 为正 p>0.5、z 为负 p<0.5，可以用这个粗判自查有没有算反。<b>第三，更新是减梯度</b>：w←w−η·(p−y)x，往损失下降方向走；符号错就变成上升了。<b>第四，批量要平均</b>：题目给两个样本通常是要你算各自的 (p−y)x 再<em>取平均</em>，不是相加。<b>第五，特征为 0 的权重不更新</b>：该分量梯度是 (p−y)·0=0。把这五点和上面的四步链结合，逻辑回归梯度题就能又快又准地拿下——它和 Q1 一起构成 T3 计算大题的全部套路。");
+  SUM(0,17,{h:"Tutorial Q2：逻辑回归梯度手算（S24）",k:"逐样本走链：<b>z=wᵀx+b → p=σ(z) → 误差 p−y → 梯度 (p−y)x</b>；偏置梯度 p−y。批量再对各样本贡献<b>取平均</b>，更新 w←w−η·梯度。",m:"每步写出数值（z、p、p−y、(p−y)x）便于给分和自查。误差 p−y∈(−1,1)，越错推力越大。特征为 0 的权重该步不更新。",w:"五大坑：<s>用 ±1 标签</s>（应 {0,1}）、<s>sigmoid 算反</s>、<s>更新方向（应减梯度）</s>、<s>两样本相加而非平均</s>、忘了特征 0 不更新。",e:"这是 T3 另一道<b>必考手算</b>。和 Q1（感知机顺序更新）一起构成 T3 计算大题的全部套路，务必各练熟一遍。"});
+  QUIZ(0,17,{t:"课件 Study check（S24）：逻辑回归两样本批量梯度，正确的计算链是？",o:["p → z → (p−y) → 相加","<b>各样本 z=wᵀx+b → p=σ(z) → (p−y) → (p−y)x，再对两样本取平均</b>","z → 相乘 → sign","只用第一个样本"],a:1,w:"对<b>每个样本</b>分别算：z=wᵀx+b → p=σ(z) → 误差 p−y（y∈{0,1}）→ 权重贡献 (p−y)x。批量时对所有样本的贡献<b>取平均</b>（不是相加），再更新 w←w−η·平均梯度。写出每步数值便于给分与自查。"});
+});
+KP("完 · 复习清单",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("M1 T3 · 分类","逐张看完了","感知机(硬)↔逻辑回归(概率)，同边界不同信号");},
+    "T3 官方课件逐张过完了。把主线收进一句话：<b>分类和回归共用线性打分 z=wᵀx+b，感知机取 sign 得硬标签、用 hinge 损失和错误驱动更新（y·s≤0，含等号），逻辑回归过 sigmoid 得概率、用交叉熵和梯度 (p−y)x 更新——两者边界同族（都线性），但输出、损失、学习信号不同。</b> 考前务必手练两道 Tutorial：Q1 感知机顺序更新（逐行传状态、含等号、方向 w←w+ηyx），Q2 逻辑回归批量梯度（z→p→p−y→(p−y)x→平均，y∈{0,1}、减梯度）。概念大题按「共同点 / 最重要差异 / 何时改变决策」的框架答。祝考试顺利！");
+});
+window.__startProjector(CFG);
+})();
+</script>

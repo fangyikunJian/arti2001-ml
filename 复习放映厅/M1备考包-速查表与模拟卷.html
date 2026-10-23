@@ -1,0 +1,1614 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARTI2001 M1 备考包</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+:root{
+  --paper:#F1F4F7;
+  --surface:#FFFFFF;
+  --surface-2:#E8EDF2;
+  --ink:#121B27;
+  --ink-2:#48566A;
+  --ink-3:#75849A;
+  --rule:#D2DAE4;
+  --rule-strong:#B4C0CE;
+  --accent:#0B6070;
+  --accent-2:#0E7C8F;
+  --accent-soft:#E0EFF2;
+  --signal:#A3331B;
+  --signal-soft:#F9E9E4;
+  --good:#2A6B47;
+  --good-soft:#E3F0E8;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace;
+  --r:4px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D131B;
+    --surface:#151D28;
+    --surface-2:#1D2734;
+    --ink:#E5EBF2;
+    --ink-2:#A2B0C2;
+    --ink-3:#75849A;
+    --rule:#293546;
+    --rule-strong:#3A4859;
+    --accent:#5DB9CA;
+    --accent-2:#7FCEDC;
+    --accent-soft:#102E37;
+    --signal:#E5896F;
+    --signal-soft:#38201A;
+    --good:#7EC29A;
+    --good-soft:#153021;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D131B;
+  --surface:#151D28;
+  --surface-2:#1D2734;
+  --ink:#E5EBF2;
+  --ink-2:#A2B0C2;
+  --ink-3:#75849A;
+  --rule:#293546;
+  --rule-strong:#3A4859;
+  --accent:#5DB9CA;
+  --accent-2:#7FCEDC;
+  --accent-soft:#102E37;
+  --signal:#E5896F;
+  --signal-soft:#38201A;
+  --good:#7EC29A;
+  --good-soft:#153021;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1060px;margin:0 auto;padding:0 22px 90px}
+
+/* ── masthead ─────────────────────────────── */
+.masthead{
+  border-bottom:1px solid var(--rule);
+  background:var(--surface);
+}
+.masthead-in{
+  max-width:1060px;margin:0 auto;padding:30px 22px 22px;
+  display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px 28px;justify-content:space-between;
+}
+.eyebrow{
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);font-weight:600;margin:0 0 6px;
+}
+h1{
+  font-size:29px;line-height:1.18;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance;
+}
+.sub{color:var(--ink-2);font-size:14px;margin:8px 0 0;max-width:52ch}
+.facts{display:flex;gap:26px;font-family:var(--mono);font-size:12px}
+.fact-n{font-size:21px;font-weight:600;color:var(--ink);display:block;line-height:1.2;font-variant-numeric:tabular-nums}
+.fact-l{color:var(--ink-3);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase}
+
+/* ── tabs ─────────────────────────────────── */
+.tabs{
+  position:sticky;top:0;z-index:20;
+  background:var(--paper);
+  border-bottom:1px solid var(--rule);
+  margin-bottom:34px;
+}
+.tabs-in{
+  max-width:1060px;margin:0 auto;padding:0 22px;
+  display:flex;gap:2px;overflow-x:auto;
+}
+.tab{
+  appearance:none;border:0;background:none;cursor:pointer;
+  font-family:var(--sans);font-size:13.5px;font-weight:500;color:var(--ink-2);
+  padding:13px 15px 11px;white-space:nowrap;
+  border-bottom:2px solid transparent;
+}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.tab:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.tab .num{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-right:6px}
+.tab[aria-selected="true"] .num{color:var(--accent)}
+
+.panel[hidden]{display:none}
+
+/* ── generic blocks ───────────────────────── */
+h2{
+  font-size:12px;font-family:var(--mono);font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--rule);
+}
+h2:first-of-type{margin-top:0}
+h3{font-size:17px;font-weight:600;margin:0 0 8px;letter-spacing:-.005em;text-wrap:balance}
+p{margin:0 0 12px;max-width:68ch}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
+
+.card{
+  background:var(--surface);
+  border:1px solid var(--rule);
+  border-radius:var(--r);
+  padding:18px 20px;
+}
+.card.marked{border-left:3px solid var(--accent)}
+
+.tag{
+  display:inline-block;font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:2px 6px;border-radius:2px;background:var(--accent-soft);color:var(--accent);
+  vertical-align:2px;margin-right:8px;
+}
+.tag.red{background:var(--signal-soft);color:var(--signal)}
+.tag.green{background:var(--good-soft);color:var(--good)}
+.tag.plain{background:var(--surface-2);color:var(--ink-2)}
+
+.grid{display:grid;gap:14px}
+@media(min-width:820px){
+  .grid.two{grid-template-columns:1fr 1fr}
+  .grid.three{grid-template-columns:repeat(3,1fr)}
+}
+
+ul,ol{margin:0 0 12px;padding-left:20px}
+li{margin:0 0 6px;max-width:68ch}
+li::marker{color:var(--ink-3)}
+ul.tight li,ol.tight li{margin-bottom:3px}
+
+code,.mono{font-family:var(--mono);font-size:.9em}
+code{background:var(--surface-2);padding:1px 4px;border-radius:2px}
+
+.fx{
+  font-family:var(--mono);font-size:13px;line-height:1.9;
+  background:var(--surface-2);border-left:2px solid var(--rule-strong);
+  padding:10px 14px;margin:0 0 12px;border-radius:0 2px 2px 0;
+  overflow-x:auto;white-space:pre-wrap;
+}
+.fx b{color:var(--accent);font-weight:600}
+
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:0 0 12px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600;border-bottom:1px solid var(--rule-strong);
+}
+td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+
+.trap{
+  background:var(--signal-soft);border:1px solid transparent;border-left:3px solid var(--signal);
+  padding:12px 16px;border-radius:0 var(--r) var(--r) 0;font-size:13.5px;
+}
+.trap strong{color:var(--signal)}
+.note{
+  background:var(--accent-soft);border-left:3px solid var(--accent);
+  padding:12px 16px;border-radius:0 var(--r) var(--r) 0;font-size:13.5px;
+}
+
+/* ── plan timeline ────────────────────────── */
+.day{
+  display:grid;grid-template-columns:78px 1fr;gap:0 20px;
+  padding:16px 0;border-top:1px solid var(--rule);
+}
+.day:last-child{border-bottom:1px solid var(--rule)}
+.day-k{
+  font-family:var(--mono);font-size:15px;font-weight:600;color:var(--accent);
+  font-variant-numeric:tabular-nums;
+}
+.day-k small{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500;margin-top:2px}
+.day-b h3{font-size:15.5px;margin-bottom:6px}
+.day-b p{font-size:13.5px;margin-bottom:8px;color:var(--ink-2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{
+  font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:2px;
+  background:var(--surface-2);color:var(--ink-2);border:1px solid var(--rule);
+}
+
+/* ── pacing bar ───────────────────────────── */
+.pace{display:flex;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;font-size:12.5px}
+.pace-seg{padding:11px 14px;border-right:1px solid var(--rule);background:var(--surface)}
+.pace-seg:last-child{border-right:0}
+.pace-seg b{display:block;font-family:var(--mono);font-size:15px;color:var(--accent);font-weight:600}
+.pace-seg span{color:var(--ink-3);font-size:11.5px}
+.pace-seg.wide{flex:2}
+.pace-seg.mid{flex:1.6}
+.pace-seg.thin{flex:1}
+
+/* ── quiz ─────────────────────────────────── */
+.toolbar{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+  background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);
+  padding:12px 16px;margin-bottom:22px;
+}
+.btn{
+  appearance:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;
+  background:var(--surface);color:var(--ink);border:1px solid var(--rule-strong);
+  padding:7px 13px;border-radius:2px;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.score{font-family:var(--mono);font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.score b{color:var(--ink);font-size:16px}
+
+.q{
+  background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);
+  padding:16px 18px;margin-bottom:12px;
+}
+.q-head{display:flex;gap:10px;align-items:baseline;margin-bottom:10px}
+.q-n{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink-3);flex:none;padding-top:2px}
+.q-t{font-size:14.5px;line-height:1.55;margin:0}
+.opts{display:flex;flex-direction:column;gap:5px;margin:0 0 0 26px;padding:0;list-style:none}
+.opt{
+  display:flex;gap:9px;align-items:flex-start;
+  border:1px solid var(--rule);border-radius:2px;background:var(--surface);
+  padding:7px 11px;cursor:pointer;font-size:13.5px;line-height:1.5;text-align:left;
+  font-family:var(--sans);color:var(--ink);width:100%;
+}
+.opt:hover:not(.done){border-color:var(--accent);background:var(--accent-soft)}
+.opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.opt .k{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink-3);flex:none;padding-top:1px}
+.opt.done{cursor:default}
+.opt.right{background:var(--good-soft);border-color:var(--good)}
+.opt.right .k{color:var(--good)}
+.opt.wrong{background:var(--signal-soft);border-color:var(--signal)}
+.opt.wrong .k{color:var(--signal)}
+.opt.dim{opacity:.5}
+.why{
+  margin:11px 0 0 26px;padding:10px 13px;border-left:2px solid var(--accent);
+  background:var(--surface-2);font-size:13px;border-radius:0 2px 2px 0;
+}
+.why[hidden]{display:none}
+.why .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:600;display:block;margin-bottom:3px}
+
+details{
+  background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);
+  padding:0;margin:12px 0 0;
+}
+details[open]{border-color:var(--rule-strong)}
+summary{
+  cursor:pointer;padding:11px 16px;font-size:13px;font-weight:600;color:var(--accent);
+  font-family:var(--mono);letter-spacing:.02em;list-style:none;
+}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"▸ ";font-size:11px}
+details[open] summary::before{content:"▾ "}
+summary:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.answer{padding:2px 18px 18px;border-top:1px solid var(--rule);font-size:13.5px}
+.answer h4{
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);margin:16px 0 7px;font-weight:600;
+}
+.marks{font-family:var(--mono);font-size:11px;color:var(--signal);font-weight:600}
+.en{
+  font-size:13px;background:var(--surface-2);padding:9px 13px;border-radius:2px;
+  border-left:2px solid var(--rule-strong);margin:0 0 10px;
+}
+.exq{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:18px 20px;margin-bottom:16px}
+.exq .stem{font-size:14px}
+.exq .stem b{font-weight:600}
+
+.phrase{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+.phrase li{
+  font-size:13px;padding-left:13px;border-left:2px solid var(--rule-strong);max-width:none;margin:0;
+}
+.phrase .zh{display:block;color:var(--ink-3);font-size:12px;margin-top:2px}
+
+hr.sp{border:0;height:34px}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ── print: the sheet you carry in ────────── */
+@media print{
+  :root{
+    --paper:#fff;--surface:#fff;--surface-2:#F2F4F6;--ink:#000;--ink-2:#333;--ink-3:#666;
+    --rule:#BBB;--rule-strong:#888;--accent:#0B5060;--accent-soft:#EAF2F4;
+    --signal:#8C2A15;--signal-soft:#F8ECE8;--good:#245C3C;--good-soft:#E9F1EC;
+  }
+  body{background:#fff;font-size:9.4pt;line-height:1.42}
+  .tabs,.toolbar,.masthead .facts,.noprint{display:none!important}
+  .masthead{border:0}
+  .masthead-in{padding:0 0 8px}
+  h1{font-size:15pt}
+  .sub{display:none}
+  .wrap{padding:0;max-width:none}
+  .panel[hidden]{display:none}
+  h2{margin:14px 0 7px;font-size:8pt;break-after:avoid}
+  h3{font-size:10.5pt}
+  .card,.q,.exq,details{break-inside:avoid;page-break-inside:avoid;padding:9px 11px;margin-bottom:8px}
+  .grid{gap:8px}
+  @media(min-width:0px){.grid.two,.grid.three{grid-template-columns:1fr 1fr}}
+  .fx{font-size:8.6pt;line-height:1.6;padding:6px 9px;margin-bottom:8px}
+  table{font-size:8.4pt}
+  th,td{padding:3px 6px}
+  details{border:0}
+  details summary{display:none}
+  details .answer{border:0;padding:0}
+  .day{padding:8px 0}
+  p,li{max-width:none}
+}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <div>
+      <p class="eyebrow">ARTI2001 · Machine Learning · Semester 2 2026</p>
+      <h1>Module 1 备考包</h1>
+      <p class="sub">开卷、纸笔、120 分钟。这份材料按"能带进考场"来做：速查表可直接打印，模拟卷按真实配比出题。</p>
+    </div>
+    <div class="facts">
+      <div><span class="fact-n">60</span><span class="fact-l">MCQ 分</span></div>
+      <div><span class="fact-n">40</span><span class="fact-l">大题分</span></div>
+      <div><span class="fact-n">120</span><span class="fact-l">分钟</span></div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="备考包分区">
+  <div class="tabs-in">
+    <button class="tab" role="tab" id="tab-plan" aria-controls="p-plan" aria-selected="true"><span class="num">01</span>备考计划</button>
+    <button class="tab" role="tab" id="tab-sheet" aria-controls="p-sheet" aria-selected="false"><span class="num">02</span>速查表（打印）</button>
+    <button class="tab" role="tab" id="tab-tpl" aria-controls="p-tpl" aria-selected="false"><span class="num">03</span>大题答题模板</button>
+    <button class="tab" role="tab" id="tab-mock" aria-controls="p-mock" aria-selected="false"><span class="num">04</span>模拟测验</button>
+    <button class="tab" role="tab" id="tab-cs" aria-controls="p-cs" aria-selected="false"><span class="num">05</span>CS229 精读</button>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<!-- ══════════════ 01 计划 ══════════════ -->
+<section class="panel" id="p-plan" role="tabpanel" aria-labelledby="tab-plan">
+
+  <h2>先回答三个问题</h2>
+  <div class="grid three">
+    <div class="card marked">
+      <h3>从零开始，来得及吗？</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">来得及，但前提是这几天<b>全部花在本课材料上</b>。四个理由：开卷；60 分在选择题，选择题考「认得出」不考「推得出」；手算只有 5 类且都是 2×2 的小数字；Module 1 是全课概念最少的一块。真正的风险不是内容难，是时间被别的东西吃掉。</p>
+    </div>
+    <div class="card marked">
+      <h3>先看 Stanford 的课？</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">每天 10 小时的话，<b>看得下——但只看 5 讲</b>。CS229 的 L2/L3/L6/L7/L8 共 6 小时 41 分，直接对应 T2/T3/T4/T1；其余十几讲要么不考，要么属于 Module 2、3。它给你「为什么」，但给不了本课的判定约定、sklearn 工作流和评分口径——取舍见下面的对照表。</p>
+    </div>
+    <div class="card marked">
+      <h3>Tutorial 还是 Practical？</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">都要，但<b>深度完全不同</b>。Tutorial 要做到<b>合上答案能重做</b>——它是计算题的原型。Practical 只要<b>读懂书面答案</b>，代码不用跑也不用背，考试明确不要求手写 Python。</p>
+    </div>
+  </div>
+
+  <h2>没有 lecture，那「课」在哪里</h2>
+  <div class="note">
+    <b>Canvas 每个 Topic 下的 Key concepts 页面就是你的讲义</b>，一共 17 页：T1 三页、T2 五页、T3 四页、T4 五页。全是文字，读起来比看视频快得多，而且选择题最直接的出处就是这些页面。它们目前<b>不在你的文件夹里</b>——这是眼下最大的缺口，比任何外部课程都优先。
+    <div style="margin-top:8px">另外三个活动页是现成的手算练习，别错过：<span class="mono">M1 T2 Regression by hand</span> · <span class="mono">M1 T3 Logistic regression by hand</span> · <span class="mono">M1 T4 SVM margin by hand</span>。</div>
+  </div>
+
+  <h2>材料优先级 · 时间怎么分</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th class="n">序</th><th>材料</th><th>做到什么程度</th><th class="n">时间</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td><b>Canvas T3 / T4 Key concepts + by hand 页</b></td><td>读懂，跟着算一遍</td><td class="n">2 h</td></tr>
+      <tr><td class="n">2</td><td><b>M1 T3 / T4 Tutorial + 答案</b></td><td><b>合上答案能重做</b>。分值密度最高的一项</td><td class="n">2.5 h</td></tr>
+      <tr><td class="n">3</td><td>4 份 <span class="mono">Prac general feedback</span> PDF</td><td>通读，抄下「完整答案要素」</td><td class="n">20 min</td></tr>
+      <tr><td class="n">4</td><td>T3 Prac Q4、T4 Prac Q1/3/5 的<b>书面</b>答案</td><td>只读文字与输出表格，不跑代码</td><td class="n">1 h</td></tr>
+      <tr><td class="n">5</td><td>Canvas T1 / T2 Key concepts</td><td>读懂，尤其 leakage 那页</td><td class="n">1.5 h</td></tr>
+      <tr><td class="n">6</td><td>M1 T1 / T2 Tutorial + 答案</td><td>会算正态、Bayes、期望方差、正规方程</td><td class="n">1.5 h</td></tr>
+      <tr><td class="n">7</td><td>T1 / T2 Practical 解答</td><td>快速浏览，重点看指标怎么解读</td><td class="n">30 min</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="font-size:13px;color:var(--ink-3)">合计约 9 小时读+练，加上模拟卷与订正约 15 小时——这是<b>本课材料的下限</b>。每天 10 小时的话还剩约 35 小时，装得下 CS229 的五讲加反复练习。至于顺序：下面的日程走 <b>T2 → T3 → T4 → T1</b>，这是被 CS229 的依赖关系定下的（L2 的梯度下降与 MLE 是 L3 逻辑回归的前提，L6 的 margin 又要先有前面的铺垫）；T1 放最后，因为它概念最轻，而且 L8 自成一块、不依赖前面几讲。<b>如果你决定不看视频</b>，就反过来从 T3/T4 开始——计算题和考纲点名的练习都在后两个 Topic。</p>
+
+  <div class="trap" style="margin-top:14px">
+    <strong>你其实不是完全从零</strong>：文件夹里有 8 月 24 日的 <span class="mono">M1_T4_Prac_completed.ipynb</span>，输出完整（kernel 比较、C 搜索、最终测试 0.958），说明 T4 practical 你实际做过；四份 feedback PDF 也说明四次 practical 都提交了。缺的是<b>系统消化</b>，不是从头接触——这两件事需要的时间差很多。
+  </div>
+
+  <h2>你手头资料的诊断</h2>
+  <table>
+    <thead><tr><th>资料</th><th>状态</th><th>怎么用</th></tr></thead>
+    <tbody>
+      <tr><td><b>Canvas Key concepts 17 页</b></td><td><span class="tag red">缺 · 最优先</span></td><td>这是你的 lecture。没有它，选择题只能靠猜。今天就去下载或另存。</td></tr>
+      <tr><td><b>Canvas 三个 by hand 活动页</b></td><td><span class="tag red">缺</span></td><td>现成的手算练习，和考试计算题同型。</td></tr>
+      <tr><td>4 份 Tutorial + 答案</td><td><span class="tag green">齐</span></td><td>手算题的唯一来源。T3 Q1–3、T4 Q1–3 要练到合上答案能重做。</td></tr>
+      <tr><td>4 份 Practical + 答案</td><td><span class="tag green">齐</span></td><td>流程／比较／判断类大题的素材。只读书面答案，不必跑代码。</td></tr>
+      <tr><td>4 份 Prac general feedback</td><td><span class="tag green">齐</span></td><td><b>被严重低估。</b>逐题写明「完整答案需要包含什么」，等于评分细则。已提炼进第 03 区。</td></tr>
+      <tr><td>M1 T4 Workflow QA 幻灯</td><td><span class="tag green">齐</span></td><td>leakage / scaling / C / gamma / 支持向量的图解，SVM 概念题直接对应。T1–T3 若有同类幻灯一并下载。</td></tr>
+      <tr><td>M1 T4 Prac solution</td><td><span class="tag plain">仅 html</span></td><td>没有 .ipynb，浏览器打开 html 即可，内容完整。</td></tr>
+    </tbody>
+  </table>
+
+  <h2>CS229 对照表 · 看哪几讲</h2>
+  <p style="color:var(--ink-2);font-size:13.5px">每天 10 小时 × 5 天 = 50 小时，视频塞得下了。但<b>不能全看</b>——这份播放列表是一整个学期，其中一半以上属于 Module 2 和 Module 3 的范围。按下表取舍：</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th class="n">讲</th><th>主题</th><th class="n">时长</th><th>对应本课</th><th>取舍</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td>Introduction</td><td class="n">1:15</td><td>T1 的分类学（监督/无监督、回归/分类）</td><td><span class="tag plain">1.5× 略过</span> 前 20 分钟有用，其余是课务</td></tr>
+      <tr><td class="n">2</td><td>Linear Regression &amp; Gradient Descent</td><td class="n">1:18</td><td><b>T2 全部</b>：LMS、批量/随机梯度下降、正规方程、MLE⇒最小二乘</td><td><span class="tag green">必看</span> 直接对应 T2 Tutorial Q1 与 Q2</td></tr>
+      <tr><td class="n">3</td><td>Locally Weighted &amp; Logistic Regression</td><td class="n">1:19</td><td><b>T3 逻辑回归</b>（后半段）</td><td><span class="tag green">看后半</span> 前段 locally weighted 本课不考；Newton 法也不考</td></tr>
+      <tr><td class="n">4</td><td>Perceptron &amp; GLM</td><td class="n">1:22</td><td>T3 感知机（只占开头一小段）</td><td><span class="tag plain">看前 20 分钟</span> GLM／指数族本课完全不考</td></tr>
+      <tr><td class="n">5</td><td>GDA &amp; Naive Bayes</td><td class="n">1:18</td><td>—</td><td><span class="tag red">跳过</span> M1 没有这块</td></tr>
+      <tr><td class="n">6</td><td>Support Vector Machines</td><td class="n">1:20</td><td><b>T4 核心</b>：functional margin、geometric margin、最优间隔分类器</td><td><span class="tag green">必看</span> 本课的 yf(x) 与 yf(x)/‖w‖ 就是这里的两个 margin</td></tr>
+      <tr><td class="n">7</td><td>Kernels</td><td class="n">1:20</td><td><b>T4 核心</b>：核技巧、特征映射、软间隔与 C、0≤α≤C</td><td><span class="tag green">必看</span> 对应 T4 Tutorial Q3 与 extension</td></tr>
+      <tr><td class="n">8</td><td>Data Splits, Models &amp; Cross-Validation</td><td class="n">1:23</td><td><b>T1 核心</b>：train/dev/test、模型选择、交叉验证、偏差方差</td><td><span class="tag green">必看</span> 大题最常考的流程题就出自这套纪律</td></tr>
+      <tr><td class="n">9–12</td><td>学习理论 · 决策树与集成 · 神经网络 · 反向传播</td><td class="n">—</td><td>神经网络两讲 = <b>Module 3</b></td><td><span class="tag red">现在跳过</span> Module 3 复习时回来看</td></tr>
+      <tr><td class="n">13–16</td><td>EM 算法 · 因子分析 · PCA &amp; ICA</td><td class="n">—</td><td>EM 与 PCA = <b>Module 2</b></td><td><span class="tag red">现在跳过</span> Module 2 复习时回来看，那时性价比很高</td></tr>
+      <tr><td class="n">17–21</td><td>ICA · 强化学习 · MDP</td><td class="n">—</td><td>本课三个 Module 都不涉及</td><td><span class="tag red">跳过</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note" style="margin-top:12px">
+    <b>必看五讲：2、3、6、7、8，合计 6 小时 41 分。</b>加上 L1 略过和 L4 前 20 分钟，约 7.5 小时视频。用 1.25–1.5 倍速、边看边记，实际约 9–10 小时——正好一天的量，但<b>不要一天看完</b>，按下面的日程分摊到每天上午，下午立刻用本课材料落地。
+  </div>
+  <div class="trap" style="margin-top:12px">
+    <strong>回答你的问题：看前面几讲够不够？——不够，但是很好的地基。</strong>
+    CS229 给你的是「为什么」，本课考的有相当一部分是「这门课怎么规定的」和「工程上怎么做」。下面两栏就是差额。
+  </div>
+
+  <h2>CS229 讲不到、但一定会考的</h2>
+  <div class="grid two">
+    <div class="card marked">
+      <h3>工程与工作流（约占 25% 分值）</h3>
+      <ul class="tight" style="font-size:13px;margin-bottom:0">
+        <li><b>Data leakage</b>——预处理泄漏、用测试集选超参。本课有专门一页，T4 practical 反复考，CS229 完全不讲。</li>
+        <li><b>sklearn API 概念</b>：<span class="mono">Pipeline</span>、<span class="mono">StandardScaler</span>、<span class="mono">SVC(kernel/C/gamma)</span>、<span class="mono">.decision_function</span>、<span class="mono">.predict_proba</span>、<span class="mono">.n_support_</span>、<span class="mono">log_loss</span>、<span class="mono">ConfusionMatrixDisplay(normalize="true")</span>。</li>
+        <li><b>特征缩放对 SVM 的必要性</b>，以及为什么 scaler 必须放进 pipeline。</li>
+        <li><b>部署后的 data shift 与监控</b>。</li>
+      </ul>
+    </div>
+    <div class="card marked">
+      <h3>本课自己的约定与指标</h3>
+      <ul class="tight" style="font-size:13px;margin-bottom:0">
+        <li><b>判定约定</b>：f(x)=0 无严格预测类别且算 margin violation；ξ=1 恰在边界上。这是课程公告专门澄清过的，CS229 不会这么讲。</li>
+        <li><b>RBF 的 gamma</b> 及其平滑／局部、欠拟合／过拟合行为。</li>
+        <li><b>R²</b>——CS229 不讲这个指标。</li>
+        <li><b>precision / recall / 多数类基线 / 类别不平衡</b>的解读方式。</li>
+        <li><b>感知机更新条件 y·s ≤ 0</b> 与一次 pass 的行为（CS229 只顺带提一句）。</li>
+        <li><b>大题评分口径</b>：报数字 → 解释 → 说局限。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>符号对照 · 看视频时随手换算</h2>
+  <p style="color:var(--ink-2);font-size:13.5px">CS229 的记号和本课不一样，考场上要写的是本课的记号。看视频时就翻译，别等到考前：</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>CS229</th><th>本课</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="n">θ, θ₀</td><td class="n">w, b</td><td>CS229 常把截距吸收进 θ₀ 并补一个 x₀ = 1；本课把 b 单独写出来</td></tr>
+      <tr><td class="n">h<sub>θ</sub>(x)</td><td class="n">ŷ 或 f(x)</td><td>同一个东西</td></tr>
+      <tr><td class="n">J(θ) = ½Σ(h−y)²</td><td class="n">SSE / MSE</td><td>CS229 带 ½ 且不除 N；本课 MSE 除 N。<b>求导后系数不同，结论一样</b></td></tr>
+      <tr><td class="n">对 log-likelihood 梯度<b>上升</b></td><td class="n">对平均 BCE 梯度<b>下降</b></td><td>同一件事，差一个负号。本课梯度是 (1/N)Σ(pᵢ−yᵢ)xᵢ</td></tr>
+      <tr><td class="n">functional margin γ̂ = y(wᵀx+b)</td><td class="n"><b>y·f(x)</b></td><td>就是本课的 margin score，判 violation 用它</td></tr>
+      <tr><td class="n">geometric margin γ = y(wᵀx+b)/‖w‖</td><td class="n"><b>y·f(x)/‖w‖</b></td><td>标签调整后的几何间隔</td></tr>
+      <tr><td class="n">令 functional margin = 1 的规范化</td><td class="n">canonical scaling</td><td>单侧 1/‖w‖，<b>全宽 2/‖w‖</b></td></tr>
+      <tr><td class="n">C, ξᵢ, αᵢ (0 ≤ αᵢ ≤ C)</td><td class="n">一致</td><td>软间隔这部分两边记号相同</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>五天计划 · 每天 10 小时</h2>
+  <p style="color:var(--ink-2);font-size:13.5px">结构固定：<b>上午 CS229 建立理解，下午本课材料落地，晚上做题验收</b>。视频只是地基——每看完一讲，当天必须用本课的 tutorial 把它变成会算的题，否则等于没看。按「距考试还有几天」排；若 prac 在周一（只剩 4 天），把 D-2 的上午并进 D-3，<b>不要砍 D-1 的整卷限时</b>。</p>
+
+  <div class="day">
+    <div class="day-k">D-5<small>今天 · 10h</small></div>
+    <div class="day-b">
+      <h3>T2 回归 · 地基与落地</h3>
+      <p><b>上午（4h）</b>先花 30 分钟去 Canvas 下载 17 页 Key concepts 和 3 个 by hand 页；再花 30 分钟通读第 02 区速查表，把看不懂的划出来。然后看 <b>CS229 L2</b>（1:18）——它讲的正是 T2 Tutorial 的两道题。<br>
+      <b>下午（4h）</b>立刻对照 <b>M1 T2 Tutorial Q1、Q2</b>：Q1 的 MLE⇒SSE 推导、Q2 的正规方程与设计矩阵，视频里都推过一遍，趁热做。再读 Canvas 的 T1 + T2 Key concepts 共 8 页。<br>
+      <b>晚上（2h）</b>模拟卷 Q1–8 并订正，把今天学到的补进速查表。</p>
+      <div class="chips"><span class="chip">下载 Canvas 讲义</span><span class="chip">CS229 L2</span><span class="chip">T2 Tutorial Q1/Q2</span><span class="chip">T1+T2 Key concepts</span><span class="chip">模拟卷 Q1–8</span></div>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="day-k">D-4<small>10h</small></div>
+    <div class="day-b">
+      <h3>T3 感知机与逻辑回归</h3>
+      <p><b>上午（4h）</b><b>CS229 L3 后半段</b>（逻辑回归，跳过 locally weighted 和 Newton 法）+ <b>L4 前 20 分钟</b>（感知机）。看完立刻做符号翻译：CS229 的梯度上升 ↔ 本课的平均 BCE 梯度下降。<br>
+      <b>下午（4h）</b>Canvas T3 四页 + 跟着「M1 T3 Logistic regression by hand」算一遍 → <b>T3 Tutorial Q1–3</b>，对完答案<b>合上重做</b>，直到不看也能算。<br>
+      <b>晚上（2h）</b>T3 Practical Q4 的书面答案 + T3 feedback PDF；做模拟卷 Q9–14 验收。</p>
+      <div class="chips"><span class="chip">CS229 L3 后半 + L4 前段</span><span class="chip">符号翻译</span><span class="chip">T3 by hand</span><span class="chip">T3 Tutorial ×2 遍</span><span class="chip">模拟卷 Q9–14</span></div>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="day-k">D-3<small>10h</small></div>
+    <div class="day-b">
+      <h3>T4 支持向量机 · 分值最密的一天</h3>
+      <p><b>上午（4.5h）</b><b>CS229 L6</b>（1:20，SVM 与两种 margin）+ <b>L7</b>（1:20，核技巧与软间隔 C）。这两讲是整个播放列表里对本课最值钱的部分。<br>
+      <b>下午（3.5h）</b>Canvas T4 五页 + M1 T4 Workflow QA 幻灯（图解最快）+「M1 T4 SVM margin by hand」→ <b>T4 Tutorial Q1–3</b> 练到合上答案能做。<b>把速查表的判定约定手抄一遍</b>：f=0 / yf&lt;1 / yf&lt;0 各是什么。<br>
+      <b>晚上（2h）</b>T4 Practical Q1/3/5 的书面答案；做模拟卷 Q15–20 和 Q24 验收。</p>
+      <div class="chips"><span class="chip">CS229 L6 + L7</span><span class="chip">Workflow QA 幻灯</span><span class="chip">T4 by hand</span><span class="chip">T4 Tutorial ×2 遍</span><span class="chip">手抄约定表</span><span class="chip">模拟卷 Q15–20 + Q24</span></div>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="day-k">D-2<small>10h</small></div>
+    <div class="day-b">
+      <h3>T1 流程 + 补差额 + 英文写作</h3>
+      <p><b>上午（3h）</b><b>CS229 L8</b>（1:23，数据划分与交叉验证）——大题里的流程题就出自这套纪律。<br>
+      <b>下午（4h）</b>补上面「CS229 讲不到」两栏的全部内容：data leakage 那页、sklearn API 速查、gamma、R²、precision/recall/基线。再读 4 份 <span class="mono">Prac general feedback</span> PDF。<br>
+      <b>晚上（3h）</b>按第 03 区四个模板<b>各手写一道完整答案，每道计时 15 分钟</b>；做模拟卷 Q21–23。大题要用英文写，不练一次考场上会卡。</p>
+      <div class="chips"><span class="chip">CS229 L8</span><span class="chip">leakage + sklearn + 指标</span><span class="chip">4 份 feedback PDF</span><span class="chip">四种模板各手写一道</span></div>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="day-k">D-1<small>9h</small></div>
+    <div class="day-b">
+      <h3>整卷限时 + 定稿打印 · 今天不看视频</h3>
+      <p><b>上午（2h）</b>整套模拟卷 <b>120 分钟一次做完</b>，严格计时，只用你打算带进考场的那份速查表。<br>
+      <b>下午（4h）</b>逐题订正；每道错题都回到对应的 tutorial 原题<b>重做一遍</b>，不是只看解析。<br>
+      <b>晚上（3h）</b>按「这次翻了哪些、没翻到哪些」改速查表 → <b>打印</b>（别留到考试当天早上）→ 默写 SVM 判定约定和陷阱清单。</p>
+      <div class="chips"><span class="chip">模拟卷全套 120min</span><span class="chip">错题回到 tutorial 重做</span><span class="chip">速查表定稿 + 打印</span><span class="chip">默写约定表</span></div>
+    </div>
+  </div>
+
+  <div class="day">
+    <div class="day-k">D-0</div>
+    <div class="day-b">
+      <h3>考前 30 分钟</h3>
+      <p>只看两栏：SVM 判定约定表，和陷阱清单。不要在这时候学新东西，更不要再点开视频。检查计算器是普通科学计算器（不可编程、不可图形、无存储与通信功能），手机等电子设备考前关机放包里。</p>
+      <div class="chips"><span class="chip">约定表</span><span class="chip">陷阱清单</span><span class="chip">计算器合规</span></div>
+    </div>
+  </div>
+
+  <div class="trap" style="margin-top:16px">
+    <strong>这个计划唯一的失败模式</strong>：上午的视频拖到下午，下午的 tutorial 挤到晚上，晚上的题没做。<b>视频有明确的停止线——每天上午必须结束</b>。看不完就按倍速跳，或者直接砍掉那一讲：本课的 tutorial 答案本身就是完整的推导，没有视频也能学会算。视频是加速器，不是前置条件。
+  </div>
+
+  <h2>考场配速</h2>
+  <div class="pace">
+    <div class="pace-seg wide"><b>40 min</b>20 道选择题<span>每题 2 分钟；卡住先标记跳过</span></div>
+    <div class="pace-seg mid"><b>60 min</b>4 道大题<span>每题 15 分钟，按小问分配</span></div>
+    <div class="pace-seg thin"><b>15 min</b>回填<span>跳过的题 + 未写完的小问</span></div>
+    <div class="pace-seg thin"><b>5 min</b>复查<span>符号、单位、是否每小问都答了</span></div>
+  </div>
+
+  <h2>开卷考的四条打法</h2>
+  <div class="grid two">
+    <div class="card">
+      <h3>1 &nbsp;速查表要有索引，不是笔记堆</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">按 T1–T4 分块、每块标题加粗、公式用等宽字体单独成行。目标是 5 秒内定位，不是内容全。第 02 区已经按这个结构排好，直接打印即可。</p>
+    </div>
+    <div class="card">
+      <h3>2 &nbsp;选择题不要翻书</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">每题 2 分钟的配速下，翻书会吃掉整场时间。翻书只留给大题的公式核对和英文措辞。</p>
+    </div>
+    <div class="card">
+      <h3>3 &nbsp;大题一定写中间步骤</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">题目明确要求 "show your intermediate working"。写出代入过程，即使最后算错，方法分仍在；只写答案则算错就全丢。</p>
+    </div>
+    <div class="card">
+      <h3>4 &nbsp;每问都要有"所以呢"</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">feedback 里最常见的扣分是"只报结果不解释"。每个数字后面补一句它意味着什么，通常就是那 1 分。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 02 速查表 ══════════════ -->
+<section class="panel" id="p-sheet" role="tabpanel" aria-labelledby="tab-sheet" hidden>
+
+  <div class="toolbar noprint">
+    <div style="font-size:13.5px;color:var(--ink-2)">这一栏为 A4 打印排版：换到本页后按 <code>Ctrl</code>+<code>P</code>，只会打印速查表。建议双面打印。</div>
+    <button class="btn" id="printBtn">打印速查表</button>
+  </div>
+
+  <h2>T1 · 流程、划分与泄漏</h2>
+  <div class="grid two">
+    <div class="card marked">
+      <h3><span class="tag">T1</span>ML pipeline</h3>
+      <p style="margin-bottom:6px;font-size:13px">问题定义 → 数据收集 → 探索与准备 → <b>划分</b> → 选模型 → 训练 → 评估 → 部署 → <b>监控与再训练</b></p>
+      <ul class="tight" style="font-size:13px">
+        <li>AI ⊃ ML ⊃ DL。ML 从<b>数据</b>中学规律，而非把规则显式写死。</li>
+        <li>监督（有标签）／无监督／强化；监督内分回归（连续）与分类（类别）。</li>
+        <li>部署后性能下降 → 先<b>调查输入分布变化</b>，收集有代表性的新数据，必要时重训并重新评估。</li>
+      </ul>
+    </div>
+    <div class="card marked">
+      <h3><span class="tag">T1</span>三份数据的职责</h3>
+      <table style="margin-bottom:0">
+        <tbody>
+          <tr><td><b>Train</b></td><td>拟合模型参数（w, b）</td></tr>
+          <tr><td><b>Validation</b></td><td>比较候选模型、选超参（kernel, C, γ, 阈值）</td></tr>
+          <tr><td><b>Test</b></td><td>设置全部锁定后，<b>只用一次</b>，给泛化性能的无偏估计</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">定完超参后，可在 train+validation 上重新拟合，再动测试集。</p>
+    </div>
+  </div>
+  <div class="trap" style="margin-top:14px">
+    <strong>Data leakage 的两种形态 —— 考试高频</strong><br>
+    ① <b>预处理泄漏</b>：在切分前用全量数据 fit scaler／填缺失值 → 验证集与测试集的统计量参与了变换。正确做法：<code>Pipeline([("scale",StandardScaler()),("svc",SVC())])</code>，scaler 只在 train 上 fit。<br>
+    ② <b>选择泄漏</b>：用测试集挑 kernel／C／γ／阈值 → 测试集变成第二个验证集，最终估计<b>乐观偏高</b>。<br>
+    两者的后果都是同一句话：performance may look better than it really is。
+  </div>
+
+  <div class="grid two" style="margin-top:14px">
+    <div class="card">
+      <h3><span class="tag">T1</span>过拟合 / 欠拟合信号</h3>
+      <table style="margin-bottom:0">
+        <thead><tr><th>现象</th><th>诊断</th><th>处理</th></tr></thead>
+        <tbody>
+          <tr><td class="n">训练高<br>测试低</td><td class="n">过拟合</td><td>简化模型、加正则（SVM 减小 C／减小 γ）、增数据、特征选择、交叉验证</td></tr>
+          <tr><td class="n">训练低<br>测试低</td><td class="n">欠拟合</td><td>更灵活的模型（线性→RBF）、加特征、减正则</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">训练准确率 1.00 不代表最好，可能是记住了训练数据。</p>
+    </div>
+    <div class="card">
+      <h3><span class="tag">T1</span>数学工具</h3>
+      <div class="fx">导数：(xⁿ)' = n·xⁿ⁻¹    (ln u)' = u'/u
+链式：df/dx = (df/du)(du/dx)
+  例 ln(x²+1) → 2x/(x²+1)
+
+标准化：Z = (X − μ)/σ
+P(a≤X≤b) = Φ(z_b) − Φ(z_a)
+
+E[X] = Σ x·P(x)
+Var(X) = E[X²] − (E[X])²
+σ(X) = √Var(X)
+
+全概率：P(T) = Σ P(T|C)P(C)
+Bayes：P(C|T) = P(T|C)P(C) / P(T)
+全期望：E[X] = E_Y[E[X|Y]]
+全方差：Var(X) = E_Y[Var(X|Y)] + Var_Y(E[X|Y])</div>
+    </div>
+  </div>
+
+  <div class="grid two" style="margin-top:14px">
+    <div class="card">
+      <h3>Φ(z) 标准正态累积表</h3>
+      <div class="scroll">
+      <table style="margin-bottom:0">
+        <thead><tr><th class="n">z</th><th class="n">0</th><th class="n">0.5</th><th class="n">1.0</th><th class="n">1.5</th><th class="n">1.96</th><th class="n">2.0</th><th class="n">2.5</th><th class="n">3.0</th></tr></thead>
+        <tbody><tr><td class="n"><b>Φ</b></td><td class="n">.5000</td><td class="n">.6915</td><td class="n">.8413</td><td class="n">.9332</td><td class="n">.9750</td><td class="n">.9772</td><td class="n">.9938</td><td class="n">.9987</td></tr></tbody>
+      </table>
+      </div>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">Φ(−z) = 1 − Φ(z)。要"之间"的概率必须<b>相减</b>，表给的是左侧面积。</p>
+    </div>
+    <div class="card">
+      <h3>σ(z) sigmoid 表</h3>
+      <div class="scroll">
+      <table style="margin-bottom:0">
+        <thead><tr><th class="n">z</th><th class="n">0</th><th class="n">0.3</th><th class="n">0.5</th><th class="n">1.0</th><th class="n">1.5</th><th class="n">2.0</th><th class="n">2.5</th><th class="n">3.0</th></tr></thead>
+        <tbody><tr><td class="n"><b>σ</b></td><td class="n">.5000</td><td class="n">.5744</td><td class="n">.6225</td><td class="n">.7311</td><td class="n">.8176</td><td class="n">.8808</td><td class="n">.9241</td><td class="n">.9526</td></tr></tbody>
+      </table>
+      </div>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">σ(−z) = 1 − σ(z)。ln2 = .693，ln4 = 1.386，ln10 = 2.303，e⁻¹ = .368。</p>
+    </div>
+  </div>
+
+  <h2>T2 · 回归与线性回归</h2>
+  <div class="grid two">
+    <div class="card marked">
+      <h3><span class="tag">T2</span>模型与解析解</h3>
+      <div class="fx">ŷ = w₀ + w₁x        ŷ = wᵀx + b
+
+单变量最小二乘：
+  w₁ = Σ(xᵢ−x̄)(yᵢ−ȳ) / Σ(xᵢ−x̄)²
+  w₀ = ȳ − w₁x̄
+
+正规方程（多变量／多项式）：
+  XᵀX β̂ = XᵀY
+  β̂ = (XᵀX)⁻¹XᵀY
+
+多项式 y = ax²+bx+c 的设计矩阵：
+  X = [xᵢ²  xᵢ  1]  (n×3),  β = [a b c]ᵀ</div>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:0">可逆的前提是 X <b>列满秩</b>（各列线性无关）。实际软件用 QR/SVD/伪逆而不是直接求逆，更稳定也能处理秩亏。</p>
+    </div>
+    <div class="card marked">
+      <h3><span class="tag">T2</span>MLE ↔ 最小二乘</h3>
+      <div class="fx">假设 εᵢ ~ N(0, σ²) 独立同方差：
+
+log L = −(N/2)log(2πσ²) − (1/2σ²)·SSE
+        └─ 与 w 无关 ─┘   └ 负系数 ┘
+
+⇒ argmax log L = argmin SSE</div>
+      <p style="font-size:13px;margin:0">一句话答法：<span class="mono">Under independent, equal-variance Gaussian noise, OLS is also the maximum-likelihood estimator; if the noise assumption changes, a different loss may be appropriate.</span></p>
+    </div>
+  </div>
+
+  <div class="grid two" style="margin-top:14px">
+    <div class="card">
+      <h3><span class="tag">T2</span>评价指标</h3>
+      <div class="fx">MSE  = (1/N)Σ(yᵢ−ŷᵢ)²      单位是 y 的平方
+RMSE = √MSE                与 y 同单位，可直接说"平均差多少"
+MAE  = (1/N)Σ|yᵢ−ŷᵢ|       对离群值不敏感
+R²   = 1 − SS_res/SS_tot   模型解释的目标方差比例</div>
+      <ul class="tight" style="font-size:13px;margin-bottom:0">
+        <li>R² = 0.85 意思是"解释了约 85% 的方差"，<b>不是</b>"85% 的预测正确"。</li>
+        <li>R² 可以为负（比用均值预测还差）。</li>
+        <li>解释预测误差用 RMSE/MAE（有单位），比较模型用 R²。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="tag">T2</span>梯度下降与系数解读</h3>
+      <div class="fx">w ← w − η·∂J/∂w
+∂MSE/∂w = −(2/N)Σ(yᵢ−ŷᵢ)xᵢ
+
+η 太大 → 损失震荡甚至发散
+η 太小 → 收敛慢
+特征尺度差异大 → 收敛慢，先标准化</div>
+      <div class="trap" style="font-size:12.5px;padding:9px 12px">
+        <strong>系数陷阱</strong>：符号表示方向，<b>原始大小不能比较重要性</b>，因为各特征量纲/尺度不同。要比较必须先标准化。
+      </div>
+    </div>
+  </div>
+
+  <h2>T3 · 分类、感知机与逻辑回归</h2>
+  <div class="grid two">
+    <div class="card marked">
+      <h3><span class="tag">T3</span>感知机</h3>
+      <div class="fx">s = wᵀx + b        ŷ = sign(s)
+
+对每个样本算 y·s：
+  若 <b>y·s ≤ 0</b> → 更新
+     w ← w + η·y·x
+     b ← b + η·y
+  否则不动
+
+更新的效果：把该样本的得分朝正确一侧推
+收敛保证：仅当数据<b>线性可分</b>时，有限步收敛
+输出：硬类别，<b>没有概率</b></div>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:0">注意是 ≤ 0，所以 s = 0（正好在边界上）也要更新。一次 pass 不保证全部分对。</p>
+    </div>
+    <div class="card marked">
+      <h3><span class="tag">T3</span>逻辑回归</h3>
+      <div class="fx">z = wᵀx + b
+p = σ(z) = 1/(1+e⁻ᶻ)
+预测 1 当 p ≥ 阈值（默认 0.5）
+
+边界：<b>z = 0</b>，因为 σ(0) = 0.5
+  2x₁ − x₂ − 3 = 0 → x₂ = 2x₁ − 3
+  z > 0 的一侧是 class 1
+
+BCE（平均）：
+  J = −(1/N)Σ[yᵢ ln pᵢ + (1−yᵢ)ln(1−pᵢ)]
+
+梯度：
+  ∂J/∂w = (1/N)Σ(pᵢ−yᵢ)xᵢ
+  ∂J/∂b = (1/N)Σ(pᵢ−yᵢ)</div>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:0">(pᵢ − yᵢ) 是<b>带符号的概率误差</b>：预测概率高于标签为正，低于为负。沿负梯度走一小步是局部下坡，所以损失下降。</p>
+    </div>
+  </div>
+
+  <div class="grid two" style="margin-top:14px">
+    <div class="card">
+      <h3><span class="tag">T3</span>阈值与指标</h3>
+      <div class="fx">precision = TP/(TP+FP)   预测为正里真的比例
+recall    = TP/(TP+FN)   真正例里被找出的比例
+accuracy  = (TP+TN)/全部
+F1 = 2·P·R/(P+R)
+
+阈值 ↑（0.5 → 0.8）：正例预测<b>变少</b>
+  → precision 通常 ↑，recall ↓
+阈值 ↓：正例变多 → recall ↑，precision ↓
+（阈值改变不会重算概率，只是重新切分）</div>
+      <div class="trap" style="font-size:12.5px;padding:9px 12px">
+        <strong>类别不平衡</strong>：若测试集只有 9% 是正类，91% 的 accuracy 可能等于"全predict 负类"。必须先报<b>多数类基线</b>再比较，并看 precision/recall 与混淆矩阵。
+      </div>
+    </div>
+    <div class="card">
+      <h3><span class="tag">T3</span>多分类与"伪概率"</h3>
+      <ul class="tight" style="font-size:13px">
+        <li><b>One-vs-rest</b>：每类学一个得分，预测时取<b>最大得分</b>的那类。</li>
+        <li><b>行归一化混淆矩阵</b>按行读：每行是一个真实类别的去向；行内最大的非对角元就是主要混淆方向。</li>
+        <li>把 <code>others</code> 这类"其他"合并类当成一个同质类别去解释是错的——它内部很异质。</li>
+      </ul>
+      <div class="trap" style="font-size:12.5px;padding:9px 12px">
+        <strong>感知机得分 ≠ 概率</strong>：得分符号给出类别、大小是模型自己尺度上的置信度，不限于 0–1。对它套 sigmoid 只是把数值压到 0–1，<b>并没有用概率损失训练过</b>，不是校准概率。
+      </div>
+    </div>
+  </div>
+
+  <h2>T4 · 支持向量机</h2>
+  <div class="card marked" style="margin-bottom:14px">
+    <h3><span class="tag red">必背</span>课程公告的判定约定</h3>
+    <div class="scroll">
+    <table style="margin-bottom:0">
+      <thead><tr><th>情形</th><th>判定</th></tr></thead>
+      <tbody>
+        <tr><td class="n">f(x) = 0</td><td>点在决策边界上，<b>没有严格的预测类别</b>；手算时不算作正确分类（软件可能有 tie-break 约定）</td></tr>
+        <tr><td class="n">y·f(x) &lt; 1</td><td><b>margin violation</b>（间隔违反）。因此边界上的点必然是 violation</td></tr>
+        <tr><td class="n">y·f(x) &lt; 0</td><td><b>misclassified</b>（误分类），对应最小松弛 ξ &gt; 1</td></tr>
+        <tr><td class="n">ξ = 1</td><td>点正好落在决策边界上</td></tr>
+        <tr><td class="n">f(x)/‖w‖</td><td>到边界的<b>带符号距离</b></td></tr>
+        <tr><td class="n">y·f(x)/‖w‖</td><td><b>标签调整后的几何间隔</b></td></tr>
+        <tr><td class="n">canonical scaling</td><td>单侧间隔 = 1/‖w‖，<b>全宽 = 2/‖w‖</b></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="grid two">
+    <div class="card">
+      <h3><span class="tag">T4</span>软间隔与 C</h3>
+      <div class="fx">f(x) = wᵀx + b,  预测 sign(f)
+松弛 ξᵢ = max(0, 1 − yᵢf(xᵢ))
+目标 min ½‖w‖² + C·Σξᵢ
+对偶约束 0 ≤ αᵢ ≤ C
+f(x) = Σ αᵢ yᵢ K(xᵢ,x) + b</div>
+      <div class="scroll">
+      <table style="margin-bottom:0">
+        <thead><tr><th>C</th><th>间隔</th><th>违反</th><th>支持向量数</th><th>风险</th></tr></thead>
+        <tbody>
+          <tr><td class="n">小</td><td>宽</td><td>容忍多</td><td>多</td><td>正则强，可能欠拟合</td></tr>
+          <tr><td class="n">大</td><td>窄</td><td>惩罚重</td><td>少</td><td>贴合训练数据，易过拟合</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p style="font-size:12.5px;color:var(--ink-3);margin:6px 0 0">支持向量 = αᵢ &gt; 0 的训练点，位于间隔上或间隔内，<b>决定了拟合出的边界</b>；移动一个支持向量边界会变，移动远处的点通常不变。上界 C 限制了单个样本能施加的影响。</p>
+    </div>
+    <div class="card">
+      <h3><span class="tag">T4</span>核与 γ</h3>
+      <div class="fx">linear  K(x,y) = xᵀy
+poly    K(x,y) = (xᵀy + r)^d
+RBF     K(x,y) = exp(−γ‖x−y‖²)
+
+φ(x₁,x₂) = (x₁², √2·x₁x₂, x₂²)
+φ(x)·φ(y) = x₁²y₁² + 2x₁x₂y₁y₂ + x₂²y₂²
+          = (x₁y₁ + x₂y₂)² = (xᵀy)²  ✓</div>
+      <ul class="tight" style="font-size:13px;margin-bottom:0">
+        <li><b>γ 小</b>：每个样本影响范围广 → 边界平滑 → 可能欠拟合。</li>
+        <li><b>γ 大</b>：影响很局部 → 边界细碎 → 可能过拟合。</li>
+        <li><b>核技巧避免的是</b>：显式构造高维特征。它直接算变换空间里的内积。<b>不保证</b>大数据上训练便宜——样本增多时成对核计算仍然很多。</li>
+        <li><b>必须先标准化</b>：间隔与 RBF 都基于距离，量纲大的特征会主导解。</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>sklearn API 速查（考概念，不考写码）</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>对象 / 参数</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr><td class="n">train_test_split(test_size=, stratify=y, random_state=)</td><td>切分；<code>stratify</code> 保持各类比例，<code>random_state</code> 保证可复现</td></tr>
+      <tr><td class="n">StandardScaler()</td><td>把特征变成均值 0、标准差 1；<b>fit 只在训练数据上</b>，验证/测试只 transform</td></tr>
+      <tr><td class="n">Pipeline([("scale",…),("svc",…)])</td><td>把预处理和模型绑成一个对象，fit/predict 时自动按正确顺序执行 → 防泄漏</td></tr>
+      <tr><td class="n">SVC(kernel=, C=, gamma=, degree=)</td><td>支持向量分类器；<code>gamma="scale"</code> 按特征方差自动定</td></tr>
+      <tr><td class="n">.support_ / .n_support_</td><td>支持向量的索引 / 每类的支持向量个数（<code>.sum()</code> 得总数）</td></tr>
+      <tr><td class="n">.decision_function(X)</td><td>返回原始得分 f(x) 或 z，<b>不是概率</b>；符号给类别</td></tr>
+      <tr><td class="n">LogisticRegression(solver=, max_iter=)</td><td>线性概率分类器</td></tr>
+      <tr><td class="n">.predict_proba(X)[:,1]</td><td>正类概率；等于 σ(<code>decision_function</code>)</td></tr>
+      <tr><td class="n">Perceptron()</td><td>硬分类线性模型，无 <code>predict_proba</code></td></tr>
+      <tr><td class="n">accuracy / precision / recall_score</td><td>分类指标；<code>zero_division=0</code> 避免除零报错</td></tr>
+      <tr><td class="n">log_loss(y, p)</td><td>交叉熵，评价<b>概率</b>质量而非硬标签</td></tr>
+      <tr><td class="n">ConfusionMatrixDisplay(normalize="true")</td><td>行归一化混淆矩阵：每行是一个真实类别的去向分布</td></tr>
+      <tr><td class="n">LinearRegression() → .coef_ / .intercept_</td><td>回归系数与截距；<code>mean_squared_error</code>、<code>r2_score</code> 评估</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>英文句库 · 直接抄进答卷</h2>
+  <ul class="phrase">
+    <li>Because the scaler was fitted on the full dataset, information from the held-out data influenced training. This is <b>data leakage</b>, and it makes the reported performance optimistically biased.<span class="zh">泄漏 · 预处理</span></li>
+    <li>The test set must be used <b>once</b>, after every setting is fixed. Using it to choose C turns it into a second validation set and produces an overly optimistic estimate of future performance.<span class="zh">泄漏 · 选择</span></li>
+    <li>A finite grid on a single validation split identifies only the <b>best tested setting for that split</b>, not a universally optimal setting.<span class="zh">局限 · 超参搜索</span></li>
+    <li>One validation split cannot establish that a kernel is universally best.<span class="zh">局限 · 模型比较</span></li>
+    <li>A wider margin can reduce sensitivity to small perturbations, but generalisation also depends on the data, scaling, kernel, noise and the selected hyperparameters.<span class="zh">局限 · 间隔</span></li>
+    <li>The sign of f(x) gives the side of the boundary; f(x) = 0 is a boundary point with <b>no strict predicted class</b>.<span class="zh">SVM 约定</span></li>
+    <li>Support vectors are the training observations that determine the fitted margin and boundary; moving one can change the boundary, while moving a distant point usually cannot.<span class="zh">支持向量</span></li>
+    <li>Boundary shapes in regions with few observations should be interpreted cautiously, because little data constrains the fit there.<span class="zh">边界图解读</span></li>
+    <li>Accuracy must be compared with the majority-class baseline, because with imbalanced classes a high accuracy can be achieved by always predicting the majority class.<span class="zh">不平衡</span></li>
+    <li>Overall accuracy averages across groups and treats all mistakes as equally costly, so it can hide both poor performance on a rare class and unequal error costs.<span class="zh">指标局限</span></li>
+    <li>The values lie between 0 and 1, but they were not obtained by training a probabilistic loss, so they are <b>not calibrated probabilities</b>.<span class="zh">伪概率</span></li>
+    <li>The sign of the coefficient indicates the direction of the association, but raw magnitudes are not comparable when features are on different scales.<span class="zh">系数解读</span></li>
+    <li>The prediction lies well outside the range of the training data, so this is <b>extrapolation</b> and the value may be implausible.<span class="zh">外推</span></li>
+    <li>Under independent, equal-variance Gaussian noise, ordinary least squares is also the maximum-likelihood estimator.<span class="zh">MLE ↔ SSE</span></li>
+  </ul>
+
+  <h2>陷阱清单 · 考前 10 分钟看这栏</h2>
+  <div class="grid two">
+    <div class="trap"><strong>SVM</strong>：f(x)=0 是 margin violation，不是"正确分类"。yf&lt;1 才叫 violation，yf&lt;0 才叫误分类，别混。全宽是 2/‖w‖，单侧才是 1/‖w‖。</div>
+    <div class="trap"><strong>感知机</strong>：更新条件是 y·s <b>≤</b> 0（含等号）。更新后要用<b>新参数</b>处理下一个样本。</div>
+    <div class="trap"><strong>逻辑回归</strong>：改阈值不会重算概率，只是重新切分。阈值 ↑ → 正例更少。</div>
+    <div class="trap"><strong>R²</strong>：是解释的方差比例，不是"正确率"，也不是 1−MSE。</div>
+    <div class="trap"><strong>系数</strong>：不同尺度下不能比大小。符号才是可靠信息。</div>
+    <div class="trap"><strong>正态</strong>：求"介于 a 与 b 之间"必须 Φ(z_b) − Φ(z_a)，不是直接查一个值。</div>
+    <div class="trap"><strong>C 与 γ</strong>：C 管"违反的惩罚"，γ 管"影响的范围"。两个都调大 → 边界又窄又局部 → 过拟合。</div>
+    <div class="trap"><strong>核技巧</strong>：省的是"构造特征"，不是"计算量"。大数据上仍可能很贵。</div>
+    <div class="trap"><strong>训练准确率 1.00</strong>：不是好消息的证据，先怀疑记忆训练数据。</div>
+    <div class="trap"><strong>选超参</strong>：任何用测试集做的选择都会污染最终估计。选完要在 train+val 上重拟合，再碰一次测试集。</div>
+  </div>
+</section>
+
+<!-- ══════════════ 03 模板 ══════════════ -->
+<section class="panel" id="p-tpl" role="tabpanel" aria-labelledby="tab-tpl" hidden>
+
+  <div class="note" style="margin-bottom:26px">
+    <b>这一区的来源：</b>四份 <span class="mono">Prac general feedback</span> PDF。它们逐题写明"a complete answer needed…"，实际上就是评分细则。四份的结论完全一致，可以浓缩成一条通用公式 ——
+    <b style="display:block;margin-top:6px;font-size:15px">报出结果 → 解释它说明什么 → 用可见证据支撑 → 说出这个证据的局限</b>
+    最常见的扣分是停在第一步。
+  </div>
+
+  <h2>Style A · 计算并解释结果</h2>
+  <div class="card">
+    <h3>结构</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>写出公式</b>再代数字。公式本身通常有分。</li>
+      <li><b>列中间量</b>。像 tutorial 答案那样用小表格：<span class="mono">i | zᵢ | pᵢ | pᵢ−yᵢ | (pᵢ−yᵢ)xᵢ</span>，比一行流水账清楚也好检查。</li>
+      <li><b>框出最终答案</b>，带单位或类别。</li>
+      <li><b>加一句解释</b>：这个数意味着什么。</li>
+      <li>如有合理性检查就写（例如"更新后 BCE 从 0.5142 降到 0.5117，符合沿负梯度下降的预期"）。</li>
+    </ol>
+    <div class="en">"Substituting into ŷ = wᵀx + b gives f = 6. Since ‖w‖ = 5, the signed distance is 6/5 = 1.2 and y·f = 6 ≥ 1, so the point is correctly classified and lies outside the margin."</div>
+    <p style="font-size:13px;color:var(--ink-3);margin:0">对应练习：M1 T3 Tutorial Q1–3、M1 T4 Tutorial Q1–3。</p>
+  </div>
+
+  <h2>Style B · 评价或纠正关于模型的说法</h2>
+  <div class="card">
+    <h3>结构（每条说法三句话）</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>判定</b>：correct / incorrect / partially correct —— 明确表态，别含糊。</li>
+      <li><b>说明为什么错</b>，用定义或机制，不要只说"不对"。</li>
+      <li><b>给出正确表述</b>，或说明需要什么证据才能支持这个说法。</li>
+    </ol>
+    <div class="en">"The claim is <b>incorrect</b>. R² is the proportion of variance in the target explained by the model, not the proportion of predictions that are correct — for a continuous target, 'correct' is not defined. A supportable version would be: the model explains about 85% of the variance in median house value on the test set."</div>
+    <p style="font-size:13px;color:var(--ink-3);margin:0">高频可考说法：R² 当正确率、系数大小当重要性、训练准确率 1.00 当最优、sigmoid 套感知机得分当概率、不平衡下用 accuracy、"复杂边界更好"。</p>
+  </div>
+
+  <h2>Style C · 找出机器学习流程中的问题</h2>
+  <div class="card">
+    <h3>结构（每个问题三段）</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>Problem</b>：指名道姓说是哪一步、什么问题（用术语：data leakage / test-set contamination / class imbalance / no validation set / extrapolation）。</li>
+      <li><b>Why it matters</b>：会造成什么后果（几乎总是"估计乐观偏高"或"指标掩盖了真实表现"）。</li>
+      <li><b>Correction</b>：怎么改。</li>
+    </ol>
+    <p style="font-size:13.5px">最后再用编号列出<b>修正后的完整流程</b>，这一段通常单独有分。标准顺序：</p>
+    <div class="fx">1  切分 train / validation / test（分类用 stratify）
+2  只在 train 上 fit 预处理；用 Pipeline 绑定
+3  在 train 上拟合，用 validation 比较候选设置
+4  锁定全部设置
+5  在 train + validation 上重新拟合
+6  在测试集上评估<b>一次</b>，报告该结果
+7  部署后监控输入分布与性能，必要时重训</div>
+    <p style="font-size:13px;color:var(--ink-3);margin:0">对应练习：M1 T4 Practical Q3、Q5 与 Workflow QA 幻灯的 leakage 对照图。</p>
+  </div>
+
+  <h2>Style D · 用数值证据比较方案并论证决策</h2>
+  <div class="card">
+    <h3>结构</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>把两个指标都报出来</b>。feedback 明确指出只报准确率是"incomplete"——SVM 题里另一个指标通常是<b>支持向量数</b>。</li>
+      <li><b>描述趋势</b>，不只是挑出最大值："as C increases from 0.1 to 100, validation accuracy peaks at C = 1 while the number of support vectors falls from 120 to 36."</li>
+      <li><b>说明机制</b>：为什么会有这个趋势（大 C 惩罚违反更重 → 间隔更窄 → 支持向量更少）。</li>
+      <li><b>下结论并说明依据</b>，平局时说清 tie-breaker（更少支持向量 = 更简单的模型）。</li>
+      <li><b>说局限</b>：单次验证划分、有限网格、只对这一份数据成立。</li>
+    </ol>
+    <div class="en">"RBF achieves the highest validation accuracy (0.917 vs 0.833 for linear and 0.806 for polynomial) with a comparable number of support vectors (71 vs 73), and the linear boundary visibly underfits the curved classes. I would carry RBF forward. However, this is a single validation split of 72 observations, so it identifies the best candidate <b>for this split</b> rather than a universally superior kernel."</div>
+    <p style="font-size:13px;color:var(--ink-3);margin:0">对应练习：M1 T4 Practical Q1、Q3、Q4；M1 T4 Tutorial Q2；M1 T3 Practical Q4。</p>
+  </div>
+
+  <h2>写作细节</h2>
+  <div class="grid two">
+    <div class="card">
+      <h3>每小问单独起段并标号</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">题目会写 (2 marks)、(3 marks)。按标号分段作答，阅卷者一眼能对上得分点。feedback 里"answer every part of the checklist"出现过不止一次——最常见的失分不是写错，是漏答其中一小问。</p>
+    </div>
+    <div class="card">
+      <h3>分值 = 采分点个数</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">3 分的小问通常要三个独立要点。写完数一数自己给了几个。2 分的问题写四段是浪费时间——那 120 分钟不宽裕。</p>
+    </div>
+    <div class="card">
+      <h3>用题目给的术语</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">margin violation、support vector、data leakage、validation split、calibrated probability、majority-class baseline。用课程自己的词，比用同义表述稳。</p>
+    </div>
+    <div class="card">
+      <h3>英文不必优美</h3>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0">短句、术语准确即可。速查表的句库就是为此准备的——考场上直接改数字套用。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 04 模拟测验 ══════════════ -->
+<section class="panel" id="p-mock" role="tabpanel" aria-labelledby="tab-mock" hidden>
+
+  <div class="note" style="margin-bottom:20px">
+    按真实配比出题：20 道选择题（每题 3 分）+ 4 道大题（每题 10 分），限时 <b>120 分钟</b>。题目用英文，和真卷一致；解析用中文。第一次做建议不翻书，做完再对答案。
+  </div>
+
+  <div class="toolbar">
+    <div class="score">已答 <b id="sDone">0</b> / 20 &nbsp;·&nbsp; 正确 <b id="sRight">0</b> &nbsp;·&nbsp; 得分 <b id="sMark">0</b> / 60</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="revealAll">显示全部答案</button>
+      <button class="btn" id="resetQuiz">重做</button>
+    </div>
+  </div>
+
+  <h2>Section A · Multiple choice <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);color:var(--ink-3)">（20 × 3 = 60 marks）</span></h2>
+
+  <div id="quiz"></div>
+
+  <h2>Section B · Extended response <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);color:var(--ink-3)">（4 × 10 = 40 marks）</span></h2>
+
+  <!-- Q21 -->
+  <div class="exq">
+    <div class="q-head"><span class="q-n">Q21</span><p class="q-t"><b>Perceptron and logistic regression by hand</b> <span class="marks">(10 marks)</span></p></div>
+    <div class="stem">
+      <p><b>(a)</b> A perceptron has <span class="mono">w = [2, −1]</span>, <span class="mono">b = −1</span> and learning rate <span class="mono">η = 1</span>. Process the two examples in order:</p>
+      <div class="fx">(x₁, y₁) = ([1, 2], +1)      (x₂, y₂) = ([2, 1], −1)</div>
+      <p>For each example calculate <span class="mono">sᵢ = wᵀxᵢ + b</span>, <span class="mono">ŷᵢ = sign(sᵢ)</span> and <span class="mono">yᵢsᵢ</span>; state whether an update is required and show it. Give the final parameters after one pass, and state whether one pass has separated the data. <span class="marks">(5 marks)</span></p>
+      <p><b>(b)</b> A logistic-regression model uses <span class="mono">z = 2x₁ + x₂ − 4</span> with <span class="mono">P(y=1|x) = σ(z)</span> and threshold 0.5.</p>
+      <ol class="tight" style="font-size:13.5px">
+        <li>Write the decision boundary in the form <span class="mono">x₂ = mx₁ + c</span> and state which side is class 1. <span class="marks">(2 marks)</span></li>
+        <li>Calculate <span class="mono">z</span>, <span class="mono">p</span> and the predicted class for <span class="mono">A = (1, 1)</span> and <span class="mono">B = (2, 1)</span>. <span class="marks">(2 marks)</span></li>
+        <li>The threshold is raised to 0.8. State the effect on B's prediction and justify it numerically. <span class="marks">(1 mark)</span></li>
+      </ol>
+    </div>
+    <details>
+      <summary>参考答案与采分点</summary>
+      <div class="answer">
+        <h4>(a) 感知机 <span class="marks">5 marks</span></h4>
+        <div class="fx">样本 1：s₁ = 2(1) + (−1)(2) + (−1) = <b>−1</b>
+        ŷ₁ = −1,  y₁s₁ = (+1)(−1) = −1 ≤ 0  → 需要更新
+        w ← [2,−1] + (1)(+1)[1,2] = <b>[3, 1]</b>
+        b ← −1 + (1)(+1) = <b>0</b>
+
+样本 2（用更新后的参数）：s₂ = 3(2) + 1(1) + 0 = <b>7</b>
+        ŷ₂ = +1,  y₂s₂ = (−1)(7) = −7 ≤ 0  → 需要更新
+        w ← [3,1] + (1)(−1)[2,1] = <b>[1, 0]</b>
+        b ← 0 + (1)(−1) = <b>−1</b>
+
+一次 pass 后：w = [1, 0],  b = −1</div>
+        <p><b>是否已分开：</b>没有。用最终参数回代：x₁ 的 s = 1(1)+0(2)−1 = 0，y·s = 0 ≤ 0；x₂ 的 s = 1(2)+0(1)−1 = 1，y·s = −1 ≤ 0。两个样本仍然都会触发更新。</p>
+        <p class="en">One pass through the data does not guarantee separation. The perceptron is only guaranteed to converge in a finite number of updates <b>if the data are linearly separable</b>; further passes would be required here.</p>
+        <p style="font-size:13px;color:var(--ink-3)"><b>采分点：</b>两次 sᵢ 与 yᵢsᵢ 的正确计算（2）· 两次更新的正确执行、第二个样本用了更新后的参数（2）· 判断未分开并说明收敛条件（1）。</p>
+
+        <h4>(b) 1 &nbsp;决策边界 <span class="marks">2 marks</span></h4>
+        <p>阈值 0.5 对应 σ(z) = 0.5，即 <b>z = 0</b>（σ 单调递增且 σ(0) = 0.5）。</p>
+        <div class="fx">2x₁ + x₂ − 4 = 0  ⟺  <b>x₂ = −2x₁ + 4</b>
+斜率 m = −2，截距 c = 4；便利点 (0, 4) 与 (2, 0)</div>
+        <p>class 1 在 <span class="mono">z &gt; 0</span> 的一侧，即 <span class="mono">x₂ &gt; −2x₁ + 4</span>，也就是直线<b>上方</b>。</p>
+
+        <h4>(b) 2 &nbsp;两点的得分与类别 <span class="marks">2 marks</span></h4>
+        <div class="scroll"><table>
+          <thead><tr><th>点</th><th class="n">z</th><th class="n">p = σ(z)</th><th>预测类别</th></tr></thead>
+          <tbody>
+            <tr><td class="n">A = (1,1)</td><td class="n">2+1−4 = −1</td><td class="n">0.2689</td><td>0</td></tr>
+            <tr><td class="n">B = (2,1)</td><td class="n">4+1−4 = +1</td><td class="n">0.7311</td><td>1</td></tr>
+          </tbody>
+        </table></div>
+        <p style="font-size:13px;color:var(--ink-3)">附带一句可加分的观察：两点的<b>置信度其实相同</b>，|0.7311 − 0.5| = |0.2689 − 0.5| = 0.2311，因为 σ(−z) = 1 − σ(z)，z = ±1 关于 0.5 对称——只是判到了相反的两类。</p>
+
+        <h4>(b) 3 &nbsp;阈值升到 0.8 <span class="marks">1 mark</span></h4>
+        <p>B 由 class 1 变为 class 0。</p>
+        <div class="fx">p ≥ 0.8  ⟺  z ≥ ln(0.8/0.2) = ln 4 ≈ <b>1.386</b>
+B 的 z = 1 &lt; 1.386，所以 p = 0.7311 &lt; 0.8 → 不再判为正类</div>
+        <p class="en">Raising the threshold classifies fewer observations as positive: recall decreases and precision typically increases. The probabilities themselves are unchanged — only the cut-off applied to them has moved.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- Q22 -->
+  <div class="exq">
+    <div class="q-head"><span class="q-n">Q22</span><p class="q-t"><b>Evaluating claims about a fitted model</b> <span class="marks">(10 marks)</span></p></div>
+    <div class="stem">
+      <p>A student fits a linear regression on the California housing data and a logistic regression on an imbalanced medical screening dataset, then writes the following four claims in their report. For <b>each</b> claim, state whether it is correct, explain why, and give a corrected version. <span class="marks">(4 × 2.5 marks)</span></p>
+      <ol class="tight" style="font-size:13.5px">
+        <li>"The test R² is 0.72, so 72% of our predictions are correct."</li>
+        <li>"The coefficient of <span class="mono">MedInc</span> is 0.45 and the coefficient of <span class="mono">AveRooms</span> is −0.02, so median income is about 22 times more important than average rooms."</li>
+        <li>"Our screening classifier reaches 96% accuracy on the test set, so it is ready for deployment." <em>(4% of patients in the data have the condition.)</em></li>
+        <li>"We applied a sigmoid to the perceptron's decision scores, so we now have the probability that each patient has the condition."</li>
+      </ol>
+    </div>
+    <details>
+      <summary>参考答案与采分点</summary>
+      <div class="answer">
+        <h4>Claim 1 — Incorrect</h4>
+        <p>R² 是<b>被模型解释的目标方差比例</b>，不是预测正确的比例。目标是连续变量，"预测正确"本身没有定义（任何预测几乎必然不等于真值）。</p>
+        <p class="en">Corrected: "The model explains about 72% of the variance in median house value on the test set. To describe typical prediction error we should also report RMSE or MAE, which are in the same units as the target."</p>
+
+        <h4>Claim 2 — Incorrect</h4>
+        <p>两个特征的<b>量纲和尺度不同</b>（收入以万美元计、房间数以间计），系数的原始大小反映的是"每单位该特征变化对应多少目标变化"，单位不同就不可比，更谈不上"22 倍"。系数的<b>符号</b>是可靠信息（方向），大小不是。</p>
+        <p class="en">Corrected: "MedInc is positively associated with median house value and AveRooms is negatively associated with it. To compare their relative influence we would need to standardise the features before fitting, or use a scale-free measure such as permutation importance."</p>
+
+        <h4>Claim 3 — Incorrect（或 misleading）</h4>
+        <p>只有 4% 的患者有该病症，因此<b>永远预测"无病"</b>就能得到 96% 的准确率。96% 可能恰好等于多数类基线，没有证据表明模型学到了任何东西。而且筛查场景下漏诊（false negative）的代价远高于误报，准确率把两类错误当成等价。</p>
+        <p class="en">Corrected: "The 96% accuracy must be compared with the 96% majority-class baseline. We should report recall and precision for the positive class and inspect the confusion matrix, because accuracy averages across groups and treats all mistakes as equally costly."</p>
+
+        <h4>Claim 4 — Incorrect</h4>
+        <p>sigmoid 只是把任意实数压缩到 (0,1)。感知机是用<b>硬分类的更新规则</b>训练的，没有优化任何概率损失（如交叉熵），所以这些数值不是<b>校准过的</b>概率——0.9 不代表"90% 的这类病人真的患病"。</p>
+        <p class="en">Corrected: "The transformed scores lie between 0 and 1 but were not obtained by training a probabilistic loss, so they are not calibrated probabilities. To obtain estimated probabilities we should fit logistic regression, which optimises binary cross-entropy, and evaluate them with log loss."</p>
+
+        <p style="font-size:13px;color:var(--ink-3);margin-top:16px"><b>采分点（每条）：</b>明确判定（0.5）· 说明为什么（1）· 给出可支撑的正确表述或所需证据（1）。</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- Q23 -->
+  <div class="exq">
+    <div class="q-head"><span class="q-n">Q23</span><p class="q-t"><b>Identifying problems in a machine-learning procedure</b> <span class="marks">(10 marks)</span></p></div>
+    <div class="stem">
+      <p>A team reports the following procedure for a two-class problem with 2,000 observations and two numerical features on very different scales.</p>
+      <div class="fx">1  Load all 2,000 observations.
+2  Fit a StandardScaler on all 2,000 rows and transform them.
+3  Split the scaled data 80/20 into training and test sets.
+4  For every combination of C ∈ {0.1, 1, 10, 100} and γ ∈ {0.1, 1},
+   fit an RBF SVC on the training set and evaluate it on the test set.
+5  Keep the combination with the highest test accuracy (C = 10, γ = 1, accuracy 0.971).
+6  Report 0.971 as the expected accuracy of the model on new data.</div>
+      <p><b>(a)</b> Identify <b>four</b> distinct problems with this procedure. For each, name the problem and explain its consequence. <span class="marks">(6 marks)</span></p>
+      <p><b>(b)</b> Write a corrected procedure as a numbered workflow. <span class="marks">(4 marks)</span></p>
+    </div>
+    <details>
+      <summary>参考答案与采分点</summary>
+      <div class="answer">
+        <h4>(a) 四个问题 <span class="marks">6 marks</span></h4>
+        <p><b>① 预处理泄漏（Step 2 在 Step 3 之前）。</b>scaler 的均值与标准差是用<b>包含测试集</b>的全部 2000 行算出来的，测试集的统计量因此参与了变换。模型间接"见过"了留出数据，测试表现会偏乐观。</p>
+        <p><b>② 没有验证集（Step 3）。</b>只切了训练/测试两份，没有任何一份数据可以合法地用来选超参。</p>
+        <p><b>③ 用测试集选超参（Step 4–5）。</b>在 8 个候选设置上反复读取测试准确率并挑最大值，等于把测试集变成了第二个验证集。挑出来的最大值还包含了"选择偏差"——8 次评估里的最大值本身就系统性地偏高。</p>
+        <p><b>④ 把 0.971 当作对新数据的期望表现（Step 6）。</b>这个数字已被用于模型选择，不再是无偏估计，会<b>系统性高估</b>未来性能。</p>
+        <p style="font-size:13px;color:var(--ink-3)">（其他可接受的第四点：没有报告类别分布或多数类基线，无法判断准确率是否有意义；切分时没有 <span class="mono">stratify</span>；只报单一指标而未报 precision/recall；只有一次划分、没有交叉验证，2000 条数据下 20% 测试集的估计方差不小。）</p>
+
+        <h4>(b) 修正流程 <span class="marks">4 marks</span></h4>
+        <div class="fx">1  先切分：train / validation / test（分类问题用 stratify 保持类别比例，
+   固定 random_state 保证可复现）。<b>切分必须发生在任何预处理之前。</b>
+2  把 StandardScaler 和 SVC 装进一个 Pipeline，
+   使 scaler 只在训练折上 fit，验证/测试只被 transform。
+3  在训练集上拟合每个 (C, γ) 候选，在<b>验证集</b>上比较；
+   记录验证准确率和支持向量数，准确率相同时取支持向量更少的。
+4  锁定选中的 kernel、C、γ，不再改动。
+5  用锁定的设置在 train + validation 上重新拟合。
+6  在测试集上评估<b>一次</b>，报告该结果作为泛化估计。
+7  同时报告多数类基线与 precision / recall，说明结论的局限：
+   单次划分、有限网格，只对这份数据成立。</div>
+        <p class="en">"Because the scaler was fitted on all rows before splitting, information from the test data influenced the transformation — this is data leakage. Combined with selecting C and γ on the test set, the reported 0.971 is optimistically biased and should not be described as the expected accuracy on new data. A finite grid on a single split identifies only the best tested setting for that split."</p>
+        <p style="font-size:13px;color:var(--ink-3)"><b>采分点：</b>(a) 每个问题"命名 + 后果"各 1.5 分，必须点出 leakage 与 test-set 选择两大项。(b) 切分先于预处理（1）· Pipeline / 只在 train 上 fit（1）· 用验证集选超参并锁定（1）· 重拟合后测试集只用一次（1）。</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- Q24 -->
+  <div class="exq">
+    <div class="q-head"><span class="q-n">Q24</span><p class="q-t"><b>Comparing SVM configurations with numerical evidence</b> <span class="marks">(10 marks)</span></p></div>
+    <div class="stem">
+      <p>A two-class dataset with two curved, overlapping classes is split into 216 training, 72 validation and 72 test observations. All models use the same <span class="mono">StandardScaler → SVC</span> pipeline. The validation results are:</p>
+      <div class="scroll"><table>
+        <thead><tr><th>Kernel (C = 1)</th><th class="n">Validation accuracy</th><th class="n">Support vectors</th></tr></thead>
+        <tbody>
+          <tr><td>linear</td><td class="n">0.833</td><td class="n">73</td></tr>
+          <tr><td>polynomial (degree 3)</td><td class="n">0.806</td><td class="n">73</td></tr>
+          <tr><td>RBF</td><td class="n">0.917</td><td class="n">71</td></tr>
+        </tbody>
+      </table></div>
+      <div class="scroll"><table>
+        <thead><tr><th class="n">C (RBF)</th><th class="n">Validation accuracy</th><th class="n">Support vectors</th></tr></thead>
+        <tbody>
+          <tr><td class="n">0.1</td><td class="n">0.861</td><td class="n">120</td></tr>
+          <tr><td class="n">1</td><td class="n">0.917</td><td class="n">71</td></tr>
+          <tr><td class="n">100</td><td class="n">0.903</td><td class="n">36</td></tr>
+        </tbody>
+      </table></div>
+      <p><b>(a)</b> Using the evidence above, select a kernel and justify the choice. State one limitation of this evidence. <span class="marks">(3 marks)</span></p>
+      <p><b>(b)</b> Describe how validation accuracy and the number of support vectors change as C increases, explain the mechanism, and state which C you would select. <span class="marks">(3 marks)</span></p>
+      <p><b>(c)</b> The selected model has <span class="mono">w = (3, 4)</span> and <span class="mono">b = −1</span>. Calculate the full margin width, and for the points <span class="mono">(1, 1)</span> with <span class="mono">y = +1</span> and <span class="mono">(2, 0)</span> with <span class="mono">y = −1</span> calculate <span class="mono">f(x)</span>, the signed distance and <span class="mono">y·f(x)</span>, then classify each point as correct / margin violation / misclassified. <span class="marks">(3 marks)</span></p>
+      <p><b>(d)</b> Describe how the final test accuracy should be obtained. <span class="marks">(1 mark)</span></p>
+    </div>
+    <details>
+      <summary>参考答案与采分点</summary>
+      <div class="answer">
+        <h4>(a) 选 kernel <span class="marks">3 marks</span></h4>
+        <p>选 <b>RBF</b>。它的验证准确率 0.917 明显高于 linear 的 0.833 和 polynomial 的 0.806，同时支持向量数（71）并不比另外两个（各 73）多，即准确率的提升没有以更复杂的解为代价。由于两类是<b>弯曲且重叠</b>的，线性 kernel 只能画直线，会系统性地欠拟合。</p>
+        <p class="en">"Limitation: these are results on a single validation split of only 72 observations. That is enough to choose a candidate to carry forward, but it cannot establish that RBF is universally best — a different split, or a different dataset, could rank the kernels differently."</p>
+
+        <h4>(b) C 的趋势与选择 <span class="marks">3 marks</span></h4>
+        <p><b>趋势：</b>C 从 0.1 增到 100，支持向量数单调下降 120 → 71 → 36；验证准确率则先升后降，在 C = 1 达到峰值 0.917（0.861 → 0.917 → 0.903）。</p>
+        <p><b>机制：</b>C 是对间隔违反的惩罚权重。C 小时惩罚轻，最优解容忍更多违反、换来更宽的间隔，落在间隔内或间隔上的点更多，因此支持向量更多——C = 0.1 时正则过强，边界过于平滑，欠拟合（0.861）。C 大时惩罚重，间隔收窄以避免违反，支持向量减少——C = 100 时贴合训练数据，泛化开始变差（0.903）。</p>
+        <p><b>选择：</b>C = 1，验证准确率最高。（若出现并列，tie-breaker 用更少的支持向量，即更简单的模型；绝不能用测试准确率来打破平局。）</p>
+
+        <h4>(c) 间隔与点的判定 <span class="marks">3 marks</span></h4>
+        <div class="fx">‖w‖ = √(3² + 4²) = <b>5</b>
+单侧间隔 = 1/‖w‖ = 0.2
+<b>全宽 = 2/‖w‖ = 0.4</b></div>
+        <div class="scroll"><table>
+          <thead><tr><th>点</th><th class="n">y</th><th class="n">f(x) = 3x₁+4x₂−1</th><th class="n">带符号距离 f/‖w‖</th><th class="n">y·f(x)</th><th>判定</th></tr></thead>
+          <tbody>
+            <tr><td class="n">(1, 1)</td><td class="n">+1</td><td class="n">3+4−1 = 6</td><td class="n">6/5 = 1.2</td><td class="n">+6</td><td>正确分类，<b>在间隔之外</b>（y·f ≥ 1）</td></tr>
+            <tr><td class="n">(2, 0)</td><td class="n">−1</td><td class="n">6+0−1 = 5</td><td class="n">5/5 = 1.0</td><td class="n">−5</td><td><b>误分类</b>（y·f &lt; 0），同时也是 margin violation；松弛 ξ = 1−(−5) = 6</td></tr>
+          </tbody>
+        </table></div>
+        <p style="font-size:13px;color:var(--ink-3)">注意第二点：它离边界并不近（距离 1.0），但落在了<b>错误的一侧</b>——距离大小与是否分类正确是两件事，判定要看 y·f(x) 的符号。</p>
+
+        <h4>(d) 最终测试 <span class="marks">1 mark</span></h4>
+        <p class="en">"After the kernel, C and γ are fixed, refit the pipeline on the combined training and validation data (288 observations) and evaluate the untouched test set <b>once</b>. Repeatedly checking the test result while changing settings would turn the test set into another validation set and produce an overly optimistic estimate."</p>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="panel" id="p-cs" role="tabpanel" aria-labelledby="tab-cs" hidden>
+
+  <div class="note" style="margin-bottom:22px">
+    <b>这份笔记的来源与做法。</b>五讲的英文字幕已下载并清洗（每讲约 1.1–1.3 万词），CS229 官方讲义 PDF 也已下载。两者分工很清楚：<b>字幕保留了 Ng 的口头讲解和直觉，但保留不了黑板上的公式</b>——字幕里只有「Gamma hat i」，没有 γ̂⁽ⁱ⁾ = y⁽ⁱ⁾(wᵀx⁽ⁱ⁾+b)。所以下面每一讲都配了讲义的<b>精确页码</b>：视频看直觉，讲义查推导，本课 tutorial 练手。
+    <div style="margin-top:8px">文件已放到 <span class="mono">G:\Adelaide COMSC\2026S2\Machine Learning\CS229\</span>：<span class="mono">transcripts\</span>（五份纯文本，可全文搜索）与 <span class="mono">notes\</span>（八份 PDF）。</div>
+  </div>
+
+  <h2>官方讲义清单 · 全部已下载</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>文件</th><th class="n">篇幅</th><th>内容</th><th>对应</th></tr></thead>
+    <tbody>
+      <tr><td class="n">cs229-notes1.pdf</td><td class="n">28 页</td><td>线性回归、LMS、正规方程、概率解释、逻辑回归、感知机、GLM</td><td><span class="tag">T2</span><span class="tag">T3</span></td></tr>
+      <tr><td class="n">cs229-notes3.pdf</td><td class="n">30 页</td><td>核方法、特征映射、SVM、函数/几何间隔、对偶、软间隔</td><td><span class="tag">T4</span></td></tr>
+      <tr><td class="n">cs229-notes5.pdf</td><td class="n">8 页</td><td>交叉验证、特征选择、正则化</td><td><span class="tag">T1</span></td></tr>
+      <tr><td class="n">error-analysis.pdf</td><td class="n">幻灯</td><td>偏差／方差权衡与误差分析</td><td><span class="tag">T1</span></td></tr>
+      <tr><td class="n">ML-advice.pdf</td><td class="n">幻灯</td><td>应用机器学习的实践建议、调试流程</td><td><span class="tag">T1</span></td></tr>
+      <tr><td class="n">cs229-prob.pdf</td><td class="n">复习</td><td>概率：期望、方差、Bayes、正态分布</td><td><span class="tag">T1 数学</span></td></tr>
+      <tr><td class="n">cs229-linalg.pdf</td><td class="n">复习</td><td>线性代数：矩阵求导、范数</td><td><span class="tag">T1 数学</span></td></tr>
+      <tr><td class="n">main_notes.pdf</td><td class="n">5.2 MB</td><td>全课合订本（含以上大部分）</td><td>备查</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="font-size:13px;color:var(--ink-3)">注：2018 syllabus 上的 <span class="mono">/notes/</span> 路径现已失效（404），上面这些是站点重组后仍然有效的地址。syllabus 列出的 evaluation_metrics 幻灯也已下线。</p>
+
+  <h2>L2 · Linear Regression &amp; Gradient Descent <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);color:var(--ink-3)">1:18 — 全看</span></h2>
+  <div class="card marked">
+    <h3>主线四点</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>假设与代价</b>：h<sub>θ</sub>(x) = θᵀx，J(θ) = ½Σ(h<sub>θ</sub>(x⁽ⁱ⁾) − y⁽ⁱ⁾)²。Ng 明确说线性回归又叫 ordinary least squares。</li>
+      <li><b>梯度下降</b>：θⱼ ← θⱼ − α·∂J/∂θⱼ，α 是 learning rate。批量（每步扫全量，稳但慢）vs 随机（每步一个样本，快但在最优点附近震荡）。</li>
+      <li><b>正规方程</b>：θ = (XᵀX)⁻¹Xᵀy。一步到位，不用迭代、不用选 α——代价是要求矩阵可逆。</li>
+      <li><b>概率解释</b>：假设误差 ε⁽ⁱ⁾ ~ N(0, σ²) 独立同分布 ⇒ 极大似然估计等价于最小化平方误差。<b>这就是 T2 Tutorial Q1 的整道题。</b></li>
+    </ol>
+    <div class="fx">讲义 <b>notes1</b>：p4 LMS/梯度下降 · p8 正规方程 · <b>p10 概率解释（最值钱的一页）</b>
+本课对应：T2 Tutorial Q1（MLE⇒SSE）· Q2（正规方程与设计矩阵）· T2 by hand（单变量闭式解）</div>
+    <p style="font-size:13px;color:var(--ink-3);margin:0">这一讲信息密度最高且没有废料，是五讲里最该完整看的一讲。</p>
+  </div>
+
+  <h2>L3 · Locally Weighted &amp; Logistic Regression <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);color:var(--ink-3)">1:19 — 只看约 30 分钟</span></h2>
+  <div class="card marked">
+    <h3>主线三点</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>sigmoid</b>：g(z) = 1/(1+e⁻ᶻ)。Ng 强调 sigmoid 和 logistic function 是<b>完全同义</b>的两个名字。</li>
+      <li><b>用极大似然推导逻辑回归</b>：写出似然、取对数、求梯度。得到的更新式和线性回归<b>形式一模一样</b>——Ng 特意点出这不是巧合，背后是 GLM。</li>
+      <li><b>没有局部最优问题</b>：逻辑回归的对数似然是凹的（对应损失是凸的），所以梯度法能收敛到全局最优。这一点可以直接用来答"为什么逻辑回归比感知机训练行为更好"。</li>
+    </ol>
+    <div class="trap" style="margin:10px 0">
+      <strong>符号必须换算</strong>：CS229 对 log-likelihood 做梯度<b>上升</b>、y ∈ {0,1}、不除 N；本课对<b>平均</b> BCE 做梯度<b>下降</b>，梯度是 (1/N)Σ(pᵢ−yᵢ)xᵢ。同一件事差一个负号和一个 1/N——看的时候就翻译，别留到考场。
+    </div>
+    <div class="fx">讲义 <b>notes1</b>：p15–17 逻辑回归 · p17 感知机（很短）
+本课对应：T3 Tutorial Q2（梯度计算与一步更新）· T3 by hand
+<b>跳过</b>：开头约 35 分钟的 locally weighted regression（本课不考）· 结尾的 Newton 法（本课不考）</div>
+  </div>
+
+  <h2>L4 · Perceptron &amp; GLM <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);color:var(--ink-3)">1:22 — 基本可整讲跳过</span></h2>
+  <div class="card">
+    <p style="font-size:13.5px;margin:0">感知机在这一讲只占开头一小段，而且 CS229 把它当作"历史上的算法、GLM 的引子"带过。<b>本课对感知机讲得比 CS229 更具体</b>——更新条件 y·s ≤ 0（含等号）、一次 pass 不保证分开、线性可分才保证收敛，这些 CS229 没有细讲。指数族与 GLM 本课完全不考。<br><br><b>建议</b>：整讲跳过，用 T3 Tutorial Q1 加速查表的感知机栏代替，省下 80 分钟。</p>
+  </div>
+
+  <h2>L6 · Support Vector Machines <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);color:var(--ink-3)">1:20 — 必看，跳过前 20 分钟</span></h2>
+  <div class="card marked">
+    <h3>主线五点 · 本课 T4 的地基</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>记号切换</b>：标签改用 y ∈ {−1,+1}，h(x) = g(wᵀx + b)，<b>截距 b 单独写出来</b>（不再吸收进 θ₀）。这和本课的写法一致。</li>
+      <li><b>functional margin</b> γ̂⁽ⁱ⁾ = y⁽ⁱ⁾(wᵀx⁽ⁱ⁾ + b)。<b>这就是本课的 y·f(x)</b>。Ng 的直觉说法：它衡量你分类得"多有把握、多正确"。</li>
+      <li><b>geometric margin</b> γ⁽ⁱ⁾ = γ̂⁽ⁱ⁾/‖w‖。<b>这就是本课的 y·f(x)/‖w‖</b>。</li>
+      <li><b>为什么需要规范化</b>：把 (w,b) 同时放大 k 倍，functional margin 也放大 k 倍，但边界没动——所以单看 functional margin 没有意义。令它等于 1（canonical scaling），最大化间隔就变成 min ½‖w‖²，于是单侧间隔 = 1/‖w‖、<b>全宽 = 2/‖w‖</b>。</li>
+      <li><b>对偶与支持向量</b>：解对偶问题后只有 αᵢ &gt; 0 的样本参与决策函数，那些就是支持向量。</li>
+    </ol>
+    <div class="fx">讲义 <b>notes3</b>：<b>p13 函数间隔与几何间隔（必读）</b> · p15–16 最优间隔分类器 · p17–18 Lagrange 对偶
+本课对应：<b>T4 Tutorial Q1</b>（f、几何间隔、yf 判定）· <b>Q2</b>（margin width 与 C）· T4 by hand
+<b>跳过</b>：开头约 20 分钟还在收尾 Naive Bayes（属于 L5 内容）</div>
+    <p style="font-size:13px;color:var(--ink-3);margin:0">第 4 点是本课 canonical scaling 约定的<b>来历</b>。搞懂它，"为什么全宽是 2/‖w‖ 而不是 1/‖w‖"就再也不会记混。</p>
+  </div>
+
+  <h2>L7 · Kernels <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);color:var(--ink-3)">1:20 — 必看</span></h2>
+  <div class="card marked">
+    <h3>主线五点</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>先把算法改写成只依赖内积的形式</b>。Ng 花了很长时间做这件事——这是核技巧的前提：特征向量<b>只</b>出现在内积里，才有机会替换掉。</li>
+      <li><b>核函数</b> K(x,z) = φ(x)ᵀφ(z)：直接算这个内积，<b>永远不构造 φ(x)</b>。</li>
+      <li><b>所以维度可以极高甚至无穷</b>。Ng 反复强调这一点：十万维、百亿维、无穷维的特征空间都能操作，因为你从没真的写下过那个向量。</li>
+      <li><b>高斯核（RBF）</b>K(x,z) = exp(−‖x−z‖²/2σ²)，是最常用的非线性核；线性核 K(x,z) = xᵀz 对应 φ(x) = x。<b>注意换算</b>：sklearn 的 <span class="mono">gamma</span> = 1/(2σ²)，所以 σ 小 ⟺ gamma 大 ⟺ 影响局部 ⟺ 易过拟合。</li>
+      <li><b>软间隔</b>：min ½‖w‖² + C·Σξᵢ，对偶约束从 αᵢ ≥ 0 变成 <b>0 ≤ αᵢ ≤ C</b>——C 成了单个样本影响力的上限。</li>
+    </ol>
+    <div class="fx">讲义 <b>notes3</b>：p1–6 特征映射与核技巧 · p6 核的性质（Mercer 条件）· <b>p24 软间隔与 C（必读）</b>
+本课对应：<b>T4 Tutorial Q3</b>（φ 展开证明等于 (xᵀy)²）· T4 Tutorial extension（0 ≤ α ≤ C）· T4 Practical 的 kernel/C/gamma 比较
+<b>跳过</b>：SMO 算法（notes3 p25–30，本课不考）</div>
+    <div class="trap" style="margin-top:10px">
+      <strong>考试要点，CS229 不会替你说</strong>：核技巧省掉的是<b>构造特征</b>，不是<b>计算量</b>。样本量增大时成对核计算仍然很贵。T4 Tutorial Q3 第 3 问考的正是这一点。
+    </div>
+  </div>
+
+  <h2>L8 · Data Splits, Models &amp; Cross-Validation <span style="text-transform:none;letter-spacing:0;font-family:var(--sans);color:var(--ink-3)">1:23 — 必看，大题的出处</span></h2>
+  <div class="card marked">
+    <h3>主线四点</h3>
+    <ol class="tight" style="font-size:13.5px">
+      <li><b>偏差 / 方差</b>：欠拟合 = 高偏差（模型太简单，线性函数拟合曲线数据）；过拟合 = 高方差（换一批样本，拟合结果会大不相同）。Ng 说这个概念"容易懂、难精通"。</li>
+      <li><b>三分数据</b>：训练集定参数，dev（= 本课的 validation）集做选择，测试集报告。</li>
+      <li><b>hold-out cross validation</b> 就是本课用的单次验证划分；另有 k-fold 与 leave-one-out，数据少时用。</li>
+      <li><b>不能拿 dev 集的成绩当最终结果</b>——因为算法已经针对 dev 集优化过了。</li>
+    </ol>
+    <div class="note" style="margin:10px 0">
+      第 4 点是<b>整个播放列表里对你分数最值钱的一句话</b>。Ng 的原话是说，报告 dev 集上的结果是不成立的，因为 <span style="font-style:italic">"the algorithm has already been optimized to the dev set"</span>。这和本课「用测试集选超参 ⇒ 最终估计乐观偏高」是同一个论证，只是本课把它挪到了测试集上。模拟卷 Q23 和 T4 Practical Q3/Q5 考的都是它。
+    </div>
+    <div class="fx">讲义 <b>notes5</b>：p2 交叉验证 · p4 特征选择　　<b>error-analysis.pdf</b>：偏差方差
+本课对应：<b>T1 全部</b> · T4 Practical Q3/Q5 · 模拟卷 Q23（流程题）· 大题 Style C</div>
+  </div>
+
+  <h2>看完五讲仍然缺的 · 必须回本课材料</h2>
+  <div class="grid two">
+    <div class="card">
+      <h3>CS229 2018 完全不讲</h3>
+      <ul class="tight" style="font-size:13px;margin-bottom:0">
+        <li><b>Data leakage</b>——预处理泄漏、切分前 fit scaler。这是工程实践概念，本课有专门一页，T4 Practical 反复考。</li>
+        <li><b>sklearn 具体 API</b>：<span class="mono">Pipeline</span>、<span class="mono">StandardScaler</span>、<span class="mono">.decision_function</span>、<span class="mono">.n_support_</span>、<span class="mono">log_loss</span>。</li>
+        <li><b>R²</b>——CS229 不用这个指标。</li>
+        <li><b>本课判定约定</b>：f(x)=0 无严格类别且算 margin violation、ξ=1 恰在边界。这是课程公告专门澄清的，只有本课这么规定。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>讲了但不在这五讲里</h3>
+      <ul class="tight" style="font-size:13px;margin-bottom:0">
+        <li><b>precision / recall / ROC</b>：CS229 有专门的 discussion section 讲这些，但那节不在 YouTube 播放列表里，配套幻灯也已从官网下线。<b>回本课 T3 Practical Q4 学</b>。</li>
+        <li><b>gamma 的欠拟合／过拟合叙事</b>：CS229 用 σ 写高斯核，也不做调参演示。<b>回 M1 T4 Workflow QA 幻灯</b>，那里有三张 gamma = 0.1 / 1 / 10 的边界对比图，比公式直观得多。</li>
+        <li><b>类别不平衡与多数类基线</b>：回 T3 Practical Q2。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="trap" style="margin-top:16px">
+    <strong>一句话总结</strong>：CS229 把本课 T2、T3、T4 的<b>数学地基</b>讲透了，也把 T1 的<b>数据划分纪律</b>讲透了——这四块加起来大概是卷面的 70%。剩下 30% 是工程实践（leakage、sklearn、指标）和本课自己的判定约定，<b>只能从本课材料学</b>，没有替代品。所以顺序是：视频建立理解 → 讲义查推导 → 本课 tutorial 练到会算 → feedback PDF 校准答题口径。
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ── tabs ─────────────────────────────── */
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function show(id){
+    tabs.forEach(function(t){
+      var on = t.id === id;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    try{ localStorage.setItem('m1kit.tab', id); }catch(e){}
+  }
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){ show(t.id); window.scrollTo(0,0); });
+  });
+  try{
+    var saved = localStorage.getItem('m1kit.tab');
+    if (saved && document.getElementById(saved)) show(saved);
+  }catch(e){}
+
+  var pb = document.getElementById('printBtn');
+  if (pb) pb.addEventListener('click', function(){ window.print(); });
+
+  /* ── question bank ────────────────────── */
+  var BANK = [
+    { t:"T1", q:"A team fits a <code>StandardScaler</code> on the full dataset and then splits the scaled data into training and test sets. What is the main problem?",
+      o:["Training will be noticeably slower.",
+         "Statistics from the held-out data influence the transformation, so the reported performance can look better than it really is.",
+         "The scaler will raise an error because the two sets have different sizes.",
+         "Nothing, provided the same scaler object is reused at prediction time."],
+      a:1, w:"这是<b>预处理泄漏</b>。scaler 的均值和标准差用到了测试数据，模型间接见过留出数据，估计乐观偏高。正确做法是先切分，再用 Pipeline 让 scaler 只在训练数据上 fit。" },
+
+    { t:"T1", q:"Which statement best describes the role of the validation set?",
+      o:["It is used to fit the model parameters w and b.",
+         "It provides the final unbiased estimate of performance on new data.",
+         "It is used to compare candidate models and hyperparameter settings before the test set is touched.",
+         "It is merged into the training set to reduce variance."],
+      a:2, w:"三份数据的分工：train 拟合参数，validation 选模型与超参，test 在设置全部锁定后<b>只用一次</b>给无偏估计。B 描述的是测试集。" },
+
+    { t:"T1", q:"A model trained on 2020–2023 data is deployed unchanged and its accuracy declines during 2026. Which response is most appropriate?",
+      o:["Continue using the model, because its original training accuracy was high.",
+         "Investigate how the input data have changed, collect representative recent examples, and retrain and re-evaluate if necessary.",
+         "Re-evaluate the model on its original training data to confirm it still works.",
+         "Replace the new observations' labels with the model's own predictions and continue."],
+      a:1, w:"这是 <b>data shift</b>。正确的第一步是调查输入分布发生了什么变化并收集有代表性的新数据。选项 D 是用模型预测当标签，会把模型自己的错误固化下来。" },
+
+    { t:"T1", q:"A linear model is fitted on GDP per capita ranging from $10,000 to $60,000 and is then used to predict life satisfaction at $500,000. The prediction is implausible. This is an example of:",
+      o:["data leakage","class imbalance","extrapolation far beyond the range of the training data","underfitting caused by too few iterations"],
+      a:2, w:"<b>外推</b>。模型只在观测到的区间内被约束过，超出该范围的预测没有数据支撑，线性关系不一定继续成立。" },
+
+    { t:"T2", q:"A regression model reports R² = 0.85 on the test set. Which interpretation is correct?",
+      o:["85% of the predictions are exactly correct.",
+         "The model explains about 85% of the variance in the target on that data.",
+         "The mean squared error equals 0.15.",
+         "85% of the input features contribute usefully to the model."],
+      a:1, w:"R² = 1 − SS_res/SS_tot，是<b>被解释的方差比例</b>。回归目标是连续值，谈「预测正确的比例」没有意义。要说明典型误差大小应报 RMSE 或 MAE（与目标同单位）。" },
+
+    { t:"T2", q:"Two features in a linear regression are measured on very different scales. Which conclusion about the fitted coefficients is valid?",
+      o:["The feature with the largest absolute coefficient is the most important.",
+         "The sign of a coefficient indicates the direction of the association, but raw magnitudes are not comparable across different scales.",
+         "Coefficients carry no interpretable information at all.",
+         "A negative coefficient shows that the feature should be removed."],
+      a:1, w:"系数的含义是「该特征每变化一个单位，目标变化多少」。单位不同则大小不可比。要比较相对影响必须先标准化特征，或改用置换重要性这类无量纲度量。" },
+
+    { t:"T2", q:"Maximising the Gaussian log-likelihood is equivalent to minimising the sum of squared errors provided that:",
+      o:["the features have been standardised before fitting.",
+         "the errors are independent, Normally distributed and share a common variance.",
+         "the model contains a polynomial term of degree at least two.",
+         "the learning rate is sufficiently small."],
+      a:1, w:"展开 log L 后得到 −(N/2)log(2πσ²) − (1/2σ²)·SSE：第一项与 w 无关，第二项系数为负，所以最大化 log L 等价于最小化 SSE。前提正是<b>独立、同方差的高斯噪声</b>。" },
+
+    { t:"T2", q:"During gradient descent the training loss oscillates and then grows without bound. The most likely cause is:",
+      o:["the learning rate is too large",
+         "the learning rate is too small",
+         "the training set contains too many observations",
+         "the target variable has been standardised"],
+      a:0, w:"η 太大时，沿负梯度的一步会越过极小值并落到损失更高的位置，反复放大形成震荡/发散。η 太小只是收敛慢，不会发散。" },
+
+    { t:"T3", q:"A perceptron computes s = wᵀx + b for a training example with label y ∈ {−1, +1}. An update is performed when:",
+      o:["y·s &gt; 1","y·s ≤ 0","|s| &gt; 1","s &gt; 0"],
+      a:1, w:"感知机的更新条件是 <b>y·s ≤ 0</b>（含等号，所以正好落在边界上 s = 0 也要更新）。更新为 w ← w + ηyx、b ← b + ηy，效果是把该样本的得分推向正确一侧。" },
+
+    { t:"T3", q:"A perceptron and a logistic-regression model both compute a linear score from the same features. The essential difference in their <em>outputs</em> is:",
+      o:["The perceptron can use more features than logistic regression.",
+         "The perceptron returns a hard class from the sign of the score, while logistic regression maps the score through the sigmoid to an estimated probability.",
+         "Logistic regression cannot produce a class label.",
+         "The perceptron's score is always between 0 and 1."],
+      a:1, w:"两者的共同点是都形成一个线性得分 wᵀx + b，都给出线性决策边界；区别在于如何使用这个得分——感知机取符号得硬类别，逻辑回归过 sigmoid 得概率，再按阈值转成类别。" },
+
+    { t:"T3", q:"A student applies the sigmoid to a fitted perceptron's <code>decision_function</code> output and calls the result \"the probability of the positive class\". The best response is:",
+      o:["Correct, because the transformed values now lie between 0 and 1.",
+         "The values lie in (0,1) but were not obtained by training a probabilistic loss, so they are not calibrated probabilities.",
+         "Correct, provided the classification threshold is kept at 0.5.",
+         "Incorrect, because the sigmoid cannot be applied to a perceptron score."],
+      a:1, w:"落在 0–1 区间 ≠ 是概率。感知机用硬分类的更新规则训练，没有优化交叉熵，所以输出 0.9 不代表「这类样本中约 90% 是正类」。要得到校准概率应当训练逻辑回归，并用 log loss 评估。" },
+
+    { t:"T3", q:"A logistic-regression model has already produced probabilities for a set of observations. The classification threshold is lowered from 0.5 to 0.3. The immediate effect is:",
+      o:["More observations are classified as positive; recall increases and precision typically decreases.",
+         "Fewer observations are classified as positive.",
+         "All predicted probabilities are recalculated with the new threshold.",
+         "Accuracy necessarily improves."],
+      a:0, w:"阈值只是对<b>已算好的概率</b>重新切分，不会改变概率本身。阈值降低 → 更多样本被判为正 → 找回更多真正例（recall ↑），但假正例也变多（precision 通常 ↓）。准确率可升可降。" },
+
+    { t:"T3", q:"In a test set only 9% of the images are the digit 5. A \"is this a 5?\" classifier reports 91% accuracy. The correct interpretation is:",
+      o:["The model performs excellently.",
+         "Accuracy must be compared with the ≈91% majority-class baseline; this result may be no better than always predicting \"not 5\".",
+         "Precision and recall must be equal to each other.",
+         "The classes must be rebalanced before any metric can be computed."],
+      a:1, w:"类别不平衡时准确率会被多数类主导。必须先报<b>多数类基线</b>（这里 91%）再比较，并查看正类的 precision / recall 与混淆矩阵，才能知道模型是否真的学到东西。" },
+
+    { t:"T3", q:"In the average binary cross-entropy gradient ∂J/∂w = (1/N)Σ(pᵢ − yᵢ)xᵢ, the term (pᵢ − yᵢ) is best described as:",
+      o:["always a positive quantity",
+         "the signed probability error: positive when the predicted probability exceeds the label and negative when it falls below it",
+         "the classification accuracy of example i",
+         "the learning rate applied to example i"],
+      a:1, w:"(pᵢ − yᵢ) 是<b>带符号的概率误差</b>。它决定了每个样本把参数往哪个方向推、推多少：预测偏高就往下压，偏低就往上抬。沿负梯度走足够小的一步是局部下坡，因此损失下降。" },
+
+    { t:"T4", q:"For f(x) = wᵀx + b with ‖w‖ = 2, a training point with label y = +1 has f(x) = 0. Under the conventions used in this course, the point is:",
+      o:["correctly classified and outside the margin",
+         "on the decision boundary, with no strict predicted class, and a margin violation because y·f(x) = 0 &lt; 1",
+         "correctly classified with a geometric margin of 0.5",
+         "misclassified, because y·f(x) &lt; 1"],
+      a:1, w:"课程公告明确规定：f(x) = 0 时点在边界上、<b>没有严格的预测类别</b>，手算中不计为正确分类；同时 y·f(x) = 0 &lt; 1，因此是 margin violation。但它<b>不是</b>误分类——误分类要求 y·f(x) &lt; 0。" },
+
+    { t:"T4", q:"Under canonical SVM scaling with w = (6, 8), the full margin width is:",
+      o:["0.1","0.2","10","14"],
+      a:1, w:"‖w‖ = √(36+64) = 10。单侧距离 = 1/‖w‖ = 0.1，<b>全宽 = 2/‖w‖ = 0.2</b>。选项 A 是常见陷阱——把单侧当成了全宽。" },
+
+    { t:"T4", q:"Reducing C in a soft-margin SVM tends to:",
+      o:["widen the margin, tolerate more violations, and increase the number of support vectors",
+         "narrow the margin and reduce the number of support vectors",
+         "have no effect unless the RBF kernel is used",
+         "remove the need to scale the features"],
+      a:0, w:"C 是对违反的惩罚权重。C 小 → 惩罚轻 → 用更多违反换更宽的间隔 → 落在间隔内/上的点更多 → 支持向量更多，正则更强、可能欠拟合。C 大则相反。" },
+
+    { t:"T4", q:"With an RBF kernel, increasing gamma:",
+      o:["makes each training point's influence more local, producing a more detailed boundary that can overfit",
+         "always improves validation accuracy",
+         "makes the decision boundary smoother",
+         "is mathematically equivalent to increasing C"],
+      a:0, w:"γ 控制每个训练点影响力的<b>作用范围</b>。γ 大 → 影响很局部 → 边界细碎、贴合个别点 → 过拟合风险。γ 小 → 影响范围广 → 边界平滑 → 可能欠拟合。C 管的是违反的惩罚，两者是不同的旋钮。" },
+
+    { t:"T4", q:"The kernel trick:",
+      o:["guarantees that training remains inexpensive on very large datasets",
+         "evaluates the dot product in a transformed feature space without explicitly constructing those features",
+         "removes the need to select any hyperparameters",
+         "converts a nonlinear classification problem into a linear-regression problem"],
+      a:1, w:"核技巧省掉的是<b>显式构造变换后的特征</b>，让高维甚至无穷维的特征映射变得可行。但它<b>不保证</b>训练便宜——样本量增大时，成对的核计算量仍然会增长。" },
+
+    { t:"T4", q:"Why should numerical features normally be scaled before fitting an SVM?",
+      o:["Because SVC cannot handle negative feature values.",
+         "Because the margin and the RBF kernel are based on distances, so a feature with a much larger numeric range would dominate the solution.",
+         "Because scaling guarantees that the classes become linearly separable.",
+         "Because scaling removes the need for a separate validation set."],
+      a:1, w:"SVM 的间隔和 RBF 核都建立在<b>距离</b>之上。若某个特征取值到几千而另一个在 0–1，前者会主导距离计算，间隔几乎只由它决定。StandardScaler 把各特征变成均值 0、标准差 1，且必须放进 Pipeline 只在训练数据上 fit。" }
+  ];
+
+  var KEY = ["A","B","C","D"];
+  var state = {};
+
+  function render(){
+    var host = document.getElementById('quiz');
+    if (!host) return;
+    host.innerHTML = '';
+    BANK.forEach(function(item, i){
+      var d = document.createElement('div');
+      d.className = 'q';
+      var opts = item.o.map(function(text, j){
+        return '<button class="opt" type="button" data-q="'+i+'" data-o="'+j+'">'+
+               '<span class="k">'+KEY[j]+'</span><span>'+text+'</span></button>';
+      }).join('');
+      d.innerHTML =
+        '<div class="q-head"><span class="q-n">'+(i+1)+'</span>'+
+        '<p class="q-t"><span class="tag plain">'+item.t+'</span>'+item.q+'</p></div>'+
+        '<div class="opts">'+opts+'</div>'+
+        '<div class="why" id="why-'+i+'" hidden><span class="lab">答案 '+KEY[item.a]+'</span>'+item.w+'</div>';
+      host.appendChild(d);
+    });
+  }
+
+  function mark(i){
+    var chosen = state[i];
+    var item = BANK[i];
+    document.querySelectorAll('.opt[data-q="'+i+'"]').forEach(function(btn){
+      var j = +btn.dataset.o;
+      btn.classList.add('done');
+      btn.classList.remove('right','wrong','dim');
+      if (j === item.a) btn.classList.add('right');
+      else if (j === chosen) btn.classList.add('wrong');
+      else btn.classList.add('dim');
+    });
+    document.getElementById('why-'+i).hidden = false;
+  }
+
+  function tally(){
+    var done = 0, right = 0;
+    Object.keys(state).forEach(function(k){
+      done++;
+      if (state[k] === BANK[+k].a) right++;
+    });
+    document.getElementById('sDone').textContent = done;
+    document.getElementById('sRight').textContent = right;
+    document.getElementById('sMark').textContent = right * 3;
+    try{ localStorage.setItem('m1kit.answers', JSON.stringify(state)); }catch(e){}
+  }
+
+  render();
+
+  document.getElementById('quiz').addEventListener('click', function(ev){
+    var btn = ev.target.closest('.opt');
+    if (!btn || btn.classList.contains('done')) return;
+    var i = +btn.dataset.q;
+    state[i] = +btn.dataset.o;
+    mark(i);
+    tally();
+  });
+
+  document.getElementById('revealAll').addEventListener('click', function(){
+    BANK.forEach(function(_, i){
+      if (!(i in state)) {
+        document.querySelectorAll('.opt[data-q="'+i+'"]').forEach(function(btn){
+          var j = +btn.dataset.o;
+          btn.classList.add('done');
+          btn.classList.add(j === BANK[i].a ? 'right' : 'dim');
+        });
+        document.getElementById('why-'+i).hidden = false;
+      }
+    });
+    document.querySelectorAll('details').forEach(function(d){ d.open = true; });
+  });
+
+  document.getElementById('resetQuiz').addEventListener('click', function(){
+    state = {};
+    render();
+    tally();
+    document.querySelectorAll('details').forEach(function(d){ d.open = false; });
+  });
+
+  try{
+    var prev = JSON.parse(localStorage.getItem('m1kit.answers') || '{}');
+    Object.keys(prev).forEach(function(k){
+      var i = +k;
+      if (BANK[i] && typeof prev[k] === 'number') { state[i] = prev[k]; mark(i); }
+    });
+  }catch(e){}
+  tally();
+})();
+</script>

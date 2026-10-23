@@ -1,0 +1,875 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L20 · 强化学习的调试与诊断</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L20 · 强化学习的调试与诊断",
+  subtitle:"三句话诊断法 · 策略搜索 · REINFORCE · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=pLhPQynL0tY&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 决策树的一个分叉：条件 → 结论 ── */
+function fork(x,y,w,cond,yes,no){
+  boxNode(x,y,w,54,cond,"b");
+  boxNode(x-w*0.30,y+76,w*0.56,54,yes,"g");
+  boxNode(x+w*0.74,y+76,w*0.56,54,no,"r");
+  link(x+w/2,y+54,x-w*0.30+w*0.28,y+76);
+  link(x+w/2,y+54,x+w*0.74+w*0.28,y+76);}
+
+/* ── 网格世界 ── */
+function grid(x0,y0,cw,ch,cols,rows,cb){
+  var i,j;
+  for(j=0;j<rows;j++)for(i=0;i<cols;i++){
+    var v=cb(i,j); if(v===null) continue;
+    boxNode(x0+i*cw, y0+j*ch, cw-6, ch-6, v[0], v[1]||"");}}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L20","强化学习的调试与诊断",
+      "全课最后一讲");},
+    "这是 CS229 的最后一讲。Ng 开场说：<b>欢迎来到本季度的最后一课，对网上的观众来说——欢迎收看季终集。</b><br><b>⭐ 这一讲是整门课里最实用的几讲之一，而且它回答的是一个你迟早会亲自撞上的问题。</b><br><b>场景是这样的</b>：<b>你照着前面几讲做完了全部工作——建好模拟器、写好奖励函数、跑完强化学习算法，拿到了一个控制器。</b><b>然后你把它装上真的直升机，结果它飞得比人类飞行员差得多。</b><br><b>⚠ 接下来该做什么？</b><b>是去改进模拟器？是去改奖励函数？还是去换一个更好的强化学习算法？</b><br><b>⭐ 这三条路都很花时间，而且 Ng 说这是一个多年的项目——选错方向的代价是以月计的。</b><br><b>这一讲给出的是一套能真正判断方向的诊断法，只用三句话。</b><br><b>后半段讲一类之前没提过的算法：策略搜索——直接去找策略，根本不经过价值函数。</b><b>那段著名的「直升机倒着飞」的视频，用的就是这类算法。</b>");
+});
+KP("1 · ⭐ 案例：斯坦福的自主直升机",function(){
+  S(134,function(){clearScene();setEq(null);setCap("一个真实的多年项目");
+       says("2:14","there is a helicopter about to crash");
+       boxNode(170,196,980,56,"目标：让直升机自己飞特技 —— 倒着飞、空中翻转","b");
+       boxNode(170,264,980,56,"⭐ 而且是真飞机、真会摔，所以不能老是坠机","y");
+       note("Ng 的趣事：邻居远看分不出这是遥控直升机，以为要坠机，打了 911",640,348,"d");
+       note("⚠ 这个例子的价值在于：它的每一步都会真的出错",640,398,"r");},"<b>这一讲用一个真实项目当案例：斯坦福的自主直升机。</b><br><b>目标是让直升机自己飞特技——倒着飞、在空中翻转、做出看起来空气动力学上不可能的机动。</b>Ng 说<b>有一段视频里，直升机一边上下翻转、一边朝各个方向旋转，却稳稳地停在空中没有掉下来。</b><br><b>⭐ 关键在于这是真飞机、真会摔。</b><b>所以「多试几次」这件事是有成本的。</b><br><b>Ng 讲了个趣事：这是一架遥控直升机，但从远处看分辨不出大小，有位邻居以为是一架载人直升机要坠毁，打了 911，结果消防车来了。</b><br><b>⚠ 这个案例之所以有教学价值，是因为它的每一步都会真的出错——模型会不准、奖励会写歪、算法会不收敛。</b><b>⇒ 下面讲的就是出错之后怎么办。</b>");
+  S(134,function(){clearScene();setEq(null);setCap("为什么不能靠「多试几次」");
+   boxNode(130,200,470,58,"在模拟器里","g");
+   boxNode(130,268,470,58,"摔一万次也不要钱","g");
+   boxNode(690,200,470,58,"⚠ 在真机上","r");
+   boxNode(690,268,470,58,"摔一次就是真金白银 ＋ 几周的修复","r");
+   note("⭐ 所以必须先在模拟器里练好，再上真机 —— 这正是 L18 那条路线",640,352,"y");
+   note("⚠ 而这又把「模拟器准不准」顶到了第一位",640,398,"r");},"<b>这个项目的一个硬约束，决定了后面所有方法的选择：真飞机摔不起。</b><br><b>在模拟器里摔一万次也不要钱；而在真机上摔一次，就是真金白银加上几周的修复时间。</b><br><b>⭐ 所以路线只能是：先在模拟器里把策略练好，再搬到真机上——这正是 L18 讲的 model-based 路线。</b><br><b>⚠ 而这条路线又立刻把一个问题顶到了第一位：模拟器准不准。</b><br><b>因为你所有的训练都发生在模拟器里，模拟器错了，学出来的东西就全错了，而你要到真机上才会发现。</b><br><b>⇒ 这就是为什么三句话里第一句就是「模拟器是准的」，也是为什么 Ng 说他通常先查这一步。</b>");
+  SUM(134,1,{h:"⭐ 案例：斯坦福自主直升机",k:"<b>目标</b>：让直升机自己飞特技——<b>倒着飞、空中翻转</b>。有一段视频里它<b>一边上下翻转、一边朝各方向旋转，却稳稳停在空中</b>。",m:"⭐ <b>关键</b>：这是<b>真飞机、真会摔</b>，所以「多试几次」是有成本的。",w:"<b>Ng 的趣事</b>：邻居远看分不出这是遥控直升机，<b>以为载人直升机要坠毁，打了 911，消防车来了</b>。",e:"⚠ <b>这个案例的教学价值</b>：它的每一步都会真的出错——<b>模型会不准、奖励会写歪、算法会不收敛</b>。"});
+  QUIZ(134,1,{t:"L20 用什么案例来讲强化学习的调试？",o:["下围棋的程序","斯坦福的自主直升机项目——真飞机、真会摔，目标是自己飞特技（倒飞、空中翻转）","推荐系统","网格世界里的机器人"],a:1,w:"⭐ 它的教学价值在于<b>每一步都会真的出错</b>：模型会不准、奖励会写歪、算法会不收敛。而且<b>「多试几次」是有成本的</b>。"});
+});
+KP("2 · ★★ 困境：三条路都很花时间，该走哪条",function(){
+  S(306,function(){clearScene();setEq(null);setCap("做完全部工作之后，结果不好");
+       says("5:06","the resulting controller does much worse than the human pilot");
+       boxNode(170,186,980,52,"你已经做完的事：建模拟器 ＋ 写奖励函数 ＋ 跑 RL 算法","d");
+       boxNode(170,246,980,52,"⚠ 结果：控制器飞得比人类飞行员差得多","r");
+       boxNode(130,318,320,52,"改模拟器？","y");
+       boxNode(480,318,320,52,"改奖励函数？","y");
+       boxNode(830,318,320,52,"改 RL 算法？","y");
+       note("⭐ 三条路都要花上几周到几个月 —— 选错方向代价极大",640,398,"y");},"<b>现在是项目的真实场景。</b><br><b>你已经按前面几讲做完了全部工作：建好了模拟器、写好了奖励函数、跑完了强化学习算法，拿到一个控制器。</b><br><b>⚠ 然后 Ng 说——第一次做的时候，你会发现这个控制器比人类飞行员差得多。</b><br><b>问题来了：接下来该做什么？</b><b>面前有三条路：改进模拟器、修改奖励函数、或者改进强化学习算法。</b><br><b>⭐ 而每一条都要花上几周到几个月。</b>Ng 提到<b>改算法这一条里又包含一堆具体选项：调离散化的粒度、换特征、甚至把线性函数近似换成一个更大的深度神经网络。</b><br><b>⚠ 所以这不是一个「都试试」能解决的问题——选错方向，代价是以月计的。</b><b>⇒ 下一节给出判断方法。</b>");
+  S(306,function(){clearScene();setEq(null);setCap("为什么不能「三条都试」");
+   matrix({rows:4,cols:2,cw:430,ch:44,x:210,y:198,
+     cell:function(i,j){var t=[
+       ["做法","问题"],
+       ["三条都试一遍","⚠ 每条几周到几个月，试完项目就黄了"],
+       ["凭感觉挑一条","⚠ 猜错了，几个月白费"],
+       ["★ 先诊断再动手","⭐ 花几天做实验，省几个月"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 诊断的全部价值，就在这个时间比例上",640,398,"y");},"<b>为什么不能「三条都试一遍」？算一下时间就知道了。</b><br><b>⚠ 每条路要花几周到几个月，三条都试一遍，项目就黄了。</b><br><b>⚠ 凭感觉挑一条呢？猜错了就是几个月白费，而且你还不知道自己猜错了——因为那条路上多少总会有些进展，看起来像是在前进。</b><br><b>★ 而先做诊断：花几天时间做几个实验，换来几个月的方向正确。</b><br><b>⭐ 诊断的全部价值就在这个时间比例上：几天 vs 几个月。</b><br><b>⚠ 顺带说一句，「凭感觉挑一条」为什么特别危险：因为改进模拟器、调奖励、换算法这三件事，做下去都会带来一些局部改善，让你误以为方向对了。</b><b>⇒ 只有诊断能告诉你哪个改善是真正有意义的。</b>");
+  SUM(306,2,{h:"★★ 三条路的困境",k:"<b>场景</b>：建好模拟器、写好奖励、跑完算法，⚠ 结果<b>控制器比人类飞行员差得多</b>。",m:"<b>三条路</b>：<b>改模拟器 / 改奖励函数 / 改 RL 算法</b>。其中「改算法」又包含一堆选项：<b>调离散化粒度、换特征、换成更大的深度神经网络</b>。",w:"⭐ <b>每条路都要几周到几个月</b>。",e:"⚠ <b>所以这不是「都试试」能解决的问题</b>——选错方向，代价以月计。"});
+  QUIZ(306,2,{t:"控制器表现不如人类飞行员时，面前有哪三条路？",o:["改进模拟器、修改奖励函数、改进 RL 算法——而每条都要几周到几个月","降低目标、简化任务、放弃特技","加数据、加算力、加人手","换硬件、换传感器、换飞行员"],a:0,w:"⭐ 「改算法」里又有一堆选项：<b>调离散化粒度、换特征、换成更大的深度神经网络</b>。⚠ <b>选错方向代价以月计</b>，所以不能「都试试」。"});
+});
+KP("3 · ★★★ 三句话：如果都成立，它就该飞得好",function(){
+  S(404,function(){clearScene();setEq(null);setCap("诊断法的核心");
+       says("6:44","if these three statements are true, then the learn controller should have flown well");
+       boxNode(170,196,980,52,"① 模拟器是准的","b");
+       boxNode(170,256,980,52,"② RL 算法确实在模拟器里最大化了期望回报","b");
+       boxNode(170,316,980,52,"③ 最大化这个期望回报，确实对应着「飞得好」","b");
+       note("⭐ 三句都成立 ⇒ 它就该飞得好。既然没有，至少有一句是假的",640,398,"y");},"<b>★★★ 这是整个诊断法的核心，而且它的逻辑非常漂亮。</b><br><b>先写下三句话。</b><b>① 模拟器是准的。</b><b>② 强化学习算法确实在模拟器里最大化了期望回报。</b><b>③ 最大化这个期望回报，确实对应着「把直升机飞好」。</b><br><b>⭐ Ng 点出关键：如果这三句话都成立，那么学出来的控制器就应该在真直升机上飞得很好。</b><br><b>⇒ 而事实是它没有。所以至少有一句是假的。</b><br><b>⭐ 更妙的是：这三句话恰好一一对应前面那三条路。</b><b>第一句假 ⇒ 该改模拟器；第二句假 ⇒ 该改算法；第三句假 ⇒ 该改奖励函数。</b><br><b>⚠ 于是问题从「该走哪条路」变成了「哪一句是假的」——而后者是可以用实验检验的。</b><b>下面三节就是那三个实验。</b>");
+  S(404,function(){clearScene();setEq(null);setCap("三句话 ↔ 三条路 ↔ 三个诊断");
+   matrix({rows:4,cols:3,cw:350,ch:44,x:130,y:198,
+     cell:function(i,j){var t=[
+       ["哪句假了","该做什么","怎么查"],
+       ["① 模拟器不准","改进模拟器","在模拟器里飞得好吗"],
+       ["② 没真在最大化","改进 RL 算法","★ 收益比人类低吗"],
+       ["③ 最大化 ≠ 飞得好","改奖励函数","★ 收益比人类高却飞得差吗"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i>=2?"hl":"";}});
+   note("⭐ 这张表就是整讲的精华 —— 值得抄下来贴在显示器上",640,398,"y");},"<b>把三句话、三条路、三个诊断对齐成一张表，这就是整讲的精华。</b><br><b>第①句假（模拟器不准）⇒ 该改进模拟器 ⇒ 查法是「它在模拟器里飞得好吗」。</b><br><b>第②句假（算法没真在最大化）⇒ 该改进算法 ⇒ 查法是「它的收益比人类低吗」。</b><br><b>第③句假（最大化不等于飞得好）⇒ 该改奖励函数 ⇒ 查法是「它的收益比人类高、却飞得更差吗」。</b><br><b>⭐ 注意后两行的查法共用同一个实验——都是和人类飞行员比收益，只是比较的方向不同。</b><br><b>⇒ 所以实际上你只要做两个实验：一个看模拟器，一个比人类。</b><b>⚠ 两个实验，就能把三条路的选择确定下来。</b>");
+  SUM(404,3,{h:"★★★ 三句话：找出假的那一句",k:"<b>① 模拟器是准的 ② RL 算法确实在模拟器里最大化了期望回报 ③ 最大化这个期望回报确实对应着「飞得好」</b>。",m:"⭐ <b>关键</b>：三句都成立 ⇒ <b>控制器就该在真机上飞得好</b>。而事实是它没有 ⇒ <b>至少有一句是假的</b>。",w:"⭐ <b>更妙的是一一对应</b>：第①句假 ⇒ 改模拟器；第②句假 ⇒ 改算法；第③句假 ⇒ 改奖励函数。",e:"⚠ <b>问题被转化了</b>：从「该走哪条路」变成「哪一句是假的」——<b>而后者可以用实验检验</b>。"});
+  QUIZ(404,3,{t:"三句话诊断法的核心逻辑是什么？",o:["同时改三样东西，看整体是否变好","把三条路各试一遍，看哪条有效","按成本从低到高依次尝试","写下三句话（模拟器准 / 算法真在最大化 / 最大化确实对应飞得好），三句都成立它就该飞得好；既然没有，就有一句假，而三句一一对应三条路"],a:3,w:"⚠ 妙处在于<b>把问题转化了</b>：从「该走哪条路」（没法直接判断）变成「<b>哪一句是假的</b>」（可以用实验检验）。"});
+});
+KP("4 · ★★ 诊断一：先看它在模拟器里飞得好不好",function(){
+  S(464,function(){clearScene();setEq(null);setCap("检验第①句：模拟器准不准");
+       says("7:44","if your policy flies well in simulation but not in real life");
+       fork(400,210,460,"策略在模拟器里飞得好吗？",
+            "✓ 好 ⇒ ⚠ 问题在模拟器","✗ 也不好 ⇒ 看诊断二、三");
+       note("⭐ 逻辑：模拟器里好、真机上不好 ⇒ 两者之间有落差 ⇒ 模拟器不准",640,382,"y");
+       note("对策：采更多数据，学一个更好的模型（线性模型就是重拟合 A、B）",640,404,"g");},"<b>第一个诊断最简单，也最该先做：看看这个策略在模拟器里飞得好不好。</b><br><b>⭐ 逻辑非常直接：如果它在模拟器里飞得很好，但在真机上不行，那就说明模拟器和现实之间有落差——问题出在模拟器上。</b><br><b>Ng 给的对策很具体：去为直升机学一个更好的模型。</b><b>如果你用的是线性模型 s_{t+1} = A·s_t + B·a_t，那就采更多数据，把 A 和 B 重新拟合得更准。</b><br><b>⚠ 反过来，如果它在模拟器里也飞得不好，那这个诊断就不指向模拟器——问题在后面两句话里，继续看诊断二和三。</b><br><b>⭐ Ng 在问答里补了一句他的习惯：我通常先查第一步，如果觉得模拟器没问题，再去看第二和第三步。</b>");
+  S(464,function(){clearScene();setEq(null);setCap("⚠ 一个容易搞混的点");
+   boxNode(170,196,980,56,"这里问的不是「算法收敛了吗」","r");
+   boxNode(170,264,980,56,"★ 而是「在模拟器里，它飞得像样吗」","g");
+   note("⭐ 算法可以完美收敛，但收敛到的那个策略在模拟器里照样可能飞得很糟",640,340,"y");
+   note("⚠ 前者是算法的内部指标，后者是你真正关心的行为",640,398,"r");},"<b>诊断一有个容易搞混的地方，值得点一下。</b><br><b>这里问的不是「算法收敛了吗」，而是「在模拟器里，这个策略飞得像样吗」。</b><br><b>⭐ 这两件事完全不同。</b><b>算法可以完美收敛——价值函数不再变化、损失曲线很漂亮——但收敛到的那个策略，在模拟器里照样可能飞得很糟。</b><br><b>⚠ 前者是算法的内部指标，后者是你真正关心的行为。</b><br><b>⇒ 所以这个诊断要你真的去看：把策略放进模拟器跑一遍，看它飞成什么样。</b><br><b>⭐ 这其实是一条更一般的经验：永远不要用「训练过程的内部指标」代替「对最终行为的直接观察」。</b>");
+  SUM(464,4,{h:"★★ 诊断一：在模拟器里飞得好吗",k:"⭐ <b>逻辑</b>：<b>模拟器里飞得好、真机上不行 ⇒ 两者之间有落差 ⇒ 模拟器不准</b>。",m:"<b>对策</b>：去学一个<b>更好的模型</b>——线性模型的话就<b>采更多数据、重新拟合 A 和 B</b>。",w:"⚠ <b>反过来</b>：如果在模拟器里也飞不好，这个诊断就<b>不指向模拟器</b>，继续看诊断二、三。",e:"⭐ <b>Ng 的习惯</b>：<b>通常先查第一步</b>，觉得模拟器没问题再看第二、三步。"});
+  QUIZ(464,4,{t:"诊断一怎么做？什么情况指向「模拟器有问题」？",o:["比较训练和测试误差；误差差距大就是模拟器问题","看算法是否收敛","看策略在模拟器里飞得好不好：模拟器里好但真机上不行，就说明两者有落差、模拟器不准","看奖励函数的数值大小"],a:2,w:"<b>对策</b>：采更多数据、<b>重新拟合 A 和 B</b>。⭐ Ng 说他<b>通常先查这一步</b>。"});
+});
+KP("5 · ★★ 诊断二：和人类飞行员比收益",function(){
+  S(584,function(){clearScene();setEq("$$V\\big(\\pi_{\\text{RL}}\\big) \\;<\\; V\\big(\\pi_{\\text{human}}\\big) \\;\\Longrightarrow\\; \\text{算法没在真正最大化}$$","top");
+       setCap("检验第②句：算法有没有真在最大化");
+       says("9:44","if the payoff achieved by the learning algorithm is less than the payoff achieved by the human",214);
+       note("① 请一位人类飞行员手动把直升机飞一遍",640,274,"b");
+       note("② 用你自己那个奖励函数，去算他这一趟的收益",640,326,"b");
+       note("⭐ ③ 和算法学出来的策略的收益比一比",640,378,"y");},"<b>第二个诊断要用到一个很聪明的参照物：人类飞行员。</b><br><b>Ng 说他们很幸运，有一位美国顶尖的特技直升机飞行员参与项目，用操纵杆手动把直升机飞了一遍。</b><br><b>做法是三步。</b><b>① 请人类飞行员手动飞一趟。</b><b>② 用你自己写的那个奖励函数，去计算他这一趟拿到的收益。</b><b>⭐ ③ 把这个数和算法学出来的策略的收益比一比。</b><br><b>⚠ 注意第二步的要害：用的是你自己的奖励函数。</b><b>也就是说，你在用自己定的尺子去量一个你承认飞得更好的人。</b><br><b>⭐ 如果算法的收益比人类低，那说明算法根本没有真正在最大化这个和式——因为人类都做到了更高的值。⇒ 第②句话是假的，该去改算法。</b>");
+  S(584,function(){clearScene();setEq(null);setCap("注意这个比较的奇特之处");
+   boxNode(130,196,470,58,"通常的比较","d");
+   boxNode(130,264,470,58,"用公认的指标去比两个方法","d");
+   boxNode(690,196,470,58,"★ 这里的比较","y");
+   boxNode(690,264,470,58,"用你自己写的奖励函数去量人类","y");
+   note("⭐ 妙处：你并不假设自己的奖励函数是对的",640,340,"y");
+   note("⚠ 恰恰是「用它去量一个飞得更好的人」，才能检验它对不对",640,398,"r");},"<b>这个比较有一个奇特之处，想通了整套诊断法就通了。</b><br><b>通常我们比较两个方法，用的是一个公认正确的指标。</b><br><b>★ 而这里用的是你自己写的那个奖励函数——一个正在被怀疑的东西——去量一个人类飞行员。</b><br><b>⭐ 妙就妙在：你并不假设自己的奖励函数是对的。</b><br><b>⚠ 恰恰相反，正是「用这把尺子去量一个你承认飞得更好的人」，才能检验这把尺子对不对。</b><br><b>如果尺子是对的，它量出来的人类成绩就该更高；而如果它量出人类更低，那尺子本身就有问题。</b><br><b>⇒ 这就是为什么同一个实验能同时检验第②句和第③句——它一边在考算法，一边在考奖励函数。</b>");
+  SUM(584,5,{h:"★★ 诊断二：用自己的奖励函数去量人类飞行员",k:"<b>三步</b>：① <b>请人类飞行员手动飞一趟</b>（Ng 说他们请到了美国顶尖的特技直升机飞行员）② <b>用你自己那个奖励函数算他的收益</b> ③ 和算法的收益比。",m:"⚠ <b>要害在第②步</b>：用的是<b>你自己定的尺子</b>，去量一个<b>你承认飞得更好的人</b>。",w:"⭐ <b>若 V(π_RL) < V(π_human)</b>：说明<b>算法根本没在真正最大化</b>——因为人类都做到了更高的值。",e:"⇒ <b>第②句话是假的，该去改算法。</b>"});
+  QUIZ(584,5,{t:"诊断二怎么做？V(π_RL) < V(π_human) 说明什么？",o:["让人类给算法的飞行打分","用你自己的奖励函数去算人类飞行员那一趟的收益，和算法比；算法收益更低说明算法没在真正最大化，该改算法","比较两者的飞行时长；时间短说明算法好","比较两者的模拟器误差"],a:1,w:"⚠ 要害是<b>用你自己定的尺子，去量一个你承认飞得更好的人</b>。⭐ 人类都做到了更高的值，说明算法没把这个和式最大化。"});
+});
+KP("6 · ★★★ 诊断三：收益更高却飞得更差 ⇒ 奖励函数错了",function(){
+  S(644,function(){clearScene();setEq("$$V\\big(\\pi_{\\text{RL}}\\big) \\;>\\; V\\big(\\pi_{\\text{human}}\\big) \\quad\\text{但人类明明飞得更好}$$","top");
+       setCap("这一条最精彩");
+       says("10:44","doing a really good job maximizing the sum of rewards does not correspond to how you actually want the helicopter to fly",214);
+       note("① 算法确实把你写的那个和式最大化了 —— 它赢了人类",640,274,"b");
+       note("② 可结果并不是你想要的飞行",640,326,"r");
+       note("⭐ ⇒ 只能说明：你写的那个和式，不是「飞得好」的正确度量",640,378,"y");},"<b>★★★ 第三个诊断是三个里最精彩的，因为它指向的问题最隐蔽。</b><br><b>情形是：算法的收益反而比人类飞行员更高。可人类明明飞得更好。</b><br><b>⭐ 这个组合说明了什么？推理只有两步。</b><b>① 算法确实把你写的那个和式最大化了——它在这个指标上赢了人类，证据确凿。</b><b>② 可最后的飞行结果并不是你想要的。</b><br><b>⭐ ⇒ 那唯一的解释就是：你写的那个和式，根本不是「飞得好」的正确度量。</b>Ng 的原话是——<b>把奖励之和做得很好，并不对应于你实际希望直升机怎么飞。</b><br><b>⇒ 第③句话是假的，该去改奖励函数。</b><br><b>⚠ 这一条为什么隐蔽？因为从算法的角度看，一切都很成功：目标在上升，指标在变好。</b><b>⭐ 问题在目标本身，而目标是你定的——这正是 L16 那条「奖励写歪了算法会忠实追求歪目标」的教训，在真实项目里的样子。</b>");
+  S(644,function(){clearScene();setEq(null);setCap("这类毛病有个名字");
+   boxNode(170,196,980,56,"算法在优化你写下的目标 —— 而不是你心里的目标","r");
+   boxNode(170,264,980,56,"★ 指标涨了，真实效果却变差","r");
+   note("⭐ 这在今天有个常见说法：奖励被「钻空子」了",640,340,"y");
+   note("⚠ 回想 L16 那个例子：只奖励「不摔机」⇒ 它学会停在地上不起飞",640,398,"r");},"<b>这类毛病其实有个名字，而且在今天的机器学习里越来越常见。</b><br><b>核心现象是：算法在优化你写下的那个目标，而不是你心里真正的目标。</b><b>于是指标一路上涨，真实效果却在变差。</b><br><b>⭐ 今天常见的说法是「奖励被钻空子了」——算法找到了一条让指标很高、但完全不符合你本意的路。</b><br><b>⚠ 回想 L16 里那个例子：如果你只奖励「不摔机」，算法会学会把直升机停在地上永远不起飞。</b><b>它完美地满足了你写下的目标。</b><br><b>⇒ 诊断三的价值，就是给了你一个能在项目里真正检测出这件事的实验，而不只是停留在「要小心奖励函数」这种提醒上。</b>");
+  SUM(644,6,{h:"★★★ 诊断三：赢了指标却输了实效 ⇒ 奖励函数错",k:"<b>情形</b>：算法的收益<b>反而比人类高</b>，可<b>人类明明飞得更好</b>。",m:"⭐ <b>两步推理</b>：① <b>算法确实把你写的和式最大化了</b>（它赢了人类，证据确凿）② <b>可结果不是你想要的飞行</b>。",w:"⇒ ⭐ <b>唯一解释：你写的那个和式不是「飞得好」的正确度量</b>。Ng：<b>把奖励之和做得很好，并不对应你实际希望直升机怎么飞</b>。",e:"⚠ <b>为什么隐蔽</b>：从算法角度看一切都很成功——目标在上升、指标在变好。⭐ <b>问题在目标本身，而目标是你定的</b>（L16 那条教训的真实版本）。"});
+  QUIZ(644,6,{t:"算法的收益比人类飞行员还高、但人类飞得更好，说明什么？",o:["说明模拟器不准","说明算法过拟合了","说明人类飞行员水平不够","说明奖励函数写错了：算法确实把那个和式最大化了，可结果不是你想要的飞行，所以那个和式不是「飞得好」的正确度量"],a:3,w:"⚠ 这一条最<b>隐蔽</b>：从算法角度看一切都成功——<b>目标在上升、指标在变好</b>，⭐ <b>问题在目标本身，而目标是你定的</b>。"});
+});
+KP("7 · ⭐ 工作流：该修的问题会不断移动",function(){
+  S(743,function(){clearScene();setEq(null);setCap("Ng 描述的真实项目节奏");
+       says("12:23","the problem you should be working on actually moves around");
+       matrix({rows:4,cols:2,cw:430,ch:44,x:210,y:198,
+         cell:function(i,j){var t=[
+           ["项目阶段","诊断指向哪里"],
+           ["前两个月","一直是「模拟器不够好」"],
+           ["模拟器改好之后","★ 暴露出下一个最重要的问题"],
+           ["如此往复","每解决一个，就露出下一个"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ Ng：感觉上就是「每解决一个问题，就暴露出下一个最该解决的」",640,398,"y");},"<b>Ng 花了一段描述这类项目的真实节奏，很值得记住。</b><br><b>他说：你会时不时回来重跑一遍这个诊断。项目的前两个月，你可能一直得到同一个答案——「模拟器还是不够好」。</b><br><b>⭐ 而等你终于把模拟器改好了，诊断的指向就变了，暴露出下一个最重要的问题。</b><br><b>Ng 的原话是：该解决的问题会不断移动，在项目的不同阶段是不一样的。</b><b>感觉上就像——每当你解决了当前这个问题，它就暴露出下一个最该解决的问题，然后你去解决那个，再暴露出下一个。</b><br><b>⭐ 这个观察的实际价值在于：它告诉你「诊断」不是开工前做一次的事，而是要反复做的。</b><br><b>⚠ 一个常见的错误正是：项目开头判断了一次方向，然后埋头做半年。</b>");
+  S(743,function(){clearScene();setEq(null);setCap("一个实际的建议");
+   boxNode(170,196,980,56,"把诊断做成固定动作，比如每两周跑一次","g");
+   boxNode(170,264,980,56,"★ 而不是「感觉不对劲了再想起来做」","y");
+   note("⭐ 因为问题会移动，而你的注意力会停在上一个问题上",640,340,"y");
+   note("⚠ 项目里最贵的浪费，往往是「在已经解决的问题上继续优化」",640,398,"r");},"<b>从「问题会移动」这个观察，可以推出一条很实际的建议。</b><br><b>把诊断做成一个固定动作——比如每两周跑一次，而不是「感觉不对劲了才想起来做」。</b><br><b>⭐ 原因就在于那个移动：问题变了，但你的注意力还停在上一个问题上。</b><br><b>你花了两个月改模拟器，改着改着就形成了惯性，会继续往下改——而此时真正该做的可能已经是改奖励函数了。</b><br><b>⚠ 项目里最贵的浪费，往往不是「做错了方向」，而是「在一个已经解决的问题上继续优化」。</b><b>因为后者看起来一直有进展，很难察觉。</b><br><b>⇒ 定期重跑诊断，就是为了打断这种惯性。</b>");
+  SUM(743,7,{h:"⭐ 该修的问题会不断移动",k:"Ng：<b>项目前两个月可能一直得到同一个答案——「模拟器还是不够好」</b>。",m:"⭐ <b>改好之后诊断的指向就变了</b>，暴露出下一个最重要的问题。原话：<b>该解决的问题会不断移动，在项目不同阶段不一样</b>。",w:"<b>感觉上就是</b>：每解决一个问题，<b>就暴露出下一个最该解决的</b>，如此往复。",e:"⭐ <b>实际价值</b>：诊断<b>不是开工前做一次的事，而是要反复做</b>。⚠ <b>常见错误</b>：开头判断一次方向，然后埋头做半年。"});
+  QUIZ(743,7,{t:"Ng 描述的真实项目节奏是什么样的？",o:["该修的问题会不断移动：前两个月可能一直是模拟器问题，改好后暴露出下一个最重要的问题，所以诊断要反复做","三个问题要同时并行解决","开头判断一次方向，然后按计划执行到底","先把算法调到最优，再考虑别的"],a:0,w:"⭐ 实际价值：<b>诊断不是开工前做一次的事</b>。⚠ 常见错误正是「<b>开头判断一次方向，然后埋头做半年</b>」。"});
+});
+KP("8 · ⚠ 这不是刚性流程，判断跑不掉",function(){
+  S(816,function(){clearScene();setEq(null);setCap("Ng 自己打的补丁");
+       says("13:36","I am presenting these things as though as a rigid mathematical");
+       boxNode(130,200,470,58,"看起来像","d");
+       boxNode(130,268,470,58,"一套刚性的数学流程，照做就有答案","d");
+       boxNode(690,200,470,58,"⚠ 实际上","r");
+       boxNode(690,268,470,58,"团队把三份证据摆一起，然后做判断","r");
+       note("⭐ 典型的结论长这样：「模拟器不算好，但也许够用了，先去弄别的」",640,352,"y");
+       note("⚠ 三个诊断给的是证据，不是裁决",640,398,"r");},"<b>⚠ Ng 讲完三个诊断之后，自己打了一个很重要的补丁。</b><br><b>他说：我把这些呈现得像一套刚性的数学流程，但实际做的时候是有判断成分的。</b><br><b>真实的样子是：一个团队聚在一起，把三个诊断得到的证据都摆出来，然后一起判断。</b><b>⭐ 典型的结论听起来是这样的——「模拟器确实不算好，但也许已经够用了，我们先去弄别的」。</b><br><b>⚠ 要点在于：三个诊断给你的是证据，不是裁决。</b><br><b>为什么会这样？因为现实里三句话很少是干脆的真或假</b>——<b>模拟器不会「完全准」也不会「完全不准」，而是「有多准」；算法不会「完全没最大化」，而是「离最优还差多少」。</b><br><b>⭐ 所以诊断的作用是把模糊的直觉变成可比较的证据，而不是代替你做决定。</b>");
+  S(816,function(){clearScene();setEq(null);setCap("那诊断还有什么用");
+   boxNode(130,196,470,58,"诊断做不到","d");
+   boxNode(130,264,470,58,"替你做决定","d");
+   boxNode(690,196,470,58,"★ 诊断能做到","g");
+   boxNode(690,264,470,58,"让讨论从「我觉得」变成「数据显示」","g");
+   note("⭐ 一个团队吵「该改模拟器还是改奖励」，吵不出结果",640,340,"y");
+   note("⚠ 但三组实验数据摆出来，分歧会小很多",640,398,"g");},"<b>既然判断跑不掉，那这套诊断还有什么用？这个问题值得正面回答。</b><br><b>诊断做不到的是：替你做决定。</b><br><b>★ 它能做到的是：让讨论从「我觉得」变成「数据显示」。</b><br><b>⭐ 想象一个团队在吵「该改模拟器还是改奖励函数」。</b><b>如果大家只能凭直觉和经验争论，是吵不出结果的——每个人的直觉都来自不同的过往项目。</b><br><b>⚠ 但如果把三组实验数据摆在桌上——策略在模拟器里飞成什么样、算法收益多少、人类收益多少——分歧会小很多。</b><br><b>⇒ 剩下的分歧也会变得具体：不再是「我觉得模拟器有问题」，而是「模拟器的误差有这么大，够不够用」。</b><b>⭐ 这就是从模糊到可讨论的那一步。</b>");
+  SUM(816,8,{h:"⚠ 三个诊断给的是证据，不是裁决",k:"Ng 自己打的补丁：<b>我把这些呈现得像一套刚性的数学流程，但实际做的时候是有判断成分的</b>。",m:"<b>真实的样子</b>：团队把三份证据摆一起判断。⭐ 典型结论：<b>「模拟器确实不算好，但也许够用了，先去弄别的」</b>。",w:"<b>为什么</b>：现实里三句话<b>很少是干脆的真或假</b>——模拟器是「<b>有多准</b>」，算法是「<b>离最优差多少</b>」。",e:"⭐ <b>诊断的作用</b>：把模糊的直觉<b>变成可比较的证据</b>，而不是代替你做决定。"});
+  QUIZ(816,8,{t:"关于三句话诊断法，Ng 自己补充了什么分寸？",o:["三个诊断必须按固定顺序做完","它是严格的数学定理，照做必然得到正确答案","它呈现得像刚性流程，但实际有判断成分——团队把三份证据摆一起讨论，因为现实里三句话很少是干脆的真或假","它只适用于直升机"],a:2,w:"⭐ 典型结论听起来是：「<b>模拟器确实不算好，但也许够用了，先去弄别的</b>」。⇒ 诊断<b>把模糊直觉变成可比较的证据</b>，不代替你做决定。"});
+});
+KP("9 · ⭐ 这套诊断法不只用于强化学习",function(){
+  S(315,function(){clearScene();setEq(null);setCap("Ng 自己点破了这一点");
+       says("5:15","this is almost exactly the slide I showed you last time");
+       boxNode(130,200,470,58,"「调试学习算法」那一讲","b");
+       boxNode(130,268,470,58,"同一张幻灯片，用监督学习的语言","b");
+       boxNode(690,200,470,58,"★ 这一讲","y");
+       boxNode(690,268,470,58,"同一套逻辑，换成强化学习的记号","y");
+       note("⭐ 一般形式：写下「若都成立则结果应当好」的几句话，再逐条检验",640,352,"y");
+       note("⚠ 它是一种通用的归因方法，不是直升机专用的技巧",640,398,"r");},"<b>Ng 讲完三句话之后顺口说了一句，很值得抓住：这几乎就是我上次给你们看的那张幻灯片，只不过我把它从监督学习的语言换成了强化学习的记号。</b><br><b>⭐ 这意味着这套诊断法不是直升机专用的技巧，而是一种通用的归因方法。</b><br><b>它的一般形式是：把「如果这几件事都成立，那结果就应该是好的」写成几句互相独立的话；</b><b>然后逐条设计实验去检验，哪一条假了，就该去修对应的那一环。</b><br><b>⚠ 关键在于那几句话必须满足两个条件：加起来足以推出好结果，而且每一条都能单独检验。</b><br><b>⭐ 这正是为什么要特意用「人类飞行员」当参照物——它让第②句和第③句变得可以分开检验，否则两者会纠缠在一起。</b>");
+  S(315,function(){clearScene();setEq(null);setCap("套到监督学习上长什么样");
+   matrix({rows:4,cols:2,cw:430,ch:44,x:210,y:198,
+     cell:function(i,j){var t=[
+       ["监督学习版的三句话",""],
+       ["① 训练数据能代表真实场景",""],
+       ["② 优化算法确实最小化了训练损失",""],
+       ["★ ③ 最小化这个损失确实对应着「做得好」",""]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 第③句对应的就是「你的损失函数选对了吗」",640,398,"y");},"<b>把这套诊断法翻译到监督学习上，看看它长什么样。</b><br><b>① 训练数据能代表真实场景。</b>（对应 RL 的「模拟器是准的」）<br><b>② 优化算法确实最小化了训练损失。</b>（对应「算法真在最大化」）<br><b>★ ③ 最小化这个损失，确实对应着「模型做得好」。</b>（对应「最大化确实对应飞得好」）<br><b>⭐ 第③句在监督学习里对应的就是那个经典问题：你的损失函数选对了吗？</b><b>比如类别极度不平衡时优化准确率，模型会学会永远预测多数类——损失很低，但毫无用处。</b><br><b>⇒ 这和直升机那个「收益很高但飞得很差」是完全同一件事。</b><b>⚠ 所以这套方法真正的价值，是它给了你一个可以套用到任何机器学习项目上的归因框架。</b>");
+  SUM(315,9,{h:"⭐ 这是通用的归因方法",k:"Ng：<b>这几乎就是上次「调试学习算法」那一讲的同一张幻灯片</b>，只是<b>从监督学习的语言换成了强化学习的记号</b>。",m:"⭐ <b>一般形式</b>：把「<b>如果这几件事都成立，结果就应该好</b>」写成几句互相独立的话，<b>再逐条设计实验检验</b>。",w:"⚠ <b>那几句话必须满足两个条件</b>：<b>加起来足以推出好结果</b>，而且<b>每一条都能单独检验</b>。",e:"⭐ <b>这正是为什么要用「人类飞行员」当参照物</b>——它让第②③句<b>变得可以分开检验</b>，否则两者会纠缠在一起。"});
+  QUIZ(315,9,{t:"关于三句话诊断法的适用范围，Ng 点破了什么？",o:["它只适用于直升机控制","它只适用于有模拟器的问题","它几乎就是「调试学习算法」那一讲的同一套逻辑，只是换了记号——是一种通用的归因方法","它只在项目初期有效"],a:2,w:"⭐ 一般形式：写下「<b>若都成立则结果应当好</b>」的几句独立的话，逐条检验。⚠ 那几句必须<b>足以推出好结果</b>且<b>能单独检验</b>。"});
+});
+KP("10 · ⚠ 「改算法」具体包括哪些事",function(){
+  S(355,function(){clearScene();setEq(null);setCap("这条路里面还有一堆岔路");
+       says("5:55","modifying the reinforcement learning algorithm includes things like playing with the discretization");
+       matrix({rows:5,cols:2,cw:420,ch:38,x:220,y:200,
+         cell:function(i,j){var t=[
+           ["「改算法」里的具体选项","来自哪一讲"],
+           ["调离散化的粒度","L18"],
+           ["换一组特征 φ(s)","L18"],
+           ["★ 把线性近似换成更大的神经网络","L18 的推广"],
+           ["换一个求解算法","L17 / L19"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⚠ 所以就算诊断指向「改算法」，你还要再选一次方向",640,398,"r");},"<b>三条路里，「改算法」那一条其实还包着一堆岔路，Ng 举了几个。</b><br><b>调离散化的粒度</b>——如果你是把连续状态 MDP 离散化成有限状态来解的（L18 讲的）。<br><b>换一组特征 φ(s)</b>——拟合值迭代里特征决定了价值函数能表达什么形状。<br><b>★ 或者，不用线性函数近似，改用一个更大的深度神经网络。</b><br><b>换一个求解算法</b>——值迭代、策略迭代、LQR 各有各的脾气。<br><b>⚠ 所以要有个心理准备：就算诊断指向了「改算法」，你还要在这条路里再选一次方向。</b><br><b>⭐ 但这已经好太多了——从三条路缩小到一条路里的几个选项，搜索空间小了一个量级。</b>");
+  S(355,function(){clearScene();setEq(null);setCap("这几个选项之间也有优先级");
+   boxNode(170,196,980,52,"先试便宜的：调离散化粒度、换几个特征","g");
+   boxNode(170,256,980,52,"⚠ 再考虑贵的：换成大型神经网络","y");
+   note("⭐ 理由：便宜的改动能很快给出「方向对不对」的信号",640,330,"y");
+   note("⚠ 一上来就换大模型，失败时你分不清是方向错还是实现错",640,398,"r");},"<b>就算确定了要「改算法」，这几个选项之间也有先后。</b><br><b>先试便宜的：调一下离散化的粒度、加换几个特征。</b><b>这些改动通常一两天就能看到结果。</b><br><b>⚠ 再考虑贵的：比如把线性函数近似换成一个大型神经网络。</b><b>这类改动要花很长时间，而且引入大量新的调参空间。</b><br><b>⭐ 理由很实际：便宜的改动能很快给出「方向对不对」的信号。</b><b>如果换几个特征就带来明显改善，说明「表达能力不足」这个判断是对的，那再上大模型就有底气了。</b><br><b>⚠ 反过来，一上来就换大型神经网络，失败的时候你分不清：是方向错了，还是网络没调好。</b><b>⇒ 这其实又是一次「先做便宜的实验」的原则应用。</b>");
+  SUM(355,10,{h:"⚠ 「改算法」里还有一堆岔路",k:"Ng 举的选项：<b>调离散化粒度</b>、<b>换一组特征 φ(s)</b>、<b>把线性近似换成更大的深度神经网络</b>、换一个求解算法。",m:"⚠ <b>心理准备</b>：就算诊断指向「改算法」，<b>你还要在这条路里再选一次方向</b>。",w:"⭐ <b>但这已经好太多了</b>：从三条路缩小到<b>一条路里的几个选项</b>，搜索空间小了一个量级。",e:"<b>这些选项分别来自 L17、L18、L19</b>——诊断法把前面几讲串了起来。"});
+  QUIZ(355,10,{t:"诊断指向「改 RL 算法」后，具体可以做什么？",o:["只能换一个全新的算法","调离散化粒度、换特征 φ(s)、把线性近似换成更大的神经网络、换求解算法——这条路里还要再选一次方向","减少状态维度","增加训练时间"],a:1,w:"⭐ 但诊断已经把搜索空间<b>从三条路缩小到一条路里的几个选项</b>，小了一个量级。"});
+});
+KP("11 · ⭐ Ng 对强化学习前景的判断",function(){
+  S(4047,function(){clearScene();setEq(null);setCap("他认为最激动人心的方向");
+       says("67:27","one of the most exciting areas for reinforcement learning will be robotics");
+       boxNode(130,196,470,58,"⚠ 现状","r");
+       boxNode(130,264,470,58,"强化学习用在机器人上的成功案例还很少","r");
+       boxNode(690,196,470,58,"★ Ng 的判断","g");
+       boxNode(690,264,470,58,"未来几年机器人会是最激动人心的方向","g");
+       note("⭐ 他还提到：围棋/象棋、工厂整体调度、甚至 AI 辅导员",640,348,"y");
+       note("⚠ 他也直说了：关于强化学习的炒作不少",640,398,"r");},"<b>Ng 在这一讲里给了他对强化学习前景的判断，而且说得很坦率。</b><br><b>⚠ 他先承认现状：强化学习应用在机器人上的成功案例还很少，而且关于强化学习的炒作不少。</b><br><b>★ 但他说，未来几年里，机器人会是强化学习最激动人心的应用方向。</b><br><b>⭐ 他还列了一串当时正在发生的应用</b>：<b>游戏（跳棋、国际象棋、围棋）；越来越多的机器人控制——他说去机器人会议上看，很多做大型机械的大公司都在用；整个工厂部署的优化</b>；<b>甚至还有一项学术研究是用强化学习做「AI 辅导员」</b>。<br><b>⚠ 把「炒作不少」和「前景看好」这两句放在一起听，才是他真正的态度</b>——<b>不是泼冷水，也不是跟风，而是指出哪些地方是真的在落地。</b>");
+  SUM(4047,11,{h:"⭐ Ng 的判断：机器人是最激动人心的方向",k:"⚠ <b>他先承认现状</b>：<b>RL 用在机器人上的成功案例还很少</b>，而且<b>关于 RL 的炒作不少</b>。",m:"★ <b>但他判断</b>：<b>未来几年机器人会是 RL 最激动人心的应用方向</b>。",w:"⭐ <b>他列的当时正在发生的应用</b>：游戏（跳棋/象棋/围棋）、<b>越来越多的机器人控制</b>（做大型机械的公司都在用）、<b>整个工厂部署的优化</b>、甚至<b>用 RL 做「AI 辅导员」</b>。",e:"⚠ <b>两句话要连着听</b>：不是泼冷水也不是跟风，<b>而是指出哪些地方是真的在落地</b>。"});
+  QUIZ(4047,11,{t:"Ng 对强化学习前景的判断是什么？",o:["他承认成功案例还少、炒作不少，但判断未来几年机器人会是最激动人心的方向；当时已在落地的有游戏、机器人控制、工厂调度","强化学习已经成熟，可以大规模应用","强化学习前景黯淡，应该转向监督学习","只有游戏领域有价值"],a:0,w:"⚠ 「<b>炒作不少</b>」和「<b>前景看好</b>」两句要连着听——他是在<b>指出哪些地方真的在落地</b>。"});
+});
+KP("12 · ★ 为什么非要请一位人类飞行员",function(){
+  S(508,function(){clearScene();setEq(null);setCap("参照物的价值");
+       says("8:28","let human be the human control policy");
+       boxNode(170,196,980,56,"⚠ 没有参照物时：只知道「飞得不好」，不知道差在哪","r");
+       boxNode(170,264,980,56,"★ 有了人类这个参照：得到一个「可达到的收益值」","g");
+       note("⭐ 它把第②句和第③句分开了：",640,340,"y");
+       note("算法收益低于人类 ⇒ 算法的问题；高于人类却飞得差 ⇒ 奖励的问题",640,398,"g");},"<b>人类飞行员在这套诊断里扮演的角色很关键，值得单独说。</b><br><b>⚠ 没有参照物的时候，你只知道「控制器飞得不好」，但不知道差在哪一环。</b><br><b>★ 有了人类这个参照，你就得到了一个关键的东西：一个「已知可达到」的收益值。</b><br><b>⭐ 而正是这个值把第②句和第③句分开了。</b><b>算法的收益低于人类 ⇒ 说明这个收益值是够得着的，算法却没够着 ⇒ 算法的问题。</b><b>算法的收益高于人类、却飞得更差 ⇒ 说明收益这把尺子本身量错了 ⇒ 奖励函数的问题。</b><br><b>⚠ 如果没有人类这个参照，这两种情况根本分不开</b>——<b>你永远不知道「收益还能不能更高」，也就无法判断算法是不是已经尽力了。</b><br><b>⭐ 这是整套诊断法里最巧妙的一步设计。</b>");
+  S(508,function(){clearScene();setEq(null);setCap("没有人类参照时怎么办");
+   boxNode(130,196,470,58,"⚠ 很多任务没有人类基准","r");
+   boxNode(130,264,470,58,"比如优化工厂调度、芯片布线","r");
+   boxNode(690,196,470,58,"★ 替代办法","g");
+   boxNode(690,264,470,58,"用已有的（非学习的）方案当参照","g");
+   note("⭐ 关键不在于「人类」，而在于有一个「已知可达到」的分数",640,340,"y");
+   note("⚠ 没有任何参照时，第②③句就很难分开检验",640,398,"r");},"<b>⚠ 一个现实问题：很多任务根本没有人类基准可比。</b><b>比如用强化学习优化整个工厂的调度、或者做芯片布线——没有哪个人类能手工给出一个可比的方案。</b><br><b>★ 替代办法是：用已有的、非学习的方案当参照。</b><b>工厂原来的排产规则、布线工具里现成的启发式算法，都可以。</b><br><b>⭐ 关键不在于参照物是不是「人类」，而在于你手上有一个「已知可达到」的分数。</b><br><b>⚠ 如果连这个都没有，第②句和第③句就很难分开检验了</b>——<b>你不知道算法的收益是「已经尽力」还是「远未尽力」。</b><br><b>⇒ 这时候只能退而求其次：比如拿算法在不同随机种子下的最好结果当参照，虽然弱得多，但聊胜于无。</b>");
+  SUM(508,12,{h:"★ 人类飞行员 = 一个「已知可达到」的收益值",k:"⚠ <b>没有参照物时</b>：只知道「飞得不好」，<b>不知道差在哪一环</b>。",m:"★ <b>有了人类参照</b>：得到一个<b>「已知可达到」的收益值</b>。",w:"⭐ <b>正是这个值把第②③句分开了</b>：<b>算法低于人类 ⇒ 够得着却没够着 ⇒ 算法问题</b>；<b>算法高于人类却飞得差 ⇒ 尺子量错了 ⇒ 奖励问题</b>。",e:"⚠ <b>没有这个参照，两种情况分不开</b>——你永远不知道「收益还能不能更高」。⭐ <b>这是整套诊断法里最巧妙的一步设计。</b>"});
+  QUIZ(508,12,{t:"人类飞行员在三句话诊断法里起什么作用？",o:["评判算法飞得好不好","提供训练数据给算法模仿","帮助建立模拟器","提供一个「已知可达到」的收益值，正是它把第②句和第③句分开——否则你永远不知道收益还能不能更高"],a:3,w:"⭐ 算法<b>低于</b>人类 ⇒ 够得着却没够着 ⇒ <b>算法问题</b>；算法<b>高于</b>人类却飞得差 ⇒ 尺子量错了 ⇒ <b>奖励问题</b>。这是最巧妙的一步设计。"});
+});
+KP("13 · ★ 整条强化学习线的收束",function(){
+  S(4047,function(){clearScene();setEq(null);setCap("L16 到 L20 一共给了什么");
+       matrix({rows:6,cols:2,cw:420,ch:34,x:220,y:176,
+         cell:function(i,j){var t=[
+           ["讲次","给了什么"],
+           ["L16","把问题形式化成 MDP 五元组"],
+           ["L17","值迭代 / 策略迭代，解出有限状态 MDP"],
+           ["L18","连续状态：拟合值迭代"],
+           ["L19","线性＋二次型的精确解 LQR"],
+           ["★ L20","做不出来时，怎么知道该查哪儿"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===5?"hl":"";}});
+       note("⭐ 前四讲教「怎么做」，最后一讲教「做不出来怎么办」",640,398,"y");},"<b>把这五讲收束一下，整条线的形状就清楚了。</b><br><b>L16 把「学开直升机」这类模糊问题形式化成 MDP 五元组。</b><b>L17 给出值迭代和策略迭代，解出有限状态的 MDP。</b><b>L18 处理连续状态，给出拟合值迭代。</b><b>L19 给出一个漂亮的特例 LQR——线性加二次型时有精确解。</b><b>★ 而 L20 讲的是：当这一切都做完却没效果时，怎么知道该查哪儿。</b><br><b>⭐ 前四讲教的是「怎么做」，最后一讲教的是「做不出来怎么办」。</b><br><b>⚠ 而后者恰恰是最难学、也最少被写进教科书的那一半。</b><b>算法可以从书上学，但「项目卡住时该往哪儿使劲」这种判断，通常只能靠踩坑积累。</b><br><b>⇒ 所以这一讲的价值，可能比它的篇幅看起来要大得多。</b>");
+  S(4047,function(){clearScene();setEq(null);setCap("Ng 对整门课的回顾");
+   matrix({rows:5,cols:2,cw:420,ch:40,x:220,y:196,
+     cell:function(i,j){var t=[
+       ["这门课走过的路",""],
+       ["监督学习",""],
+       ["学习理论 ＋ 应用学习算法的建议",""],
+       ["无监督学习（k-means、PCA 等）",""],
+       ["★ 强化学习（L16–L20）",""]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===4?"hl":"";}});
+   note("⭐ Ng：感觉上你们确实见了很多学习算法",640,398,"y");},"<b>Ng 在最后回顾了整门课走过的路。</b><br><b>从监督学习开始，到学习理论和「应用学习算法的建议」，再到无监督学习（k-means、PCA 等等），最后是这五讲的强化学习。</b><br><b>⭐ 他的感慨是：感觉上你们确实见了很多学习算法。</b><br><b>⚠ 值得注意的是中间那一块——「应用学习算法的建议」在这门课里是单独占一讲的，而不是当成附录。</b><br><b>⭐ 而这一讲（L20）其实就是那一讲在强化学习上的续集：同一套诊断逻辑，换了一个领域。</b><br><b>⇒ 把这两讲连起来看，Ng 想传达的东西就很清楚了：会推导算法只是一半，知道项目卡住时该查哪儿是另一半，而后者同样值得花一整讲来教。</b>");
+  SUM(4047,13,{h:"★ L16–L20 的整体形状",k:"<b>L16</b> 形式化成 MDP 五元组 → <b>L17</b> 值迭代/策略迭代 → <b>L18</b> 连续状态的拟合值迭代 → <b>L19</b> 线性＋二次型的精确解 LQR。",m:"★ <b>L20</b>：当这一切做完却没效果时，<b>怎么知道该查哪儿</b>。",w:"⭐ <b>前四讲教「怎么做」，最后一讲教「做不出来怎么办」。</b>",e:"⚠ <b>后者恰恰最难学、也最少被写进教科书</b>——算法能从书上学，<b>但「项目卡住时该往哪使劲」通常只能靠踩坑积累</b>。"});
+  QUIZ(4047,13,{t:"L16 到 L20 这条线的整体结构是什么？",o:["五讲都在讲同一个算法的不同实现","前三讲讲理论，后两讲讲编程","L16 形式化成 MDP、L17 解有限状态、L18 处理连续状态、L19 给出 LQR 精确解，而 L20 教「做不出来时该查哪儿」","由易到难排列的五个独立话题"],a:2,w:"⭐ <b>前四讲教「怎么做」，最后一讲教「做不出来怎么办」</b>——而后者最难学、最少被写进教科书。"});
+});
+KP("14 · ★★ 策略搜索：跳过价值函数，直接找策略",function(){
+  S(1191,function(){clearScene();setEq(null);setCap("前面所有方法的共同路线，和另一条路");
+       says("19:51","in direct policy search, we try to find a good policy directly");
+       boxNode(110,200,270,56,"估 V*","b");
+       boxNode(430,200,270,56,"再 argmax","b");
+       boxNode(750,200,270,56,"得到 π*","b");
+       link(380,228,430,228); link(700,228,750,228);
+       boxNode(300,310,680,56,"★ 直接策略搜索：直接去找 π，不经过 V","y");
+       note("⭐ 名字里的「直接」就是指跳过了中间那一步",640,398,"y");},"<b>后半讲一类之前没出现过的算法：策略搜索。</b><br><b>先回顾前面所有方法的共同路线：先估计或近似价值函数 V*，再用那个 argmax 的式子导出最优策略 π*。</b><b>L17、L18、L19 全都走这条路。</b><br><b>★ 而直接策略搜索跳过中间那一步：直接去找一个好的策略。</b>Ng 说<b>「直接」这个词就是这么来的——你直奔目标，不绕价值函数。</b><br><b>⭐ 为什么这是个合理的想法？因为价值函数本来就只是个中间产物。</b><b>你真正要的是策略，V* 只是通往它的一条路。</b><br><b>⚠ 既然如此，为什么不是所有人都用策略搜索？</b><b>因为它有自己的适用范围——这一讲最后会讲清楚该在什么时候用哪一种。</b>");
+  S(1191,function(){clearScene();setEq(null);setCap("价值函数这条路的隐藏代价");
+   boxNode(170,196,980,56,"⚠ 估 V* 要求你把「每个状态有多好」都搞清楚","r");
+   boxNode(170,264,980,56,"★ 但很多任务里，你只需要知道「该往哪推」","g");
+   note("⭐ 倒立摆：杆往右倒就把车往右开 —— 策略简单，价值函数却不简单",640,340,"y");
+   note("⚠ 估一个复杂的中间量，只为了导出一个简单的结果",640,398,"r");},"<b>为什么会有人想跳过价值函数？因为估价值函数本身有隐藏代价。</b><br><b>⚠ 要估出 V*，你必须把「每一个状态到底有多好」都搞清楚——这是一个关于整个状态空间的完整描述。</b><br><b>★ 但很多任务里，你其实只需要知道「在这个状态该往哪边推」。</b><br><b>⭐ 倒立摆就是最好的例子：策略可以简单到一句话——杆往右倒，就把小车往右开。</b><b>可它的价值函数一点都不简单，要精确描述「每个角度和速度组合有多危险」是件相当复杂的事。</b><br><b>⚠ 于是出现了一个不划算的局面：你估了一个很复杂的中间量，只为了导出一个很简单的结果。</b><br><b>⇒ 直接策略搜索就是冲着这个不划算去的。</b>");
+  SUM(1191,14,{h:"★★ 直接策略搜索：不经过价值函数",k:"<b>前面所有方法的共同路线</b>：先估 V*，再用 argmax 导出 π*。L17、L18、L19 全都走这条。",m:"★ <b>直接策略搜索跳过中间那一步</b>，直接去找一个好策略。Ng：<b>「直接」就是指不绕价值函数</b>。",w:"⭐ <b>为什么合理</b>：<b>价值函数本来就只是个中间产物</b>，你真正要的是策略。",e:"⚠ <b>那为什么不都用它</b>：它有自己的适用范围——<b>这一讲最后会讲该在什么时候用哪一种</b>。"});
+  QUIZ(1191,14,{t:"直接策略搜索和前面几讲的方法有什么根本不同？",o:["它不需要模拟器","前面都是先估价值函数 V*、再用 argmax 导出策略；策略搜索跳过中间这一步，直接去找一个好策略","它不需要奖励函数","它只能用于离散状态"],a:1,w:"⭐ 合理性在于：<b>价值函数本来只是中间产物</b>，你真正要的是策略。⚠ 但它有适用范围，不是万能替代。"});
+});
+KP("15 · ★ 第一步：给策略定一个形式",function(){
+  S(1250,function(){clearScene();setEq(null);setCap("Ng 的类比：当初逻辑回归也是这么来的");
+       says("20:50","come up with the class of policies you will entertain");
+       boxNode(130,200,470,58,"逻辑回归","b");
+       boxNode(130,268,470,58,"当初也是「先定下 sigmoid 这个形式」","b");
+       boxNode(690,200,470,58,"★ 策略搜索","y");
+       boxNode(690,268,470,58,"先定下 π_θ 的形式，再去学参数 θ","y");
+       note("⭐ Ng 自嘲：当年讲逻辑回归时，sigmoid 基本是「变戏法变出来的」",640,352,"d");
+       note("⚠ 定形式这一步决定了你能表达哪些策略 —— 定窄了就学不到好策略",640,398,"r");},"<b>要做策略搜索，第一步是给策略定一个形式。</b><br><b>Ng 用了一个很好的类比：当初第一次讲逻辑回归时，我们也是先说「把 y 近似成 sigmoid 作用在 θᵀx 上」。</b><b>⭐ 他还自嘲了一句——那时候 sigmoid 基本是「从帽子里变出来的」，他说「相信我，我们就用逻辑函数吧」。</b><br><b>★ 策略搜索是同一个套路：先定下策略的形式 π_θ，它由参数 θ 决定；然后去学 θ。</b><br><b>⚠ 但要意识到这一步的分量：定形式就是在限定「你能表达哪些策略」。</b><b>如果你定的形式太简单，而真正的最优策略很复杂，那无论怎么优化 θ 都学不到好策略。</b><br><b>⭐ 这正是最后一节讲「什么时候该用策略搜索」的根据——它取决于最优策略的形状能不能被简单函数表达。</b>");
+  S(1250,function(){clearScene();setEq(null);setCap("和挑特征是同一类工作");
+   matrix({rows:4,cols:3,cw:350,ch:44,x:130,y:198,
+     cell:function(i,j){var t=[
+       ["","你要先定的","然后学的"],
+       ["线性回归","特征 φ(x) 的形式","参数 θ"],
+       ["L18 拟合值迭代","特征 φ(s) 的形式","参数 θ"],
+       ["★ 策略搜索","策略 π_θ 的形式","参数 θ"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 三次出现同一个套路：先定形式，再学参数",640,398,"y");},"<b>「先定形式、再学参数」这个套路，在这门课里已经出现过三次了。</b><br><b>线性回归：你先定下特征 φ(x) 的形式（要不要加平方项、要不要加交互项），然后学参数 θ。</b><br><b>L18 的拟合值迭代：你先定下价值函数特征 φ(s) 的形式，然后学 θ。</b><br><b>★ 策略搜索：你先定下策略 π_θ 的形式，然后学 θ。</b><br><b>⭐ 看出这个重复模式之后，有一件事就会变得很清楚：每一次「定形式」都是在限定表达能力，而参数再怎么学也突破不了这个限定。</b><br><b>⚠ 所以这三个地方都遵循同一条经验：如果结果不好，先怀疑形式定窄了，而不是一味去调优化过程。</b>");
+  SUM(1250,15,{h:"★ 第一步：定下策略的形式 π_θ",k:"<b>Ng 的类比</b>：当初第一次讲<b>逻辑回归</b>，也是先说「把 y 近似成 sigmoid 作用在 θᵀx 上」。⭐ 他自嘲<b>那时 sigmoid 基本是「从帽子里变出来的」</b>。",m:"★ <b>策略搜索同一套路</b>：<b>先定下 π_θ 的形式</b>（由参数 θ 决定），<b>再去学 θ</b>。",w:"⚠ <b>这一步的分量</b>：定形式就是在<b>限定「你能表达哪些策略」</b>。形式太简单而最优策略很复杂 ⇒ <b>怎么优化都学不到</b>。",e:"⭐ 这正是<b>「什么时候该用策略搜索」的根据</b>——取决于<b>最优策略能不能被简单函数表达</b>。"});
+  QUIZ(1250,15,{t:"策略搜索的第一步是什么？为什么这一步很关键？",o:["建立模拟器；因为需要采样","收集数据；因为数据决定一切","选择折扣因子；因为它决定收敛速度","给策略定一个形式 π_θ（类比逻辑回归先定下 sigmoid）；关键在于定形式就限定了你能表达哪些策略，定窄了怎么优化都学不到好策略"],a:3,w:"⭐ Ng 自嘲当年 sigmoid 基本是「<b>从帽子里变出来的</b>」。⇒ 这一步也正是<b>「什么时候该用策略搜索」的根据</b>。"});
+});
+KP("16 · ★ 随机策略：输出的是概率，不是动作",function(){
+  S(1402,function(){clearScene();setEq(null);setCap("为什么要随机");
+       says("23:22","the direct policy search algorithm we will use, will use a stochastic policy");
+       boxNode(130,200,470,58,"确定性策略","d");
+       boxNode(130,268,470,58,"输入状态 ⇒ 输出一个动作","d");
+       boxNode(690,200,470,58,"★ 随机策略","y");
+       boxNode(690,268,470,58,"输入状态 ⇒ 输出各个动作的概率","y");
+       note("⭐ 例：倒立摆两个动作 ⇒ 输出「向左推的概率是 0.7」",640,352,"y");
+       note("⚠ 随机性有两个好处：天然带探索，而且让 θ 可以求导",640,398,"r");},"<b>Ng 用的策略搜索算法采用的是随机策略，这个选择不是随意的。</b><br><b>确定性策略：输入一个状态，输出一个确定的动作。</b>前面几讲的 π(s) 都是这样。<br><b>★ 随机策略：输入一个状态，输出的是各个动作的概率。</b><b>⭐ 以倒立摆为例（它只有两个动作：向左推、向右推），随机策略输出的是类似「向左推的概率是 0.7」这样的东西。</b><br><b>⚠ 为什么要随机？有两个好处。</b><b>第一，它天然带探索——既然是按概率选，那每个动作都有机会被试到，不会出现 L17 那种「自我锁死」。</b><br><b>⭐ 第二个好处更技术但更关键：随机策略让目标函数对 θ 可导。</b><b>确定性策略里动作是「挑出来的」，挑这个动作还是那个动作是个跳变，没法求导；而概率可以连续地变化，于是梯度上升才做得起来。</b>");
+  S(1402,function(){clearScene();setEq(null);setCap("它和 ε-greedy 的区别");
+   boxNode(130,196,470,58,"ε-greedy（L17）","b");
+   boxNode(130,264,470,58,"贪心策略外面套一层随机，是「加」上去的","b");
+   boxNode(690,196,470,58,"★ 随机策略","y");
+   boxNode(690,264,470,58,"策略本身就是概率分布，随机是「内生」的","y");
+   note("⭐ 后果：随机性的大小本身也是被学出来的",640,340,"y");
+   note("⚠ 训练到后期，策略可以自己变得越来越确定",640,398,"g");},"<b>随机策略和 L17 讲的 ε-greedy 看起来都带随机，但性质完全不同。</b><br><b>ε-greedy 是在一个贪心策略外面套了一层随机——那个 10% 是你手动加上去的，策略本身仍然是确定性的。</b><br><b>★ 而随机策略里，策略本身就是一个概率分布，随机性是内生的。</b><br><b>⭐ 这带来一个很好的后果：随机性的大小本身也是被学出来的。</b><br><b>⚠ 训练早期，策略可能输出接近 50/50 的概率（相当于在大量探索）；而随着 θ 被学好，它可以自己变得越来越确定，输出 95/5 甚至更极端。</b><br><b>⇒ 你不需要像 ε-greedy 那样手动安排一个「ε 随时间衰减」的日程表——策略自己会收紧。</b>");
+  SUM(1402,16,{h:"★ 随机策略：输出各动作的概率",k:"<b>确定性策略</b>：输入状态 ⇒ 输出一个确定动作。★ <b>随机策略</b>：输入状态 ⇒ <b>输出各个动作的概率</b>。",m:"⭐ <b>例</b>：倒立摆只有两个动作（左推/右推），随机策略输出的是「<b>向左推的概率是 0.7</b>」这样的东西。",w:"⚠ <b>好处一：天然带探索</b>——按概率选，每个动作都有机会被试到，<b>不会出现 L17 那种自我锁死</b>。",e:"⭐ <b>好处二（更关键）：让目标函数对 θ 可导</b>。确定性策略里<b>挑动作是跳变，没法求导</b>；<b>而概率可以连续变化</b>，梯度上升才做得起来。"});
+  QUIZ(1402,16,{t:"策略搜索为什么用随机策略？",o:["两个好处：天然带探索（每个动作都有机会被试到）；更关键的是让目标对 θ 可导——确定性策略里挑动作是跳变、没法求导","因为可以省内存","因为随机策略更简单","因为环境本身是随机的"],a:0,w:"⭐ 例子：倒立摆两个动作，随机策略输出「<b>向左推的概率是 0.7</b>」。⇒ 概率可以<b>连续变化</b>，所以梯度上升做得起来。"});
+});
+KP("17 · ★★ REINFORCE：让好轨迹更可能发生",function(){
+  S(2099,function(){clearScene();setEq(null);setCap("算法的核心想法");
+       says("34:59","this algorithm is called the reinforce algorithm");
+       boxNode(170,186,980,52,"① 用当前策略跑一条轨迹（T 个时间步）","b");
+       boxNode(170,246,980,52,"② 算出这条轨迹的总回报 R(s₀)+R(s₁)+⋯+R(s_T)","y");
+       boxNode(170,306,980,52,"③ 朝「让这条轨迹更可能发生」的方向更新 θ","g");
+       boxNode(170,366,980,38,"④ 更新的幅度乘上那个总回报","g");
+       note("⭐ 回报高 ⇒ 大幅加强；回报低 ⇒ 几乎不动甚至削弱",640,178,"y");},"<b>★★ Ng 讲的策略搜索算法叫 REINFORCE。他说原版还有一些别的零碎，但核心想法就这几步。</b><br><b>① 用当前的策略在 MDP 里跑一条轨迹，跑 T 个时间步。</b><br><b>② 算出这条轨迹的总回报——就是沿途所有奖励加起来。</b><br><b>③ 朝着「让这条轨迹更可能发生」的方向更新参数 θ。</b><br><b>④ 而更新的幅度，要乘上那个总回报。</b><br><b>⭐ 第四步是整个算法的灵魂：如果这条轨迹的回报很高，就大幅度地加强它；如果回报很低，就几乎不动，甚至往反方向削弱。</b><br><b>⇒ 于是经过很多次迭代，高回报的行为模式被不断强化，低回报的被淡化。</b><br><b>⭐ 算法的名字 REINFORCE（强化）正是这么来的。</b>");
+  S(2099,function(){clearScene();setEq(null);setCap("⚠ 一个它天生的毛病");
+   boxNode(170,196,980,56,"更新只看「整条轨迹的总回报」","b");
+   boxNode(170,264,980,56,"⚠ 可一条轨迹里，好的动作和坏的动作是混在一起的","r");
+   note("⭐ 回报高 ⇒ 整条轨迹里所有动作都被加强，包括其中的昏招",640,340,"y");
+   note("⚠ 要靠大量采样让它平均掉 ⇒ 方差大、样本效率低",640,398,"r");},"<b>REINFORCE 的想法很优雅，但它有一个天生的毛病，知道这一点对理解后续方法很有帮助。</b><br><b>它的更新只看整条轨迹的总回报。</b><br><b>⚠ 可一条轨迹里，好的动作和坏的动作是混在一起的。</b><br><b>⭐ 如果这条轨迹总回报很高，那么其中所有的动作都会被加强——包括中间那几步昏招。</b>反过来，一条总回报低的轨迹里，那几个其实很漂亮的动作也会被一起削弱。<br><b>⚠ 算法只能靠大量采样，指望这些误判在平均中被抵消掉。</b><b>⇒ 后果就是方差大、样本效率低——你需要跑非常多条轨迹才能得到一个靠谱的更新方向。</b><br><b>⭐ 这正是 L17 那个「信用分配问题」在策略搜索里的样子：它没有解决信用分配，只是用平均去绕开它。</b>");
+  SUM(2099,17,{h:"★★ REINFORCE：按回报加权地加强轨迹",k:"<b>① 用当前策略跑一条轨迹（T 步） ② 算出这条轨迹的总回报 ③ 朝「让这条轨迹更可能发生」的方向更新 θ ④ 更新幅度乘上总回报</b>。",m:"⭐ <b>第④步是灵魂</b>：<b>回报高就大幅加强，回报低就几乎不动甚至反向削弱</b>。",w:"⇒ 经过很多次迭代，<b>高回报的行为模式被不断强化，低回报的被淡化</b>。",e:"⭐ <b>算法名 REINFORCE（强化）正是这么来的。</b>⚠ Ng 说原版还有一些别的零碎，他只讲核心想法。"});
+  QUIZ(2099,17,{t:"REINFORCE 算法的核心想法是什么？",o:["跑一条轨迹、算出它的总回报、朝「让这条轨迹更可能发生」的方向更新 θ，更新幅度乘上总回报","对每个状态解一个线性方程组","估计价值函数后取 argmax","把策略离散化后枚举"],a:0,w:"⭐ 第四步是灵魂：<b>回报高就大幅加强，回报低就几乎不动甚至反向削弱</b>。<b>算法名「强化」正是这么来的。</b>"});
+});
+KP("18 · ⚠ 什么时候用策略搜索，什么时候用价值函数",function(){
+  S(3668,function(){clearScene();setEq(null);setCap("判据：是不是「低层控制」任务");
+       says("61:08","so that is a low-level control task");
+       matrix({rows:4,cols:3,cw:350,ch:44,x:130,y:198,
+         cell:function(i,j){var t=[
+           ["任务类型","例子","该用哪个"],
+           ["低层控制","把车保持在直路上、立住倒立摆","★ 策略搜索"],
+           ["多步推理","下棋、围棋","价值函数近似"],
+           ["开车的两面","沿路行驶 vs 超车并避让行人","⭐ 两者都有"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⭐ 关键看：最优策略能不能用一个简单函数表示出来",640,398,"y");},"<b>两类方法该怎么选？Ng 给的判据是：看任务是不是「低层控制」。</b><br><b>★ 低层控制任务：比如把车保持在一条直路上——你只要看着路，把方向盘微微打一下就行。</b><b>或者把倒立摆立住。</b><b>⭐ 这类任务的最优策略形状很简单，可以用一个相对简单的函数表示，所以直接策略搜索很合适。</b><br><b>⚠ 而多步推理任务就不同了：下棋、围棋，或者 Ng 举的开车例子——「我要先超过这辆车，再避开那个行人和自行车」。</b><b>这类任务需要往前推好几步，最优策略很难用一个简单的线性函数表达。</b><b>⇒ 这时价值函数近似更有希望。</b><br><b>⭐ Ng 特意指出开车这件事两面都有：沿着路走是低层控制，而超车规划就是多步推理了。</b><br><b>⚠ 所以判据的本质是：最优策略能不能被一个简单函数表示出来。</b>");
+  S(3723,function(){clearScene();setEq(null);setCap("Ng 自己的经历");
+       says("62:03","my first attempt for flying helicopters were actually a direct policy search");
+       boxNode(130,200,470,58,"最早飞直升机","g");
+       boxNode(130,268,470,58,"用的就是直接策略搜索","g");
+       boxNode(690,200,470,58,"★ 那段倒着飞的视频","y");
+       boxNode(690,268,470,58,"也是策略搜索算法做的","y");
+       note("⚠ 但要飞更复杂的机动，就得转向价值函数近似那一类",640,352,"r");
+       note("⭐ 还有研究在尝试把两类方法融合起来",640,398,"g");},"<b>Ng 讲了自己的实际经历，给这个判据加了分量。</b><br><b>他说：我最早尝试飞直升机，用的就是直接策略搜索。</b><br><b>★ 而且前面提到的那段著名的「直升机倒着飞」的视频，实现用的也是一个直接策略搜索算法</b>（他补充说不完全是课上讲的这一个，稍有不同）。<br><b>⚠ 但他接着说：要飞更复杂的机动，就得用更接近价值函数近似的方法了。</b><br><b>⇒ 这和上一节的判据完全吻合——悬停和简单特技是低层控制，而复杂的连续机动需要多步规划。</b><br><b>⭐ 最后他提了一句方向：如何把直接策略搜索和价值函数近似这两类方法融合起来，是一个令人兴奋的研究方向。</b><b>⚠ 所以这不是一道非此即彼的选择题。</b>");
+  S(3668,function(){clearScene();setEq(null);setCap("用一个问题就能判断");
+   boxNode(170,196,980,56,"问自己：最优策略能不能用一句简单的规则说清楚？","y");
+   boxNode(170,264,980,56,"★ 能 ⇒ 策略搜索　　✗ 不能 ⇒ 价值函数近似","g");
+   note("⭐ 「杆往右倒就把车往右开」—— 能说清楚 ⇒ 策略搜索",640,340,"y");
+   note("⚠ 「这步棋该下哪」—— 说不清楚 ⇒ 价值函数近似",640,398,"r");},"<b>把这个判据压缩成一个你随时能问自己的问题。</b><br><b>问：这个任务的最优策略，能不能用一句相对简单的规则说清楚？</b><br><b>★ 能说清楚 ⇒ 策略搜索合适。</b><b>⭐ 比如倒立摆——「杆往右倒就把小车往右开」，这句话已经很接近最优策略了，剩下的只是把系数调准。</b><br><b>⚠ 说不清楚 ⇒ 价值函数近似更有希望。</b><b>比如「这步棋该下哪」，没有任何一句简单规则能概括围棋的最优下法。</b><br><b>⇒ 而价值函数在这种情况下反而更好办：你不需要说清「该怎么下」，只需要能评估「这个局面有多好」，然后搜索一下就行。</b><br><b>⭐ 这其实又回到了 L16 开头那个不对称——评估比决策容易。</b>");
+  SUM(3668,18,{h:"⚠ 判据：是不是「低层控制」任务",k:"★ <b>低层控制</b>（把车保持在直路上、立住倒立摆）：<b>最优策略形状简单，可用简单函数表示 ⇒ 策略搜索合适</b>。",m:"⚠ <b>多步推理</b>（下棋、围棋、「先超过这辆车再避开那个行人」）：<b>最优策略难用简单线性函数表达 ⇒ 价值函数近似更有希望</b>。",w:"⭐ <b>开车两面都有</b>：沿路行驶是低层控制，<b>超车规划就是多步推理</b>。⚠ 判据的本质是<b>最优策略能否被简单函数表示</b>。",e:"<b>Ng 的经历</b>：最早飞直升机<b>用的就是直接策略搜索</b>，<b>那段倒着飞的视频也是</b>；但<b>更复杂的机动就得转向价值函数近似</b>。⭐ 两类方法的融合是活跃的研究方向。"});
+  QUIZ(3668,18,{t:"什么时候该用策略搜索，什么时候该用价值函数近似？",o:["两者等价，随便选","数据多用策略搜索，数据少用价值函数","状态离散用策略搜索，连续用价值函数","看是不是「低层控制」：保持车在直路上、立住倒立摆这类最优策略形状简单，用策略搜索；下棋、超车避让这类多步推理用价值函数近似"],a:3,w:"⭐ 判据本质是<b>最优策略能否被简单函数表示</b>。Ng 的经历：<b>倒着飞那段视频用的就是策略搜索</b>，但<b>更复杂的机动要转向价值函数近似</b>。"});
+});
+KP("19 · ★ 目标：找一组 θ 让期望回报最大",function(){
+  S(1803,function(){clearScene();setEq("$$\\max_{\\theta} \\; \\mathbb{E}\\big[\\,R(s_0)+R(s_1)+\\cdots+R(s_T)\\;\\big|\\;\\pi_{\\theta}\\big]$$","top");
+       setCap("策略搜索要优化的到底是什么");
+       says("30:03","the goal of a direct policy search algorithm is to choose a set of parameters theta",214);
+       note("⭐ 注意优化变量是 θ —— 不是价值函数，不是动作",640,274,"y");
+       note("① 给定一组 θ，策略就定了 ② 执行它，能拿到一个期望回报",640,326,"b");
+       note("⇒ 于是「找最好的策略」变成了「找最好的 θ」—— 一个熟悉的优化问题",640,378,"g");},"<b>把策略搜索要优化的东西写清楚。</b><br><b>Ng 的说法是：直接策略搜索的目标，是选一组参数 θ，使得执行这个策略时，你的期望回报最大。</b><br><b>⭐ 注意优化变量是 θ。</b><b>不是价值函数，也不是某个具体动作——是那组参数。</b><br><b>整个逻辑链很干净</b>：<b>① 给定一组 θ，策略 π_θ 就完全定下来了；② 执行这个策略，能拿到一个期望回报。</b><br><b>⇒ 于是「找最好的策略」这个问题，就变成了「找最好的 θ」。</b><br><b>⭐ 而「找一组参数让某个量最大」，正是你从线性回归开始就一直在做的事。</b><b>⚠ 唯一的新麻烦是：这个期望回报没有闭式表达，你没法直接对它求导——所以才需要 REINFORCE 那种靠采样来估梯度的办法。</b>");
+  S(1803,function(){clearScene();setEq(null);setCap("和前面几讲的优化对象对照");
+   matrix({rows:5,cols:2,cw:420,ch:38,x:220,y:196,
+     cell:function(i,j){var t=[
+       ["方法","在优化什么"],
+       ["L17 值迭代","每个状态的 V 值（一张表）"],
+       ["L18 拟合值迭代","价值函数的参数 θ"],
+       ["L19 LQR","★ 什么都不优化 —— 直接解出来"],
+       ["L20 策略搜索","★ 策略的参数 θ"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i>=3?"hl":"";}});
+   note("⭐ 注意 L18 和 L20 都在优化「θ」，但那是两个完全不同的 θ",640,398,"y");},"<b>把四讲的优化对象并排看，很容易看清区别，也很容易看混。</b><br><b>L17 值迭代：优化的是每个状态的 V 值，存成一张表。</b><br><b>L18 拟合值迭代：优化的是价值函数的参数 θ。</b><br><b>★ L19 LQR：什么都不优化——它是直接解出来的，没有迭代逼近的过程。</b><br><b>★ L20 策略搜索：优化的是策略的参数 θ。</b><br><b>⚠ 最容易混的就是 L18 和 L20：两者都在优化一个叫 θ 的东西，但那是两个完全不同的 θ。</b><br><b>L18 的 θ 决定「每个状态值多少分」，L20 的 θ 决定「在每个状态该做什么」。</b><br><b>⇒ 一个描述世界，一个描述行为。</b><b>⭐ 看到 θ 时先问「它参数化的是什么」，这个混淆就化解了。</b>");
+  SUM(1803,19,{h:"★ 目标：max over θ 的期望总回报",k:"Ng：<b>直接策略搜索的目标是选一组参数 θ，使执行这个策略时期望回报最大</b>。",m:"⭐ <b>优化变量是 θ</b>——不是价值函数，也不是某个具体动作。",w:"<b>逻辑链</b>：① 给定 θ ⇒ 策略 π_θ 完全定下 ② 执行它 ⇒ 得到一个期望回报 ⇒ <b>「找最好的策略」变成「找最好的 θ」</b>。",e:"⚠ <b>唯一的新麻烦</b>：这个期望回报<b>没有闭式表达，没法直接求导</b> ⇒ 所以才需要 <b>REINFORCE 那种靠采样估梯度</b>的办法。"});
+  QUIZ(1803,19,{t:"直接策略搜索优化的变量是什么？难点在哪？",o:["优化价值函数 V；难在状态太多","优化动作序列；难在动作连续","优化策略的参数 θ，使期望总回报最大；难在这个期望没有闭式表达、没法直接求导，只能靠采样估梯度","优化折扣因子 γ；难在取值范围"],a:2,w:"⭐ 「找一组参数让某个量最大」正是你从<b>线性回归</b>开始就一直在做的事——新麻烦只在<b>梯度算不出来，只能采样估</b>。"});
+});
+KP("20 · ★ 策略长什么样：倒立摆的例子",function(){
+  S(1322,function(){clearScene();setEq(null);setCap("参数乘上状态特征，再压成概率");
+       says("22:02","the action were approximate with some policy Pi, parameterized by Theta");
+       boxNode(130,196,470,58,"① 状态特征","b");
+       boxNode(130,264,470,58,"x（小车位置）、ẋ、角度、角速度，再加一个截距","b");
+       boxNode(690,196,470,58,"★ ② 乘上参数","y");
+       boxNode(690,264,470,58,"再压成「向左推的概率」","y");
+       note("⭐ 和逻辑回归的形状完全一样：特征 × 参数 → 概率",640,348,"y");
+       note("⚠ Ng 特意把参数记号从 θ 换成了 φ，免得和杆的角度 θ 撞车",640,398,"r");},"<b>策略具体长什么样？Ng 用倒立摆举了例子。</b><br><b>① 先把状态写成一组特征：小车的位置 x、小车速度 ẋ、杆的角度、杆的角速度，再加一个截距项。</b><br><b>★ ② 把这些特征乘上参数，然后压成一个概率——比如「向左推的概率」。</b><br><b>⭐ 注意这个形状和逻辑回归一模一样：特征乘参数，再过一个压缩函数变成概率。</b><b>这也正是 Ng 为什么要拿逻辑回归做类比。</b><br><b>⚠ 这里有个小细节值得一提：Ng 在课上特意把参数的记号从 θ 换成了 φ。</b><b>原因是倒立摆里杆的角度已经用 θ 表示了，再用 θ 当参数会撞车。</b><br><b>⇒ 这是个很实在的提醒：读论文和讲义时，同一个希腊字母在不同上下文里可能指完全不同的东西。</b>");
+  S(1322,function(){clearScene();setEq(null);setCap("为什么倒立摆适合策略搜索");
+   boxNode(170,196,980,56,"它的最优策略几乎可以手写：杆往右倒 ⇒ 把车往右开","g");
+   boxNode(170,264,980,56,"★ 所以一个「特征的线性组合」就足够表达它","y");
+   note("⭐ 剩下要学的只是「各项该占多大权重」",640,340,"y");
+   note("⚠ 反过来说：如果最优策略手写不出来，这个形式就不够用",640,398,"r");},"<b>为什么倒立摆特别适合做策略搜索的例子？因为它的最优策略几乎可以手写出来。</b><br><b>一句话就是：杆往右倒，就把小车往右开。</b><br><b>★ 既然一句话就能概括，那么「状态特征的一个线性组合」就足以表达它。</b><br><b>⭐ 剩下要学的只是各项该占多大权重——角度重要还是角速度重要、小车位置该占多少分量。</b><b>这正好是参数 θ 的活儿。</b><br><b>⚠ 反过来说也成立：如果一个任务的最优策略你根本手写不出来，那这种简单的参数化形式就不够用了。</b><b>⇒ 这就是为什么下棋不适合用这种策略搜索——没有任何一句话能概括围棋的最优下法。</b>");
+  SUM(1322,20,{h:"★ 策略的形状：特征 × 参数 → 概率",k:"<b>倒立摆的例子</b>：① 状态特征 = <b>小车位置 x、速度 ẋ、杆角度、杆角速度，再加截距</b>。",m:"★ ② <b>乘上参数，再压成「向左推的概率」</b>。",w:"⭐ <b>形状和逻辑回归一模一样</b>：特征乘参数，过一个压缩函数变成概率——这正是 Ng 拿逻辑回归做类比的原因。",e:"⚠ <b>小细节</b>：Ng 特意把参数记号<b>从 θ 换成 φ</b>，因为<b>倒立摆里杆的角度已经用 θ 了</b>。⇒ 同一个希腊字母在不同上下文可能指完全不同的东西。"});
+  QUIZ(1322,20,{t:"倒立摆的策略 π_θ 具体长什么样？",o:["一个二次函数","把状态特征（位置、速度、角度、角速度、截距）乘上参数，再压成「向左推的概率」——形状和逻辑回归一样","一张从状态到动作的查找表","一个决策树"],a:1,w:"⚠ 小细节：Ng 把参数记号<b>从 θ 换成 φ</b>，因为<b>杆的角度已经占用了 θ</b>。同一个字母在不同上下文可能指不同东西。"});
+});
+KP("21 · ★ 梯度怎么算出来：把整条轨迹的概率提出来",function(){
+  S(2688,function(){clearScene();setEq(null);setCap("推导的关键一步");
+       says("44:48","this terms I underlined, this is just the probability of the whole state sequence");
+       boxNode(170,196,980,52,"期望 = Σ（每条轨迹的概率 × 这条轨迹的回报）","b");
+       boxNode(170,256,980,52,"⚠ 轨迹有无穷多条 ⇒ 这个求和算不出来","r");
+       boxNode(170,316,980,52,"★ 关键一步：把「整条轨迹的概率」整体提出来","g");
+       note("⭐ 提出来之后，剩下的部分正好能写成「按当前策略采样再取平均」",640,386,"y");},"<b>REINFORCE 的更新式不是拍脑袋来的，它是推出来的。推导的关键只有一步。</b><br><b>出发点：期望回报等于「每条轨迹出现的概率，乘上这条轨迹的回报」，对所有轨迹求和。</b><br><b>⚠ 问题是轨迹有无穷多条，这个求和根本算不出来。</b><br><b>★ 关键一步是 Ng 在板书上圈出来的那个操作：把「整条轨迹出现的概率」当成一个整体提出来。</b>他指着那几项说——<b>我划线的这些项，合起来就是整个状态序列的概率。</b><br><b>⭐ 提出来之后，剩下的部分正好具有「概率 × 某个量」的形状，而这正是期望的定义。</b><b>⇒ 于是它可以用「按当前策略跑几条轨迹，再取平均」来估计。</b><br><b>⚠ 这就是为什么 REINFORCE 的算法里是「跑一条轨迹、算回报、更新」——那个形式是推导的产物，不是拍脑袋设计的。</b>");
+  S(2688,function(){clearScene();setEq(null);setCap("⚠ Ng 提醒过的一个边界");
+   boxNode(130,196,470,58,"推导里出现了「轨迹的概率」","b");
+   boxNode(130,264,470,58,"它依赖状态转移概率 P_sa","b");
+   boxNode(690,196,470,58,"★ 但最后抵消掉了","g");
+   boxNode(690,264,470,58,"更新式里只剩下策略 π_θ 的导数","g");
+   note("⭐ 所以 REINFORCE 不需要知道 P_sa —— 不需要模型",640,340,"y");
+   note("⚠ 这和 L18 的拟合值迭代正好相反，那个必须有模拟器",640,398,"r");},"<b>这个推导有一个很值得注意的副产品。</b><br><b>推导过程中出现了「整条轨迹的概率」，而一条轨迹的概率显然依赖状态转移概率 P_sa——也就是依赖环境模型。</b><br><b>★ 但在最后的更新式里，P_sa 抵消掉了，只剩下策略 π_θ 自己的导数。</b><br><b>⭐ 这意味着 REINFORCE 根本不需要知道 P_sa——它不需要模型。</b><b>你只要能让智能体在环境里跑一跑、拿到轨迹和回报就够了。</b><br><b>⚠ 这和 L18 的拟合值迭代正好相反：那个算法必须有模拟器，因为它要「把状态设回去反复采样」。</b><br><b>⇒ 所以这两类方法的实际前提差别很大：一个要模型，一个只要能试。</b><b>⭐ 这也是策略搜索在没法建模拟器的场景里的主要吸引力。</b>");
+  SUM(2688,21,{h:"★ 梯度的来历：把整条轨迹的概率提出来",k:"<b>出发点</b>：期望回报 = <b>Σ（每条轨迹的概率 × 这条轨迹的回报）</b>。⚠ <b>轨迹无穷多，求和算不出来</b>。",m:"★ <b>关键一步</b>：把<b>「整条轨迹出现的概率」当成一个整体提出来</b>。Ng：<b>我划线的这些项，合起来就是整个状态序列的概率</b>。",w:"⭐ <b>提出来之后，剩下的部分正好是「概率 × 某个量」的形状</b>——这正是期望的定义。",e:"⇒ <b>于是可以用「跑几条轨迹再取平均」来估计</b>。⚠ <b>REINFORCE 那个「跑轨迹→算回报→更新」的形式是推导的产物，不是拍脑袋设计的。</b>"});
+  QUIZ(2688,21,{t:"REINFORCE 的更新式是怎么推出来的？",o:["由 Bellman 方程直接导出","用拉格朗日乘子法","期望回报是「轨迹概率 × 轨迹回报」的求和，轨迹无穷多算不出来；关键一步是把整条轨迹的概率整体提出来，剩下的恰好是期望的形状，于是能用采样估计","对价值函数求导得到"],a:2,w:"⭐ 所以 REINFORCE 那个「<b>跑一条轨迹 → 算回报 → 更新</b>」的形式<b>是推导的产物，不是拍脑袋设计的</b>。"});
+});
+KP("22 · ★★ AlphaGo：两类方法的融合",function(){
+  S(3788,function(){clearScene();setEq(null);setCap("Ng 在课上举的那个例子");
+       says("63:08","was a blend of ideas from both of these types of approaches");
+       boxNode(130,200,420,58,"策略搜索","y");
+       boxNode(710,200,420,58,"价值函数近似","b");
+       boxNode(370,300,540,58,"★ AlphaGo = 两者的融合","g");
+       link(340,258,500,300); link(920,258,780,300);
+       note("⭐ Ng：正是这种融合让它能扩展到下围棋这么大的系统",640,386,"y");},"<b>★★ 讲完「什么时候用哪个」之后，Ng 马上举了一个两者都用的例子：AlphaGo。</b><br><b>他说，AlphaGo（DeepMind 那个下围棋的程序）之所以能成功，一个原因就是它融合了这两类方法的思想</b>——<b>而正是这种融合，让它能扩展到下围棋这么大的系统。</b><br><b>⭐ 为什么围棋需要两者都要？用前面那个判据就能解释。</b><b>围棋是典型的多步推理任务，最优策略没法用简单函数表示 ⇒ 需要价值函数来评估局面。</b><b>但围棋的动作空间巨大（每一步有几百个合法落点），纯靠价值函数去搜索代价也极高 ⇒ 需要一个策略网络来把搜索缩小到少数几个有希望的落点上。</b><br><b>⇒ 两者各补对方的短板。</b><br><b>⚠ 所以上一节那个判据是用来理解方法性质的，不是一道非此即彼的选择题。</b>Ng 自己也说<b>如何融合这两类方法是个令人兴奋的研究方向。</b>");
+  S(3788,function(){clearScene();setEq(null);setCap("时间坐标");
+   boxNode(170,196,980,56,"这门课录制于 2018 年秋","d");
+   boxNode(170,264,980,56,"★ AlphaGo 战胜李世石是 2016 年，当时还是很新的事","y");
+   note("⭐ 所以 Ng 讲的不是回顾，而是「刚刚发生的、正在改变领域的事」",640,340,"y");
+   note("⚠ 他说「如何融合两类方法是令人兴奋的研究方向」—— 后来确实如此",640,398,"g");},"<b>给这段话加一个时间坐标，才能理解 Ng 当时的语气。</b><br><b>这门课录制于 2018 年秋天。</b><b>★ 而 AlphaGo 战胜李世石是 2016 年——在当时还是很新的事。</b><br><b>⭐ 所以 Ng 讲 AlphaGo 时，不是在回顾一段历史，而是在说「刚刚发生的、正在改变这个领域的事」。</b><br><b>⚠ 他说「如何把直接策略搜索和价值函数近似融合起来，是一个令人兴奋的研究方向」——<b>后来的发展确实印证了这一点</b>，今天主流的强化学习方法大多同时包含策略和价值两部分。</b><br><b>⇒ 这也提醒了一件事：你在课上学到的「两类方法」是一个教学上的划分，而真实的前沿往往在两者之间。</b>");
+  SUM(3788,22,{h:"★★ AlphaGo 融合了两类方法",k:"Ng：<b>AlphaGo（DeepMind 的围棋程序）成功的一个原因就是融合了这两类方法的思想</b>，<b>正是这种融合让它能扩展到下围棋这么大的系统</b>。",m:"⭐ <b>用前面的判据就能解释</b>：围棋是<b>多步推理</b> ⇒ 需要<b>价值函数评估局面</b>。",w:"<b>但围棋动作空间巨大</b>（每步几百个合法落点），纯靠价值函数搜索代价极高 ⇒ <b>需要策略网络把搜索缩小到少数有希望的落点</b>。",e:"⇒ <b>两者各补对方短板</b>。⚠ 所以那个判据是<b>用来理解方法性质的，不是非此即彼的选择题</b>——Ng 说融合是令人兴奋的研究方向。"});
+  QUIZ(3788,22,{t:"Ng 举 AlphaGo 这个例子是为了说明什么？",o:["价值函数近似优于策略搜索","两类方法可以融合：围棋是多步推理需要价值函数评估局面，但动作空间巨大又需要策略网络缩小搜索——正是这种融合让它能扩展","深度学习取代了这两类方法","围棋只能用策略搜索"],a:1,w:"⚠ 所以「低层控制 vs 多步推理」那个判据是<b>用来理解方法性质的，不是非此即彼的选择题</b>。Ng 说<b>融合是令人兴奋的研究方向</b>。"});
+});
+KP("23 · ⭐ 机器狗翻越障碍",function(){
+  S(987,function(){clearScene();setEq(null);setCap("另一段斯坦福的视频");
+       says("16:27","this is again just using reinforcement learning to get a robot dog to climb over obstacles");
+       boxNode(170,196,980,56,"任务：让四足机器人自己翻越障碍","b");
+       boxNode(170,264,980,56,"★ 和直升机是同一套路线：建模拟器 → 在里面学 → 搬上真机","g");
+       note("⭐ Ng 自嘲：不那么厚道的朋友不愿意管这叫「机器狗」",640,340,"d");
+       note("⚠ 它和直升机一起支撑了那句判断：机器人是 RL 最值得看的方向",640,398,"y");},"<b>Ng 在讲完诊断法之后放了另一段斯坦福的视频：用强化学习让一只四足机器人自己翻越障碍。</b><br><b>⭐ 他自嘲了一句——不那么厚道的朋友们不愿意把这玩意儿叫做「机器狗」。</b><br><b>这个例子和直升机走的是同一套路线：先建模拟器，在模拟器里学，再搬到真机上。</b><b>⇒ 也就是 L18 讲的 model-based 路线。</b><br><b>⚠ 为什么要在这里插一段视频？因为它和直升机一起支撑了 Ng 紧接着的那句判断：机器人是强化学习最值得关注的方向。</b><br><b>⭐ 两个例子都有同一个特征——任务的「好坏」一眼就看得出来（翻过去了没有、摔了没有），但「该怎么做」谁也说不清楚。</b><b>这正是 L16 开篇那个不对称，在真实项目里反复出现。</b>");
+  S(987,function(){clearScene();setEq(null);setCap("Ng 为什么反复放视频");
+   boxNode(170,196,980,56,"⚠ 强化学习的结果很难用数字说清楚","r");
+   boxNode(170,264,980,56,"★ 「平均回报 0.74」说明不了什么 —— 但一看就知道飞得好不好","g");
+   note("⭐ 这其实又是诊断三那条教训：指标和真实效果可能脱节",640,340,"y");
+   note("⚠ 所以 RL 项目里「亲眼看一遍」是不可省的一步",640,398,"r");},"<b>Ng 在这一讲里放了好几段视频，这件事本身就有含义。</b><br><b>⚠ 强化学习的结果很难用数字说清楚。</b><b>你说「平均回报是 0.74」，这几乎说明不了什么——因为那个数字的含义完全取决于你怎么写的奖励函数。</b><br><b>★ 而一段视频，一看就知道它飞得好不好、翻得过去翻不过去。</b><br><b>⭐ 这其实正是诊断三那条教训的另一面：指标和真实效果可能脱节，所以你不能只盯着指标。</b><br><b>⚠ 于是在强化学习项目里，「亲眼看一遍」是一步不可省的工作</b>——<b>不管是在模拟器里看回放，还是在真机上看。</b><br><b>⇒ 诊断一要你「看它在模拟器里飞得像样吗」，用的就是这个道理。</b>");
+  SUM(987,23,{h:"⭐ 机器狗：同一套路线的另一个例子",k:"<b>任务</b>：用强化学习让<b>四足机器人自己翻越障碍</b>。⭐ Ng 自嘲<b>不那么厚道的朋友不愿管它叫「机器狗」</b>。",m:"<b>和直升机同一套路线</b>：<b>先建模拟器 → 在里面学 → 搬上真机</b>（L18 的 model-based 路线）。",w:"⚠ <b>为什么插这段视频</b>：它和直升机一起支撑了 Ng 紧接着那句判断——<b>机器人是 RL 最值得关注的方向</b>。",e:"⭐ <b>两个例子的共同特征</b>：<b>「好坏」一眼看得出来</b>（翻过去没有、摔了没有），<b>但「该怎么做」谁也说不清</b>——L16 开篇那个不对称的真实版本。"});
+  QUIZ(987,23,{t:"机器狗的例子和直升机有什么共同点？",o:["都走 model-based 路线（建模拟器→在里面学→搬上真机），而且都是「好坏一眼看得出、该怎么做说不清」","两者都是离散状态","两者都不需要模拟器","两者都用了 LQR"],a:0,w:"⭐ 后一点正是 <b>L16 开篇那个不对称</b>在真实项目里的反复出现：<b>评估容易，决策难</b>。"});
+});
+KP("完 · 季终集",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L20 · 完","强化学习的调试与诊断",
+      "三句话，和一整门课");},
+    "收一下这一讲，也收一下整条强化学习的线。<br><b>★★★ 这一讲最值钱的东西是那套三句话诊断法。</b><b>场景是：控制器飞得比人类飞行员差得多，而你面前有三条都很花时间的路——改模拟器、改奖励函数、改算法。</b><br><b>Ng 的办法是先写下三句话</b>：<b>① 模拟器是准的；② 强化学习算法确实在模拟器里最大化了期望回报；③ 最大化这个期望回报，确实对应着「飞得好」。</b><b>⭐ 关键在于：如果这三句都成立，那学出来的控制器就应该飞得很好。</b><b>既然它没有，那至少有一句是假的——而三句话正好对应三条路。</b><br><b>然后用三个测试把假的那句找出来。</b><b>测试一：它在模拟器里飞得好吗？</b><b>⭐ 如果在模拟器里飞得好、在真机上不行，那问题就是模拟器——去采更多数据、学一个更好的模型。</b><b>测试二：拿人类飞行员来比。</b><b>用你自己那个奖励函数去算人类飞行的收益，和算法的收益比一比。</b><b>⭐ 如果算法的收益比人类低，说明算法没有真正在最大化——该去改算法。</b><b>★★★ 测试三是最精彩的：如果算法的收益反而比人类高，可人类明明飞得更好——那只能说明你的奖励函数写错了。</b><b>⚠ 因为「把你写的那个和式最大化」已经做到了，可结果并不是你想要的飞行。</b><br><b>⭐ Ng 还讲了两件关于工作流的事，都很实在。</b><b>第一，该修的问题会不断移动</b>——<b>项目前两个月可能一直是「模拟器不够好」，解决之后暴露出来的就是下一个最重要的问题，如此往复。</b><b>第二，⚠ 他特意说这不是一套刚性的数学流程</b>：<b>实际做的时候是一个团队把三个测试的证据摆在一起，然后判断「模拟器也许不够好，但可能够用了，我们先去弄别的」。</b><b>判断是跑不掉的。</b><br><b>后半段讲了策略搜索。</b><b>前面所有方法的路线都是：先估价值函数，再用 argmax 导出策略。</b><b>⭐ 而直接策略搜索跳过中间那一步，直接去找一个好策略。</b><b>做法是先给策略定一个形式（Ng 类比逻辑回归：当初也是「先定下 sigmoid 这个形式」），再对它的参数 θ 做梯度上升。</b><b>它用的是随机策略——输出的不是一个动作，而是各个动作的概率。</b><b>★ 算法叫 REINFORCE：跑一条轨迹、算出这条轨迹的总回报、然后朝着「让这条轨迹更可能发生」的方向更新 θ，更新的幅度乘上总回报。</b><b>⇒ 回报高的轨迹被加强，回报低的被削弱，名字就是这么来的。</b><br><b>⚠ 什么时候用哪个？Ng 给的判据很清楚：看任务是不是「低层控制」。</b><b>把车保持在直路上、把倒立摆立住——这类任务的最优策略形状简单，策略搜索很合适。</b><b>⭐ 而下棋、围棋、或者「先超过这辆车再躲开那个行人」这种需要多步推理的任务，最优策略没法用一个简单函数表示，这时价值函数近似更有希望。</b><b>Ng 还给了自己的经历：他最早飞直升机用的就是直接策略搜索，那段倒着飞的视频用的也是策略搜索；但要飞更复杂的机动，就得转向价值函数近似那一类方法。</b><br><b>⭐ 最后说一句整条线。</b>从 L16 把问题形式化成 MDP，到 L17 用值迭代解出来，到 L18 处理连续状态，到 L19 的 LQR 精确解，再到这一讲的调试方法和策略搜索——<b>这五讲合起来是一套完整的工程能力：不只是「会这些算法」，而是「做不出来时知道该查哪儿」。</b><b>⚠ 而 L20 教的恰恰是其中最难学、也最少被写进教科书的那一半。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

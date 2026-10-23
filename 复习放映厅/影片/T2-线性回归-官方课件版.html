@@ -1,0 +1,506 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>T2 线性回归放映厅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(98ch,93%);max-height:85vh;overflow:auto;
+  background:rgba(13,18,26,.94);border:1px solid #253044;border-radius:14px;padding:24px 30px 22px;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 5px}
+#sum h3{font-size:clamp(17px,2.1vw,28px);font-weight:800;margin:0 0 15px;letter-spacing:-.02em;line-height:1.2}
+#sum .rows{display:grid;gap:11px}
+@media(min-width:900px){#sum .rows{grid-template-columns:1fr 1fr;gap:12px 26px}}
+#sum .row{border-left:2px solid #2A3546;padding-left:13px}
+#sum .rk{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 3px}
+#sum .rv{font-size:clamp(11.5px,1.1vw,15px);font-weight:300;line-height:1.7;color:#C3CEDD;margin:0}
+#sum .rv b{color:#F0F4FA;font-weight:600}
+#sum .rv i{font-style:normal;color:var(--blue)}
+#sum .rv em{font-style:normal;color:var(--green)}
+#sum .rv s{text-decoration:none;color:var(--coral)}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"ARTI2001 · T2 线性回归（官方课件·逐张精读）",
+  subtitle:"逐张一个知识点 · 每镜都有详解 · Study check 作检验 · 空格推进",video:""};
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("M1 T2 · 线性回归","官方课件逐张精读",
+      "对应课件 S4–S25 · 每张一个知识点 · 每个讲解镜头都有详细说明");},
+    "这部逐张跟着你课程的 M1T2 线性回归课件走。T2 是整个 Module 的<b>数学地基</b>：一条直线怎么拟合、怎么用「代价函数」把好坏压成一个数、怎么用梯度下降或正规方程把这个数最小化。它和 CS229 第二讲高度重合，但记号和约定按<em>你的课件</em>来。每个讲解镜头下方有详解（按 N 开关），每个知识点配总结卡和用官方 Study check 改编的必答检验。<s>注意本课代价函数用 ½·MSE（除以 2m）</s>，手算系数和 CS229 略有差别。");
+});
+KP("1 · 为什么预测数字（S4–5）",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(150,240,300,100,"回归","b");boxNode(830,240,300,100,"分类","y");note("目标：连续的数",300,400,"b");note("目标：离散的类别",980,400,"y");note("价格 · 年龄 · 温度 · 时长",300,438,"");note("垃圾/正常 · 猫/狗",980,438,"");setCap("<b>课件：很多真实问题要预测一个连续的数。</b>");},"T2 的第一问是「<b>为什么要预测一个数</b>」。很多现实任务的答案本身就是连续量——房价、年龄、气温、销量、学习时长。这类<b>监督学习</b>问题叫<em>回归</em>，和<em>分类</em>（预测离散类别）并列，是监督学习的两大分支。判据只有一条：<b>目标变量是不是连续量</b>。课件的 Study check 很典型——「从照片预测一个人的年龄」是回归（年龄连续），「考试及格还是不及格」是分类（两个类别）。这条判据 T1、T2 都会考。");
+  S(0,function(){clearScene();setCap(null);setEq(null);setBig("连续 vs 离散","目标变量的类型决定用回归还是分类");},"为什么要先分清回归和分类？因为它<b>决定你后面用什么损失、怎么评估</b>。回归用平方误差、用 RMSE/R² 评估；分类用交叉熵、用准确率/召回率。一个常见陷阱：<s>输出是数字不等于回归</s>——用 1/2/3 编码三个城市那是分类，因为数字间的大小没有意义。判断永远看<b>目标本身</b>是不是有序的连续量。T2 整个 Topic 讲的就是最基础的回归模型：一条直线。");
+  SUM(0,1,{h:"回归：预测一个连续的数（S4–5）",k:"当目标变量是<b>连续量</b>（价格、年龄、时长）时，这类监督学习叫<em>回归</em>；目标离散则是分类。判据只有一条：目标变量连续还是离散。",m:"这个区别决定下游：回归用平方误差、RMSE/R²；分类用交叉熵、准确率。T2 讲最基础的回归模型——一条直线。",w:"<s>输出是数字 ≠ 回归</s>。用 1/2/3 编码类别仍是分类。判断看目标变量本身有没有大小/顺序意义。",e:"T1、T2 都考「回归 vs 分类」。「从照片预测年龄」=回归；「及格/不及格」=分类。记住判据是目标变量连续还是离散。"});
+  QUIZ(0,1,{t:"课件 Study check：从一张照片预测一个人的年龄，是回归还是分类？",o:["分类，因为年龄有很多可能","<b>回归——年龄是连续量，可以是 23.5、47 岁，数值间大小有意义</b>","分类，因为要分年龄段","两者都不是"],a:1,w:"年龄是<b>连续量</b>：可以是 23.5 岁、47 岁，数值之间的大小和差距都有意义，所以是<em>回归</em>。<s>若把年龄切成「青年/中年/老年」几档再预测，那才是分类</s>——但题目问的是直接预测年龄这个数，是回归。判据永远看目标变量本身连续还是离散。"});
+});
+KP("2 · 训练集与记号（S6）",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);matrix({rows:6,cols:3,cw:150,ch:48,y:170,cell:function(i,j){var t=[["i","面积 x","价格 y"],["1","1.0","145"],["2","1.5","185"],["3","2.0","224"],["4","2.5","260"],["5","3.0","290"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return i===3?"hl":"";}});note("m = 样本数（行）· n = 特征数（列，不含目标）",640,470,"y");},"回归从一张<b>训练集</b>开始：每行是一个样本，一对 (x, y)——输入特征 x 和正确答案 y。记号要记死：<b>m 是样本数</b>（有多少行），<b>n 是特征数</b>（每个样本用几个数描述）。上标带括号的 <b>x⁽ⁱ⁾</b> 指第 i 个样本（一整行），下标 xⱼ 指第 j 个特征。课件 Study check 问「x⁽³⁾ 和 y⁽³⁾ 是什么」——就是表里<em>第 3 行</em>的面积和价格（2.0 和 224）。<s>上标不是指数</s>，别和幂搞混。");
+  S(0,function(){clearScene();setBig("目标是泛化","不是背下这张表，是对没见过的 x 给出好预测");},"训练集的用途不是「记住」这五行，而是<b>学出一个规律</b>，对<em>没出现在表里</em>的房子给出合理估价。这就是<b>泛化</b>——训练集上的表现只是手段，真正要的是新数据上的表现。这条贯穿全 Module：T1 的 train/test 划分、T2 的过拟合、都是围绕「别只在训练集上好看」。所以我们要一个能<i>外推</i>的模型（一条直线或曲线），而不是一张查找表。");
+  SUM(0,2,{h:"训练集与记号：m、n、上标下标（S6）",k:"训练集每行一个样本 (x,y)。<b>m=样本数（行）</b>，<b>n=特征数（列）</b>。<b>x⁽ⁱ⁾</b>=第 i 个样本（一整行），xⱼ=第 j 个特征（一个数）。",m:"目标是<b>泛化</b>：学出规律、对没见过的 x 给好预测，而不是背下训练表。这是全 Module 的主线（对应 T1 划分、T2 过拟合）。",w:"<s>上标 x⁽ⁱ⁾ 不是指数</s>，是第 i 个样本。<s>m 和 n 别搞反</s>：m 行数、n 列数。MNIST 的 (60000,784) 就是 m=60000、n=784。",e:"Study check「x⁽³⁾、y⁽³⁾ 是什么」=第 3 行的输入和目标。记号是 T2/T3/T4 所有计算题的基础，务必分清上标（样本）下标（特征）。"});
+  QUIZ(0,2,{t:"课件 Study check（S6）：表格中 x⁽³⁾ 和 y⁽³⁾ 指什么？",o:["x 的 3 次方和 y 的 3 次方","<b>第 3 个训练样本的输入特征 x 和目标值 y（那一整行）</b>","第 3 个特征","前 3 个样本"],a:1,w:"<b>上标带括号</b>的 (i) 表示<em>第 i 个样本</em>，不是指数。所以 x⁽³⁾、y⁽³⁾ 是训练集<b>第 3 行</b>的输入面积和目标价格（本例是 2.0 和 224）。<s>把上标当成幂</s>是最常见的记号错误。下标 xⱼ 才是第 j 个特征。"});
+});
+KP("3 · ★ 模型 f(x)=wx+b（S7）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$f_{w,b}(x)=wx+b$$","top");var P={l:360,r:940,t:150,b:430};axes(P);note("面积 x",930,455,"");note("价格 y",350,160,"");var pts=[[420,410],[520,350],[620,300],[720,255],[820,205]];dots(pts,"b",7);curve([[400,430],[900,180]],"fit");note("w = 斜率",760,300,"y");note("b = 截距",420,445,"g");},"回归最简单的模型就是一条<b>直线</b>：f(x)=wx+b。这其实就是你早就学过的 y=mx+c，只是把字母换了名字——<i>说破这一点能消掉一大半焦虑</i>。两个参数各管一件事：<b>w 是斜率</b>（房价随面积每增加一单位涨多少），<b>b 是截距</b>（面积为 0 时的基准值）。课件 Study check 让你先猜再看：<b>增大 w</b> 会让直线<em>更陡</em>（绕着转），<b>增大 b</b> 会让直线<em>整体上移</em>（平移）。分清这两个作用，是理解后面所有拟合的前提。");
+  S(0,function(){clearScene();setEq("$$f(x)=w_1x_1+w_2x_2+\\dots+w_nx_n+b=w^{\\top}x+b$$","top");setCap("<b>多特征时每个特征配一个自己的权重，写成向量内积。</b>");},"特征不止一个时（面积、卧室数、楼层……），每个特征配<b>一个自己的权重</b> wⱼ，加起来再加截距：f(x)=w₁x₁+…+wₙxₙ+b，紧凑写成 <b>wᵀx+b</b>。这就是你课程 T3、T4 反复出现的那个<em>线性打分</em>——回归里直接当预测值，分类里取符号或过 sigmoid。<s>一个术语细节</s>：严格说带常数项 b 的叫「仿射函数」，但机器学习圈一律叫「线性」，考试不考这个区别，知道有这回事即可。");
+  SUM(0,3,{h:"★ 线性模型 f(x)=wx+b（S7）",k:"模型是一条<b>直线</b> f(x)=wx+b，就是 y=mx+c 换了字母。<b>w=斜率</b>（每单位 x 预测涨多少），<b>b=截距</b>（x=0 的基准）。多特征写成 <b>wᵀx+b</b>。",m:"增大 w → 直线更陡（旋转）；增大 b → 直线整体上移（平移）。这个 wᵀx+b 就是 T3/T4 的线性打分核心，全 Module 通用。",w:"<s>严格说带 b 的是仿射函数</s>，但 ML 里一律叫线性，考试不考这个区别。多特征时每个特征各有一个权重，别只给一个。",e:"Study check：w 让线更陡、b 让线平移。会写单特征 wx+b 和多特征 wᵀx+b，是 T2 所有拟合和 T3/T4 打分的基础。"});
+  QUIZ(0,3,{t:"课件 Study check（S7）：在 f(x)=wx+b 中，增大 w 和增大 b 分别对直线做什么？",o:["增大 w 平移、增大 b 变陡","<b>增大 w 让直线更陡（旋转）；增大 b 让直线整体上移（平移）</b>","两者都让直线变陡","两者都让直线平移"],a:1,w:"<b>w 是斜率</b>：增大它，直线绕着转、变得更陡。<b>b 是截距</b>：增大它，整条直线<em>向上平移</em>，斜率不变。两个参数各管一个自由度——一个管「倾斜程度」、一个管「高低位置」，合起来才能拟合任意一条直线。"});
+});
+KP("4 · ★ 残差 = 竖直误差（S9）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);var P={l:360,r:940,t:150,b:430};axes(P);note("x",930,455,"");note("y",350,160,"");curve([[400,420],[900,190]],"fit");var pts=[[470,400],[560,330],[660,320],[760,240],[840,230]];dots(pts,"b",7);pts.forEach(function(p){var yl=420-(p[0]-400)*(230/500);E.link(p[0],yl,p[0],p[1]);});note("残差 = 竖直距离",640,470,"c");},"怎么衡量一条线拟合得好不好？先看单个样本的误差——<b>残差</b>（residual）：真实值和预测值之间的<em>竖直</em>距离，e = y − f(x)。课件的算例：如果 f(1.0)=78+72×1.0=150，但真实价是 145，残差 = 145−150 = <b>−5</b>。<b>读符号</b>：负数表示模型<i>高估</i>了（预测比真实高），正数表示低估。Study check 让你算 x=1.5 的残差，就是同样代入相减。为什么是<b>竖直</b>而不是点到线的垂直距离？因为回归的目标是<em>预测 y</em>，我们关心的正是 y 方向的差。");
+  S(0,function(){clearScene();setEq("$$e^{(i)}=y^{(i)}-f(x^{(i)})$$","top");setBig(null);setCap("<b>残差有正有负</b>：正=低估，负=高估。直接加会互相抵消。");},"残差是后面一切的基石，但它<b>有正有负</b>——高估的样本残差为负、低估的为正。如果直接把所有残差加起来衡量总误差，<s>正负会互相抵消</s>，一条烂线也可能得零。所以下一步要<b>平方</b>再求和：平方既消掉符号，又对大误差罚得更重。这就引出「代价函数」。记住残差的定义 y−f(x) 和它的符号含义，Tutorial 手算残差、代价、梯度都从它开始。");
+  SUM(0,4,{h:"★ 残差：真实值−预测值的竖直距离（S9）",k:"残差 <b>e = y − f(x)</b>，是单个样本上真实值与预测值的<em>竖直</em>差。算例 f(1.0)=150、真实 145 → 残差 −5。<b>负=高估，正=低估</b>。",m:"用竖直距离（不是点到线的垂直距离）因为回归要预测 y、关心 y 方向的差。残差有正负，直接相加会抵消，所以下一步要平方。",w:"<s>符号别读反</s>：y−f<0 表示预测偏高（高估）。<s>别用垂直距离</s>——那把 x 的误差也算进来了，与预测任务不符。",e:"Study check 让你算 x=1.5 的残差：代入 f 求预测、再 y−f。Tutorial 手算代价/梯度都从残差起步，务必练熟代入相减。"});
+  QUIZ(0,4,{t:"某样本真实价 y=145，模型预测 f(x)=150。它的残差是多少？说明什么？",o:["+5，模型低估了","<b>−5，模型高估了（预测比真实高）</b>","5，无法判断方向","0，因为很接近"],a:1,w:"残差 = 真实 − 预测 = 145 − 150 = <b>−5</b>。<b>负号表示模型高估</b>——它预测的 150 比真实的 145 高了 5。正残差才表示低估。读准符号很重要：它告诉你模型在这个点是偏高还是偏低。残差有正有负，所以衡量总误差要先平方（下一个知识点）。"});
+});
+KP("5 · ★ 代价函数 J（S10）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$J(w,b)=\\frac{1}{2m}\\sum_{i=1}^{m}\\big(f_{w,b}(x^{(i)})-y^{(i)}\\big)^2$$","top");setCap("<b>把整条线的好坏，压成一个数。</b>越小越好。");},"有了残差，就能定义<b>代价函数</b> J：把每个样本的残差<em>平方</em>再<b>求平均</b>，得到一个衡量「整条线有多差」的单一数字。本课用的是 <b>½·MSE</b>：J = 1/(2m)·Σ(f−y)²。<b>平方</b>做两件事——消掉正负号、并且<i>对大误差罚得更重</i>（差 10 罚 100，差 2 只罚 4，所以最小二乘对离群点敏感）。<b>那个 ½ 是为了后面求导好看</b>：求导时平方的 2 掉下来，正好和 ½ 约掉。学习的目标就变成一句话：<b>选 w、b 让 J 最小</b>。");
+  S(0,function(){clearScene();setEq(null);setBig("min J(w,b)","学习 = 最小化代价");setCap("<b>½·MSE 与 MSE 最优解相同</b>，但手算梯度的系数不同——按本课的 1/2m 写。");},"这一步把「找一条好线」<b>翻译成一个优化问题</b>：最小化 J(w,b)。这是机器学习最核心的套路——把学习变成最小化某个数。<s>注意系数约定</s>：本课用 1/(2m)（½·MSE），CS229 用 ½·SSE（不除 m），有些书用 1/m（MSE）。<b>它们的最优解 w、b 完全相同</b>（乘正常数不改变最小值位置），但<em>手算梯度时前面的系数不一样</em>——考试和 Tutorial 按你课程的 1/(2m) 写。下一步就是怎么找到这个最小值：梯度下降，或正规方程。");
+  SUM(0,5,{h:"★ 代价函数 J = ½·MSE（S10）",k:"代价 <b>J(w,b)=1/(2m)·Σ(f−y)²</b>：残差平方求平均，把整条线的好坏压成一个数，<em>越小越好</em>。学习 = <b>最小化 J</b>。",m:"平方消符号、且重罚大误差（对离群点敏感）。那个 <b>½ 是为求导方便</b>——导数里平方的 2 会和它约掉。最小化 J 是机器学习的通用套路。",w:"<s>系数约定要一致</s>：本课 1/(2m)、CS229 ½·SSE、有的书 1/m。最优解相同，但<em>手算梯度系数不同</em>，按本课 1/(2m) 写。",e:"Study check 要能指出「预测/残差/目标/参数更新」四件事。会写 J 的公式、解释 ½ 的作用、说明为何最小化它，是 T2 核心。"});
+  QUIZ(0,5,{t:"代价函数 J=1/(2m)·Σ(f−y)² 里的那个 ½（即 1/2）主要是为了什么？",o:["让代价变小一半","<b>求导方便——导数里平方产生的 2 正好和 ½ 约掉，式子干净</b>","惩罚大误差","让 J 变成概率"],a:1,w:"½ 纯粹是<b>为后面求导好看</b>：对 (f−y)² 求导会掉出一个 2，正好和 ½ 相乘得 1，梯度式子就干净了。<s>它不改变最优解的位置</s>——乘一个正常数只改变 J 的高度和梯度尺度，最小值在哪不变。所以 ½·MSE 和 MSE 学出同样的 w、b，只是手算梯度的系数差一个 2。"});
+});
+KP("6 · 代价曲面：一个碗（S11）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);var P={l:340,r:960,t:160,b:440};axes(P);note("参数 w",950,465,"");note("J",330,170,"");var pts=[];for(var k=0;k<=60;k++){var x=340+620*k/60;var t=(k-30)/30;pts.push([x,200+t*t*220]);}curve(pts,"fit b");dots([[650,200]],"g",8);note("最低点 = 最优参数",650,180,"g");},"把 J 画成参数的函数，形状是一个<b>碗</b>（对单参数是抛物线）。<b>横轴是参数（w），纵轴是 J（这组参数有多差）</b>——<s>注意这不是数据图</s>，是「参数的地形图」。<em>数据空间里的一整条直线，在这张图上只是一个点</em>。碗底就是使 J 最小的最优参数。线性回归的代价函数是<b>凸的（碗形）</b>，这个性质极好：只有一个最低点，<i>局部最优即全局最优</i>，从任何起点出发都能滚到同一个底。");
+  S(0,function(){clearScene();setEq(null);setCap(null);var P={l:360,r:940,t:150,b:440};axes(P);note("θ₀",930,465,"");note("θ₁",350,160,"");var cx=650,cy=290;for(var r=40;r<=170;r+=40){var e=[];for(var a=0;a<=48;a++){var t=a/48*6.283;e.push([cx+r*1.5*Math.cos(t),cy+r*0.75*Math.sin(t)]);}curve(e,"fit");}dots([[cx,cy]],"g",8);note("细长椭圆 = 特征尺度差异大",640,470,"y");},"两个参数时，碗是三维的；从正上方压平看就是一圈圈<b>等高线</b>（同一圈上 J 相同）。这里的等高线常是<b>细长的斜椭圆</b>而不是同心圆——原因是两个参数<i>高度相关</i>，或者<b>特征尺度差异大</b>。椭圆越细长，梯度下降走起来越会<em>之字形</em>震荡、收敛越慢（后面「特征缩放」会回到这一点）。记住这张图：优化就是在这张参数地形上<b>往碗底走</b>。");
+  SUM(0,6,{h:"代价曲面：凸的碗，参数的地形图（S11）",k:"把 J 画成参数的函数是一个<b>碗（凸函数）</b>。横轴是<em>参数</em>、纵轴是 J。数据里的一整条直线，在这图上只是<b>一个点</b>。碗底=最优参数。",m:"凸性保证<b>局部最优=全局最优</b>，从任何起点都滚到同一个底（线性回归、逻辑回归都有；神经网络没有）。等高线细长椭圆=参数相关/特征尺度差异大→梯度下降之字形慢。",w:"<s>别把它当数据图</s>：横纵轴是参数不是 x、y。Ng 专门强调 get the axes right——数据空间的一条线=参数空间的一个点。",e:"理解「凸→只有一个最低点」和「细长椭圆→收敛慢」为特征缩放埋伏笔。T2 Tutorial 里「Hessian 半正定⇒J 凸」说的就是这个碗。"});
+  QUIZ(0,6,{t:"线性回归的代价函数是凸的（碗形），这带来什么保证？",o:["训练一定很快","<b>只有一个最低点，局部最优即全局最优，从任何起点都能收敛到同一个解</b>","不需要学习率","一定不会过拟合"],a:1,w:"<b>凸函数（碗形）只有一个最低点</b>，所以梯度下降只要学习率合适，从<em>任何</em>起点出发都会滚到同一个全局最优——<s>不存在会卡住的坏局部最优</s>。逻辑回归也有这个性质；神经网络<b>没有</b>（损失面坑坑洼洼，起点和随机种子会影响结果）。凸性也是正规方程有唯一解的基础。"});
+});
+KP("7 · ★ 梯度下降（S12–13）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$w:=w-\\alpha\\frac{\\partial J}{\\partial w},\\qquad b:=b-\\alpha\\frac{\\partial J}{\\partial b}$$","top");setCap("<b>不知道碗底在哪，就往最陡的下坡迈一小步，重复。</b>");},"梯度下降的直觉：<b>站在雾里的山坡上，看不到谷底，就环顾四周、往最陡的下坡方向迈一步</b>，重复。数学上，<b>梯度 ∂J/∂w 指向 J 增长最快的方向</b>，所以下山要走它的<em>反方向</em>——这就是更新式里<b>减号</b>的全部作用。规则：w := w − α·∂J/∂w，b 同理。<b>「:=」是赋值</b>（重新算、覆盖旧值）。梯度的<i>长度</i>也有意义：地形越陡梯度越长、步子越大，接近谷底时梯度变短、步子自动变小。");
+  S(0,function(){clearScene();setEq(null);setBig("同时更新","先用旧 w,b 算完两个偏导，再一起写回");setCap("<b>易错：必须用同一批旧参数算完所有偏导，再同时覆盖。</b>");},"有个<b>必须踩准的细节：同时更新</b>。正确做法是：先用<i>当前的</i> w、b 把两个偏导 ∂J/∂w、∂J/∂b <b>都算完</b>、暂存，然后<em>一次性写回</em>。<s>如果算完 ∂J/∂w 就立刻更新 w，再拿新的 w 去算 ∂J/∂b，那就不是梯度下降了</s>——虽然有时也能跑通，但它不再沿真正的负梯度方向。对线性回归，代入 J 求导后梯度是 <b>(1/m)Σ(f−y)x</b> 的形式——「误差×特征」，和逻辑回归 (p−y)x、感知机 y·x 同一个形状，这不是巧合（广义线性模型）。");
+  SUM(0,7,{h:"★ 梯度下降：往负梯度方向走（S12–13）",k:"更新 <b>w := w − α·∂J/∂w</b>、b 同理。梯度指向 J 增长最快方向，<em>减号</em>让我们走下坡。α 是步长，「:=」是赋值覆盖。反复迭代直到收敛。",m:"梯度长度自适应步子（越陡走越大、近底越小）。<b>必须同时更新</b>：用同一批旧参数算完所有偏导再一起写回。线性回归梯度形如 (1/m)Σ(f−y)x=「误差×特征」。",w:"<s>非同时更新是高频错误</s>：算完 ∂J/∂w 就更新 w、再用新 w 算 ∂J/∂b，就不再沿负梯度了。别忘减号（走的是负梯度）。",e:"会写更新式、解释减号（负梯度=下坡）、强调同时更新。「误差×特征」的梯度形状 T3 Tutorial Q2（逻辑回归 (p−y)x）会再用。"});
+  QUIZ(0,7,{t:"梯度下降更新参数时，为什么是<b>减去</b>梯度？",o:["为了让参数变小","<b>梯度指向 J 增长最快的方向，减去它就是朝 J 下降最快的方向走</b>","为了收敛更快","随便加减都行"],a:1,w:"<b>梯度 ∇J 指向函数<em>增长</em>最快的方向</b>（上坡）。我们要最小化 J，所以要走它的<em>反方向</em>（下坡）——这就是更新式里减号的全部含义：w := w − α·∇J。加号会让你往山上爬、J 越来越大。另外记得<b>同时更新</b> w 和 b（用同一批旧值算完再一起覆盖）。"});
+});
+KP("8 · ★ 学习率 α（S14）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);var P={l:200,r:1080,t:160,b:440};boxNode(150,200,300,100,"α 太小","b");boxNode(520,200,240,100,"α 合适","g");boxNode(830,200,300,100,"α 太大","r");note("收敛，但极慢、浪费算力",300,340,"b");note("又快又稳",640,340,"g");note("越过谷底、震荡甚至发散",980,340,"r");setCap("<b>α 是你手动定的超参数，不是学出来的。</b>");},"学习率 <b>α 控制每步走多大</b>，而且它是<b>你手动选的超参数</b>，不是从数据学出来的——<s>选错 α 是「代码明明对却像坏了」的最常见原因</s>。<b>太小</b>：能收敛、J 也在降，但慢得浪费算力，典型症状是 J 曲线一直缓缓下降、半天不到底。<b>太大</b>：会<em>越过谷底</em>冲到对面更高处，来回震荡甚至发散（J 反而上升）。<b>合适</b>：又快又稳。没有万能值，通常试几个数量级（0.001、0.01、0.1）看哪个 J 降得又快又稳。");
+  S(0,function(){clearScene();setBig(null);setEq(null);var P={l:300,r:980,t:150,b:430};axes(P);note("迭代次数",950,455,"");note("J",300,160,"");var pts=[];for(var k=0;k<=60;k++){pts.push([300+680*k/60,160+270*Math.exp(-k/12)]);}curve(pts,"fit g");note("画 J-迭代曲线来诊断",640,250,"y");},"怎么判断 α 好不好？<b>画一条 J 随迭代次数的曲线</b>——这是工程上最常用的诊断法。<b>J 一直缓慢下降、走不平</b>→α 太小，调大。<b>J 上下乱跳或往上翘</b>→α 太大，调小。<b>J 平滑下降然后走平</b>→收敛了，可以停。注意课件 Study check 的陷阱：「J 降得很好，然后<em>在一个仍然很高的值上走平了</em>——这是学习率问题吗？」<s>不一定</s>——走平说明<b>收敛了</b>，值高可能是<i>模型太简单（欠拟合）或特征不够</i>，不是 α 的错。");
+  SUM(0,8,{h:"★ 学习率 α：超参数，太小慢太大炸（S14）",k:"α 控制步长，是<b>手动选的超参数</b>。<b>太小</b>→收敛但极慢；<b>太大</b>→越过谷底、震荡/发散；<b>合适</b>→又快又稳。选错是「代码对却像坏了」的头号原因。",m:"诊断法：<b>画 J-迭代曲线</b>。一直缓降→α 太小；上下跳/上翘→α 太大；平滑降后走平→收敛。常试 0.001/0.01/0.1 几个数量级。",w:"<s>Study check 陷阱</s>：J 降完在一个高值走平，<b>不一定是 α 问题</b>——走平=收敛了，值高多半是欠拟合/特征不足。α 太大反而 J 上升。",e:"会区分 α 太小（慢）vs 太大（发散），会用 J-迭代曲线诊断。T4 的 C、γ 也是「太小/太大各有毛病」的超参数，同一套思路。"});
+  QUIZ(0,8,{t:"课件 Study check（S14）：J 先降得很好，然后在一个<b>仍然偏高</b>的值上走平不动了。这是学习率问题吗？",o:["是，α 太大了","是，α 太小了","<b>不一定——「走平」说明已收敛；值偏高多半是欠拟合/特征不足，不是 α 的错</b>","是，必须换模型"],a:2,w:"J <b>平滑下降然后走平</b>，说明梯度下降<em>已经收敛</em>到了这个模型能达到的最低代价。<s>停在高值不是学习率的锅</s>——α 太大时 J 会震荡或上升，不是平稳走平。停在高处更可能是<b>模型太简单（欠拟合、高偏差）或特征没抓住规律</b>。对策是加特征/提高模型复杂度，而不是调 α。"});
+});
+KP("9 · 从一个特征到多个（S15）",function(){
+  S(0,function(){clearScene();setEq("$$f(x)=w_1x_1+w_2x_2+\\dots+w_nx_n+b$$","top");setBig(null);matrix({rows:4,cols:3,cw:200,ch:52,y:250,cell:function(i,j){var t=[["特征","权重","含义"],["面积 x₁","w₁","每 +1 面积涨多少"],["卧室 x₂","w₂","每 +1 卧室涨多少"],["楼层 x₃","w₃","每 +1 楼层涨多少"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return false;}});},"真实问题很少只用一个特征。加特征很简单：<b>每个特征配一个自己的权重 wⱼ</b>，全部加起来再加截距。每个 wⱼ 的含义是「<i>其它特征不变时，这个特征每增加一单位，预测涨多少</i>」。课件 Study check 问得很到位：<b>只加一间卧室、其它不变，预测怎么变？</b>——答案是<em>加上 w₂</em>（卧室的权重），因为 f 里只有 w₂x₂ 那一项受影响。这就是线性模型好解释的地方：<b>每个权重是该特征的「边际效应」</b>。");
+  S(0,function(){clearScene();setEq("$$f(x)=w^{\\top}x+b$$","top");setCap("<b>几何上：一维是直线、二维是平面、更高维是超平面。</b>");},"多特征在几何上意味着<b>升维</b>：一个特征时拟合的是<i>平面上的一条直线</i>，两个特征是<i>三维空间里的一个平面</i>，n 个特征是<b>超平面</b>（画不出来，但代数形式 wᵀx+b 完全一样）。<s>维度再高道理不变</s>。这也是为什么线性代数是这门课的先修——把一堆样本堆成矩阵 X，预测就是一次矩阵乘法 Xw+b，为下一步的「正规方程」铺路。");
+  SUM(0,9,{h:"多特征：每特征一个权重，wᵀx+b（S15）",k:"多特征时 f(x)=w₁x₁+…+wₙxₙ+b=<b>wᵀx+b</b>，每个特征配<em>一个自己的权重</em>。每个 wⱼ = 该特征的<b>边际效应</b>（其它不变时每 +1 单位预测涨多少）。",m:"几何上升维：一维直线→二维平面→n 维超平面，代数形式不变。堆成矩阵 X，预测是矩阵乘法 Xw+b，为正规方程铺路。",w:"<s>加一个特征只影响它自己那一项</s>：只加一间卧室、其它不变，预测就加上 w₂。别以为会牵动别的权重（那些项没变）。",e:"Study check「加一间卧室预测怎么变」= 加上该特征的权重 w₂。理解权重=边际效应、多特征=超平面，是正规方程和 T3/T4 的基础。"});
+  QUIZ(0,9,{t:"课件 Study check（S15）：其它特征都不变，只把卧室数 x₂ 增加 1，预测值怎么变？",o:["不变","<b>增加 w₂（卧室对应的权重）</b>","增加 w₁","翻倍"],a:1,w:"f(x)=w₁x₁+w₂x₂+…+b。只有 x₂ 变了（+1），其它项都不动，所以预测<b>增加 w₂×1 = w₂</b>。这正是线性模型的可解释性：<b>每个权重就是对应特征的「边际效应」</b>——该特征每增加一单位、其它不变时预测的变化量。"});
+});
+KP("10 · ★ 正规方程（S16）",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq("$$\\theta=(X^{\\top}X)^{-1}X^{\\top}y$$","top");note("X：设计矩阵（行=样本，列=特征）",640,270,"b");note("y：目标向量",640,330,"g");note("一步解出最优参数，不用迭代",640,400,"y");},"除了迭代的梯度下降，线性回归还有一条<b>一步到位</b>的路：<b>正规方程</b> θ=(XᵀX)⁻¹Xᵀy。既然 J 是个碗，直接令梯度为零、解方程就能得到碗底坐标，不用一步步走。<b>X 是设计矩阵</b>（每行一个样本、每列一个特征，第一列常补全 1 吸收截距），<b>y 是目标向量</b>。这个式子的前提是 <b>XᵀX 可逆</b>（要求特征列线性无关）。<s>实际数值软件很少真的求逆</s>——直接求逆又慢又不稳，库用 QR 分解或 SVD（更稳，且 XᵀX 不可逆时能用伪逆给合理解）。");
+  S(0,function(){clearScene();setEq(null);setBig(null);matrix({rows:4,cols:3,cw:250,ch:54,y:200,cell:function(i,j){var t=[["","梯度下降","正规方程"],["方式","迭代逼近","一步闭式解"],["要选 α？","要","不要"],["特征很多时","更划算","(XᵀX)⁻¹ 太贵"]];return t[i][j];},dim:function(i,j){return i===0||j===0;},hl:function(i,j){return false;}});setCap("<b>怎么选？</b>特征少用正规方程；特征极多用梯度下降。");},"<b>梯度下降 vs 正规方程</b>的取舍：正规方程<i>一步到位、不用选 α</i>，但要算 (XᵀX)⁻¹——当特征数 n 很大时，求逆是 O(n³)，<s>完全不可行</s>；梯度下降每步便宜、适合大规模。所以经验是：<b>特征不多（几十到几千）用正规方程省事；特征极多或数据海量用梯度下降</b>。还有一点边界：正规方程只有线性回归等少数模型有闭式解——<em>逻辑回归、SVM、神经网络都没有</em>，只能靠梯度方法。所以梯度下降才是通用的那个。");
+  SUM(0,10,{h:"★ 正规方程 θ=(XᵀX)⁻¹Xᵀy（S16）",k:"闭式解 <b>θ=(XᵀX)⁻¹Xᵀy</b>：令梯度为零直接解出碗底，不用迭代、不用选 α。X=设计矩阵（行样本列特征），y=目标向量。前提 <b>XᵀX 可逆</b>（特征列线性无关）。",m:"取舍：正规方程一步到位但要算 (XᵀX)⁻¹（O(n³)），特征极多不可行；梯度下降每步便宜、适合大规模。<b>只有线性回归等少数模型有闭式解</b>，逻辑回归/SVM/神经网络都没有。",w:"<s>实际软件不直接求逆</s>：又慢又不稳，用 QR/SVD（更稳，不可逆时用伪逆）。特征列线性相关时 XᵀX 不可逆——这是 Tutorial Q3 的条件。",e:"<b>T2 Tutorial Q2/Q3</b>：写出设计矩阵、代入 θ=(XᵀX)⁻¹Xᵀy、说明列满秩时可逆。会答「GD vs 正规方程怎么选」（特征多用 GD）。"});
+  QUIZ(0,10,{t:"正规方程 θ=(XᵀX)⁻¹Xᵀy 相比梯度下降，什么时候<b>不该</b>用它？",o:["数据有噪声时","<b>特征数 n 非常大时——求 (XᵀX)⁻¹ 是 O(n³)，太贵</b>","需要高精度时","目标是连续值时"],a:1,w:"正规方程要计算 <b>(XᵀX)⁻¹</b>，这是一个 n×n 矩阵求逆，代价约 <b>O(n³)</b>。当特征数 n 很大（上万）时，求逆<s>又慢又占内存</s>，完全不划算，这时该用<em>梯度下降</em>（每步便宜、可扩展）。反过来，特征不多时正规方程一步到位、还不用调 α，更省事。另外逻辑回归/SVM/神经网络<b>根本没有闭式解</b>，只能用梯度方法。"});
+});
+KP("11 · 特征缩放（S17）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);var P={l:360,r:940,t:150,b:440};axes(P);note("θ₀",930,465,"");note("θ₁",350,160,"");var cx=650,cy=290;for(var r=1;r<=4;r++){var e=[];for(var a=0;a<=48;a++){var t=a/48*6.283;e.push([cx+r*40*2.0*Math.cos(t),cy+r*40*0.5*Math.sin(t)]);}curve(e,"fit");}note("未缩放：细长椭圆 → 之字形、慢",640,470,"r");},"当不同特征的<b>数值范围差异很大</b>（比如面积 0–2000、卧室 0–5），梯度下降会变慢。原因回到那张等高线图：尺度差异让代价曲面变成一条<b>又长又窄的山谷</b>，梯度在大部分位置<em>不指向谷底</em>，于是算法先横穿峡谷冲到对面、再一点点折回——<b>之字形</b>震荡，收敛很慢。课件 Study check 的直觉题：<b>把长度从米换成厘米，那个特征的权重会怎样？</b>——数值放大 100 倍，对应<em>权重缩小 100 倍</em>（乘积不变），但优化路径会变难走。");
+  S(0,function(){clearScene();setEq(null);var P={l:360,r:940,t:150,b:440};axes(P);note("θ₀",930,465,"");note("θ₁",350,160,"");var cx=650,cy=290;for(var r=1;r<=4;r++){var e=[];for(var a=0;a<=48;a++){var t=a/48*6.283;e.push([cx+r*38*Math.cos(t),cy+r*38*Math.sin(t)]);}curve(e,"fit g");}note("缩放后：接近同心圆 → 直奔谷底",640,470,"g");},"解法很便宜：<b>特征缩放</b>——把每个特征标准化到相近范围（常用标准化 (x−μ)/σ 或归一化到 [0,1]）。缩放后等高线接近<b>同心圆</b>，梯度处处指向谷底，梯度下降<em>直奔碗底</em>、收敛快得多。<s>关键工程纪律</s>：缩放的参数（μ、σ）必须<b>只在训练集上计算</b>、装进 Pipeline，绝不能用到测试集的统计量——否则就是<i>预处理泄漏</i>（T1、T4 practical 的固定考点）。注意：正规方程<b>不需要</b>缩放（它不迭代），缩放主要是为梯度下降提速。");
+  SUM(0,11,{h:"特征缩放：让梯度下降不再之字形（S17）",k:"特征数值范围差异大 → 代价曲面是<b>细长山谷</b> → 梯度下降<em>之字形</em>震荡、慢。<b>特征缩放</b>（标准化/归一化）让等高线接近同心圆，直奔谷底。",m:"换单位（米→厘米）数值×100 则权重÷100（乘积不变），但优化路径变难走。缩放不改变模型能力，只加速梯度下降。正规方程不需要缩放。",w:"<s>缩放参数只在训练集上算、装进 Pipeline</s>——用到测试集统计量就是预处理泄漏（T1/T4 考点）。缩放主要为 GD 提速，不影响正规方程。",e:"Study check「换单位权重怎样」：数值放大 k 倍则权重缩小 k 倍。会解释「尺度差异→之字形→缩放」的几何链，并强调缩放放进 Pipeline 防泄漏。"});
+  QUIZ(0,11,{t:"课件 Study check（S17）：把某个长度特征从「米」换成「厘米」（数值×100），它对应的权重会怎样？",o:["也变成 100 倍","<b>变成原来的 1/100——数值放大 100 倍，权重缩小 100 倍，乘积（对预测的贡献）不变</b>","不变","无法确定"],a:1,w:"预测里是 <b>w×x</b> 这一项。把 x 的数值放大 100 倍（米→厘米），要保持这一项对预测的贡献不变，<b>w 必须缩小到 1/100</b>。所以换单位不改变模型的预测能力，只改变权重的数值。<s>但它会改变优化路径</s>：不同特征尺度差异大时代价曲面变细长、梯度下降之字形变慢——这就是要做特征缩放的原因。"});
+});
+KP("12 · ★ 过拟合与欠拟合（S18）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);var base=[[0,0],[1,0]];[[160,"欠拟合·高偏差","y",function(t){return 400-70*t;}],[500,"刚好","g",function(t){return 400-95*Math.sin(t*2.4);}],[840,"过拟合·高方差","r",function(t){return 400-95*Math.sin(t*2.4)-60*Math.sin(t*11);}]].forEach(function(cfg){var x0=cfg[0],w=280;E.link(x0,410,x0+w,410);var d=[];for(var i=0;i<7;i++){var t=(i+.5)/7;d.push([x0+t*w,400-95*Math.sin(t*2.4)-(((i*37)%23)-11)*3]);}dots(d,"b",5);curve(fn(function(x){var t=(x-x0)/w;return cfg[3](t);},x0,x0+w,60),"fit "+cfg[2]);note(cfg[1],x0+w/2,465,cfg[2]);});},"模型复杂度是一场<b>平衡</b>：太简单会<em>错过真实规律</em>，太复杂会<em>把噪声也背下来</em>。<b>欠拟合（高偏差）</b>：用直线拟合本来就弯的数据，系统性地错——而且<s>在训练集上就已经很差</s>。<b>过拟合（高方差）</b>：模型太灵活，把训练点连噪声一起完美穿过，<i>训练误差极低但测试误差很高</i>。<b>刚好</b>：抓住主趋势、忽略噪声。判据是<b>比较训练误差和测试误差</b>：两个都高=欠拟合；训练低测试高=过拟合；两个都低且接近=刚好。");
+  S(0,function(){clearScene();setEq(null);setBig("训练好 · 测试差","= 过拟合（高方差）");setCap("<b>对策：简化模型 / 加正则化 / 增加数据。</b>与欠拟合相反。");},"两种病的<b>处方正好相反</b>，所以先诊断再动手。<b>过拟合</b>（训练好测试差）：简化模型、加<em>正则化</em>（惩罚过大的权重）、增加训练数据、做特征选择。<b>欠拟合</b>（两个都差）：加特征、提高模型复杂度、减小正则化。<s>用错方向会越治越糟</s>。课件 Study check 的送分题：「三个模型里哪个在<b>训练</b>数据上误差最低？」——<em>最复杂的那个</em>（过拟合的），因为训练误差随复杂度单调下降。<b>但训练误差低不代表好</b>，要看测试。这条直接对应 T1 大题。");
+  SUM(0,12,{h:"★ 过拟合 vs 欠拟合（S18）",k:"复杂度平衡：<b>欠拟合（高偏差）</b>训练测试都差；<b>过拟合（高方差）</b>训练极好、测试差；<b>刚好</b>两者都低且接近。判据是比较<em>训练误差与测试误差</em>。",m:"处方相反：过拟合→简化/加正则/加数据；欠拟合→加特征/提复杂度/减正则。训练误差随复杂度<b>单调下降</b>，所以最复杂的模型训练误差最低——但这正是过拟合。",w:"<s>训练误差低 ≠ 模型好</s>：它永远推荐最复杂的模型。必须看测试/验证。用错处方（给过拟合加复杂度）会越治越糟。",e:"<b>T1 大题</b>：训练 1.00、测试 0.62 → 诊断过拟合，给两个方向（简化/正则、加数据）。Study check「谁训练误差最低」=最复杂的那个。"});
+  QUIZ(0,12,{t:"课件 Study check（S18）：欠拟合、刚好、过拟合三个模型里，哪个在<b>训练</b>数据上误差最低？",o:["欠拟合的","刚好的","<b>过拟合（最复杂）的——训练误差随复杂度单调下降</b>","三个一样"],a:2,w:"<b>训练误差随模型复杂度单调下降</b>：模型越灵活越能贴合（甚至记住）训练点，所以<em>最复杂的过拟合模型训练误差最低</em>（甚至接近 0）。<s>但这恰恰是陷阱</s>——训练误差低不代表泛化好，过拟合模型在<b>测试</b>集上很差。所以绝不能用训练误差选模型，要用留出的验证/测试集。"});
+});
+KP("13 · 评估回归模型（S19）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);matrix({rows:4,cols:2,cw:330,ch:56,y:210,cell:function(i,j){var t=[["指标","含义"],["MAE 平均绝对误差","平均差多少（同单位、抗离群）"],["RMSE 均方根误差","平均差多少（重罚大误差）"],["R² 决定系数","解释了多少比例的方差（0–1）"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return false;}});},"训练完要用<b>指标</b>判断模型好不好，而且必须在<em>留出的测试集</em>上算。三个常用指标：<b>MAE</b>（平均绝对误差）——预测平均差多少，单位和 y 一样、对离群点不敏感；<b>RMSE</b>（均方根误差）——也是平均差多少，但因为先平方所以<i>对大误差罚得更重</i>（和训练用的平方损失一致）；<b>R²</b>（决定系数）——模型解释了目标变量多少比例的方差，通常 0–1，越接近 1 越好，R²=0 相当于「只会预测平均值」的基线。选哪个看你更在意「典型误差」（MAE）还是「大误差」（RMSE）。");
+  S(0,function(){clearScene();setBig("永远和基线比","R² 或与「预测均值」比，别只看一个数");setCap("<b>单个指标会骗人</b>：一定要和一个简单基线对照。");},"一个反复被强调的纪律：<b>任何指标都要和一个基线比较</b>，别孤立地看一个数。回归里最自然的基线是「<i>无论输入都预测目标的平均值</i>」——R² 正是相对这个基线定义的（R²>0 才说明模型比「猜平均」强）。你课程的 practical feedback 反复要求：<b>报出指标 → 和相关基线/备选比较 → 解释指标含义 → 只下证据支持的结论</b>。RMSE 说「500 元」是好是坏？<s>脱离基线无法判断</s>——房价均值 20 万时 500 元很小，均值 2000 元时就很大。");
+  SUM(0,13,{h:"评估：MAE / RMSE / R²，且要比基线（S19）",k:"在<b>测试集</b>上用指标评估：<b>MAE</b>（平均绝对误差、抗离群）、<b>RMSE</b>（重罚大误差、与平方损失一致）、<b>R²</b>（解释了多少比例方差，0–1，1 最好）。",m:"MAE 看典型误差、RMSE 看大误差。R² 相对「预测均值」基线定义：R²>0 才说明比猜平均强，R²=0 等于基线。选指标看你更在意典型还是大误差。",w:"<s>单个指标脱离基线会骗人</s>：RMSE=500 是好是坏取决于目标的量级。必须和相关基线/备选比较，再下结论。",e:"practical feedback 固定要求：报指标→比基线→解释含义→只下证据支持的结论。会区分 MAE/RMSE/R² 的侧重，R² 的基线是「预测均值」。"});
+  QUIZ(0,13,{t:"某回归模型报告 <b>RMSE = 500</b>。能据此判断它好不好吗？",o:["能，500 很小所以很好","能，500 很大所以很差","<b>不能——脱离目标的量级和基线无法判断；需和「预测均值」等基线比较</b>","能，RMSE 越大越好"],a:2,w:"RMSE=500 <b>脱离上下文无意义</b>：如果房价均值是 20 万，差 500 元微不足道；如果目标均值只有 2000，差 500 就很糟。<s>单个指标必须和基线比较</s>——回归的自然基线是「无论输入都预测目标均值」，R² 正是相对它定义的。这也是你课程反复强调的：报指标要同时给出比较对象和解释。"});
+});
+KP("14 · 线性回归的假设（S20）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);matrix({rows:5,cols:2,cw:340,ch:52,y:180,cell:function(i,j){var t=[["假设","含义"],["线性","特征与目标是线性关系"],["独立","样本之间互不影响"],["同方差","误差方差处处相同"],["正态","误差服从正态分布"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return false;}});},"线性回归背后有一组<b>经典统计假设</b>：<b>线性</b>（特征与目标是线性关系）、<b>独立</b>（样本互不影响）、<b>同方差</b>（误差方差处处相同）、<b>正态</b>（误差服从正态分布）。为什么讲它们？——<b>如果目标只是预测，可以违反其中几条还能用</b>；但如果要做<em>统计推断</em>（置信区间、假设检验），这些假设就很重要。这也正是 T2 Tutorial Q1 的背景：<i>在 IID 正态噪声假设下，最大化似然等价于最小化平方误差</i>——平方损失不是随便选的，是这组假设的数学推论。");
+  S(0,function(){clearScene();setBig("假设可能被违反","时间序列不独立 · 波动随规模变大=异方差");setCap("<b>Study check：同一条街十年的房价，最可能违反哪条？</b>");},"这些假设在现实里<b>经常被违反</b>，要能识别。课件 Study check：「<b>同一条街、十年的房价</b>，最可能违反哪条假设？」——<b>独立性</b>：同一条街的房子彼此影响（学区、地段共享），十年的价格还有时间上的自相关，样本远非独立。另一个常见的是<b>异方差</b>：贵房子的价格波动比便宜房子大，违反「同方差」。<s>违反了会怎样？</s>——最小二乘<b>仍能算出参数</b>，但它不再是最优的极大似然估计，置信区间和显著性检验会失真。所以 Tutorial Q1 答案要补一句：<i>噪声假设改变时，可能需要不同的损失或加权</i>。");
+  SUM(0,14,{h:"线性回归的四条假设（S20）",k:"经典假设：<b>线性、独立、同方差、正态</b>。纯预测时可违反几条仍能用；做<em>统计推断</em>（置信区间、检验）时它们才关键。",m:"IID 正态噪声假设下，<b>极大似然 ⟺ 最小二乘</b>（T2 Tutorial Q1）——平方损失是这组假设的推论。违反后 OLS 仍能算，但不再是最优 MLE，推断会失真。",w:"<s>假设常被违反</s>：时间序列/同街样本不独立；波动随规模变大是异方差。识别哪条被违反是考点。违反不等于不能用，取决于目标是预测还是推断。",e:"Study check「同街十年房价违反哪条」→<b>独立性</b>（也涉异方差）。T2 Tutorial Q1 从 IID 正态假设推出最小二乘，答案要补「假设变则损失/加权可能要变」。"});
+  QUIZ(0,14,{t:"课件 Study check（S20）：对「同一条街、连续十年」的房价建模，最可能违反哪条假设？",o:["线性","<b>独立性——同街房屋互相影响、十年价格有时间自相关，样本远非独立</b>","正态","以上都不会"],a:1,w:"<b>独立性</b>最危险：同一条街的房子共享学区、地段、周边环境，彼此高度相关；同一批房子十年的价格还有<em>时间上的自相关</em>（今年贵明年也贵）。所以这些样本远不是相互独立的。（<i>异方差</i>也常见——贵房子波动更大。）违反独立性时最小二乘仍能拟合，但标准误、置信区间会失真，不能直接用于统计推断。"});
+});
+KP("15 · Tutorial 三题：似然·设计矩阵·正规方程（S23–25）",function(){
+  S(0,function(){clearScene();setBig(null);setEq(null);boxNode(120,180,380,80,"Q1 · 似然论证","g");boxNode(120,300,380,80,"Q2 · 多项式设计矩阵","b");boxNode(120,420,380,80,"Q3 · 正规方程推导","y");note("MLE ⇒ 最小二乘（IID 正态）",760,220,"g","start");note("每行一样本、每列一系数；先查维度",760,340,"b","start");note("定义 J → 展开 → 对 θ 求导 → 令为零",760,460,"y","start");},"T2 的 Tutorial 有<b>三道连环题</b>，都是「先想清楚再动手」型。<b>Q1 似然论证</b>：从 y=wᵀx+ε、ε~IID 正态出发，写出似然、取对数、扔掉与参数无关的常数项，<em>证明最大化对数似然 = 最小化平方误差</em>（这题和 CS229 L3 前半完全一致）。<b>Q2 多项式设计矩阵</b>：把多项式回归写成线性形式——<b>每行一个观测、每列一个系数</b>（基函数如 [xᵢ², xᵢ, 1]），相乘前<s>先检查 X、θ、y 的维度对不对</s>。<b>Q3 正规方程推导</b>：定义目标 → 小心展开 → 对 θ 求导 → 令为零，并说明可解的矩阵条件。");
+  S(0,function(){clearScene();setEq("$$\\theta=(X^{\\top}X)^{-1}X^{\\top}y\\quad(\\text{列满秩时可逆})$$","top");setBig(null);setCap("<b>Q3 的落点：这个式子，加上「列线性无关 ⇒ XᵀX 可逆」。</b>");},"Q3 的<b>标准答案骨架</b>要能默写：① 目标 J(θ)=½‖Xθ−y‖²；② 展开成 ½(θᵀXᵀXθ − 2θᵀXᵀy + yᵀy)；③ 对 θ 求梯度得 XᵀXθ − Xᵀy；④ 令梯度为零得<b>正规方程 XᵀXθ=Xᵀy</b>，解出 θ=(XᵀX)⁻¹Xᵀy；⑤ 补两句限定——<i>当 X 的列线性无关时 XᵀX 可逆</i>；<i>实际用 QR/SVD 更稳，不直接求逆</i>。因为 J 的 Hessian 是 XᵀX（半正定），J 是<b>凸二次函数</b>，所以这个驻点就是全局最小，不需二阶检验。每步给理由，是拿满分的关键。");
+  SUM(0,15,{h:"Tutorial 三题：似然/设计矩阵/正规方程（S23–25）",k:"<b>Q1</b>：IID 正态下 MLE⟺最小二乘（写似然→取 log→扔常数项）。<b>Q2</b>：多项式写成线性，行=观测列=系数，先查维度。<b>Q3</b>：定义 J→展开→对 θ 求导→令零→正规方程。",m:"Q3 骨架：J=½‖Xθ−y‖²→梯度 XᵀXθ−Xᵀy→令零→θ=(XᵀX)⁻¹Xᵀy。Hessian=XᵀX 半正定⇒J 凸⇒驻点即全局最小，无需二阶检验。",w:"<s>每步都要给理由</s>，不能只写结果。Q3 结尾必补：列满秩⇒XᵀX 可逆；实际用 QR/SVD 不直接求逆。Q2 相乘前先对维度。",e:"这是 T2 的必考手算三连。Q1=MLE⇒最小二乘（同 CS229 L3），Q2=多项式设计矩阵，Q3=正规方程推导。会默写骨架 + 每步理由 = 满分。"});
+  QUIZ(0,15,{t:"T2 Tutorial Q3 推正规方程，令梯度 XᵀXθ−Xᵀy=0 解出 θ 后，<b>必须补充</b>的关键条件是？",o:["学习率要足够小","<b>当 X 的列线性无关时 XᵀX 可逆，θ=(XᵀX)⁻¹Xᵀy 才有唯一解</b>","样本必须服从正态","特征必须先缩放"],a:1,w:"要写出 θ=(XᵀX)⁻¹Xᵀy，前提是 <b>XᵀX 可逆</b>，其充要条件是 <em>X 的列线性无关（列满秩）</em>——否则 XᵀX 奇异、无唯一解。<s>正规方程不需要特征缩放</s>（它不迭代），也不需要正态假设（那是 Q1 似然论证的前提）。答题时还应补一句：实际数值软件用 QR/SVD 求解更稳定，不直接求逆。"});
+});
+KP("完 · 复习清单",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("M1 T2 · 线性回归","逐张看完了","一条线 → 代价函数 J → 梯度下降 / 正规方程");},
+    "T2 逐张过完了。主线收进一句话：<b>用一条线 f=wᵀx+b 拟合，残差平方求平均得代价 J=1/(2m)Σ(f−y)²，再用梯度下降（迭代、要选 α、要缩放）或正规方程 θ=(XᵀX)⁻¹Xᵀy（一步、列满秩可逆）把 J 最小化。</b> 考前务必手练 Tutorial 三题：Q1 似然⇒最小二乘、Q2 多项式设计矩阵、Q3 正规方程推导。概念上盯住：½ 的作用、同时更新、α 太小/太大的症状、过拟合 vs 欠拟合的处方、四条假设、评估要比基线。祝考试顺利！");
+});
+window.__startProjector(CFG);
+})();
+</script>

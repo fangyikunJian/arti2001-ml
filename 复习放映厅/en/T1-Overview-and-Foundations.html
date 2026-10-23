@@ -1,0 +1,471 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>T1 Overview &amp; Foundations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   Reusable "Projector" teaching template  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  A reusable frame for turning any topic into a shot-by-shot animated lesson.
+  Everything below the content script -- projector loop, caption layer, summary
+  card, mandatory quiz, SVG drawing toolbox, caption-collision handling -- is
+  already built. You only ever edit one place:
+
+     the LAST <script> in the file, between the "content starts / ends" markers
+
+  ── How to use it ─────────────────────────────────────────────────────────
+  1. Edit CFG: title, subtitle, optional video link.
+  2. Build each concept out of four calls, always in this order:
+        KP("concept name", function(){
+          S(seconds, sceneFn, "narration paragraph (optional, toggled with N)");
+          SUM(seconds, conceptNo, {h:heading, k:result, m:mechanism,
+                                   w:misreading, e:relevance to assessment});
+          QUIZ(seconds, conceptNo, {t:question, o:[options...], a:correctIndex,
+                                    w:explanation});
+        });
+     A concept may have many S() shots; it ends with exactly one SUM and one QUIZ.
+  3. Drawing toolbox available inside a scene function:
+        clearScene()                     clear the canvas
+        setTitle(eyebrow, h1, sub)       title card
+        setBig(big, small)               centred display text (a number, a verdict)
+        setCap(html)                     one line at the top (<b><i><em><s> allowed)
+        setEq("$$...$$", "top")          MathJax formula ("top" = align to top)
+        flip("...<span data-id=x>..")    term-level morph animation between formulas
+        T(id, text, "hl/res/ded")        a token for flip() to track
+        note(text, x, y, "g/y/b/r/v", anchor)   label on the canvas
+        dots([[x,y]...], "a/b/c", r)     scatter points
+        curve(points, "fit/fit g/...")   polyline or curve (draws itself on)
+        boxNode(x, y, w, h, label, cls)  a labelled box
+        link(x1, y1, x2, y2)             a connector
+        matrix({rows,cols,cw,ch,x,y,cell,dim,hl,label,labelCls})  table or matrix
+        The canvas is 1280x720 (16:9), origin at the top left.
+        Layout rule: keep every drawn element within y = 90..470. Below that is
+        where the caption band sits, and a long narration grows upward into it.
+  4. Colour semantics (keep them consistent -- learners come to rely on them):
+        blue   = model / input        yellow = attention / conclusion
+        green  = correct / answer     coral  = error / failure
+        violet = emphasis
+  5. Interaction (built in, nothing to change): SPACE or arrow-right advances,
+     arrow-left goes back, number keys jump to a concept, N toggles the narration.
+     A quiz must be answered before the film continues. Summary cards and quizzes
+     deliberately carry no narration -- the card is the message.
+
+  ── Three worked concepts are included below as a live example of the format.
+     Replace that whole block with your own.
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+/* lifted out of the caption band: the layer centres it, 9% puts it in the upper middle */
+#big{margin-bottom:9%}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:34%;overflow-y:auto;margin-bottom:44px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12px,1.02vw,14.5px);font-weight:400;line-height:1.6;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1180px,94%);width:100%;max-height:96%;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:16px 26px 16px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(16.5px,1.7vw,22px);font-weight:800;margin:0 0 9px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:6px}
+#sum .row{border-left:3px solid #3C4A61;padding:7px 15px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#9EABBE;margin:0 0 2px;line-height:1.3}
+#sum .rv{font-size:clamp(13px,1.05vw,15.5px);font-weight:400;line-height:1.5;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;min-width:0;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;right:6px;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .3s,background .3s}
+.kpbar:hover .kplbl{right:auto;overflow:visible;z-index:3;color:var(--ink);background:var(--bg);padding-right:6px}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.link.r{stroke:var(--coral);stroke-width:2.2} .link.g{stroke:var(--green);stroke-width:2.2}
+.link.y{stroke:var(--yellow);stroke-width:2.2} .link.b{stroke:var(--blue);stroke-width:2.2}
+.link.d{stroke-dasharray:7 6}
+.link.q{stroke:#4A5A75;stroke-width:2}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: an .off panel must become invisible immediately */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="Previous shot"></button>
+<button class="navbtn" id="next" aria-label="Next shot"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">SPACE advance · ← back · N narration</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ ENGINE (no need to edit) ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2,cls){gS.append("path").attr("class","link "+(cls||"")).attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","The result"],["m","Why it works"],["w","Common misreading"],["e","In your exam"]];
+  sumEl.innerHTML='<p class="sh">Concept '+kp+' · Summary</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">Concept '+kp+' · Check yourself</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  SPACE to continue";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* expose the engine to the content script */
+function axes(P){gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ PROJECTOR (no need to edit) ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  answer first":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="SPACE advance · ← back · N "+(narrOn?"narration":"show narration");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"ARTI2001 · T1 Overview & Foundations (slide-by-slide)",
+  subtitle:"AI vs ML · three paradigms · the maths you need · the ML pipeline and leakage · SPACE to advance",video:""};
+KP("Opening",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("M1 T1 · Overview & Foundations","Slide-by-slide walkthrough",
+      "Skipping the admin slides · four examinable blocks");},
+    "This film covers only the parts of M1T1 that are <b>actually examinable</b>. The first half of the deck is course admin -- enrolment, marking, the roadmap -- so we skip it. The substance is four blocks: <b>the difference between AI and machine learning</b>, <b>the three learning paradigms</b>, <b>the mathematics this semester relies on</b>, and most importantly <b>the end-to-end ML pipeline and the discipline of not leaking data</b>. That last block is the heart of the T1 long-answer question. Every concept ends with a summary card and a check question adapted from the slides' own Study check.");
+});
+KP("1 · AI vs machine learning (S19)",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(300,108,680,74,"Artificial Intelligence (the big umbrella)","v");boxNode(430,206,420,66,"Machine Learning","b");boxNode(500,296,280,58,"Deep Learning","g");link(640,182,640,206);link(640,272,640,296);note("AI also covers: rule-based systems, search, logical reasoning",640,384,"");setCap("<b>AI is the broad field; machine learning is the branch that learns from data.</b>");},"The first examinable point is <b>telling AI and machine learning apart</b>. <b>Intelligence</b> is the capacity of an agent to learn, reason, adapt and use knowledge to reach a goal. <b>AI</b> is the <em>broad field</em> of making machines display that -- and it <i>includes</i> rule-based expert systems, search, logical reasoning and more. <b>Machine learning</b> is one <b>branch</b> of it, distinguished by one thing: <em>it induces the rules from data instead of a human writing them down explicitly</em>. Deep learning is in turn the branch of ML that uses neural networks. So this is a <b>containment relationship</b>: AI &sup2; ML &sup2; deep learning.");
+  S(0,function(){clearScene();setBig("Learned, not hard-coded","this is the dividing line between ML and classical AI");},"Exams like to ask \"what is the difference between AI and ML\". The standard answer: <b>AI is the larger category</b>, covering every method that makes a machine appear intelligent, <i>including systems that never learn</i>; <b>ML is the branch that induces patterns from data rather than encoding rules explicitly</b>. An example makes it concrete: hand-writing an if-else rule for \"is this a leap year\" is ordinary programming or a rule system -- <b>not</b> ML, because it never gets better from seeing more data. Training on ten thousand labelled photographs to recognise a cat <em>is</em> ML. <s>Not every piece of automation or AI is machine learning</s> -- the test is always \"does it learn from data?\"");
+  SUM(0,1,{h:"AI vs machine learning: a containment relationship (S19)",k:"<b>AI &sup2; ML &sup2; deep learning.</b> AI is the broad field of making machines appear intelligent (rule systems, search, reasoning included); <b>ML is the branch that induces patterns from data rather than encoding rules</b>; deep learning is the neural-network branch of ML.",m:"The dividing line for ML is <em>induction from data vs rules written by a human</em>. Classical AI can be entirely rule-based and never learn; ML depends on data and improves as it sees more.",w:"<s>Not all AI or automation is ML.</s> A hand-written if-else rule (leap years, say) is programming, not machine learning -- it does not improve with more data.",e:"T1 regularly asks for the AI-vs-ML distinction: AI is larger and includes rule systems; ML is the learn-from-data branch. The test is always whether the method learns from data."});
+  QUIZ(0,1,{t:"Which statement describes the relationship between AI and machine learning most accurately?",o:["AI and ML are synonyms","<b>AI is the broad field (including rule systems); ML is the branch that induces patterns from data rather than hard-coding rules</b>","ML is broader than AI","AI is one algorithm within ML"],a:1,w:"<b>AI &sup2; ML.</b> AI is the <em>whole field</em> of making machines appear intelligent, and it includes rule-based expert systems, search and logical reasoning -- none of which need to learn. <b>Machine learning is specifically the branch that induces patterns from data.</b> Deep learning is in turn a subset of ML. To decide whether something is ML, ask <s>does it learn from data</s>, not whether it seems intelligent."});
+});
+KP("2 · ★ The three learning paradigms (S20)",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(120,180,320,100,"Supervised","b");boxNode(490,180,300,100,"Unsupervised","g");boxNode(840,180,320,100,"Reinforcement","y");note("every example carries its answer (a label)",280,330,"b");note("data only, no answers",640,330,"g");note("only a good/bad signal (reward)",1000,330,"y");setCap("<b>The test: what form of feedback can you get?</b>");},"The second examinable point is the <b>three learning paradigms</b>, and there is only one test that separates them: <b>what form of feedback is available to you</b>. <b>Supervised learning</b> -- every example <em>carries the correct answer (a label)</em>, and you learn the mapping from input to output; classification predicts a category, regression predicts a continuous value. <b>Unsupervised learning</b> -- <em>data only, no labels</em>; the algorithm has to find structure by itself (clustering, dimensionality reduction). <b>Reinforcement learning</b> -- <em>no correct answers, only an evaluation of good or bad (a reward)</em>, and a policy is learned by trial and error. The first two modules of this course map straight onto the first two: <b>M1 supervised</b>, <b>M2 unsupervised</b>. M3's neural networks are a <i>model</i>, not a fourth kind of problem.");
+  S(0,function(){clearScene();setBig("Labels, or their absence","supervised = labelled · unsupervised = unlabelled · reinforcement = reward only");},"Fix the boundaries firmly. <b>The only test separating supervised from unsupervised is whether the training data carries labels</b> -- the same pile of data is a supervised problem if you were given the answers and an unsupervised one if you were not. <s>Two easy mistakes</s>: (1) do not treat \"neural network\" as a fourth category alongside supervised -- it is a <b>model</b>, and it can be trained either way; when asked which <em>kind of learning problem</em> something is, answer supervised / unsupervised / reinforcement, not a model name. (2) Within supervised learning, regression and classification are separated by whether the target is <b>continuous or discrete</b> -- that is a <i>second-level</i> split, a different level of the hierarchy, so do not mix it with the three-way one. Reinforcement learning is not in your three modules, but the three-way split itself is examinable.");
+  SUM(0,2,{h:"★ The three learning paradigms (S20)",k:"The test is <b>the form of the feedback</b>: <b>supervised</b> (every example labelled, learn input&rarr;output), <b>unsupervised</b> (no labels, find structure), <b>reinforcement</b> (reward only, learn a policy by trial and error). M1 is supervised, M2 unsupervised.",m:"Supervised vs unsupervised turns on <em>one</em> thing: does the training data carry labels. Within supervised, regression vs classification is a second-level split on whether the target is continuous or discrete. A neural network is a model, not a fourth kind of problem.",w:"<s>A neural network is not a category of learning problem.</s> It is a model, trainable either way. Asked \"which kind of learning\", answer supervised / unsupervised / reinforcement -- never a model name.",e:"Reliably examined. The test is the feedback available: a full answer / nothing / only a good-bad signal. Regression vs classification sits one level below -- keep the levels apart."});
+  QUIZ(0,2,{t:"What most fundamentally distinguishes supervised, unsupervised and reinforcement learning?",o:["They use different algorithms","The amount of data available","<b>The form of feedback available: a full correct answer / nothing at all / only an evaluation of good or bad</b>","Whether the output is continuous or discrete"],a:2,w:"The three-way split rests on <b>the form of the supervisory signal</b>: supervised learning has a <em>full correct answer</em> per example; unsupervised has <s>no answers at all</s> and only mines structure; reinforcement has only a <b>reward</b>, which is often delayed. Option D -- continuous vs discrete output -- is the test that separates regression from classification <em>inside</em> supervised learning. Different level of the hierarchy; keep them apart."});
+});
+KP("3 · The maths you need: linear algebra and calculus (S23-24)",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setEq("$$x^{\\top}y=\\sum_i x_iy_i,\\quad (AB)_{ij}=\\sum_k A_{ik}B_{kj},\\quad \\lVert x\\rVert=\\sqrt{x^{\\top}x}$$","top");setCap("<b>Linear algebra: inner product, matrix product, transpose, norm -- used all semester.</b>");},"The deck recaps the mathematics this semester leans on. From <b>linear algebra</b>, the pieces that recur: the <b>inner (dot) product</b> x&#7488;y = &Sigma;x&#7522;y&#7522; -- a linear score w&#7488;x <em>is</em> this; the <b>matrix product</b> (AB)&#7522;&#11388; = &Sigma;&#8342;A&#7522;&#8342;B&#8342;&#11388; -- <i>always check the dimensions first: columns of A must match rows of B</i>; the <b>transpose</b>, which swaps rows and columns; and the <b>norm</b> &Vert;x&Vert; = &radic;(x&#7488;x) -- the SVM margin 1/&Vert;w&Vert; is built from it. Also <b>invertibility, rank and eigenvalues</b> -- the normal equation (X&#7488;X)&#8315;&#185; needs full column rank so that X&#7488;X is invertible. None of this is examined on its own, but every calculation in T2 and T4 stands on it.");
+  S(0,function(){clearScene();setEq("$$\\frac{d(x^n)}{dx}=nx^{n-1},\\quad [f(g(x))]'=f'(g(x))g'(x),\\quad \\nabla J=\\Big[\\tfrac{\\partial J}{\\partial\\theta_1},\\dots\\Big]$$","top");setCap("<b>Calculus: the power rule, the chain rule, and the gradient as a vector of partials.</b>");},"From <b>calculus</b>: the <b>power rule</b> d(x&#8319;)/dx = nx&#8319;&#8315;&#185;; the <b>chain rule</b> [f(g(x))]&prime; = f&prime;(g(x))&middot;g&prime;(x) -- deriving the logistic-regression gradient and back-propagation both rest entirely on it; the <b>exponential and log</b> derivatives d(e&#739;) = e&#739; and d(ln x) = 1/x; and the <b>gradient</b> &nabla;J, which is \"the partial derivatives of J with respect to each parameter, <em>collected into a vector</em>\", pointing in the direction of steepest increase. <b>T1's tutorial questions Q1 and Q2 are differentiation drills on exactly these rules</b> -- differentiating a squared loss, differentiating a sigmoid. Get the power rule and the chain rule fluent and the hand-computed gradients in T2 and T3 become substitution exercises.");
+  SUM(0,3,{h:"Mathematical foundations: linear algebra + calculus recap (S23-24)",k:"<b>Linear algebra</b>: inner product x&#7488;y = &Sigma;x&#7522;y&#7522; (a linear score is one), matrix product (check dimensions first), transpose, norm &Vert;x&Vert; = &radic;(x&#7488;x), invertibility and rank (the normal equation needs full column rank). <b>Calculus</b>: power rule, chain rule, gradient as a vector of partials.",m:"These are the tools behind every calculation in T2, T3 and T4: w&#7488;x is an inner product, 1/&Vert;w&Vert; is a norm, (X&#7488;X)&#8315;&#185; needs invertibility, and hand-computed gradients come from the power and chain rules.",w:"<s>Check dimensions before multiplying matrices</s> (columns of A = rows of B) or the product does not exist. The gradient is a <em>vector</em> -- one partial derivative per parameter -- not a single number.",e:"T1's tutorial Q1-Q2 are differentiation drills on the power and chain rules. This material is not examined deeply on its own, but it underpins the normal equation in T2, the gradients in T3 and the margin in T4, so it has to be fluent."});
+  QUIZ(0,3,{t:"Differentiating L = (&sigma;(z) &minus; y)&sup2; with respect to z by the chain rule, what happens first?",o:["The result is 0","<b>Differentiate the square first, giving 2(&sigma;(z) &minus; y), then multiply by the inner derivative &sigma;&prime;(z) -- peel from the outside in</b>","Differentiate with respect to y first","The power rule does not apply"],a:1,w:"The chain rule <b>peels from the outside inwards</b>: the outermost operation is the square, so differentiate that first while holding the inside fixed, giving 2(&sigma;(z) &minus; y); then multiply by the derivative of the inside, &sigma;&prime;(z) = &sigma;(z)(1 &minus; &sigma;(z)). <s>No layer may be skipped.</s> This power-rule-plus-chain-rule routine is exactly how T2 derives the least-squares gradient and T3 derives the logistic-regression gradient (p &minus; y)x -- and it is what T1's tutorial is drilling."});
+});
+KP("4 · Optimisation: loss, convexity, gradient descent (S26)",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);matrix({rows:4,cols:2,cw:340,ch:54,y:190,cell:function(i,j){var t=[["Concept","The point"],["Loss / objective","measures how wrong the prediction is; smaller is better"],["Convexity","bowl-shaped -> a local optimum is the global one"],["Gradient descent","theta <- theta - alpha * grad L, repeated"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return false;}});setEq("$$\\theta\\leftarrow\\theta-\\alpha\\nabla L(\\theta)$$","top");},"Training a machine learning model is fundamentally <b>optimisation</b>: define a <b>loss (objective) function</b> that measures how wrong the predictions are, then <b>minimise</b> it. The key ideas: <b>convexity</b> -- is the loss surface bowl-shaped? For a convex function <em>a local optimum is the global optimum</em> (linear regression and logistic regression are convex; neural networks are not). <b>Gradient descent</b>, &theta; &larr; &theta; &minus; &alpha;&nabla;L, is the general-purpose minimiser, with &alpha; the learning rate. <b>Convergence</b> -- stop when J flattens out. The deck also names the two concrete losses you will meet: <b>MSE</b> = (1/n)&Sigma;(y &minus; &#375;)&sup2; for regression and <b>binary cross-entropy</b> L = &minus;[y&middot;log p + (1&minus;y)&middot;log(1&minus;p)] for classification -- which are precisely the losses of T2 and T3.");
+  S(0,function(){clearScene();setBig("Learning = minimising a loss","define the loss -> take the gradient -> descend -> converge");},"Hold on to the single skeleton that runs through all of Module 1: <b>learning is defining a loss and minimising it</b>. Different models only swap the loss and the assumptions: <i>regression uses MSE, classification uses cross-entropy, the SVM uses hinge loss</i>; and the minimisation is done either by <b>gradient descent</b> (general) or by a <b>closed-form solution</b> (available only for a few models such as linear regression). <b>Local versus global optimum</b> is the distinction that matters: convex problems -- the regression, logistic regression and SVM of M1 -- have no bad local optima, so any starting point reaches the same bottom; non-convex ones (neural networks) can get stuck, and the starting point and random seed affect the result. Once this skeleton is clear, T2, T3 and T4 are the same derivation with different pieces substituted in.");
+  SUM(0,4,{h:"Optimisation: loss, convexity, gradient descent (S26)",k:"Training = <b>minimising a loss</b>. Key ideas: <b>convexity</b> (bowl-shaped &rarr; local = global optimum), <b>gradient descent</b> &theta; &larr; &theta; &minus; &alpha;&nabla;L, convergence. Two concrete losses: MSE (regression), binary cross-entropy (classification).",m:"One skeleton: define a loss &rarr; take its gradient &rarr; descend (or solve in closed form) &rarr; converge. Models only swap the loss (MSE / cross-entropy / hinge). Convex problems have no bad local optima; non-convex ones can get stuck.",w:"<s>Convex and non-convex behave very differently.</s> M1's regression, logistic regression and SVM are convex, with a unique optimum; neural networks are not, so the starting point matters. Closed forms exist for few models -- gradient descent is general.",e:"The through-line of M1. Be able to write the update, distinguish convex from non-convex, and recognise MSE and BCE. T2 and T3 are the same optimisation with a different loss."});
+  QUIZ(0,4,{t:"Why does convexity matter?",o:["It makes training faster","<b>For a convex function a local optimum is the global optimum -- gradient descent reaches it from any starting point and cannot get stuck in a bad local minimum</b>","It removes the need for a learning rate","It guarantees no overfitting"],a:1,w:"<b>A convex (bowl-shaped) function has a single lowest point</b>, so as long as &alpha; is sensible, gradient descent rolls to the same global optimum from <em>any</em> starting point and <s>there are no bad local minima to be trapped in</s>. The objectives of linear regression, logistic regression and the SVM are all convex. A neural network is <b>non-convex</b> -- its loss surface is full of dips, so the starting point and the random seed affect the final result, which is one of the reasons deep learning is hard to tune."});
+});
+KP("5 · ★ The end-to-end ML pipeline (S29)",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(80,104,300,58,"1. Data and preparation","b");boxNode(80,178,300,58,"2. Train / select a model","");boxNode(80,252,300,58,"3. Evaluate","y");boxNode(80,326,300,58,"4. Deploy and monitor","g");note("collect representative data, clean it, explore it",430,138,"","start");note("fit the parameters, choose the hyper-parameters",430,212,"","start");note("quantify on held-out data, compare to a baseline",430,286,"","start");note("watch the input distribution; retrain when it moves",430,360,"","start");link(230,162,230,178);link(230,236,230,252);link(230,310,230,326);},"The third block is the <b>end-to-end ML pipeline</b>: (1) <b>data and preparation</b> -- collect representative data, clean it, explore it; (2) <b>training</b> -- fit the parameters, choose the model and hyper-parameters; (3) <b>evaluation</b> -- quantify performance on <em>held-out</em> data and compare against a baseline; (4) <b>deployment and monitoring</b> -- once live, watch the input distribution and retrain when it moves. The deck stresses that this pipeline <b>doubles as a diagnostic tool</b>: good on train but poor on test &rarr; overfitting; poor on both &rarr; underfitting; accuracy falls after deployment &rarr; data shift. <s>Every step can go wrong</s>, and the T1 long-answer question is precisely \"identify what has gone wrong in this pipeline and say what to do about it\".");
+  S(0,function(){clearScene();setBig("The pipeline diagnoses too","good train + poor test = overfitting · both poor = underfitting · falls in production = data shift");},"Knowing \"the pipeline is also a diagnostic\" is the skeleton of the T1 long-answer question. <b>Low training error, high test error</b> &rarr; <em>overfitting (high variance)</em>: simplify the model, add regularisation, get more data. <b>Both errors high</b> &rarr; <em>underfitting (high bias)</em>: add features, increase capacity. <b>Accuracy drops after deployment</b> with no code change &rarr; <em>data shift</em>: investigate what changed in the inputs, gather representative recent data, retrain and re-evaluate if needed. <s>Two answers that lose marks</s>: using the model's own predictions as labels and continuing to train (this bakes in and amplifies its errors), and re-evaluating on the original training set (which cannot reveal a problem that lives in the new data).");
+  SUM(0,5,{h:"★ The ML pipeline is also a diagnostic table (S29)",k:"The pipeline: <b>(1) data preparation &rarr; (2) train / select &rarr; (3) evaluate on held-out data against a baseline &rarr; (4) deploy and monitor</b>. It <em>doubles as a diagnostic</em>: good train + poor test = overfitting; both poor = underfitting; drops in production = data shift.",m:"Each step can fail. Overfitting &rarr; simplify, regularise, add data. Underfitting &rarr; add features, increase capacity. Data shift &rarr; investigate what changed in the inputs, collect fresh representative data, retrain and re-evaluate.",w:"<s>Never use the model's own predictions as labels and keep training</s> (it bakes in the errors). <s>Never re-evaluate only on the original training set</s> -- it cannot reveal a problem in the new data.",e:"Answer the T1 long-answer question from this diagnostic table: name the failure (overfitting / underfitting / data shift), then give two targeted remedies."});
+  QUIZ(0,5,{t:"A model trained on 2020-2023 data, with no code changes, is noticeably less accurate in 2026. What is the most appropriate first step?",o:["Keep using it -- its training accuracy was high","Re-evaluate on the original training set to confirm it still works","<b>Investigate what has changed in the input data, collect representative recent samples, and retrain and re-evaluate if needed</b>","Label the new data with the model's own predictions and continue training"],a:2,w:"This is textbook <b>data shift</b>: the deployment environment no longer matches the training data. The right first step is to <em>investigate what changed in the inputs</em>, collect recent representative data, and retrain and re-evaluate if necessary. <s>Option B reveals nothing</s> -- the problem lives in the new data, not the old. <s>Option D bakes the model's own errors in and amplifies them.</s> This question is the prototype for T1's example multiple-choice items."});
+});
+KP("6 · ★★ Preparing data without leaking it (S30)",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(280,104,720,58,"1. Split into train / validation / test FIRST","g");boxNode(280,178,720,58,"2. Fit preprocessing on the training set only (put it in a Pipeline)","g");boxNode(280,252,720,58,"3. Fit on train, choose hyper-parameters on validation","");boxNode(280,326,720,58,"4. Touch the test set once, then report","r");[162,236,310].forEach(function(y){link(640,y,640,y+16);});setCap("<b>The order is not negotiable: splitting must come before any preprocessing.</b>");},"This is <b>the core examinable point of T1</b>: <b>do not leak the answers into the data while preparing it</b>. The rule in one line -- <b>split first, preprocess second</b>. The reason is that <s>preprocessing is part of training, not a neutral operation</s>: an imputer that fills missing values, an encoder, a scaler that standardises, a feature-selection rule -- every one of them <em>learns something from the data</em>. Those objects <b>must be fitted on the training set only</b>, then applied unchanged to validation, test and future data -- which in practice means <b>putting them inside a Pipeline</b>. If you fit a scaler on <i>all</i> the data before splitting, the test set's statistics have leaked into the model and your evaluation comes out <b>optimistically biased</b>. That is <em>preprocessing leakage</em>.");
+  S(0,function(){clearScene();setBig("Two kinds of leakage","preprocessing leakage (fitting before the split) · selection leakage (choosing hyper-parameters on the test set)");},"You need to be able to recognise both kinds; they are a standing source of lost marks in the T1 long-answer question. <b>Preprocessing leakage</b>: fitting a scaler or imputer on the whole dataset before splitting -- the fix is to <i>split first and put preprocessing inside a Pipeline so it is fitted only on the training fold</i>. <b>Selection leakage</b>: comparing several hyper-parameter settings on the <em>test set</em> and keeping the best -- once the test set has taken part in the choice, it has <b>become a second validation set</b> and the score is no longer clean; worse, \"the maximum over N attempts\" is systematically optimistic. The fix is to <i>choose hyper-parameters on a validation set and touch the test set once</i>. <s>The sentence to memorise</s>: repeatedly inspecting the test result and adjusting on the basis of it turns the test set into another validation set and produces an over-optimistic estimate. This comes up almost every year.");
+  SUM(0,6,{h:"★★ Preparing data without leakage (S30)",k:"<b>Split first, preprocess second.</b> Preprocessing (imputer / scaler / encoder / selection) learns from the data, so it <em>must be fitted on the training set only, inside a Pipeline</em>, then applied unchanged. Fitting before the split is preprocessing leakage &rarr; a biased evaluation.",m:"Two kinds: <b>preprocessing leakage</b> (fitting before the split) and <b>selection leakage</b> (tuning on the test set turns it into a second validation set; the max over N attempts is systematically optimistic). Fix: choose on validation, touch test once.",w:"<s>Preprocessing is not neutral</s> -- it is part of training. <s>The test set is contaminated the moment you use it twice</s>: inspecting the score and adjusting makes it a validation set.",e:"<b>The core T1 long-answer topic.</b> Memorise: repeatedly inspecting the test result and adjusting turns the test set into a second validation set and gives an over-optimistic estimate. Answer structure: split first &rarr; Pipeline &rarr; choose on validation &rarr; test once."});
+  QUIZ(0,6,{t:"A pipeline: (1) fit StandardScaler on all the data, (2) split into train/test, (3) compare 8 hyper-parameter settings on the test set and keep the best, (4) report that test accuracy. How many serious errors are there?",o:["None","One: the hyper-parameter search is not fine enough","<b>At least two: preprocessing leakage (scaler fitted before the split) and selection leakage (hyper-parameters chosen on the test set)</b>","One: the test set is too small"],a:2,w:"Two independent leaks occur at once. (1) <b>Preprocessing leakage</b> -- the scaler is fitted on everything before the split, so the test set's statistics enter the model; the fix is to <em>split first</em> and place the scaler in a Pipeline so it is fitted on the training fold only. (2) <b>Selection leakage</b> -- comparing 8 settings on the test set and keeping the best makes it a second validation set, and the maximum of 8 attempts is systematically optimistic. The correction: split into train/validation/test, choose on validation, and touch the test set <b>once</b>. This is the prototype of the T1 long-answer question."});
+});
+KP("End · revision checklist",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("M1 T1 · Overview & Foundations","Walkthrough complete",
+      "AI ⊃ ML · three paradigms · mathematical tools · the pipeline and leakage");},
+    "That is the examinable content of T1. Four sentences to take away: <b>(1) AI is the broad field and ML is the branch that learns patterns from data; (2) the three paradigms are separated by the feedback available -- supervised (labelled) / unsupervised (unlabelled) / reinforcement (reward only), with M1 supervised and M2 unsupervised; (3) the mathematical tools are the inner product, norm and matrix invertibility from linear algebra, the power rule, chain rule and gradient from calculus, and loss, convexity and gradient descent from optimisation; (4) the ML pipeline is both a sequence of steps and a diagnostic table, and its most important rule is split first, preprocess second, touch the test set once -- which is what prevents the two kinds of leakage.</b> The T1 long-answer question almost always lands on the pipeline and leakage, so make the memorised sentence from concept 6 secure. Good luck in the exam.");
+});
+window.__startProjector(CFG);
+})();
+</script>

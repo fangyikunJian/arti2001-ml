@@ -1,0 +1,884 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L5 · 生成式学习：GDA 与朴素贝叶斯</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L5 · 生成式学习：GDA 与朴素贝叶斯",
+  subtitle:"换一种思路做分类 · 每个术语先解释再用 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=nt63k3bfXS0&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 一维钟形曲线 ── */
+function bell(cx,cy,w,h,cls){
+  var p=[],i;
+  for(i=0;i<=80;i++){
+    var t=-3+6*i/80;
+    p.push([cx+w*t/6, cy-h*Math.exp(-t*t/2)]);}
+  curve(p,cls||"b");}
+
+/* ── 椭圆等高线（rot 单位：度）── */
+function ell(cx,cy,rx,ry,rot,cls){
+  var p=[],i,a=rot*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a);
+  for(i=0;i<=72;i++){
+    var t=2*Math.PI*i/72, x=rx*Math.cos(t), y=ry*Math.sin(t);
+    p.push([cx+x*ca-y*sa, cy+x*sa+y*ca]);}
+  curve(p,cls||"b");}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L5","生成式学习：GDA 与朴素贝叶斯",
+      "换一种完全不同的思路做分类");},
+    "前面几讲的分类做法其实都是同一个套路：<b>在数据中间找一条分界线，线这边判一类、线那边判另一类</b>。Ng 的说法是，<b>逻辑回归真正在做的事就是「找一条线」</b>。<br><b>⭐ 这一讲要换一种完全不同的思路。</b>不去找分界线，而是<b>分别去学「正类长什么样」和「负类长什么样」</b>，<b>来了一个新样本，就看它更像哪一边。</b><br>这个思路叫<b>「生成式学习算法」</b>，这一讲会用它做出两个具体算法：<b>GDA（高斯判别分析）处理连续值特征</b>，比如肿瘤分类；<b>朴素贝叶斯处理离散特征</b>，比如垃圾邮件过滤。<br><b>⭐ 还会推出一个相当漂亮的结论：GDA 这套假设，推到最后会得出和逻辑回归一模一样的形式</b>——但反过来不成立。<b>这决定了什么时候该用哪一个。</b><br><b>这一讲的所有术语都先用一整节讲清楚再用</b>，包括条件概率、贝叶斯公式、协方差矩阵。");
+});
+KP("1 · 先认识一个记号：条件概率 P(A|B)",function(){
+  S(0,function(){clearScene();setEq(null);setCap("竖线读作「在…的条件下」");
+   boxNode(230,200,820,70,"P( A | B )　＝　已经知道 B 发生了，A 还有多大机会","b");
+   note("竖线左边：你想问的事",400,315,"d");
+   note("竖线右边：你已经知道的事",900,315,"d");
+   note("⭐ 右边是「前提」，不是「同时发生」—— 这是最容易弄混的一点",640,392,"y");},"<b>整讲都在用一个记号，先把它说清楚：P(A|B)，中间那根竖线读作「在…的条件下」。</b><br><b>P(A|B) 的意思是：已经知道 B 发生了，这时候 A 还有多大机会。</b><br><b>⚠ 最容易弄混的是：竖线右边是「前提」，不是「A 和 B 同时发生」。</b><br>举个例子：<b>P(发烧) 在全体人群里也许是 2%</b>；但 <b>P(发烧 | 得了流感) 可能是 80%</b>。<b>同一件事「发烧」，加了不同的前提，数字完全不同。</b><br><b>⭐ 这一讲的全部内容，说到底就是在两个方向的条件概率之间来回换：P(y|x) 和 P(x|y)。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("两个方向，意思完全不同");
+       boxNode(130,206,470,74,"P(阳性 | 有病)","b");
+       boxNode(740,206,440,74,"P(有病 | 阳性)","g");
+       note("检查准不准 —— 医院关心",365,326,"d");
+       note("我到底有没有病 —— 病人关心",960,326,"d");
+       note("⚠ 两个数可以差很远：病很罕见时，阳性里大多数是假阳性",640,396,"y");},"条件概率最要命的地方是<b>方向</b>，用体检举例一眼就清楚。<br><b>P(阳性 | 有病)</b> 问的是「<b>有病的人里，多少会被查出来</b>」——这是<b>检查本身准不准</b>。<b>P(有病 | 阳性)</b> 问的是「<b>查出阳性的人里，多少是真有病</b>」——这才是<b>病人关心的</b>。<br><b>⚠ 这两个数可以差得非常远。</b>如果这个病本身很罕见，<b>就算检查很准，阳性结果里大多数仍然是假阳性</b>。<br><b>⭐ 把竖线两边的东西看清楚，是这一讲所有推导的起点</b>——后面 GDA 整套推导，做的就是把 P(x|y) 翻成 P(y|x)。");
+  SUM(0,1,{h:"条件概率 P(A|B)：在 B 的前提下 A 的机会",k:"<b>竖线读作「在…的条件下」</b>：左边是你想问的事，<b>右边是你已经知道的前提</b>。",m:"⚠ <b>右边是前提，不是「同时发生」</b>——这是最容易弄混的一点。",w:"例：P(发烧) 在全人群也许 2%，但 <b>P(发烧|得了流感) 可能 80%</b>。<b>同一件事，前提不同，数字完全不同。</b>",e:"⭐ <b>这一讲的全部内容就是在 P(y|x) 和 P(x|y) 两个方向之间来回换。</b>"});
+  QUIZ(0,1,{t:"记号 P(发烧|流感) 表示什么？",o:["发烧导致流感的机会","已经知道得了流感的前提下，发烧还有多大机会","发烧的机会减去流感的机会","发烧和流感同时发生的机会"],a:1,w:"⚠ <b>竖线右边是「前提」，不是「同时发生」。</b>⭐ 这一讲就是在 P(y|x) 与 P(x|y) 之间来回换。"});
+});
+KP("2 · ★★ 两种思路：找分界线 vs 分别学两边",function(){
+  S(0,function(){clearScene();setEq(null);setCap("第一种：判别式 —— 直接找分界线");
+   says("0:00","logistic regression is really searching for a line");
+   axes({x0:300,x1:980,y0:380,y1:195});
+   dots([[380,340],[430,320],[400,295],[470,345],[350,310],[450,300]],"b",8);
+   dots([[800,250],[850,230],[820,215],[880,255],[760,235],[870,205]],"r",8);
+   curve([[330,375],[950,200]],"y");
+   note("⭐ 它从不问「正类长什么样」，只问「界在哪」",640,392,"y");},"<b>先看你已经熟悉的那一种，叫「判别式」算法。</b>Ng 说：<b>逻辑回归真正在做的事，就是在找一条线。</b><br><b>它的工作方式</b>：拿一条线放进数据里，<b>不断挪动这条线，直到两类分得最开</b>。来了新点，看它落在线的哪一侧。<br><b>⭐ 请注意它从来不问「正类长什么样」这个问题</b>，它只关心<b>界在哪里</b>。<br><b>用符号说</b>：它直接去学 <b>P(y|x)</b>——给定特征 x，类别 y 是什么。<b>「直接」两个字是重点。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("第二种：生成式 —— 分别学两边长什么样");
+   says("0:00","all of the learning algorithms we've been learning about so far are called discriminative");
+   axes({x0:300,x1:980,y0:380,y1:195});
+   dots([[380,340],[430,320],[400,295],[470,345],[350,310],[450,300]],"b",8);
+   dots([[800,250],[850,230],[820,215],[880,255],[760,235],[870,205]],"r",8);
+   ell(410,320,95,65,-15,"b"); ell(825,235,95,60,-20,"r");
+   note("⭐ 不画界，而是给每一类各描一个「模子」",640,392,"y");},"<b>这一讲要讲的是另一种，叫「生成式」算法。</b>Ng 在开场说：<b>到目前为止学的所有算法，都叫判别式算法</b>——今天讲的是新的一类。<br><b>它的工作方式完全不同</b>：<b>不画界</b>，而是<b>给每一类各描一个「模子」</b>——良性肿瘤的特征大概分布成什么样，恶性的又是什么样。<br><b>来了一个新样本，就分别问两个模子：「你有多像我？」谁给的分高就判谁。</b><br><b>用符号说</b>：它学的是 <b>P(x|y)</b>——<b>注意方向反过来了</b>：<b>已知类别，特征长什么样</b>。<b>⚠ 这个方向的翻转是这一讲所有内容的起点。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("打个比方");
+   boxNode(140,200,480,80,"判别式：看两种语言的区别在哪","b");
+   boxNode(680,200,480,80,"生成式：分别把两种语言学会","r");
+   note("只要能分辨就行，不必会说",380,320,"d");
+   note("会说之后，自然也能分辨",920,320,"d");
+   note("⚠ 生成式学的更多 —— 这既是它的优势，也是它的代价",640,392,"y");},"<b>打个比方会更好记。</b>假设要区分两种语言。<br><b>判别式的做法</b>：只去找这两种语言的<b>区别</b>——比如一种有卷舌音、另一种没有。<b>只要能分辨就行，不必会说。</b><br><b>生成式的做法</b>：<b>把两种语言都学会</b>。学会之后，听到一句话自然知道它属于哪一种。<br><b>⚠ 关键在于：生成式学到的东西更多。</b>这<b>既是它的优势</b>（信息用得更充分，样本少时表现更好），<b>也是它的代价</b>（要假设每类数据长什么样，<b>假设错了就会吃亏</b>）。<br><b>⭐ 这一讲最后会专门用一节讲「什么时候该用哪一个」。</b>");
+  SUM(0,2,{h:"★★ 判别式 vs 生成式：两种根本不同的思路",k:"<b>判别式</b>（逻辑回归等）<b>直接学 P(y|x)</b>——只找分界线，<b>从不问「正类长什么样」</b>。",m:"<b>生成式</b><b>学 P(x|y)</b>——<b>方向反过来</b>：给每一类各描一个模子，新样本来了问「你更像谁」。",w:"比方：判别式只找两种语言的<b>区别</b>（能分辨就行）；生成式<b>把两种语言都学会</b>。",e:"⚠ <b>生成式学得更多</b>：既是优势（样本少时更好），也是代价（<b>要假设每类长什么样，假错就吃亏</b>）。"});
+  QUIZ(0,2,{t:"生成式学习算法直接建模的是哪个量？",o:["P(x|y) —— 给定类别，特征长什么样","分界线的斜率","P(y|x) —— 给定特征求类别","P(x) —— 特征本身的分布"],a:0,w:"⚠ <b>方向是反的</b>：判别式学 P(y|x) 直接找界；生成式学 P(x|y)，<b>给每类描一个模子</b>，再用贝叶斯公式转回来。"});
+});
+KP("3 · 贝叶斯公式：把方向翻回来",function(){
+  S(0,function(){clearScene();
+   setEq("$$P(y=1\\mid x) = \\frac{P(x\\mid y=1)\\,P(y=1)}{P(x)}$$");
+   setCap("学的是 P(x|y)，要的是 P(y|x)");
+   note("分子左半：这一类「生得出」这个 x 的机会",640,170,"b");
+   note("分子右半：这一类本身有多常见（先验）",640,205,"g");
+   note("⭐ 两者相乘 —— 像不像 和 常不常见，都要算",640,265,"y");},"<b>这里有个明显的问题：生成式学的是 P(x|y)，但我们真正要的是 P(y|x)——给定特征判类别。怎么办？</b><br><b>贝叶斯公式就是用来翻转方向的。</b>它说：<b>P(y=1|x) ＝ P(x|y=1) × P(y=1) ÷ P(x)</b>。<br>分子的两半各有名字和含义：<br><b>P(x|y=1)</b>：<b>「正类这个模子，生得出这个 x 的机会有多大」</b>——也就是「像不像」。<br><b>P(y=1)</b>：叫<b>「先验」</b>，意思是<b>在还没看特征之前，正类本身有多常见</b>。<br><b>⭐ 两者要相乘</b>：<b>光像不够，还得这一类本身不罕见。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("为什么先验必须算进去");
+   boxNode(160,200,460,80,"某病的症状，你 90% 吻合","b");
+   boxNode(680,200,460,80,"但全国只有百万分之一的人得","r");
+   note("只看「像不像」⇒ 判你得病",390,320,"b");
+   note("把「常不常见」也算上 ⇒ 多半没得",920,320,"g");
+   note("⭐ 这就是先验的作用：罕见的事，需要更强的证据",640,392,"y");},"<b>先验为什么必须算进去？看一个例子就明白了。</b><br>假设某种病的典型症状你<b>吻合 90%</b>。<b>只看「像不像」，结论是你得了这个病。</b><br><b>但如果这个病全国只有百万分之一的人得呢？</b>把「这病本来就极罕见」这件事算进去，<b>结论会完全翻过来：你多半只是得了别的更常见的病。</b><br><b>⭐ 这就是先验的作用——罕见的事情，需要更强的证据才能下结论。</b><br><b>⚠ 这也正是判别式算法不直接处理的一块信息。</b>生成式算法<b>把「每一类有多常见」明确地学成一个参数</b>。");
+  SUM(0,3,{h:"贝叶斯公式：P(y|x) = P(x|y)·P(y) / P(x)",k:"生成式学的是 P(x|y)，要的是 P(y|x)，<b>靠贝叶斯公式翻转方向</b>。",m:"分子两半：<b>P(x|y) ＝「像不像」</b>；<b>P(y) ＝「先验」＝ 这一类本身有多常见</b>。<b>两者相乘。</b>",w:"⭐ <b>罕见的事需要更强的证据</b>：症状吻合 90%，但病只有百万分之一的人得 ⇒ 结论翻过来。",e:"⚠ 这块信息<b>判别式算法不直接处理</b>；生成式<b>把「每类有多常见」明确学成一个参数</b>。"});
+  QUIZ(0,3,{t:"贝叶斯公式分子里的 P(y=1) 叫什么，起什么作用？",o:["归一化常数；让概率加起来等于 1","似然；衡量数据拟合得好不好","后验；表示最终的判断结果","先验；表示还没看特征之前这一类本身有多常见"],a:3,w:"⭐ <b>罕见的事需要更强的证据</b>——这就是先验的作用。⚠ 归一化那一项是分母 P(x)，<b>下一节会说明它其实不用算</b>。"});
+});
+KP("4 · ⚠ 那个分母其实不用算",function(){
+  S(0,function(){clearScene();
+   setEq("$$\\arg\\max_y \\; \\frac{P(x\\mid y)P(y)}{P(x)} \\;=\\; \\arg\\max_y \\; P(x\\mid y)P(y)$$");
+   setCap("比大小的时候，分母可以丢掉");
+   note("分母 P(x) 里没有 y",640,170,"d");
+   note("⇒ 算 y=0 和 y=1 时，除的是同一个数",640,205,"b");
+   note("⭐ 同除一个正数不改变大小关系 ⇒ 直接丢掉",640,265,"y");},"<b>⚠ 实际用的时候有个省事的地方值得单独说，因为很多人卡在这里：那个分母 P(x) 根本不用算。</b><br><b>理由很简单</b>：我们要做的事是<b>比较 y=0 和 y=1 哪个概率大</b>，而<b>分母 P(x) 里压根没有 y</b>——<b>算哪一类，除的都是同一个数</b>。<br><b>⭐ 同时除以一个相同的正数，不会改变谁大谁小。</b>所以直接把分母丢掉，<b>只比较分子 P(x|y)·P(y) 就行。</b><br><b>⚠ 但要注意区分两种需求</b>：<b>只要「判哪一类」，丢掉分母没问题</b>；<b>如果要报出「是正类的概率是 0.83」这样的具体数值，分母就得算</b>（否则两个分子加起来不等于 1）。");
+  S(0,function(){clearScene();setEq(null);setCap("什么时候能省，什么时候不能");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["你要的是","算分母吗","为什么"],
+           ["哪一类更可能","不用","分母对两类是同一个正数"],
+           ["具体是多少概率","要算","不然加起来不等于 1"],
+           ["两类概率之比","不用","分母直接约掉"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 考试里问「判哪一类」时，写出「分母相同可省」本身就是得分点",640,396,"y");},"分母能不能省，取决于<b>你要的是什么</b>。<br><b>只问「哪一类更可能」</b>——分母对两类是<b>同一个正数</b>，比大小时同除一个正数不改变顺序，<b>所以可以省</b>。<br><b>要报出「具体是多少概率」</b>——<b>必须算</b>，否则两个数加起来不等于 1。<br><b>问两类的概率之比</b>——分母直接约掉，也不用算。<br><b>⭐ 考试里遇到「判哪一类」，把「分母对两类相同、可以不算」这句话写出来本身就是得分点</b>：它说明你看懂了结构，不是在盲算。");
+  SUM(0,4,{h:"⚠ 比大小时分母 P(x) 可以丢掉",k:"<b>分母 P(x) 里没有 y</b> ⇒ 算 y=0 和 y=1 时<b>除的是同一个数</b>。",m:"⭐ <b>同除一个正数不改变大小关系</b> ⇒ 只比较分子 <b>P(x|y)·P(y)</b> 即可。",w:"⚠ <b>分清两种需求</b>：只要「判哪一类」可以丢；<b>要报出「概率是 0.83」这种具体数值就得算</b>。",e:"这是实现时的常见省算，<b>也是考试里容易出判断题的点</b>。"});
+  QUIZ(0,4,{t:"用贝叶斯公式做分类时，为什么常常不用算分母 P(x)？",o:["因为 P(x) 总是等于 1","因为生成式算法不需要概率","因为分母里没有 y，比较两类时除的是同一个数，不影响谁大谁小","因为 P(x) 可以忽略不计"],a:2,w:"⚠ <b>只有「判哪一类」时能丢</b>。<b>要报出具体概率数值（如 0.83）仍然必须算分母</b>，否则两个分子加起来不等于 1。"});
+});
+KP("5 · 先铺词：一维高斯长什么样",function(){
+  S(535,function(){clearScene();setEq(null);setCap("最常见的那口「钟」");
+       axes({x0:300,x1:980,y0:380,y1:190});
+       bell(640,380,560,165,"b");
+       note("µ 均值：钟摆在哪",640,205,"g");
+       note("σ² 方差：钟有多胖",870,300,"y");
+       note("⭐ 两个旋钮，定了就定了整条曲线",640,392,"d");},"<b>GDA 里的「高斯」就是这口钟，先把它说清楚。</b><br><b>高斯分布（也叫正态分布）描述的是：大多数值挤在中间，越往两边越少。</b>人的身高、测量误差，大致都是这个形状。<br><b>它只有两个旋钮</b>：<br><b>µ「均值」——决定钟摆在哪</b>（把 µ 调大，整口钟往右平移）。<br><b>σ²「方差」——决定钟有多胖</b>（方差大就矮胖，说明数值分散；方差小就瘦高，说明都挤在中间）。<br><b>⭐ 两个旋钮定了，整条曲线就完全定了。</b><b>下一节要做的，是把它从「一条数轴」推广到「多个特征」。</b>");
+  S(535,function(){clearScene();setEq(null);setCap("两个参数各管一件事");
+       bell(400,350,380,140,"g");
+       bell(930,350,620,86,"y");
+       note("µ 管「峰在哪儿」",400,192,"g");
+       note("σ² 管「胖不胖」",930,248,"y");
+       note("两条曲线下的面积都等于 1",640,376,"d");
+       note("⭐ 所以摊得越开，峰就必然越矮 —— 这不是画图的巧合",640,402,"y");},"一维高斯只有两个参数，各管一件事。<br><b>µ 管「峰在哪儿」</b>——整条曲线平移，形状不变。<b>σ² 管「胖不胖」</b>——越大越摊开。<br><b>⭐ 有一条性质必须现在就建立：两条曲线下的面积都等于 1。</b>所以<b>摊得越开，峰就必然越矮</b>——这不是画图的巧合，是归一化逼出来的。<br><b>⚠ 由此也能理解为什么密度可以大于 1</b>：σ 很小时曲线又窄又高，<b>峰值轻易超过 1，但面积仍然是 1</b>。<b>记住这一句：密度是高度，概率是面积。</b>");
+  SUM(535,5,{h:"一维高斯：两个旋钮 µ 和 σ²",k:"<b>大多数值挤在中间，越往两边越少</b>（身高、测量误差都大致如此）。",m:"<b>µ 均值决定钟摆在哪</b>；<b>σ² 方差决定钟有多胖</b>（大=矮胖分散，小=瘦高集中）。",w:"⭐ <b>两个旋钮定了，整条曲线就完全定了。</b>",e:"⚠ 下一节推广到多个特征，<b>这两个旋钮会分别变成一个向量和一个矩阵</b>。"});
+  QUIZ(535,5,{t:"一维高斯分布里，σ²（方差）控制的是什么？",o:["钟的高度上限","钟的胖瘦——方差大就矮胖（数值分散），方差小就瘦高（数值集中）","钟的位置（摆在哪）","数据的个数"],a:1,w:"位置由 <b>µ 均值</b>控制。⭐ <b>两个旋钮定了整条曲线就定了</b>；推广到多维后，它们分别变成<b>向量</b>和<b>矩阵</b>。"});
+});
+KP("6 · ★ 多元高斯：µ 变成向量，σ² 变成矩阵",function(){
+  S(626,function(){clearScene();setEq(null);setCap("从一条数轴，到一个平面");
+       says("10:26","the covariance matrix will be n by n");
+       matrix({rows:4,cols:3,cw:300,ch:48,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["","一维","n 维"],
+           ["数据点","一个数","长度 n 的向量"],
+           ["中心 µ","一个数","长度 n 的向量"],
+           ["胖瘦","σ² 一个数","Σ 一个 n×n 矩阵"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3&&j===2?"hl":"";}});
+       note("⭐ 为什么胖瘦要用矩阵？因为每个方向的胖瘦可以不一样",640,392,"y");},"<b>真实问题里特征不止一个</b>——肿瘤有大小、也有密度。<b>所以要把高斯从一条数轴推广到多个维度。</b><br><b>µ 很好推广</b>：一维时它是一个数（中心在哪）；<b>n 维时它就是一个长度 n 的向量</b>，每个分量管一个特征的中心。<br><b>⭐ σ² 的推广才是重点：它变成了一个 n×n 的矩阵 Σ，叫「协方差矩阵」。</b>Ng 在课上就强调了这个形状。<br><b>为什么需要一个矩阵？</b>因为<b>一维时「胖瘦」只有一个数就够了，而多维时每个方向的胖瘦可以不一样</b>——<b>而且两个特征之间还可能互相关联。</b><b>下一节分开讲这两件事。</b>");
+  S(626,function(){clearScene();setEq(null);setCap("一维到多维：每个零件都升了一级");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","一维","多维"],
+           ["中心","µ 一个数","µ 一个向量"],
+           ["胖瘦","σ² 一个数","Σ 一个矩阵"],
+           ["指数里","(x−µ)²/σ²","(x−µ)ᵀ Σ⁻¹ (x−µ)"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 「除以 σ²」升级成「乘 Σ 的逆」—— 形状一样，只是零件换了",640,396,"y");},"把一维和多维并排放，会发现<b>每个零件都原封不动地升了一级</b>。<br><b>中心</b>从一个数变成一个向量；<b>胖瘦</b>从一个数变成一个矩阵；<b>指数里那一项</b>从 (x−µ)²/σ² 变成 (x−µ)ᵀΣ⁻¹(x−µ)。<br><b>⭐ 注意最后一行的对应关系：「除以 σ²」升级成了「乘 Σ 的逆」。</b>形状完全一样，只是标量换成了矩阵。<br><b>⚠ 多出来的新东西只有一个</b>：σ² 只能描述「多胖」，<b>而 Σ 还能描述「往哪个方向斜」</b>——下一节就讲这件事。");
+  SUM(626,6,{h:"★ 多元高斯：µ 是向量，Σ 是 n×n 矩阵",k:"<b>µ</b>：一维是一个数，<b>n 维是长度 n 的向量</b>，每个分量管一个特征的中心。",m:"⭐ <b>σ² 变成 n×n 的「协方差矩阵」Σ</b>（Ng 课上强调了这个形状）。",w:"<b>为什么要用矩阵？</b>因为<b>每个方向的胖瘦可以不一样</b>，<b>而且特征之间可能互相关联</b>。",e:"⚠ 这两件事（各自胖瘦 / 互相关联）<b>分别由 Σ 的对角元素和离轴元素管</b>，下两节细讲。"});
+  QUIZ(626,6,{t:"多元高斯里，协方差矩阵 Σ 的尺寸是多少？",o:["m×m（m 是样本个数）","1×1（一个数）","n×1（一个向量）","n×n（n 是特征个数）"],a:3,w:"⭐ 它取代了一维时的 σ²。<b>需要一个矩阵而不是一个数</b>，是因为<b>各方向胖瘦可以不同、特征之间还可能关联</b>。"});
+});
+KP("7 · ★ 协方差矩阵（上）：对角元素管「各方向多胖」",function(){
+  S(626,function(){clearScene();setEq(null);setCap("对角线上的数 = 每个特征各自的方差");
+       axes({x0:230,x1:1050,y0:385,y1:195});
+       ell(400,300,70,70,0,"b"); ell(400,300,110,110,0,"b");
+       ell(800,300,130,55,0,"g"); ell(800,300,80,34,0,"g");
+       note("Σ = [[1,0],[0,1]] ⇒ 正圆",400,200,"b");
+       note("Σ = [[3,0],[0,1]] ⇒ 横向拉长",800,200,"g");
+       note("⭐ 等高线：圈上每一点的「可能性」一样大，像地图上的等高线",640,392,"y");},"<b>先看 Σ 的对角线。对角线上的数，就是每个特征各自的方差——也就是「这个方向上有多胖」。</b><br><b>图上画的是「等高线」</b>：⭐ <b>和地图上的等高线一个意思——同一圈上的每一点，可能性一样大</b>。圈越往里，可能性越高。<br><b>左边 Σ 的对角线是 1 和 1</b>：两个方向一样胖，<b>等高线就是正圆</b>。<br><b>右边对角线是 3 和 1</b>：<b>第一个特征的方差大三倍，所以横向被拉长，变成椭圆</b>。<br><b>⚠ 现在先只看对角线，离轴的那两个数都是 0。下一节就把它们打开——那才是协方差矩阵真正有意思的地方。</b>");
+  S(626,function(){clearScene();setEq(null);setCap("只改对角元素：椭圆只会「拉伸」，不会「倾斜」");
+       ell(330,300,58,58,0,"b");
+       ell(640,300,106,58,0,"g");
+       ell(960,300,58,78,0,"y");
+       note("Σ=[[1,0],[0,1]] ⇒ 正圆",330,186,"b");
+       note("Σ=[[3,0],[0,1]] ⇒ 横向拉长",640,186,"g");
+       note("Σ=[[1,0],[0,3]] ⇒ 纵向拉长",960,186,"y");
+       note("⭐ 不管对角元素怎么调，椭圆的轴始终和坐标轴平行",640,404,"y");},"先把对角元素单独试一遍。<br><b>两个都是 1 ⇒ 正圆；第一个变大 ⇒ 横向拉长；第二个变大 ⇒ 纵向拉长。</b><br><b>⚠ 但不管怎么调，椭圆的轴始终和坐标轴平行。</b>它只会变胖变瘦，<b>不会斜过来</b>。<br><b>⭐ 这正好对应 M2 里 GMM 的 covariance_type='diag'</b>：只允许轴对齐的椭圆，参数从 d(d+1)/2 降到 d。<br><b>想让椭圆倾斜，只能动离轴元素</b>——那就是下一节的内容，<b>也是协方差矩阵真正有意思的地方。</b>");
+  SUM(626,7,{h:"★ Σ 的对角元素 ＝ 各方向的胖瘦",k:"<b>对角线上的数是每个特征各自的方差</b>，也就是「这个方向上有多胖」。",m:"<b>等高线</b>＝⭐ <b>同一圈上每一点可能性一样大</b>（和地图等高线同理），<b>越往里可能性越高</b>。",w:"<b>对角 1 和 1 ⇒ 正圆</b>；<b>对角 3 和 1 ⇒ 横向拉长的椭圆</b>。",e:"⚠ 这一节离轴元素都是 0；<b>打开它们才是协方差矩阵真正有意思的地方</b>。"});
+  QUIZ(626,7,{t:"协方差矩阵 Σ 对角线上的元素表示什么？",o:["每个特征各自的方差——该方向上分布有多胖","样本的个数","两个特征之间的关联强弱","分布的中心位置"],a:0,w:"<b>中心由 µ 管</b>，<b>关联由离轴元素管</b>。⭐ 对角 1和1 是正圆、3和1 是横向拉长的椭圆。"});
+});
+KP("8 · ★ 协方差矩阵（下）：离轴元素管「两个特征的关联」",function(){
+  S(907,function(){clearScene();setEq(null);setCap("离轴元素一旦不为 0，椭圆就歪了");
+       says("15:07","what happens if we set the off-diagonal elements to negative values");
+       axes({x0:230,x1:1050,y0:385,y1:195});
+       ell(420,295,120,52,-32,"g"); ell(420,295,75,33,-32,"g");
+       ell(840,295,120,52,32,"r"); ell(840,295,75,33,32,"r");
+       note("离轴为正 ⇒ 向右上倾斜",420,200,"g");
+       note("离轴为负 ⇒ 向右下倾斜",840,200,"r");
+       note("⭐ 正：一个大另一个也大　负：一个大另一个反而小",640,392,"y");},"<b>⭐ 离轴元素（左下和右上那两个数）管的是另一件事：两个特征之间有没有关联。</b>Ng 在课上专门演示了把它们设成负值会怎样。<br><b>离轴为正</b>：<b>椭圆向右上方倾斜</b>，意思是<b>一个特征大的时候，另一个也倾向于大</b>。比如身高和体重。<br><b>离轴为负</b>：<b>椭圆向右下方倾斜</b>，意思是<b>一个大的时候，另一个反而倾向于小</b>。<br><b>离轴为 0</b>：椭圆是正着的，<b>两个特征互不相干</b>。<br><b>⚠ 注意矩阵是对称的</b>——左下和右上那两个数必然相等，<b>因为「A 和 B 的关联」跟「B 和 A 的关联」本来就是同一件事</b>。");
+  S(907,function(){clearScene();setEq(null);setCap("离轴元素的符号：椭圆往哪边斜");
+       ell(400,300,130,56,-25,"b");
+       ell(900,300,130,56,25,"y");
+       note("离轴元素 > 0：正相关",400,186,"b");
+       note("离轴元素 < 0：负相关",900,186,"y");
+       note("⭐ 越扁，说明「知道一个就越能推出另一个」",640,212,"y");
+       note("x₁ 大时 x₂ 也倾向大",400,400,"d");
+       note("x₁ 大时 x₂ 倾向小",900,400,"d");},"离轴元素的<b>符号</b>决定椭圆往哪边斜。<br><b>大于 0 是正相关</b>：x₁ 大的时候 x₂ 也倾向于大，点云沿右上方向排开。<b>小于 0 是负相关</b>：方向正好反过来。<br><b>⭐ 绝对值的大小决定椭圆有多扁</b>，而「扁」的含义很实在：<b>越扁，说明知道其中一个值，就越能推出另一个</b>。<br><b>⚠ 极端情况下椭圆压成一条线</b>——那意味着两个特征完全由彼此决定，<b>此时 Σ 不可逆，高斯密度根本写不出来</b>（公式里有 Σ⁻¹，归一化常数里还有 |Σ| 开根号作分母）。");
+  SUM(907,8,{h:"★ Σ 的离轴元素 ＝ 两个特征的关联",k:"<b>正 ⇒ 椭圆右上倾斜</b>：一个大另一个也倾向于大（如身高与体重）。",m:"<b>负 ⇒ 椭圆右下倾斜</b>：一个大另一个反而倾向于小。<b>0 ⇒ 椭圆正着，互不相干</b>。",w:"⚠ <b>矩阵是对称的</b>：左下与右上必然相等，<b>因为「A 与 B 的关联」和「B 与 A 的关联」是同一件事</b>。",e:"⭐ 这正是生成式算法比「各特征分开看」强的地方——<b>它能表达特征之间的联动</b>。"});
+  QUIZ(907,8,{t:"协方差矩阵的离轴元素为负，意味着什么？",o:["分布的中心在负半轴","两个特征都很分散","一个特征大的时候，另一个反而倾向于小（等高线椭圆向右下倾斜）","矩阵不可逆"],a:2,w:"<b>正</b>⇒右上倾斜（同大同小）；<b>0</b>⇒正着（互不相干）。⚠ <b>矩阵对称</b>，左下右上必然相等。"});
+});
+KP("9 · ★ GDA 的模型：三个式子、四组参数",function(){
+  S(311,function(){clearScene();setEq(null);setCap("把前面的零件拼起来");
+       says("5:11","let's talk about Gaussian discriminant analysis");
+       boxNode(170,195,980,62,"① y 服从伯努利：P(y=1) = φ　　（这一类有多常见）","g");
+       boxNode(170,268,980,62,"② x | y=0 服从高斯：中心 µ₀，协方差 Σ","b");
+       boxNode(170,341,980,62,"③ x | y=1 服从高斯：中心 µ₁，协方差 Σ","b");},"<b>把前面的零件拼起来，GDA 的模型就三句话。</b><br><b>① 类别 y 服从伯努利分布</b>：<b>P(y=1) = φ</b>。<b>这就是前面说的「先验」——正类本身有多常见。</b><br><b>② 负类的特征服从一个高斯</b>，中心在 <b>µ₀</b>。<br><b>③ 正类的特征服从另一个高斯</b>，中心在 <b>µ₁</b>。<br><b>⭐ 请特别注意第②③条里的协方差矩阵：两类用的是同一个 Σ。</b>两个中心不同，但<b>形状和朝向完全一样</b>——<b>两个一模一样的椭圆，只是摆在不同位置。</b><br><b>这是一个刻意的设计选择，下一节专门讲为什么。</b><br>所以一共四组参数：<b>φ、µ₀、µ₁、Σ</b>。");
+  S(311,function(){clearScene();setEq(null);setCap("画出来就是这个样子");
+       axes({x0:280,x1:1010,y0:385,y1:195});
+       dots([[400,330],[450,310],[420,285],[480,335],[370,300],[460,290]],"b",8);
+       dots([[780,270],[830,250],[800,225],[860,275],[750,255],[870,235]],"r",8);
+       ell(428,308,88,46,-18,"b"); ell(428,308,56,29,-18,"b");
+       ell(815,252,88,46,-18,"r"); ell(815,252,56,29,-18,"r");
+       note("µ₀",428,308,"d"); note("µ₁",815,252,"d");
+       note("⭐ 两个椭圆形状朝向完全相同，只是中心不同 —— 这就是「共用 Σ」",640,392,"y");},"<b>画出来就一目了然了。</b><br><b>两堆点，各自被一个高斯「罩住」。</b>椭圆的中心是 <b>µ₀</b> 和 <b>µ₁</b>——<b>这两个不一样，因为两类的数据本来就在不同位置</b>。<br><b>⭐ 但请仔细看两个椭圆的形状和朝向：完全一样。</b>一样的胖瘦、一样的倾斜角。<b>这就是「共用同一个 Σ」在图上的样子。</b><br><b>⚠ 这不是偶然，是模型刻意规定的。</b><b>如果允许两类各有各的 Σ，画出来就会是两个形状不同的椭圆</b>——<b>那是另一个算法（叫 QDA），不是 GDA。</b><br><b>下一节讲为什么要作这个限制。</b>");
+  SUM(311,9,{h:"★ GDA 模型：三句话、四组参数 φ µ₀ µ₁ Σ",k:"<b>① y 服从伯努利，P(y=1)=φ</b>（先验）；<b>② x|y=0 ~ 高斯(µ₀, Σ)</b>；<b>③ x|y=1 ~ 高斯(µ₁, Σ)</b>。",m:"⭐ <b>两类共用同一个 Σ</b>：<b>两个椭圆形状朝向完全相同，只是中心不同</b>。",w:"⚠ <b>这是刻意的限制</b>。允许两类各有各的 Σ 就成了<b>另一个算法 QDA</b>，不是 GDA。",e:"⭐ <b>共用 Σ 正是「决策边界是直线」的直接原因</b>，后面两节会兑现。"});
+  QUIZ(311,9,{t:"GDA 模型中，两个类别的协方差矩阵 Σ 是什么关系？",o:["各自独立，互不相同","Σ 必须是单位矩阵","两类共用同一个 Σ——两个椭圆形状朝向完全相同，只是中心不同","Σ 由 φ 决定"],a:2,w:"⚠ 允许各有各的 Σ 就成了 <b>QDA</b>，不是 GDA。⭐ <b>共用 Σ 正是决策边界为直线的原因。</b>"});
+});
+KP("10 · ⭐ 为什么非要两类共用一个 Σ",function(){
+  S(311,function(){clearScene();setEq(null);setCap("两笔账：参数个数，和边界形状");
+       boxNode(150,195,480,66,"各用各的 Σ","r");
+       boxNode(650,195,480,66,"共用一个 Σ","g");
+       note("参数翻倍，n 大时暴涨",390,282,"r");
+       note("参数减半，更省数据",890,282,"g");
+       note("边界是弯曲的（二次曲线）",390,335,"r");
+       note("⭐ 边界是一条直线",890,335,"g");
+       note("⚠ 代价：万一两类形状真的不同，就模型失真了",640,392,"y");},"<b>共用 Σ 这个限制，背后有两笔账。</b><br><b>第一笔是参数个数。</b>Σ 是 n×n 的，<b>参数个数大约按 n² 增长</b>。<b>两类各用各的，参数直接翻倍</b>；特征一多就很吃数据。<b>共用之后参数减半，省下来的数据可以把 Σ 估得更准。</b><br><b>第二笔账更关键：边界的形状。</b><b>⭐ 共用 Σ 会让决策边界变成一条直线</b>；<b>各用各的，边界会是一条弯曲的二次曲线</b>。<br><b>⚠ 当然这个限制是有代价的</b>：<b>万一两类的形状真的差很多</b>（比如一类很集中、另一类很分散），<b>强行共用就会让模型失真</b>。<b>这是一个在「省参数」和「贴合数据」之间的取舍。</b>");
+  S(311,function(){clearScene();setEq(null);setCap("共用与不共用：三处差别");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","共用一个 Σ（GDA）","各用各的（QDA）"],
+           ["决策边界","直线","弯的二次曲线"],
+           ["参数个数","少","大约翻一倍"],
+           ["两个椭圆","形状朝向相同","可以各不相同"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⭐ Ng：各用各的「也完全合理」，只是参数翻倍、边界不再是直线",640,396,"y");},"把两种做法的差别列成三行。<br><b>最关键的是第一行</b>：<b>共用 Σ 时决策边界是直线，各用各的就变成弯的二次曲线</b>。<br><b>参数个数大约翻一倍</b>，<b>两个椭圆也不再被迫同形同向</b>。<br><b>⭐ 注意 Ng 的态度</b>：他说各用各的 Σ <b>「也完全合理」</b>，并不是错的做法——<b>那就是 QDA</b>。只是参数更多、需要的数据也更多。<br><b>⚠ 所以这不是「对与错」，是「省参数 vs 贴合数据」的取舍</b>——这个取舍在整门课里会反复出现。");
+  SUM(311,10,{h:"⭐ 共用 Σ 的两个理由与一个代价",k:"<b>理由一：省参数。</b>Σ 的参数按 n² 增长，<b>各用各的直接翻倍</b>；共用后省下的数据能把 Σ 估得更准。",m:"<b>理由二：⭐ 共用 Σ 让决策边界变成直线</b>；各用各的，边界是<b>弯曲的二次曲线</b>。",w:"⚠ <b>代价</b>：两类形状真的差很多时（一类集中、一类分散），<b>强行共用会让模型失真</b>。",e:"⭐ 这是典型的「<b>省参数 vs 贴合数据</b>」取舍，和正则化是同一类思想。"});
+  QUIZ(311,10,{t:"GDA 让两类共用同一个 Σ，带来的好处是什么？",o:["让模型能拟合更复杂的边界","参数减半更省数据，而且决策边界变成一条直线","让两类的先验相等","让 Σ 一定可逆"],a:1,w:"⚠ <b>代价是</b>：两类形状真的差很多时会失真。各用各的 Σ ⇒ 边界是<b>弯曲的二次曲线</b>（那是 QDA）。"});
+});
+KP("11 · 参数怎么估：数一数，平均一下",function(){
+  S(1815,function(){clearScene();setEq(null);setCap("没有迭代，一步到位");
+       matrix({rows:5,cols:2,cw:420,ch:48,x:220,y:200,
+         cell:function(i,j){var t=[
+           ["参数","怎么算"],
+           ["φ","正类样本数 ÷ 总样本数"],
+           ["µ₀","所有 y=0 样本的特征平均"],
+           ["µ₁","所有 y=1 样本的特征平均"],
+           ["Σ","两类点各自减去自己中心后，一起算"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===4?"hl":"";}});
+       note("⭐ 全是数数和求平均 —— 不用梯度下降，没有学习率",640,392,"y");},"<b>参数怎么求？这里是 GDA 很舒服的一点：全是数数和求平均，一步到位。</b><br><b>φ</b>：<b>正类样本数 ÷ 总样本数</b>。（100 封邮件里 30 封是垃圾，φ 就是 0.3。）<br><b>µ₀</b>：<b>把所有 y=0 的样本的特征加起来，除以 y=0 的个数</b>——就是这一类的「重心」。<b>µ₁ 同理。</b><br><b>Σ</b>：<b>⭐ 这里要用到共用的设定</b>——<b>把每个点减去它自己那一类的中心</b>，<b>然后两类的结果合在一起算一个 Σ</b>。<br><b>⭐ 请对比一下逻辑回归</b>：那边要跑梯度下降、要调学习率、要等它收敛；<b>这边一遍扫过数据就出结果，没有迭代、没有学习率、不存在「没收敛」的问题。</b>");
+  S(1815,function(){clearScene();setEq(null);setCap("四个参数，各自在估什么");
+       boxNode(130,200,250,66,"φ","b");
+       boxNode(420,200,250,66,"µ₀ , µ₁","g");
+       boxNode(710,200,250,66,"Σ","y");
+       boxNode(1000,200,190,66,"全是闭式解","r");
+       note("正类占比",255,302,"d");
+       note("各类样本的重心",545,302,"d");
+       note("两类离差合起来算一次",835,302,"d");
+       note("⚠ Σ 的每一项要减「自己那一类」的均值，不是减总均值",640,374,"y");
+       note("⭐ 扫一遍数据就训练完 —— 对比逻辑回归必须迭代",640,404,"g");},"把四个参数摆开，各自在估什么就清楚了。<br><b>φ 是正类占比</b>（数一数）；<b>µ₀、µ₁ 是各类样本的重心</b>（求平均）；<b>Σ 是把两类的离差合起来算一次协方差</b>。<br><b>⚠ Σ 这一项最容易错</b>：公式里是 x⁽ⁱ⁾ 减去 <b>µ 下标 y⁽ⁱ⁾</b>，也就是<b>减去它自己那一类的均值</b>，<b>不是减总均值</b>。<br><b>⭐ 四个全是闭式解</b>——扫一遍数据就训练完了，<b>没有迭代、没有学习率</b>。<b>对比一下：逻辑回归没有闭式解，必须迭代。</b>");
+  SUM(1815,11,{h:"参数估计：数数 + 求平均，一步到位",k:"<b>φ ＝ 正类数 ÷ 总数</b>；<b>µ₀ / µ₁ ＝ 各类样本特征的平均</b>（该类的重心）。",m:"<b>Σ</b>：⭐ <b>每个点先减去它自己那一类的中心，然后两类合在一起算一个 Σ</b>（这就是「共用」的落实）。",w:"⭐ <b>对比逻辑回归</b>：那边要梯度下降、调学习率、等收敛；<b>这边一遍扫过数据就出结果</b>。",e:"⇒ <b>没有迭代、没有学习率、不存在「没收敛」的问题</b>——这是 GDA 的实用优势。"});
+  QUIZ(1815,11,{t:"GDA 的参数是怎么求出来的？",o:["直接数数和求平均，一遍扫过数据就得到，没有迭代","用梯度下降迭代，需要调学习率","用牛顿法迭代","用 EM 算法交替求解"],a:0,w:"⭐ 这是 GDA 相对逻辑回归的实用优势：<b>不存在「没收敛」「学习率没调好」这类问题</b>。"});
+});
+KP("12 · ★ 预测：两边各算一次，谁大判谁",function(){
+  S(2287,function(){clearScene();setEq(null);setCap("来了一个新点，怎么判");
+       axes({x0:280,x1:1010,y0:385,y1:195});
+       ell(428,308,88,46,-18,"b"); ell(815,252,88,46,-18,"r");
+       note("µ₀",428,308,"d"); note("µ₁",815,252,"d");
+       dots([[620,280]],"y",11);
+       note("新点",620,258,"y");
+       link(506,296,610,284); link(760,262,634,278);
+       note("问蓝模子：你生得出我的机会多大？× 蓝类有多常见",400,355,"b");
+       note("问红模子：同样问一遍",900,355,"r");
+       note("⭐ 两个数比大小，大的那个就是答案",640,392,"y");},"<b>训练完了，来了一个新点怎么判？</b><br><b>分别问两个模子同一个问题。</b><br><b>问蓝色这个</b>：「<b>你这个高斯，生得出这个点的机会有多大？</b>」得到 P(x|y=0)，<b>再乘上「蓝类本身有多常见」</b>，也就是 1−φ。<br><b>问红色那个</b>：同样问一遍，得到 P(x|y=1) × φ。<br><b>⭐ 两个数比大小，大的那个就是答案。</b>（还记得吗——<b>分母 P(x) 两边一样，已经丢掉了</b>。）<br><b>⚠ 直觉上就是</b>：<b>离哪个中心更近就判哪一类</b>——但<b>不是简单的直线距离</b>，<b>还要按椭圆的形状来算「远近」，并且把两类的常见程度一起考虑进去。</b>");
+  S(2287,function(){clearScene();setEq(null);setCap("走一遍：一个新点来了怎么判");
+       boxNode(110,204,230,62,"新样本 x","b");
+       boxNode(380,204,290,62,"p(x|y=0)·p(y=0)","g");
+       boxNode(710,204,290,62,"p(x|y=1)·p(y=1)","g");
+       boxNode(1040,204,150,62,"谁大判谁","y");
+       link(340,235,380,235); link(670,235,710,235); link(1000,235,1040,235);
+       note("两个高斯密度各算一次",525,314,"d");
+       note("再各自乘上先验",855,314,"d");
+       note("⭐ 乘先验这一步常被忘 —— 它让「常见的那一类」占便宜",640,374,"y");
+       note("⚠ 没有除以 p(x)：判类别时它对两边一样，可以省",640,404,"d");},"把预测走一遍。<b>一个新样本来了，就在两个高斯上各算一次密度，再各自乘上那一类的先验，谁大判谁。</b><br><b>⭐ 「乘先验」这一步最常被忘</b>，而它的作用很实在：<b>它让「本来就更常见的那一类」占便宜</b>。两个点离两类中心一样远时，<b>先验大的那一类会赢</b>。<br><b>⚠ 注意整个过程没有除以 p(x)</b>：判类别时它对两边是同一个数，<b>约掉即可</b>——这正是前面那一节讲的。");
+  SUM(2287,12,{h:"★ 预测：两个模子各算一次，谁大判谁",k:"分别问两个高斯「<b>你生得出这个点的机会多大</b>」，<b>各自再乘上那一类的先验</b>（φ 或 1−φ）。",m:"⭐ <b>两个数比大小，大的就是答案</b>（分母 P(x) 两边相同，已经丢掉）。",w:"⚠ 直觉上是「<b>离哪个中心更近判哪类</b>」，但<b>不是简单直线距离</b>——要按椭圆形状算远近。",e:"⚠ 还要<b>把两类的常见程度一起考虑</b>：罕见的类需要更强的证据。"});
+  QUIZ(2287,12,{t:"GDA 预测一个新样本时做的是什么？",o:["找最近的 k 个训练样本投票","看它落在分界线的哪一侧","代入 sigmoid 看是否大于 0.5","分别算两个高斯生成它的机会，各乘以该类先验，比大小"],a:3,w:"⚠ <b>不是简单的直线距离</b>——要按椭圆形状算远近，<b>还要乘先验</b>。分母 P(x) 两边相同可以丢掉。"});
+});
+KP("13 · ★★ 决策边界居然是一条直线",function(){
+  S(2287,function(){clearScene();setEq(null);setCap("两个椭圆之间，界是直的");
+       says("38:07","points to the upper right of this decision boundary");
+       axes({x0:280,x1:1010,y0:385,y1:195});
+       dots([[400,330],[450,310],[420,285],[480,335],[370,300]],"b",8);
+       dots([[800,270],[850,250],[820,225],[860,275],[770,255]],"r",8);
+       ell(428,308,88,46,-18,"b"); ell(815,252,88,46,-18,"r");
+       curve([[600,385],[680,195]],"y");
+       note("⭐ 这条界不是硬画的，是两边概率相等的那些点",640,392,"y");},"<b>把平面上每一个点都判一遍，「判蓝」和「判红」的分界在哪里？</b><br><b>⭐ 答案是一条直线。</b>Ng 在课上画出来就是这样。<br><b>⚠ 要紧的是理解这条线是怎么来的</b>：<b>它不是硬画上去的，而是「两边算出来的概率正好相等」的那些点连成的</b>。<br><b>往这条线的一侧走，蓝色那个式子更大；往另一侧走，红色更大。</b><br><b>⭐ 为什么偏偏是直的？关键就在「共用同一个 Σ」。</b>两个高斯形状完全一样，<b>算概率时取对数，那些二次项在两边完全相同，相减就全抵消了，只剩下一次项——而一次项画出来就是直线。</b><br><b>⚠ 如果两类各有各的 Σ，二次项抵消不掉，边界就是弯的。</b>");
+  S(2287,function(){clearScene();setEq(null);setCap("展开来看：为什么二次项会消失");
+       setEq("$$-\\tfrac{1}{2}(x-\\mu_1)^{\\top}\\Sigma^{-1}(x-\\mu_1)\\;+\\;\\tfrac{1}{2}(x-\\mu_0)^{\\top}\\Sigma^{-1}(x-\\mu_0)$$");
+       note("两边展开，各自都会出现同一项 xᵀΣ⁻¹x",640,196,"b");
+       note("⭐ 用的是同一个 Σ ⇒ 这两项大小相同、符号相反 ⇒ 抵消",640,240,"y");},"二次项为什么会消失，展开一下就看见了。<br><b>决策边界是两类后验相等的地方，取对数相减后就是上面这个式子。</b><br><b>把两个括号都展开，各自都会出现一项 xᵀΣ⁻¹x</b>——<b>⭐ 因为用的是同一个 Σ，这两项大小完全相同、符号相反，于是干干净净地抵消掉了。</b><br>剩下的只有 x 的<b>一次项</b>和常数，<b>所以边界是一条直线。</b><br><b>⚠ 反过来就明白了</b>：如果两类各用各的 Σ，<b>这两项的系数不同，抵消不掉，边界自然是弯的</b>。");
+  SUM(2287,13,{h:"★★ 决策边界是直线，因为共用 Σ",k:"边界<b>不是硬画的</b>，是「<b>两边算出的概率正好相等</b>」的那些点连成的。",m:"⭐ <b>为什么是直的</b>：两高斯形状相同 ⇒ 取对数后<b>二次项在两边完全相同、相减全抵消</b>，<b>只剩一次项 ⇒ 直线</b>。",w:"⚠ <b>各有各的 Σ ⇒ 二次项抵消不掉 ⇒ 边界是弯的</b>（QDA）。",e:"⭐ 这条推理把前面「共用 Σ」那个设计选择<b>兑现了</b>——答题时能说出「二次项抵消」很有说服力。"});
+  QUIZ(2287,13,{t:"GDA 的决策边界为什么是一条直线？",o:["因为数据本身线性可分","因为先验 φ 等于 0.5","因为两类共用同一个 Σ，取对数后二次项在两边相同、相减抵消，只剩一次项","因为用了 sigmoid 函数"],a:2,w:"⚠ 若两类<b>各有各的 Σ</b>，二次项抵消不掉，<b>边界就是弯曲的二次曲线</b>（那是 QDA）。"});
+});
+KP("14 · ★★★ GDA 推到底，竟然得出逻辑回归的形式",function(){
+  S(2840,function(){clearScene();
+       setEq("$$P(y=1\\mid x) \\;=\\; \\frac{1}{1+e^{-\\theta^\\top x}}$$");
+       setCap("把 GDA 的假设代进贝叶斯公式，整理出来的就是它");
+       note("左边：GDA 算出来的「后验」＝ 看过特征之后的概率",640,170,"b");
+       note("右边：一模一样的 sigmoid 形式",640,205,"g");
+       note("⭐ 我们从没假设过 sigmoid —— 它是代数整理的结果",640,265,"y");},"<b>⭐ 现在是这一讲最漂亮的结论。</b><br><b>把 GDA 的那三条假设代进贝叶斯公式，然后硬算、整理</b>，<b>看看 P(y=1|x) 最后长什么样。</b><br><b>答案是：1 / (1 + e^(−θᵀx))。就是 sigmoid，就是逻辑回归的形式。</b><br><b>（顺带认个词：这里算出来的 P(y=1|x) 叫「后验」——和前面的「先验」正好相对：先验是没看特征之前的判断，后验是看过特征之后的判断。）</b><br><b>⚠ 请注意我们从头到尾没有假设过 sigmoid。</b>我们假设的是「<b>每类数据服从高斯</b>」，<b>sigmoid 是代数整理的结果。</b><br><b>⭐ 这和上一讲（L4）的结论可以对照着看</b>：那边是「<b>假设 y 服从伯努利 ⇒ 推出 sigmoid</b>」，这边是「<b>假设 x|y 服从高斯 ⇒ 也推出 sigmoid</b>」。<b>两条完全不同的路，通向同一个函数。</b>");
+  S(2840,function(){clearScene();setEq(null);setCap("⚠ 但这个箭头是单向的");
+       boxNode(170,205,430,80,"x|y 是高斯（共用 Σ）","b");
+       boxNode(690,205,430,80,"P(y=1|x) 是 sigmoid","g");
+       link(600,235,690,235);
+       note("✓ 这个方向成立",640,215,"g");
+       note("✗ 反过来不成立",640,300,"r");
+       note("⭐ 因为还有别的假设也能推出 sigmoid（如泊松）",640,355,"d");
+       note("⚠ 所以 GDA 的假设更强 —— 这决定了什么时候用哪个",640,398,"y");},"<b>⚠ 但有一个要紧的细节：这个箭头是单向的。</b><br><b>「x|y 是高斯」⇒「后验是 sigmoid」，这个方向成立。</b><br><b>反过来不成立</b>：<b>后验是 sigmoid，并不意味着 x|y 一定是高斯。</b><br><b>⭐ 为什么？因为还有别的假设也能推出同样的 sigmoid</b>——比如<b>假设 x|y 服从泊松分布，照样能推出 sigmoid</b>。<br><b>⭐ 所以结论是：GDA 的假设比逻辑回归更强。</b><b>「更强」的意思是：它要求的条件更苛刻，排除掉的可能性更多。</b><br><b>⚠ 这句话听起来抽象，但它直接决定了实践中该选哪个算法——下一节就讲这件事。</b>");
+  SUM(2840,14,{h:"★★★ GDA ⇒ 逻辑回归形式，但反之不成立",k:"把 GDA 三条假设代进贝叶斯公式整理，<b>P(y=1|x) 正好是 1/(1+e^(−θᵀx))</b>——<b>我们从没假设过 sigmoid</b>。",m:"⭐ <b>对照 L4</b>：那边「y 服从伯努利 ⇒ sigmoid」，这边「x|y 服从高斯 ⇒ sigmoid」。<b>两条路通向同一个函数。</b>",w:"⚠ <b>箭头单向</b>：后验是 sigmoid <b>不</b>意味着 x|y 是高斯——<b>泊松等假设也能推出 sigmoid</b>。",e:"⇒ <b>GDA 的假设更强</b>（条件更苛刻、排除的可能性更多）。<b>这直接决定了实践中选哪个。</b>"});
+  QUIZ(2840,14,{t:"关于「x|y 是高斯」和「P(y=1|x) 是 sigmoid」，哪句正确？",o:["两者毫无关系","前者能推出后者，但后者推不出前者——别的假设（如泊松）也能推出 sigmoid","两者完全等价，可以互推","后者能推出前者，但前者推不出后者"],a:1,w:"⇒ <b>GDA 的假设更强</b>。⭐ 对照 L4：「y 服从伯努利」也能推出 sigmoid——<b>多条路通向同一个函数</b>。"});
+});
+KP("15 · ★★ 那到底该用哪一个",function(){
+  S(3150,function(){clearScene();setEq(null);setCap("取决于你有多信得过那个假设");
+       says("52:30","if indeed x given y is Gaussian, then GDA will do better");
+       matrix({rows:4,cols:3,cw:300,ch:48,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["情形","GDA","逻辑回归"],
+           ["数据确实近似高斯","✓ 更好，更省数据","可以，但更费数据"],
+           ["数据不是高斯","✗ 可能明显变差","✓ 照样稳"],
+           ["样本很多","差别缩小","✓ 更稳妥的默认"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===1&&j===1)||(i===2&&j===2)?"hl":"";}});
+       note("⭐ 核心：假设越强，猜对了赚得越多，猜错了亏得越惨",640,392,"y");},"<b>这是实践中真正要回答的问题。</b>Ng 的说法是：<b>如果 x|y 确实是高斯，那 GDA 会做得更好</b>——因为<b>你等于把这个信息直接告诉了算法，它就能更有效地利用数据</b>。<br><b>⭐ 一句话概括这件事：假设越强，猜对了赚得越多，猜错了亏得越惨。</b><br><b>GDA 的假设强</b>：对了的话，<b>同样多的数据能学出更准的模型</b>（或者说<b>达到同样效果需要的数据更少</b>）。<br><b>逻辑回归的假设弱</b>：<b>它不关心 x|y 到底什么分布，所以数据不是高斯时它照样稳。</b><br><b>⚠ 实践里的常见选择是逻辑回归</b>，因为<b>「数据真的是高斯吗」这件事你通常没法确认</b>，而<b>样本量够大时两者差距会缩小。</b>");
+  S(3497,function(){clearScene();setEq(null);setCap("一句话判据：先别急着做检验");
+       says("58:17","you probably have enough data to just use logistic regression");
+       boxNode(130,206,470,74,"数据多到能做统计检验","b");
+       boxNode(740,206,440,74,"那也就多到能直接用逻辑回归","g");
+       link(600,243,740,243);
+       note("Ng 的回答",365,326,"d");
+       note("高维时的实际做法：把数据画出来看一眼",960,326,"g");
+       note("⭐ 明显不像高斯，就别用 GDA —— 不需要正式检验",640,396,"y");},"有学生问 Ng：要不要先做个统计检验，确认数据真是高斯的再用 GDA？<br><b>他的回答很实在</b>：<b>如果你的数据多到足以做检验并且让人信服，那多半也多到可以直接用逻辑回归了</b>——<b>那就没必要纠结 GDA 了</b>。<br><b>⭐ 高维情况下人们的实际做法更朴素：把数据画出来看一眼。</b>明显不像高斯，就别用 GDA。<br><b>⚠ 这条很值得记</b>：它说明<b>这个判断在实践中通常不需要正式回答</b>，别在考场上把它当成一道必须严格论证的题。");
+  SUM(3150,15,{h:"★★ GDA vs 逻辑回归：取决于你多信得过那个假设",k:"Ng：<b>x|y 确实是高斯时 GDA 更好</b>——<b>等于把这个信息告诉了算法，数据用得更有效</b>。",m:"⭐ <b>一句话</b>：<b>假设越强，猜对了赚得越多，猜错了亏得越惨</b>。",w:"<b>GDA 假设强</b>：对了就更省数据。<b>逻辑回归假设弱</b>：<b>不关心 x|y 的分布，不是高斯也照样稳</b>。",e:"⚠ <b>实践常选逻辑回归</b>：「数据真是高斯吗」通常无法确认，<b>而样本量大时两者差距缩小</b>。"});
+  QUIZ(3150,15,{t:"什么情况下 GDA 比逻辑回归更有优势？",o:["类别不平衡的时候","样本量非常大的时候","特征维度非常高的时候","数据确实近似高斯、而且样本量较少的时候"],a:3,w:"⭐ <b>假设越强，猜对了赚得越多，猜错了亏得越惨。</b>⚠ 样本量大时两者差距缩小，<b>实践常选更稳的逻辑回归</b>。"});
+});
+KP("16 · ⭐ 一条通则：数据越少，你写进去的假设越关键",function(){
+  S(3651,function(){clearScene();setEq(null);setCap("Ng 把这个取舍抽成了一条通则");
+       says("60:51","rely more on assumptions you code in");
+       boxNode(140,206,450,74,"数据少","b");
+       boxNode(730,206,450,74,"算法更依赖你写进去的假设","g");
+       link(590,243,730,243);
+       note("假设对 ⇒ 省下大量数据",365,326,"g");
+       note("假设错 ⇒ 被假设带偏",960,326,"r");
+       note("⭐ 所以数据少时，你的知识和建模能力反而更值钱",640,396,"y");},"Ng 把 GDA 和逻辑回归的取舍，抽成了一条适用于整门课的通则。<br><b>原话是：数据越少，算法就越需要依赖你写进去的假设。</b>两分多钟后他把话说得更重——<b>数据少的时候，你的编码功力和领域知识反而更关键</b>。<br><b>⭐ 这条通则能当尺子用</b>：假设强（GDA、线性模型、k-means 的球形簇）⇒ <b>数据少时省事</b>；假设弱（逻辑回归、神经网络）⇒ <b>数据多时更稳</b>。<br><b>⚠ 反过来也成立</b>：数据足够多时，<b>强假设带来的那点便宜就不值一提了</b>，而它错了的代价照样要付。");
+  SUM(3651,16,{h:"⭐ 通则：数据越少，写进去的假设越关键",k:"Ng 原话：<b>数据越少，算法越需要依赖你写进去的假设</b>；此时<b>你的知识与建模能力更值钱</b>。",m:"假设强（GDA / 线性模型 / k-means 球形簇）⇒ <b>数据少时省事</b>；假设弱（逻辑回归 / 神经网络）⇒ <b>数据多时更稳</b>。",w:"⚠ 数据足够多时，<b>强假设省下的那点便宜不值一提，而它错了的代价照样要付</b>。",e:"⭐ 这把尺子能量任何两个模型，<b>答「为什么选 A 不选 B」时拿它当框架，比零散列优缺点得分高</b>。"});
+  QUIZ(3651,16,{t:"Ng 从 GDA 与逻辑回归的对比里抽出的通则是什么？",o:["数据越少，算法越要依赖你写进去的假设，此时你的知识和建模能力更关键","假设越强，模型一定越准确","数据越多，模型的假设就该越强","生成式模型总是优于判别式模型"],a:0,w:"⭐ 这把尺子适用于整门课：<b>线性 vs 神经网络、k-means vs GMM、spherical vs full</b> 都是同一个取舍。"});
+});
+KP("17 · ⭐ 不只是泊松：同一个指数族就够了",function(){
+  S(3651,function(){clearScene();setEq(null);setCap("课堂上的推广 —— 讲义里只举了泊松一个例子");
+       says("60:51","x given y equals 1, it comes from an exponential family distribution");
+       note("⭐ 讲义只举了泊松；课堂把它推广成了一整类",640,182,"y");
+       boxNode(130,210,470,70,"两类来自同一个指数族","b");
+       boxNode(740,210,440,70,"只差一个自然参数 η","b");
+       note("↓ 那么",640,308,"d");
+       boxNode(380,330,520,64,"p(y|x) 一定是 logistic 形式","g");},"讲义举了一个反例说明「logistic 形式不挑食」：<b>x|y 服从泊松分布时，p(y|x) 照样是 logistic。</b><br><b>⭐ 但 Ng 在课堂上把这件事推广得更远</b>：只要 x|y=0 和 x|y=1 来自<b>同一个指数族分布</b>、而且<b>只差一个自然参数 η</b>，<b>p(y|x) 就一定是 logistic 形式</b>。<br><b>⚠ 这把「一个反例」升级成了「一整类反例」</b>，也让前面那个结论更有分量：<b>高斯 ⇒ logistic，但 logistic 推不回高斯</b>，因为能导出 logistic 的假设太多了。<b>所以 GDA 的假设确实严格更强。</b>");
+  SUM(3651,17,{h:"⭐ 推广：同一指数族、只差 η ⇒ p(y|x) 必是 logistic",k:"讲义只举了<b>泊松</b>一个反例；课堂把它推广成<b>一整类</b>：两类来自同一个指数族、只差自然参数即可。",m:"⇒ <b>能导出 logistic 的假设非常多</b>，所以「高斯 ⇒ logistic 但反之不成立」这个单向关系更稳固。",w:"⚠ 这也解释了逻辑回归为什么稳健：<b>它只要求 p(y|x) 的形状，不关心 p(x|y) 具体是谁</b>。",e:"答「为什么说 GDA 假设更强」时，<b>举得出反例</b>（泊松，或更一般的同族分布）比只说结论更有说服力。"});
+  QUIZ(3651,17,{t:"除了高斯，还有哪些情况会让 p(y|x) 呈 logistic 形式？",o:["两类来自同一个指数族、只差自然参数时都会","只有泊松","只有高斯","任何分布都会"],a:0,w:"⚠ 不是「任何分布」——条件是<b>同一个指数族且只差自然参数</b>。⭐ 正因为满足条件的分布很多，<b>logistic 形式推不回高斯</b>，这就是 GDA 假设更强的依据。"});
+});
+KP("18 · 换个场景：垃圾邮件过滤",function(){
+  S(3869,function(){clearScene();setEq(null);setCap("这次特征是离散的");
+       boxNode(170,195,980,62,"GDA：特征是连续值（肿瘤大小、密度）⇒ 用高斯","b");
+       boxNode(170,275,980,62,"朴素贝叶斯：特征是离散的（某个词出现没有）⇒ 用别的","g");
+       note("⭐ 思路完全不变：还是「分别学两边长什么样」+ 贝叶斯公式",640,370,"y");
+       note("变的只是「怎么描述每一类的特征分布」",640,400,"d");},"<b>前半讲的 GDA 处理的是连续值特征</b>——肿瘤的大小、密度，这些是实数，用高斯来描述很自然。<br><b>后半讲换一个场景：垃圾邮件过滤。</b>这里的特征是<b>离散的</b>——「<b>某个词在这封邮件里出现了没有</b>」，答案只有「有」或「没有」。<b>高斯显然不合适了。</b><br><b>⭐ 但请注意：思路完全没变。</b>还是那两步——<b>分别学「垃圾邮件长什么样」和「正常邮件长什么样」，然后用贝叶斯公式翻转回来。</b><br><b>变的只有一件事：怎么描述每一类的特征分布。</b><br><b>⚠ 下面三节会看到，这个新场景会带来一个前面没遇到过的大麻烦。</b>");
+  S(3869,function(){clearScene();setEq(null);setCap("为什么换到文本就不能用 GDA 了");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","肿瘤分类","垃圾邮件"],
+           ["特征是什么","大小、密度…","某个词出没出现"],
+           ["取值","连续实数","只有 0 和 1"],
+           ["套高斯合理吗","合理","不合理"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===2||i===3?"hl":"";}});
+       note("⭐ Ng 的分法：连续特征用 GDA，离散特征用朴素贝叶斯",640,396,"y");},"换场景不是换个例子那么简单，<b>它逼着我们换算法</b>。<br><b>肿瘤那个例子里特征是连续实数</b>，套高斯很自然。<b>垃圾邮件里特征是「某个词出没出现」，只有 0 和 1</b>——<b>往一堆 0/1 上套高斯是说不通的</b>。<br><b>⭐ Ng 在开场就给过这条分法</b>：<b>连续值特征用 GDA，离散特征用朴素贝叶斯</b>。<br><b>⚠ 看到题目说「特征是词是否出现 / 是否点击 / 是否超标」，第一反应就该是朴素贝叶斯，而不是 GDA。</b>");
+  SUM(3869,18,{h:"换场景：离散特征的垃圾邮件过滤",k:"<b>GDA 处理连续值</b>（肿瘤大小、密度）用高斯；<b>垃圾邮件的特征是离散的</b>（某词出现没有），高斯不合适。",m:"⭐ <b>思路完全不变</b>：分别学两类长什么样 + 贝叶斯公式翻转回来。",w:"<b>变的只有「怎么描述每一类的特征分布」。</b>",e:"⚠ 这个新场景会带来一个前面没遇到过的大麻烦（<b>参数爆炸</b>），下两节细讲。"});
+  QUIZ(3869,18,{t:"从 GDA 换到朴素贝叶斯，变的是什么？",o:["不再需要先验","不再需要贝叶斯公式","从生成式变成了判别式","只是换了「怎么描述每类的特征分布」——整体思路（分别学两边 + 贝叶斯公式）不变"],a:3,w:"<b>GDA 用高斯描述连续特征</b>；<b>朴素贝叶斯处理离散特征</b>。⭐ <b>两步法完全一样。</b>"});
+});
+KP("19 · ★ 怎么把一封邮件变成一串数",function(){
+  S(3869,function(){clearScene();setEq(null);setCap("词典 + 0/1 向量");
+       says("64:29","start with the English dictionary and make a list of all the words");
+       matrix({rows:6,cols:3,cw:250,ch:44,x:270,y:170,
+         cell:function(i,j){var t=[
+           ["位置","词","这封邮件"],
+           ["1","a","1"],
+           ["2","aardvark","0"],
+           ["3","aardwolf","0"],
+           ["…","…","…"],
+           ["2800","buy","1"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2&&(i===1||i===5)?"hl":"";}});
+       note("⭐ 每封邮件 ⇒ 一串 0 和 1，长度 = 词典大小",640,398,"y");},"<b>算法只会算数，所以先要把一封邮件变成一串数。Ng 的做法是：</b><br><b>第一步，拿一本英文词典，把所有词列成一张表</b>（他在课上真的从 a、aardvark 开始数）。<b>假设有一万个词。</b><br><b>第二步，对每封邮件造一个长度一万的向量</b>：<b>第 i 个位置写 1 表示「第 i 个词在这封邮件里出现过」，写 0 表示没出现。</b><br><b>所以一封邮件就变成了一串一万个 0 和 1。</b><br><b>⚠ 注意这个表示丢掉了两样东西</b>：<b>词出现了几次</b>（出现 1 次和 10 次都记 1），以及<b>词的顺序</b>。<b>这是有意的简化。</b><br><b>⭐ 实际做法通常不用整本词典，而是用训练集里出现过的词。</b>");
+  S(3869,function(){clearScene();setEq(null);setCap("一封邮件 → 一个很长的 0/1 向量");
+       boxNode(120,206,250,62,"「buy now」","b");
+       boxNode(470,206,330,62,"查词表里每个词在不在","g");
+       boxNode(900,206,280,62,"[0,…,1,…,1,…,0]","y");
+       link(370,237,470,237); link(800,237,900,237);
+       note("向量长度 = 词表大小，不是邮件长度",640,322,"d");
+       note("⚠ 同一个词出现 1 次和 20 次，编码完全一样",640,366,"r");
+       note("⭐ 所以这种表示法「记了谁出现，没记出现几次」",640,404,"y");},"把一封邮件变成数的办法很直接：<b>拿着词表从头到尾过一遍，这个词在邮件里出现过就记 1，没出现记 0。</b><br><b>⚠ 第一个容易搞错的点：向量的长度等于词表大小，不是邮件长度。</b>一封三个词的邮件和一封三千词的邮件，<b>编码出来一样长</b>。<br><b>⚠ 第二个点更要紧：同一个词出现 1 次和出现 20 次，编码完全一样</b>——<b>这种表示法只记「谁出现了」，不记「出现几次」</b>。<br><b>⭐ 记住这个取舍，后面讲事件模型时还会回来找它。</b>");
+  SUM(3869,19,{h:"★ 特征表示：词典 + 0/1 向量",k:"<b>列出词典的所有词</b>（假设一万个），<b>每封邮件造一个长度一万的向量</b>：<b>第 i 位 1 ＝ 第 i 个词出现过</b>。",m:"⚠ <b>这个表示丢掉了两样东西</b>：<b>词出现了几次</b>（1 次和 10 次都记 1）、<b>词的顺序</b>。是有意的简化。",w:"⭐ 实际做法<b>通常不用整本词典，而是用训练集里出现过的词</b>。",e:"⚠ 下一节会看到，<b>正是这个一万维的 0/1 向量引出了参数爆炸</b>。"});
+  QUIZ(3869,19,{t:"朴素贝叶斯里，一封邮件被表示成什么？",o:["词频统计表（每个词出现几次）","邮件的字符串本身","长度等于词典大小的 0/1 向量，第 i 位表示第 i 个词是否出现","一个实数向量，每维是词的权重"],a:2,w:"⚠ <b>这个表示丢掉了「出现几次」和「词的顺序」</b>——是有意的简化。⭐ 实际常只用训练集出现过的词。"});
+});
+KP("20 · ⚠ 麻烦来了：参数会爆炸",function(){
+  S(4291,function(){clearScene();setEq(null);setCap("一万个 0/1 有多少种组合？");
+       boxNode(230,200,820,70,"2^10000 − 1 个参数","r");
+       note("要给每一种可能的邮件都指定一个概率",640,300,"d");
+       note("⚠ 这个数比宇宙里的原子还多 —— 不可能估得出来",640,355,"r");
+       note("⭐ 必须加一个简化假设，否则这条路走不通",640,398,"y");},"<b>⚠ 现在撞上大麻烦了。</b><br><b>要描述「垃圾邮件长什么样」，严格来说要给每一种可能的邮件指定一个概率。</b><br><b>一万个位置、每个位置 0 或 1，一共有 2^10000 种可能。</b>所以<b>参数个数是 2^10000 − 1</b>（减 1 是因为所有概率加起来必须等于 1，最后一个被定死了）。<br><b>⚠ 这个数大到没有意义——比可观测宇宙里的原子总数还多得多。</b>你<b>永远不可能有足够的数据去估计它们</b>。<br><b>⭐ 所以这条路直接走不通，必须加一个简化假设。</b><b>下一节的那个假设，就是「朴素贝叶斯」这个名字的来源。</b>");
+  S(4291,function(){clearScene();setEq(null);setCap("这个数到底有多大");
+       boxNode(140,204,460,70,"词表 50000 个词","b");
+       boxNode(740,204,440,70,"2^50000 种可能的邮件","r");
+       link(600,239,740,239);
+       note("每个词要么在、要么不在",370,324,"d");
+       note("⚠ 这个数比宇宙里的原子还多得多",960,324,"r");
+       note("⭐ 不是「算得慢」，是「根本不可能」—— 所以必须加假设",640,396,"y");},"先把这个数字的量级感受一下。<b>词表五万个词，每个词要么在要么不在，所以一封邮件有 2^50000 种可能。</b>要给每一种都配一个概率，<b>就需要 2^50000 − 1 个参数</b>（减 1 是因为所有概率加起来必须等于 1，最后一个不自由）。<br><b>⚠ 这个数比宇宙里的原子还多得多。</b><br><b>⭐ 关键是要认清这不是「算得慢一点」的问题，而是「根本不可能」。</b><br><b>所以加假设不是为了优雅，是因为不加就学不了。</b>");
+  SUM(4291,20,{h:"⚠ 参数爆炸：2^10000 − 1",k:"严格描述「垃圾邮件长什么样」＝ <b>给每一种可能的邮件指定一个概率</b>。一万个 0/1 位 ⇒ <b>2^10000 种可能</b>。",m:"<b>参数个数 2^10000 − 1</b>（减 1 因为所有概率加起来必须等于 1，最后一个被定死）。",w:"⚠ <b>这个数比可观测宇宙的原子还多</b>——<b>永远不可能估得出来</b>。",e:"⭐ <b>所以必须加一个简化假设</b>——那个假设就是「朴素贝叶斯」名字的来源。"});
+  QUIZ(4291,20,{t:"不加任何假设时，一万维 0/1 特征的生成模型需要多少参数？",o:["一万的平方个","2^10000 − 1 个","一万个","和样本数一样多"],a:1,w:"<b>减 1 是因为所有概率加起来必须等于 1</b>，最后一个被定死。⚠ 这个数<b>比宇宙里的原子还多</b>，所以必须简化。"});
+});
+KP("21 · ★★★ 朴素贝叶斯假设：假装词与词互不相干",function(){
+  S(4291,function(){clearScene();setEq(null);setCap("Ng 口中的「条件独立假设」");
+       says("71:31","this assumption is called a conditional independence assumption");
+       boxNode(170,200,980,66,"已知这是垃圾邮件后，每个词出现与否互不影响","g");
+       note("⇒ 整封邮件的概率 = 每个词各自概率连乘",640,290,"b");
+       note("⇒ 参数从 2^10000 降到 2 × 10000",640,343,"g");
+       note("⭐ 从「不可能」变成「数一数就行」",640,396,"y");},"<b>⭐ 这就是全讲的关键假设。</b>Ng 说它<b>叫「条件独立假设」，也叫「朴素贝叶斯假设」</b>。<br><b>它说的是：已经知道这是一封垃圾邮件之后，每个词出现与否互不影响。</b><br><b>⚠ 请注意「已经知道是垃圾邮件之后」这个前提——这是条件独立，不是无条件独立。</b><br><b>有了它，整封邮件的概率就可以拆成每个词各自概率的连乘</b>，<b>参数个数从 2^10000 直接降到 2 × 10000。</b><br><b>⭐ 从「宇宙里的原子都不够数」变成「数一数就能算出来」——这个假设的威力就在这里。</b>");
+  S(4291,function(){clearScene();setEq(null);setCap("⚠ 这个假设明显是错的");
+       boxNode(170,205,460,70,"「买」出现了","r");
+       boxNode(690,205,460,70,"「便宜」更可能出现","r");
+       link(630,240,690,240);
+       note("⚠ 词之间当然相关 —— 假设明显不成立",640,310,"r");
+       note("⭐ 但它在实践中效果出奇地好",640,360,"g");
+       note("这正是「朴素 naive」这个名字的来历",640,400,"d");},"<b>⚠ 但必须老实说：这个假设明显是错的。</b><br><b>一封邮件里出现了「买」，「便宜」出现的机会当然会上升</b>——<b>词和词之间显然是相关的</b>。<b>假设它们互不相干，和现实不符。</b><br><b>⭐ 这正是「朴素」（naive）这个名字的来历——它朴素地假装了一件并不成立的事。</b><br><b>⚠ 但有意思的地方在于：它在实践中效果出奇地好</b>，<b>垃圾邮件过滤、文本分类都长期用它。</b><br><b>⭐ 原因大致是：我们最终要的只是「谁的概率更大」这个比较结果，而不是精确的概率值。</b>假设带来的偏差<b>往往在两边同时存在，比较的时候相当程度上抵消掉了。</b>");
+  SUM(4291,21,{h:"★★★ 朴素贝叶斯假设 ＝ 条件独立",k:"<b>已知是垃圾邮件之后，每个词出现与否互不影响</b>。⚠ <b>是条件独立，不是无条件独立</b>。",m:"⇒ 整封邮件的概率<b>拆成每个词概率的连乘</b> ⇒ <b>参数从 2^10000 降到 2×10000</b>。",w:"⚠ <b>这个假设明显是错的</b>（出现「买」则「便宜」更可能出现）——<b>「朴素 naive」就是这么来的</b>。",e:"⭐ <b>但实践中效果出奇地好</b>：我们只要「谁更大」这个比较结果，<b>偏差在两边同时存在、比较时相当程度抵消</b>。"});
+  QUIZ(4291,21,{t:"朴素贝叶斯假设具体说的是什么？",o:["垃圾邮件和正常邮件一样多","每封邮件的长度相同","已知类别之后，各个词是否出现互不影响（条件独立）","每个词出现的概率都相等"],a:2,w:"⚠ <b>是「已知类别之后」的条件独立</b>，不是无条件独立。它<b>明显不成立</b>（词之间相关），<b>但实践效果出奇地好</b>。"});
+});
+KP("22 · 参数怎么估：还是数一数",function(){
+  S(4291,function(){clearScene();setEq(null);setCap("每个数都是一个比值");
+       matrix({rows:4,cols:2,cw:430,ch:50,x:210,y:200,
+         cell:function(i,j){var t=[
+           ["参数","怎么算"],
+           ["φ（先验）","垃圾邮件数 ÷ 总邮件数"],
+           ["第 j 个词 | 垃圾","含该词的垃圾邮件数 ÷ 垃圾邮件数"],
+           ["第 j 个词 | 正常","含该词的正常邮件数 ÷ 正常邮件数"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 和 GDA 一样：没有迭代，扫一遍数据就出结果",640,394,"y");},"<b>参数怎么求？和 GDA 一样舒服：每个数都是一个比值，数一数就行。</b><br><b>φ（先验）</b>：<b>垃圾邮件的数量 ÷ 总邮件数</b>。<br><b>「第 j 个词在垃圾邮件里出现的概率」</b>：<b>含这个词的垃圾邮件数 ÷ 垃圾邮件总数</b>。<br><b>「第 j 个词在正常邮件里出现的概率」</b>：同理。<br><b>举个具体的</b>：100 封垃圾邮件里有 30 封含「便宜」，这个参数就是 <b>0.3</b>。<br><b>⭐ 一共 2×10000 + 1 个这样的比值，扫一遍训练数据全部算完，没有迭代、没有学习率。</b><br><b>⚠ 但这个「数一数」的做法藏着一个陷阱，最后一节专门讲。</b>");
+  S(4291,function(){clearScene();setEq(null);setCap("三个参数，都是数出来的");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["参数","大白话","怎么算"],
+           ["φ(y)","垃圾邮件占多大比例","数 ÷ 总封数"],
+           ["φ(j|y=1)","垃圾邮件里出现词 j 的比例","数 ÷ 垃圾邮件封数"],
+           ["φ(j|y=0)","正常邮件里出现词 j 的比例","数 ÷ 正常邮件封数"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⚠ 第 2 行的分母是「垃圾邮件的封数」，不是「总封数」",640,396,"y");},"三个参数全是数出来的，没有任何推导。<br><b>φ(y) 是垃圾邮件占多大比例</b>；<b>φ(j|y=1) 是「垃圾邮件里出现词 j 的那部分比例」</b>；φ(j|y=0) 同理。<br><b>⚠ 最容易错的是分母</b>：φ(j|y=1) 的分母是<b>垃圾邮件的封数</b>，<b>不是总封数</b>。<br><b>⭐ 把它读成大白话就不会错了</b>：「<b>在垃圾邮件当中</b>，有多大比例出现了这个词」——「在……当中」这几个字就指明了分母。<br><b>⚠ 但这个「数一数」的做法藏着一个陷阱，最后一节专门讲。</b>");
+  SUM(4291,22,{h:"参数估计：每个数都是一个比值",k:"<b>φ ＝ 垃圾邮件数 ÷ 总数</b>；<b>P(第 j 词|垃圾) ＝ 含该词的垃圾邮件数 ÷ 垃圾邮件数</b>。",m:"例：100 封垃圾邮件里 30 封含「便宜」⇒ 这个参数是 <b>0.3</b>。",w:"⭐ 一共 <b>2×10000 + 1</b> 个比值，<b>扫一遍数据全部算完</b>，没有迭代、没有学习率。",e:"⚠ <b>这个「数一数」的做法藏着一个陷阱</b>——下一节就是它。"});
+  QUIZ(4291,22,{t:"朴素贝叶斯里「第 j 个词在垃圾邮件中出现的概率」怎么估？",o:["用梯度下降优化得到","含该词的垃圾邮件数 ÷ 垃圾邮件总数","该词在所有邮件中出现的总次数 ÷ 总词数","含该词的邮件数 ÷ 总邮件数"],a:1,w:"⚠ 分母是<b>垃圾邮件总数</b>，不是全部邮件数——这是条件概率。⭐ 扫一遍数据全部算完。"});
+});
+KP("23 · ⚠ 最后的陷阱：一个零毁掉整个预测",function(){
+  S(4665,function(){clearScene();setEq(null);setCap("训练集里没见过的词");
+       says("77:45","the biggest problem with this algorithm is, what happens if this is zero");
+       boxNode(170,195,980,62,"某个词在训练集的垃圾邮件里一次都没出现 ⇒ 概率估成 0","r");
+       note("⇒ 连乘里出现一个 0 ⇒ 整个乘积变成 0",640,285,"r");
+       note("⚠ 两类都算成 0 ⇒ 0 比 0，根本没法比",640,338,"r");
+       note("⭐ 只因为一个词没见过，整封邮件就判不了了",640,392,"y");},"<b>⚠ Ng 说这是这个算法最大的问题。</b><br><b>设想某个词在训练集的垃圾邮件里一次都没出现过。</b>按上一节的算法，<b>它的概率就被估成 0</b>。<br><b>问题在于我们是把所有词的概率连乘起来的</b>——<b>连乘里只要出现一个 0，整个乘积就变成 0。</b><br><b>⚠ 更糟的是：如果这个词在正常邮件里也没出现过，那么两边算出来都是 0。0 比 0，根本没法比。</b><br><b>⭐ 只因为出现了一个训练时没见过的词，整封邮件就判不了了——这显然不合理。</b><br><b>⚠ 根本毛病在于：「没见过」不等于「不可能」。</b>把没观察到的事件概率估成 0，<b>是对有限数据过于自信。</b>");
+  S(4665,function(){clearScene();setEq(null);setCap("Ng 说下节课讲解决办法");
+       says("77:45","we'll come back to that when we talk about Laplace");
+       boxNode(230,205,820,76,"拉普拉斯平滑：分子加 1，分母加类别数","g");
+       note("效果：任何事件的概率都不会是 0，只是很小",640,310,"b");
+       note("⚠ Ng 明确说这部分放到下一讲 —— L5 本身没展开",640,363,"y");
+       note("⭐ 想法很朴素：没见过 ≠ 不可能，先给它留一点点余地",640,400,"d");},"<b>解决办法叫「拉普拉斯平滑」。</b><br><b>⚠ 要如实说明：Ng 在这里只点了名字，明确说留到下一讲再讲，L5 本身没有展开。</b>这里给你一句话的预告，<b>细节等 L6。</b><br><b>做法出人意料地简单：算那个比值的时候，分子加 1，分母加上类别的个数。</b><br><b>效果是：任何事件的概率都不会正好是 0，只会是一个很小的数。</b>这样<b>连乘就不会被一个 0 毁掉</b>。<br><b>⭐ 想法本身很朴素：没见过不等于不可能，所以先给它留一点点余地。</b><br><b>⚠ 这个「给没见过的事留余地」的思路，在机器学习里到处都是。</b>");
+  SUM(4665,23,{h:"⚠ 零概率问题：一个 0 毁掉整个连乘",k:"<b>训练集没见过的词 ⇒ 概率估成 0 ⇒ 连乘整个变 0</b>。<b>两类都是 0 就没法比</b>。Ng 说这是该算法<b>最大的问题</b>。",m:"⚠ 根本毛病：<b>「没见过」不等于「不可能」</b>——把没观察到的事件估成 0 是<b>对有限数据过于自信</b>。",w:"<b>解决办法叫拉普拉斯平滑</b>：<b>分子加 1，分母加类别数</b> ⇒ 任何概率都不会正好是 0。",e:"⚠ <b>Ng 明确说这部分留到下一讲，L5 本身没展开</b>——细节见 L6。"});
+  QUIZ(4665,23,{t:"朴素贝叶斯遇到训练集中没出现过的词会怎样？",o:["该词概率被估成 0，使整个连乘变成 0；若两类都是 0 就完全无法比较","算法报错退出","概率被估成 0.5","自动忽略该词"],a:0,w:"⚠ 根本毛病是<b>「没见过」≠「不可能」</b>。解决办法是<b>拉普拉斯平滑</b>（分子加 1、分母加类别数），<b>Ng 留到了下一讲</b>。"});
+});
+KP("完 · 换一种思路做分类",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L5 · 完","生成式学习：GDA 与朴素贝叶斯","下一讲：拉普拉斯平滑与 SVM");},
+    "收一下这一讲。<b>核心只有一个思路上的切换。</b><br><b>⭐ 两种思路</b>：<b>判别式</b>（逻辑回归）<b>直接学 P(y|x)</b>——只找分界线，<b>从不问「正类长什么样」</b>；<b>生成式</b><b>学 P(x|y)</b>——<b>方向反过来</b>，给每一类各描一个模子，新样本来了问「你更像谁」。比方：前者只找两种语言的<b>区别</b>，后者<b>把两种语言都学会</b>。<br><b>翻回来靠贝叶斯公式</b>：P(y|x) ∝ <b>P(x|y)·P(y)</b>，<b>「像不像」乘「常不常见」</b>。⭐ 先验的意义是——<b>罕见的事需要更强的证据</b>。⚠ <b>比大小时分母 P(x) 可以丢掉</b>（两类除的是同一个数），<b>但要报出具体概率值就得算</b>。<br><b>GDA</b>：µ 从一个数变成<b>向量</b>，σ² 变成 <b>n×n 的协方差矩阵 Σ</b>——<b>对角元素管各方向多胖，离轴元素管两个特征的关联</b>（正⇒同大同小、负⇒一大一小、0⇒不相干；<b>矩阵必然对称</b>）。模型三句话、四组参数 <b>φ µ₀ µ₁ Σ</b>，<b>⭐ 两类共用同一个 Σ</b>（两个椭圆形状朝向相同、只是中心不同）。<b>参数全是数数和求平均，一遍扫完，没有迭代没有学习率</b>。<br><b>⭐⭐ 两个最该记的结论</b>：① <b>决策边界是直线</b>，因为<b>共用 Σ 让取对数后的二次项两边相同、相减抵消，只剩一次项</b>（各有各的 Σ 就是 QDA，边界是弯的）；② <b>把 GDA 的假设代进贝叶斯公式整理，P(y=1|x) 正好是 sigmoid</b>——<b>我们从没假设过 sigmoid</b>。⚠ <b>但箭头单向</b>：后验是 sigmoid 推不出 x|y 是高斯（泊松也能推出 sigmoid）⇒ <b>GDA 的假设更强</b>。<br><b>⇒ 怎么选</b>：<b>假设越强，猜对了赚得越多，猜错了亏得越惨</b>。数据确实近似高斯且样本少 ⇒ GDA 更省数据；<b>拿不准或样本多 ⇒ 逻辑回归更稳</b>。<br><b>朴素贝叶斯</b>（离散特征）：<b>词典 + 0/1 向量</b>（⚠ 丢掉了词频和词序）→ <b>⚠ 参数爆炸 2^10000−1</b> → <b>★ 条件独立假设</b>：已知类别后各词互不影响 ⇒ <b>连乘 ⇒ 参数降到 2×10000</b>。⚠ <b>这个假设明显是错的</b>（词之间当然相关，「朴素」就是这么来的），<b>但实践效果出奇地好</b>——因为我们只要「谁更大」，<b>偏差在两边同时存在、比较时相当程度抵消</b>。<br><b>⚠ 最后撞上的墙</b>：<b>训练集没见过的词概率估成 0，一个 0 毁掉整个连乘</b>，两类都是 0 就没法比。根本毛病是<b>「没见过」不等于「不可能」</b>。<b>⭐ 解决办法叫拉普拉斯平滑（分子加 1、分母加类别数），Ng 明确说留到下一讲——这一讲没展开。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

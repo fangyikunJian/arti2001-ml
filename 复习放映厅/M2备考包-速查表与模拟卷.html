@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARTI2001 Module 2 备考包 · 速查表与模拟卷</title>
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --panel2:#FAF8F4; --sunken:#EDEAE3;
+  --line:#E3DFD6; --line2:#D2CCC0;
+  --ink:#23272C; --ink2:#111417; --dim:#616973; --dimmer:#656A73;
+  --blue:#1C6AA6; --green:#0E7355; --yellow:#845808; --coral:#B23540; --violet:#6A4BA3;
+  --navbg:rgba(245,243,238,.93); --eqink:#1E2833;
+  --tblue:rgba(28,106,166,.10); --tgreen:rgba(14,115,85,.10);
+  --tyellow:rgba(150,101,11,.12); --tcoral:rgba(178,53,64,.10);
+  --tviolet:rgba(106,75,163,.11); --tdim:rgba(97,105,115,.08);
+  --stripe:rgba(60,54,44,.022);
+  --shadow:0 1px 2px rgba(40,34,20,.05), 0 6px 18px rgba(40,34,20,.05);
+
+  --cjk:"PingFang SC","Microsoft YaHei","微软雅黑",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+}
+:root[data-theme="dark"]{
+  --bg:#080B11; --panel:#101724; --panel2:#0C1320; --sunken:#0A0E14;
+  --line:#1E2836; --line2:#2A3546;
+  --ink:#F0F4FA; --ink2:#FFFFFF; --dim:#98A6BA; --dimmer:#78849A;
+  --blue:#54A9F7; --green:#5BDDA8; --yellow:#FFD36E; --coral:#FF7C87; --violet:#B48BF5;
+  --navbg:rgba(8,11,17,.94); --eqink:#DCE6F2;
+  --tblue:rgba(84,169,247,.14); --tgreen:rgba(91,221,168,.14);
+  --tyellow:rgba(255,211,110,.15); --tcoral:rgba(255,124,135,.16);
+  --tviolet:rgba(180,139,245,.15); --tdim:rgba(147,161,181,.13);
+  --stripe:rgba(255,255,255,.012);
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--cjk);
+  font-size:15px;line-height:1.78}
+.wrap{max-width:1060px;margin:0 auto;padding:30px 24px 100px}
+
+nav{position:sticky;top:0;z-index:20;background:var(--navbg);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:9px 0;margin-bottom:26px}
+nav .in{max-width:1060px;margin:0 auto;padding:0 24px;display:flex;flex-wrap:wrap;gap:6px}
+nav a{color:var(--dim);text-decoration:none;font-size:12.5px;padding:4px 10px;
+  border:1px solid var(--line);border-radius:99px;white-space:nowrap}
+nav a:hover{color:var(--blue);border-color:var(--blue)}
+nav button{background:var(--yellow);color:#111;border:0;border-radius:99px;
+  font:600 12.5px var(--cjk);padding:5px 14px;cursor:pointer;margin-left:auto}
+
+h1{font-size:28px;margin:0 0 4px;font-weight:690}
+h1 span{color:var(--blue)}
+.sub{color:var(--dim);font-size:14px;margin-bottom:22px}
+h2{font-size:20px;margin:42px 0 4px;font-weight:670;padding-top:8px;
+  border-top:1px solid var(--line)}
+h2 em{font-style:normal;color:var(--dimmer);font-size:12.5px;font-family:var(--mono);
+  font-weight:400;margin-left:9px}
+h3{font-size:15.5px;margin:22px 0 7px;color:var(--yellow);font-weight:650}
+p{margin:9px 0}
+.lead{color:var(--dim);font-size:13.5px;margin-bottom:14px}
+
+.box{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+  padding:15px 19px;margin:13px 0}
+.box.g{border-left:3px solid var(--green)}
+.box.y{border-left:3px solid var(--yellow)}
+.box.r{border-left:3px solid var(--coral)}
+.box.b{border-left:3px solid var(--blue)}
+.vid{display:inline-block;margin:8px 0 0;font-size:13px;line-height:1.5;
+  color:var(--violet);background:var(--tviolet);border-radius:7px;
+  padding:4px 10px;text-decoration:none}
+.vid:hover{text-decoration:underline}
+.box.v{border-left:3px solid var(--violet)}
+.box .h{font-weight:650;margin-bottom:6px}
+
+table{width:100%;border-collapse:collapse;margin:11px 0;font-size:13.5px}
+th,td{text-align:left;padding:8px 11px;border:1px solid var(--line);vertical-align:top}
+th{background:var(--panel2);color:var(--dim);font-weight:620;font-size:12.5px}
+td b{color:var(--ink)}
+tr:nth-child(even) td{background:var(--stripe)}
+
+code{font-family:var(--mono);font-size:13px;background:var(--sunken);border:1px solid var(--line);
+  border-radius:4px;padding:1px 6px;color:var(--green)}
+.eq{font-family:var(--mono);font-size:14px;background:var(--sunken);border:1px solid var(--line);
+  border-radius:8px;padding:11px 15px;margin:10px 0;color:var(--eqink);overflow-x:auto;
+  white-space:pre-wrap;line-height:1.95}
+.eq b{color:var(--yellow);font-weight:600}
+
+ul,ol{margin:9px 0;padding-left:23px}
+li{margin-bottom:6px}
+.k{color:var(--green);font-weight:600}
+.w{color:var(--coral);font-weight:600}
+.n{color:var(--yellow);font-weight:600}
+s{color:var(--coral);opacity:.85}
+
+details{background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  padding:11px 16px;margin:9px 0}
+details summary{cursor:pointer;font-weight:620;color:var(--green);font-size:13.5px;outline:none}
+details[open] summary{margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:7px}
+
+.q{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:14px 18px;margin:11px 0}
+.q .n{font-family:var(--mono);color:var(--blue);font-weight:700;margin-right:7px}
+.q .stem{font-weight:560;margin-bottom:8px}
+.q ol{margin:6px 0 0;padding-left:26px}
+.q ol li{margin-bottom:3px;color:var(--dim)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+
+a{color:var(--blue)}
+a:hover{opacity:.78}
+.pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:1px 8px;
+  border-radius:99px;background:none;border:1px solid currentColor;
+  color:var(--blue);margin-right:6px}
+.pill.t2{background:none;color:var(--green)}
+.pill.t3{background:none;color:var(--violet)}
+
+@media print{
+  nav{display:none}
+  body{background:#fff;color:#111;font-size:10.5pt;line-height:1.5}
+  .wrap{max-width:none;padding:0}
+  h1{font-size:19pt} h2{font-size:14pt;margin:16pt 0 3pt;border-top:1px solid #bbb;
+    break-after:avoid}
+  h3{font-size:11.5pt;color:#7a5a00;margin:10pt 0 3pt;break-after:avoid}
+  .sub,.lead{color:#555}
+  .box{background:#f7f7f7;border:1px solid #ccc;padding:7pt 10pt;margin:6pt 0;
+    break-inside:avoid;border-radius:4pt}
+  .box.g{border-left:2.5pt solid #1a7f5a} .box.y{border-left:2.5pt solid #a37400}
+  .box.r{border-left:2.5pt solid #b3343f} .box.b{border-left:2.5pt solid #1f6fb2}
+  .box.v{border-left:2.5pt solid #6a49a8}
+  table{font-size:9pt;break-inside:avoid} th{background:#eee;color:#333}
+  td,th{border:1px solid #bbb;padding:4pt 6pt} tr:nth-child(even) td{background:#fafafa}
+  code,.eq{background:#f2f2f2;border:1px solid #ccc;color:#111;font-size:9pt}
+  .eq{white-space:pre-wrap;padding:6pt 9pt;line-height:1.55} .eq b{color:#7a5a00}
+  .k{color:#1a7f5a} .w{color:#b3343f} .n{color:#8a6000} s{color:#b3343f}
+  details{border:1px solid #ccc;background:#fafafa;break-inside:avoid;padding:6pt 10pt}
+  details summary{color:#1a7f5a} details:not([open]) > *:not(summary){display:none}
+  .q{border:1px solid #ccc;background:#fff;break-inside:avoid;padding:6pt 10pt}
+  .q .n{color:#1f6fb2} .q ol li{color:#333}
+  .pill{border:1px solid #999;background:none;color:#333}
+  a{color:#111;text-decoration:none}
+  .noprint{display:none}
+}
+
+/* ══ 双主题补丁 ══ */
+html{color-scheme:light dark}
+:root:not([data-theme="dark"]) .box,
+:root:not([data-theme="dark"]) .card,
+:root:not([data-theme="dark"]) .q,
+:root:not([data-theme="dark"]) details{box-shadow:var(--shadow)}
+:root:not([data-theme="dark"]) nav button{color:#fff}
+#themeBtn{background:var(--sunken);border:1px solid var(--line);border-radius:99px;
+  color:var(--dim);font:13px var(--cjk);padding:5px 12px;cursor:pointer;min-width:34px}
+#themeBtn:hover{color:var(--blue);border-color:var(--blue)}
+</style>
+</head>
+<body>
+
+<nav><div class="in">
+  <a href="#plan">计划</a><a href="#pace">配速</a>
+  <a href="#t1">T1 PCA</a><a href="#t2">T2 聚类</a><a href="#t3">T3 GMM</a>
+  <a href="#ev">评估证据</a><a href="#api">sklearn</a><a href="#en">英文句库</a>
+  <a href="#trap">陷阱</a><a href="#tpl">答题模板</a><a href="#off">加练</a><a href="#mcq">模拟·选择</a><a href="#erq">模拟·大题</a>
+  <button id="themeBtn" title="切换主题">☾</button>
+  <button onclick="window.print()">打印</button>
+</div></nav>
+
+<div class="wrap">
+
+<h1>Module 2 <span>备考包</span></h1>
+<div class="sub">无监督学习 · PCA / 聚类 / GMM —— 速查表 · 答题模板 · 整卷模拟</div>
+
+<div class="box y">
+  <div class="h">这份包怎么用</div>
+  <p><b>考试是开卷的</b>，所以决定分数的不是「记得多少」，而是<b>在 110 分钟里翻不翻得到</b>。
+  用法：<span class="k">① 速查表打印出来</span>，按 T1/T2/T3 三栏贴标签；
+  <span class="k">② 答题模板背成条件反射</span>，四类大题各一套句式；
+  <span class="k">③ 模拟卷限时做一遍</span>，做完再看答案。</p>
+  <p class="lead" style="margin-bottom:0">考试：Week 9（10 月 12–18 日）practical 课时 · <b>110 分钟</b> ·
+  20 选择 ×3 分 + 4 大题 ×10 分 · 开卷、可带任意纸质材料 · 只能用普通非编程非图形科学计算器。</p>
+</div>
+
+<h2 id="plan">两周计划 <em>不绑日历，按块推进</em></h2>
+<p class="lead">离考试约两周。下面按「块」排，你可以一天做一块，也可以两天做一块——但<b>顺序别换</b>，后面的块依赖前面的。</p>
+
+<table>
+<tr><th style="width:74px">块</th><th>做什么</th><th>产出</th></tr>
+<tr><td><b>① 通读</b></td>
+    <td>把三份<b>逐页精读</b>走完（T1 18 页 / T2 16 页 / T3 16 页），每页那道题都答。不懂的先标记，不停下来。</td>
+    <td>错题本里自动攒出你的薄弱页</td></tr>
+<tr><td><b>② 补洞</b></td>
+    <td>只看错题本标出来的页。PCA 的推导配<b>放映厅深度片</b>和<b>短片①</b>；聚类和 GMM 先看 <code>M2讲义/</code> 里对应的 txt（比 PPT 深得多），再用<b>短片②③④</b>把 k-means、DBSCAN、EM 各看一遍动的。</td>
+    <td>薄弱页清零</td></tr>
+<tr><td><b>③ 手算</b></td>
+    <td><b>四类手算各练三遍</b>（换数字）：PCA 全链路 / k-means 一轮 / DBSCAN 判角色 / GMM 责任度+M步。用本包速查表里的算例先对一遍答案。</td>
+    <td>四类都能 10 分钟内做完</td></tr>
+<tr><td><b>④ 三份 Tutorial</b></td>
+    <td>把 T1、T2 的 tutorial <b>盖住答案重做</b>（题目卷已下载）。T3 的答案 Canvas 还没发，先做 <code>M2 T3 Prac.ipynb</code> 里的 Q4（手写一轮 E/M step）。</td>
+    <td>官方题型全过一遍</td></tr>
+<tr><td><b>⑤ 写作</b></td>
+    <td>练<b>答题四步</b>：报结果 → 解释 → 证据 → 局限。拿本包的四套模板，各写两道。英文句库抄熟。</td>
+    <td>大题不再只写数字</td></tr>
+<tr><td><b>⑥ 模拟</b></td>
+    <td>本包模拟卷，<b>严格计时 110 分钟</b>，只带你打印的速查表。做完批改，统计哪一类丢分最多。</td>
+    <td>知道自己的实际配速</td></tr>
+<tr><td><b>⑦ 定稿</b></td>
+    <td>按模拟暴露的问题改速查表，<b>打印定稿</b>，贴索引标签。考前只看速查表和陷阱清单。</td>
+    <td>带进考场的那一叠</td></tr>
+</table>
+
+<h2 id="pace">考场配速与开卷打法</h2>
+<div class="grid2">
+<div class="box b">
+  <div class="h">110 分钟怎么分</div>
+  <table style="margin:4px 0">
+    <tr><td><b>选择题 20 道</b></td><td class="k">30 分钟</td><td>≈1.5 分钟/题</td></tr>
+    <tr><td><b>大题 4 道</b></td><td class="k">60 分钟</td><td>≈15 分钟/题</td></tr>
+    <tr><td><b>检查</b></td><td class="k">20 分钟</td><td>算错 + 漏签名</td></tr>
+  </table>
+  <p style="margin-bottom:0;font-size:13px;color:var(--dim)">剩 15 分钟时会有提醒。到点没做完的大题，
+  <b>先把「解释 + 局限」那两句写上</b>——那是能独立拿分的。</p>
+</div>
+<div class="box r">
+  <div class="h">开卷考的四条打法</div>
+  <ol style="margin-bottom:0">
+    <li><b>速查表要有索引，不是笔记堆。</b>三栏分色、每栏顶部写一行目录，翻页不超过 5 秒。</li>
+    <li><b>选择题别翻书。</b>1.5 分钟的预算翻一次书就没了。翻书只留给大题的公式核对。</li>
+    <li><b>大题一定写中间步骤。</b>「报出结果 → 解释」之间的那几步就是分。</li>
+    <li><b>每一问都要有「所以呢」。</b>算完一个数字，补一句它<b>说明什么</b>、一句它<b>不能证明什么</b>。</li>
+  </ol>
+</div>
+</div>
+
+<div class="box y">
+  <div class="h">⚠️ 送命细节</div>
+  <p style="margin:0"><b>每一页都要写全名</b>（不只第一页，附加答题纸也要）· 交卷时<b>出示学生证</b>并在签到表<b>签名</b> ·
+  计算器不能有通信/存储/编程/符号运算功能 · 手机智能表必须关机放在座位外。</p>
+</div>
+
+<!-- ══════════════════ T1 ══════════════════ -->
+<h2 id="t1">T1 · PCA 与降维 <em>速查</em></h2>
+
+<h3>整条计算链（手算大题就考这个）</h3>
+<div class="eq">① 均值      <b>μ</b> = 每一列的平均              自检：算完两个数就停下核对
+② 中心化    <b>Xc = X − μ</b>（逐行减）           <b>自检：Xc 每一列加起来 = 0</b>
+③ 散布阵    <b>S = Xcᵀ Xc</b>                    对称；对角线 = 各列平方和
+   协方差    <b>Cov = S / (n−1)</b>               n = 观测个数
+④ 特征值    解 <b>det(S − λI) = 0</b>            <b>自检：Σλ = 迹(S)　Πλ = det(S)</b>
+⑤ 特征向量  解 <b>(S − λI)v = 0</b>，再<b>归一化 ‖v‖=1</b>
+⑥ 排序      λ 从大到小；<b>最大 λ 对应 PC1</b>
+⑦ 投影      <b>Z = Xc W</b>（一维时 z = Xc·v₁）    <b>自检：得分之和 = 0</b>
+⑧ 重构      <b>X̂ = Z Wᵀ + 1ₙ μᵀ</b>              <b>⚠ 别漏加 μ</b>
+⑨ 解释方差  <b>rⱼ = λⱼ / Σλ</b>                   分母是<b>全部</b>特征值之和</div>
+
+<div class="box g">
+  <div class="h">本课约定（Tutorial 写死的，考试按这个）</div>
+  <ul style="margin-bottom:0">
+    <li><span class="k">S = Xcᵀ Xc</span> 叫<b>散布矩阵</b>；<span class="k">Cov = S/(n−1)</span> 才叫样本协方差。<s>没除就叫协方差会被扣</s>。</li>
+    <li><b>S 与 Cov 的特征向量完全相同</b>，特征值差 (n−1) 倍，<b>解释方差比完全一样</b>。
+        ⇒ <b>手算直接用 S</b>（整数好算）；只有问「方差是多少」或要对 sklearn 的 <code>explained_variance_</code> 时才除 (n−1)。</li>
+    <li>CS229 用 <code>(1/n)Σxxᵀ</code> 且式子里没有 μ（它前一步已预处理）——<b>三种写法主方向相同</b>，别被绊倒。</li>
+    <li><b>成分的符号是任意的</b>：v 与 −v 张成同一条轴，得分整体变号，<b>子空间与重构完全不变</b>。</li>
+  </ul>
+</div>
+
+<h3>两个必须记住的算例</h3>
+<div class="grid2">
+<div class="box b">
+  <div class="h">Tutorial 原题（退化 / 秩一）</div>
+  <div class="eq" style="margin:6px 0">X = (2,3) (3,5) (0,−1) (−1,−3)
+μ = <b>(1, 1)</b>
+Xc = (1,2) (2,4) (−1,−2) (−2,−4)   ← 四点共线
+S = [[<b>10</b>, <b>20</b>], [<b>20</b>, <b>40</b>]]     Cov = S/3
+λ² − 50λ = 0 ⇒ λ = <b>50, 0</b>     （和 = 迹 50 ✓ 积 = 0 ✓）
+v₁ = <b>(1, 2)/√5</b>
+得分 = √5, 2√5, −√5, −2√5
+解释方差 = 50/50 = <b>100%</b>，重构误差 <b>0</b></div>
+  <p style="margin:0;font-size:12.8px;color:var(--dim)">⚠️ 这是<b>刻意设计的退化例子</b>（λ₂=0），一维就能完整重构。<s>别把 100% 当常态</s>。</p>
+</div>
+<div class="box v">
+  <div class="h">by-hand 公开例（非退化 / 更常考）</div>
+  <div class="eq" style="margin:6px 0">X = (−3,0) (3,0) (0,−1) (0,1)
+μ = (0,0) ⇒ Xc = X
+S = [[<b>18</b>, 0], [0, <b>2</b>]]     对角阵，λ 直接读
+Cov = S/3 ⇒ 方差 <b>6</b> 与 <b>0.667</b>
+解释方差比 = 18/20, 2/20 = <b>0.9 / 0.1</b>
+保留 PC1（水平）后：(0,±1) 都被重构到 <b>(0,0)</b>
+总平方重构误差 = 1 + 1 = <b>2</b> = 被丢的 λ₂</div>
+  <p style="margin:0;font-size:12.8px;color:var(--dim)"><b>用途</b>：证明「保住 90% 方差 ≠ 保住 90% 信息」——第二个特征的差异<b>完全消失</b>了。</p>
+</div>
+</div>
+
+<h3>为什么是特征向量（大题问「为什么选最大的 λ」时照抄）</h3>
+<div class="eq">取单位方向 v，投影得分 z = Xc v
+投影方差 = <b>vᵀ Σ v</b>
+在 ‖v‖=1 下最大化 ⇒ 拉格朗日 L = vᵀΣv − λ(vᵀv − 1)
+∂L/∂v = 2Σv − 2λv = 0  ⇒  <b>Σv = λv</b>
+代回：vᵀΣv = vᵀ(λv) = λ·vᵀv = <b>λ</b>
+⇒ <b>目标函数的值就等于特征值本身，所以挑最大的 λ</b></div>
+<div class="box g">
+  <div class="h">第二条等价推导（加分点）</div>
+  <div class="eq" style="margin:6px 0">x = (xᵀu)u + r ，且 r ⊥ u
+勾股： ‖x‖² = (xᵀu)² + ‖r‖²
+对所有点求和： <b>Σ‖x‖²（常数，与 u 无关） = Σ(xᵀu)² + Σ‖r‖²</b>
+⇒ <b>最大化投影方差 ⟺ 最小化正交重构误差</b></div>
+  <p style="margin:0;font-size:13px">被问「PCA 在优化什么」时，给出<b>两种等价表述并说明为什么等价</b>，明显高出一截。</p>
+</div>
+
+<h3>保方差 ≠ 保意义</h3>
+<ul>
+  <li><b>PCA 只用 X 拟合、不看 y</b>。高方差方向可能是<b>量纲、光照、批次效应</b>；低方差方向可能才分得开类别。</li>
+  <li>⇒ PCA 对下游<b>可能提升、可能降低、也可能没影响</b>，只能<b>在验证集上比较</b>。</li>
+  <li><b>PCA ≠ 线性回归</b>：回归有 y、最小化<b>目标方向（竖直）</b>的预测误差；PCA 无 y、最小化<b>正交（垂直）</b>重构误差。</li>
+  <li>缩放：某特征 ×c ⇒ 其方差 ×c² ⇒ <b>主方向可能整个翻转</b>。标准化后两特征方差都为 1，若协方差为 0 会出现 <b>0.5/0.5 的特征值平局</b>（PC1 方向不唯一，<s>不是「载荷均等」</s>）。</li>
+  <li><b>泄漏</b>：预测流程里<b>先划分</b>，scaler 与 PCA <b>只在训练集 fit</b>，验证/测试集只 transform。</li>
+</ul>
+
+<!-- ══════════════════ T2 ══════════════════ -->
+<h2 id="t2">T2 · 聚类：K-means 与 DBSCAN <em>速查</em></h2>
+
+<h3>K-means</h3>
+<div class="eq">目标（inertia / WCSS）  <b>J = Σᵢ ‖xᵢ − μ_c(i)‖²</b>     ← 是<b>求和</b>不是平均
+分配步  c(i) = argmin_j ‖xᵢ − μⱼ‖²      <b>可只比平方距离，不开根号</b>
+更新步  μⱼ ← 该簇所有点的<b>均值</b>（逐维平均）
+停止    分配不再变 / 质心稳定 / 到最大迭代次数</div>
+<div class="box g">
+  <div class="h">为什么一定收敛（必考问答）</div>
+  <p style="margin:0">分配步把每个点放到<b>最近</b>的质心 ⇒ J 不增；更新步用<b>均值</b>，而均值正是使簇内平方和最小的点 ⇒ J 不增。
+  两步都不增，<b>而且把 n 个点分到 k 个簇的方式只有有限多种</b> ⇒ <b>必然收敛</b>。
+  但 <span class="w">J 是非凸的</span>，收敛到的只是<b>局部极小</b> ⇒ 需要多次初始化。</p>
+</div>
+<ul>
+  <li><b>k-means++</b>：第一个质心随机取自数据，之后偏好<b>离已选质心远</b>的点 ⇒ 起点分散。</li>
+  <li><span class="w">n_init=10 是重启 10 次完整拟合、保留 inertia 最低的那次</span>，<s>不是迭代 10 轮</s>。</li>
+  <li><b>比较稳定性要比「成员」不比「标签号」</b>：标签 0/1 互换但分组相同 ⇒ 同一个解。</li>
+  <li>怕什么：<b>k 要预先给定 / 尺度 / 初始化 / 非球形 / 离群点</b>（而且每个点<b>必须</b>有标签，没有「噪声」选项）。</li>
+</ul>
+<div class="box b">
+  <div class="h">算例（一维，一轮就收敛）</div>
+  <div class="eq" style="margin:6px 0">观测 {1, 2, 8, 9}，k=2，初始质心 <b>1</b> 和 <b>8</b>
+分配：{1,2} → μ₁ ； {8,9} → μ₂
+更新：μ₁ = 1.5 ，μ₂ = 8.5
+J = (1−1.5)² + (2−1.5)² + (8−8.5)² + (9−8.5)² = <b>1</b>
+再分配一次分组不变 ⇒ <b>已收敛</b></div>
+  <a class="vid" href="短片/M2T2-②k-means迭代与局部最优.mp4">▶ 短片②（59 秒）换成二维九点三簇的另一组数：看 J 为什么<b>每个半步都不增</b>，以及换一组初始质心怎么卡在 6.5 倍的局部最优</a>
+  <div class="eq" style="margin:6px 0">稳定性对照：A(0,0) B(0,2) C(4,0) D(4,2)，k=2
+{A,B},{C,D} → 质心 (0,1) 与 (4,1) → inertia = <b>4</b>
+{A,C},{B,D} → 质心 (2,0) 与 (2,2) → inertia = <b>16</b>  ← 更差的局部解</div>
+</div>
+
+<h3>选 k 的证据</h3>
+<ul>
+  <li><b>inertia</b>：<b>全局最优</b>的 inertia 随 k 增大不会上升（k=n 时为 0）⇒ <s>不能用「最小」选 k</s>，只能看<b>肘部</b>（判断，不是规则）。⚠️ <b>实际拟合</b>的多次运行会落进不同局部极小，所以<b>观测到的</b> inertia 未必单调。</li>
+  <li><b>silhouette</b> s(i) = (b−a)/max(a,b)，范围 −1~1。<b>a</b> = 到同簇其他点的平均距离（<b>排除自己</b>）；<b>b</b> = 到<b>最近的另一个簇</b>的平均点对点距离。近 1 = 匹配好；近 0 = 边界；<b>负 = 更该属于别的簇</b>。</li>
+  <li><span class="w">silhouette 偏爱紧凑凸形簇</span>，对弯曲/密度型结构会给出误导排序。评 DBSCAN 时要<b>先排除噪声点（−1）</b>并报告排除比例。</li>
+  <li>官方决策表的形状要记住：<b>分最高但不稳定的候选会被否掉</b>，最终选多路证据一致的那个。</li>
+</ul>
+
+<h3>DBSCAN</h3>
+<div class="eq">邻域    <b>Nε(x) = { z : ‖z − x‖ ≤ ε }</b>   ⚠ <b>包含 x 自己</b>；<b>取等号也算在内</b>
+core    <b>|Nε(x)| ≥ MinPts</b>
+border  自己不够 core，但<b>落在某个 core 点的 ε 邻域内</b>
+noise   两者都不是（sklearn 标签 <b>−1</b>）
+扩张    <b>只有 core 点能扩张簇</b>；border 点加入但不再往外传</div>
+<div class="box b">
+  <div class="h">算例（一维，直接背）</div>
+  <div class="eq" style="margin:6px 0">A=0, B=0.5, C=1.0, D=3.0, E=3.4 ，<b>ε=0.6, MinPts=3</b>
+A:{A,B}=2  B:{A,B,C}=<b>3</b>  C:{B,C}=2  D:{D,E}=2  E:{D,E}=2
+⇒ <b>B 是 core</b>；<b>A、C 是 border</b>（挨着 core 点 B）；<b>D、E 是 noise</b>
+最终：簇 = <b>{A,B,C}</b>，噪声 = {D,E}</div>
+  <a class="vid" href="短片/M2T2-③DBSCAN密度判定.mp4">▶ 短片③（53 秒）演的<b>就是上面这个算例</b>：ε 窗口逐点扫过去，边扫边把这张判定表填出来</a>
+  <p style="margin:0;font-size:13px"><b>为什么先标 noise 的点会变 border</b>：噪声标签在遍历中只是<b>临时</b>的——当后来访问到的某点被认出是 core 并开始扩张时，落在它邻域里的非 core 点就被吸收为 border。</p>
+</div>
+<ul>
+  <li><b>参数怎么影响</b>：ε 太小 ⇒ 稠密区碎裂、大量点未分配；ε 太大 ⇒ 不同稠密区<b>合并</b>。MinPts 太小 ⇒ 弱模式被当成簇；太大 ⇒ 小的/低密度的真实组被丢成噪声。</li>
+  <li><span class="w">密度差异大的数据</span>用一组全局 (ε, MinPts) 描述不好——这是 DBSCAN 的主要局限。</li>
+  <li><b>先缩放，再选 ε</b>：ε 的数值含义完全取决于特征单位。</li>
+  <li><b>−1 不等于「异常」</b>：它只表示「在当前设置下没被分进任何稠密区」，不是数据错误的证据。</li>
+  <li><b>border 点的归属可能取决于遍历顺序</b>（若同时够得着两个簇）；core 点组成的连通块才是稳定的。</li>
+</ul>
+
+<h3>两个算法对比（Q3 型大题直接套）</h3>
+<table>
+<tr><th>问题</th><th>K-means</th><th>DBSCAN</th></tr>
+<tr><td>必须指定的参数</td><td><b>簇数 k</b></td><td><b>eps 与 min_samples</b></td></tr>
+<tr><td>典型几何</td><td>紧凑、凸形、以质心为中心</td><td>连通的稠密区，<b>可以是弯曲形状</b></td></tr>
+<tr><td>未分配观测</td><td><b>没有</b>，每点必有标签</td><td><b>有</b>，稀疏点记 −1</td></tr>
+<tr><td>主要敏感性</td><td>初始化、k、离群点、尺度</td><td>邻域参数、<b>密度差异</b>、尺度</td></tr>
+<tr><td>优化目标</td><td>最小化 WCSS</td><td><b>没有全局目标函数</b>，是密度连通的定义</td></tr>
+</table>
+
+<!-- ══════════════════ T3 ══════════════════ -->
+<h2 id="t3">T3 · 高斯混合模型与 EM <em>速查</em></h2>
+
+<h3>模型与责任度</h3>
+<div class="eq">一维高斯  <b>N(x | μ, σ²) = 1/√(2πσ²) · exp( −(x−μ)² / (2σ²) )</b>
+混合密度  <b>p(x) = Σₖ πₖ N(x | μₖ, Σₖ)</b>    πₖ ≥ 0 ，<b>Σₖ πₖ = 1</b>
+责任度    <b>rᵢₖ = πₖ N(xᵢ|μₖ,Σₖ) ÷ Σⱼ πⱼ N(xᵢ|μⱼ,Σⱼ)</b>
+          分母就是混合密度 p(xᵢ)   ⇒  <b>自检：Σₖ rᵢₖ = 1</b></div>
+<div class="box r">
+  <div class="h">三个必须分清的量</div>
+  <p style="margin:0"><b>密度</b>＝曲线的<b>高度</b>（<b>可以大于 1</b>，p(x) ≠ P(X=x)，后者恒为 0）；
+  <b>概率</b>＝曲线下的<b>面积</b>；<b>责任度</b>＝<b>概率</b>（0~1 且对成分求和为 1）。混淆这三个是最常见失分。</p>
+</div>
+
+<h3>EM 两步</h3>
+<div class="eq"><b>E 步</b>：参数固定 → 算责任度 rᵢₖ
+<b>M 步</b>：责任度固定 → 更新参数
+  有效计数  <b>Nₖ = Σᵢ rᵢₖ</b>       （<b>分数</b>，可非整数；<b>Σₖ Nₖ = n</b>）
+  权重      <b>πₖ ← Nₖ / n</b>
+  均值      <b>μₖ ← (Σᵢ rᵢₖ xᵢ) / Nₖ</b>          ⚠ 分母是 <b>Nₖ</b>，不是 n
+  方差      <b>σ²ₖ ← (Σᵢ rᵢₖ (xᵢ − μₖ^new)²) / Nₖ</b>
+            ⚠ 用<b>刚更新的新均值</b>，但用<b>同一轮的旧责任度</b>；<b>除 Nₖ 不是 Nₖ−1</b>（极大似然）</div>
+<ul>
+  <li>EM 每轮<b>不降低</b>对数似然，但会停在<b>局部最优</b> ⇒ 多次初始化。</li>
+  <li><b>为什么要这样交替</b>：直接 MLE 会得到 <code>log Σₖ πₖN(...)</code>——log 里套求和，没有闭式解。EM 用 Jensen 不等式造下界：<b>E 步挑 Q 让下界在当前参数处取等，M 步最大化下界</b>，所以真似然只能升不能降。<span style="color:var(--dim)">（考纲：会用 E/M 步即可，<b>收敛性证明不考</b>）</span></li>
+  <li><b>初始化必须打破对称</b>：两个成分若初始化成完全相同的参数，责任度恒为 0.5、更新后仍然相同，<b>永远分不开</b>。</li>
+</ul>
+
+<div class="box b">
+  <div class="h">两个必背算例</div>
+  <div class="eq" style="margin:6px 0"><b>责任度</b>：π=(0.7, 0.3)，某点 x 处成分密度 = 0.2420 与 0.0540
+加权贡献：0.7×0.2420 = <b>0.1694</b> ； 0.3×0.0540 = <b>0.0162</b>
+混合密度：0.1694 + 0.0162 = <b>0.1856</b>
+责任度：  0.1694/0.1856 = <b>0.913</b> ； 0.0162/0.1856 = <b>0.087</b>   （和 = 1 ✓）</div>
+  <div class="eq" style="margin:6px 0"><b>M 步</b>：观测 −2, 0, 3 ；成分 1 的责任度 0.9, 0.6, 0.1
+N₁ = 0.9+0.6+0.1 = <b>1.6</b>        （N₂ = 1.4，和 = 3 ✓）
+π₁ = 1.6/3 ≈ <b>0.533</b>
+μ₁ = (0.9·(−2) + 0.6·0 + 0.1·3) / 1.6 = −1.5/1.6 = <b>−0.9375</b>
+   ⚠ 0 那个观测对<b>分子贡献 0，但仍进入分母</b>；<s>除以 3 是错的</s>
+σ²₁ = (0.9·(−1.0625)² + 0.6·(0.9375)² + 0.1·(3.9375)²) / 1.6 = <b>1.93359375</b></div>
+  <a class="vid" href="短片/M2T3-④EM软分配.mp4">▶ 短片④（49 秒）用另一组数（x = ∓1）把<b>一整轮 E + M 走完</b>：责任度 0.881/0.119 怎么从两条曲线的高度来、M 步后 μ 内移 σ² 收窄、对数似然 ℓ 为什么必定上升</a>
+</div>
+
+<div class="box y">
+  <div class="h">⭐ 官方 T3 Tutorial 原题与答案（2026-10-07 Canvas 发布，数字已逐个复核）</div>
+  <div class="eq" style="margin:6px 0"><b>Q1</b>　π=(0.6, 0.4)，两点处的成分密度已给：
+　　　　x_A：N₁=0.30, N₂=0.10　　x_B：N₁=0.12, N₂=0.18
+加权贡献　x_A：0.6×0.30=<b>0.18</b>，0.4×0.10=<b>0.04</b>　⇒　p(x_A)=<b>0.22</b>
+　　　　　x_B：0.6×0.12=<b>0.072</b>，0.4×0.18=<b>0.072</b>　⇒　p(x_B)=<b>0.144</b>
+⇒ <b>x_A 总密度更大</b>（0.22&gt;0.144）；<b>x_B 更含糊</b>——两个加权贡献<b>完全相等</b>，谁也不占优
+⚠ 「密度大」和「归属含糊」是<b>两件独立的事</b>，这题故意分开考</div>
+  <div class="eq" style="margin:6px 0"><b>Q2</b>　γ(x_A)=(0.18/0.22, 0.04/0.22)=<b>(0.818, 0.182)</b>　γ(x_B)=<b>(0.5, 0.5)</b>
+<b>第 3 问最值钱</b>：把权重换成 π=(0.2, 0.8)，<b>成分密度一个字不改</b>
+　　0.2×0.30=<b>0.06</b>，0.8×0.10=<b>0.08</b>　⇒　p=0.14　⇒　γ=<b>(0.429, 0.571)</b>
+⇒ <b>最大责任从成分 1 翻到成分 2</b>。官方理由照抄：<b>责任度由「成分密度」与「先验权重」共同决定，
+　 成分 2 更大的先验压过了它在 x_A 处更低的密度。</b></div>
+  <div class="eq" style="margin:6px 0"><b>Q3</b>　x = −4, −1, 2, 5；r₁ = 0.9, 0.7, 0.2, 0.1
+<b>错法</b>：μₖ = Σᵢrᵢₖxᵢ / <b>4</b>　——分母用了观测总数
+<b>对法</b>：分母必须是<b>该成分自己的有效计数 Nₖ = Σᵢrᵢₖ</b>
+　N₁=<b>1.9</b>，N₂=<b>2.1</b>（相加=4 可自查）　π=(<b>0.475</b>, <b>0.525</b>)
+　μ₁ = −3.4/1.9 ≈ <b>−1.789</b>　　μ₂ = 5.4/2.1 ≈ <b>2.571</b>
+⚠ 若错用分母 4：μ₁ = <b>−0.85</b>，被硬生生<b>拉向 0</b>，两个成分挤到一起</div>
+  <div class="eq" style="margin:6px 0"><b>扩展（抽样）</b>　π₁=0.7 配 N(−3,1)，π₂=0.3 配 N(3,<b>2</b>)；抽到 u=0.85、z=−0.5
+u=0.85 &gt; 0.7 ⇒ <b>选成分 2</b>；注意第二个参数是<b>方差</b> ⇒ σ=√2
+x = μ + σz = 3 + √2×(−0.5) ≈ <b>2.293</b>　　⚠ 别把方差当标准差直接用</div>
+</div>
+
+<div class="box r">
+  <div class="h">⚠ 讲师共性反馈点名的 M 步方差陷阱（极具体，值得单独记）</div>
+  <p style="margin:0"><b>先对「更新后的均值」算离差、再平方，然后才用责任度加权</b> ——
+  原话 <em>first square the deviations from the <b>updated</b> mean, then weight those squared
+  deviations by responsibilities</em>。<br>
+  <b>把责任度放进平方里面</b>（写成 Σ(rᵢₖ(xᵢ−μ))² 之类）<b>得到的是另一个、错误的更新式</b>。
+  反馈还补了一句：<b>和为 1 之类的自查有用，但抓不出参数公式里的每一种错。</b></p>
+</div>
+
+<h3>模型选择</h3>
+<div class="eq"><b>AIC = −2 log L + 2p</b>        <b>BIC = −2 log L + p · log n</b>
+一维 K 成分（每成分一个方差）： <b>p = (K−1) + K + K = 3K − 1</b>
+                               权重 K−1 个自由度（须和为 1）+ K 个均值 + K 个方差
+<b>越低越好</b>；BIC 惩罚更重（含 log n），样本越大越偏向简单模型</div>
+<ul>
+  <li><span class="w">AIC 只能和 AIC 比，BIC 只能和 BIC 比</span>，而且必须<b>同一份数据、同一套特征</b>。<s>不要把 AIC 值和 BIC 值直接比大小</s>。</li>
+  <li><b>训练对数似然随复杂度上升</b> ⇒ 不能单独用它选 K。</li>
+  <li>标准表述：<b>「在这些候选中 K=k 在拟合与复杂度间取得最好平衡；但这不证明总体存在 k 个自然分组，也不证明高斯成分有科学意义。」</b></li>
+</ul>
+
+<h3>其它高频点</h3>
+<table>
+<tr><th>点</th><th>要点</th></tr>
+<tr><td><b>协方差类型</b></td><td><b>spherical</b> 圆（一个方差）· <b>diag</b> 轴对齐椭圆（不能倾斜）· <b>tied</b> 所有成分<b>共用同一形状</b>（只有中心不同）· <b>full</b> 各自可有不同大小、拉伸与<b>倾斜</b>。<b>需要不同倾斜方向 → 只能 full</b>。</td></tr>
+<tr><td><b>等密度轮廓</b></td><td>图上的椭圆是<b>成分的等密度线</b>，<s>不是簇的分界线</s>，也不是「包住所有点」的范围。</td></tr>
+<tr><td><b>混合的均值与方差</b></td><td><b>E[X] = Σπₖμₖ</b>；<b>Var(X) = Σπₖσ²ₖ（组内） + [Σπₖμ²ₖ − (Σπₖμₖ)²]（组间）</b>。<span class="w">不等于成分方差的加权平均</span>——成分再窄，中心离得远整体方差也大。</td></tr>
+<tr><td><b>权重 vs 责任度</b></td><td>权重 πₖ 是<b>先验</b>（该成分占概率质量的比例）；责任度是<b>后验</b>。<b>权重大 ≠ 责任度大</b>——责任度 ∝ 先验 × 该点密度。</td></tr>
+<tr><td><b>成分数 vs 峰数</b></td><td>重叠很多的两个成分可以合成<b>一个宽单峰</b> ⇒ <s>「图上两个峰所以 K=2」不成立</s>。</td></tr>
+<tr><td><b>与 k-means</b></td><td>k-means = <b>硬</b>分配、优化 WCSS、球形距离；GMM = <b>软</b>责任度、优化<b>似然</b>、可用协方差表达形状与朝向。<b>GMM 不是「更高级的 k-means」</b>。</td></tr>
+</table>
+
+<!-- ══════════════════ 评估 ══════════════════ -->
+<h2 id="ev">跨主题 · 评估无监督结果 <em>官方标注 Core and assessable</em></h2>
+<div class="box y">
+  <div class="h">四类证据框架（大题骨架，逐条点名）</div>
+  <table style="margin:6px 0 0">
+  <tr><th style="width:150px">证据</th><th>要问什么</th><th>例子</th></tr>
+  <tr><td><b>拟合 / 内部结构</b></td><td>模型有没有抓到它该抓的结构？</td><td>解释方差、重构误差、inertia、silhouette、似然、AIC/BIC</td></tr>
+  <tr><td><b>稳定性</b></td><td>小改动会不会翻盘？</td><td>换种子、换初始化、重采样、邻近超参</td></tr>
+  <tr><td><b>假设与表示</b></td><td>距离、尺度、形状、分布假设合不合理？</td><td>特征缩放、簇几何、密度、协方差形式、噪声处理</td></tr>
+  <tr><td><b>领域有用性</b></td><td>它回答了那个真问题没有？</td><td>投影可读、分组可行动、成分讲得通、专家认可</td></tr>
+  </table>
+</div>
+<div class="box r">
+  <div class="h">必背原则</div>
+  <p style="margin:0"><b>一个高分不能单独证明</b>某个嵌入 / 簇 / 成分对应真实世界的东西。
+  评估文档原话：<b>a correct final number alone may not demonstrate the required understanding</b>。
+  <span class="w">只报数字最多拿一半分。</span></p>
+</div>
+
+<!-- ══════════════════ sklearn ══════════════════ -->
+<h2 id="api">sklearn 速查 <em>考概念，不考写码</em></h2>
+<table>
+<tr><th style="width:160px">对象</th><th>属性 / 方法</th><th>含义</th></tr>
+<tr><td rowspan="5"><b>PCA</b></td><td><code>mean_</code></td><td>拟合时学到的特征均值，投影前被减掉</td></tr>
+<tr><td><code>components_</code></td><td><b>每一行是一个主方向</b>（原特征坐标）</td></tr>
+<tr><td><code>explained_variance_</code></td><td>各成分的<b>方差</b>（协方差的特征值）</td></tr>
+<tr><td><code>explained_variance_ratio_</code></td><td>占总方差的<b>比例</b>（带 _ratio_ 的才是比例）</td></tr>
+<tr><td><code>transform</code> / <code>inverse_transform</code></td><td>得分 Z / 重构回原空间（<b>均值已替你加回</b>）</td></tr>
+<tr><td rowspan="4"><b>KMeans</b></td><td><code>n_clusters</code></td><td>k，必须预先指定</td></tr>
+<tr><td><code>init="k-means++"</code>, <code>n_init=10</code></td><td><b>重启次数</b>，保留 inertia 最低的一次</td></tr>
+<tr><td><code>inertia_</code></td><td>拟合出的 WCSS</td></tr>
+<tr><td><code>cluster_centers_</code> / <code>labels_</code></td><td>质心（<b>在缩放后的空间</b>）/ 任意编号的标签</td></tr>
+<tr><td rowspan="3"><b>DBSCAN</b></td><td><code>eps</code>, <code>min_samples</code></td><td>ε 与 MinPts（<b>min_samples 含点自身</b>）</td></tr>
+<tr><td><code>labels_</code></td><td><b>−1 = 噪声</b>；簇数 = 去掉 −1 后不同标签数</td></tr>
+<tr><td><code>core_sample_indices_</code></td><td>核心点下标；非核心且非 −1 的即 border</td></tr>
+<tr><td rowspan="5"><b>GaussianMixture</b></td><td><code>n_components</code>, <code>covariance_type</code></td><td>K 与 spherical/diag/tied/full</td></tr>
+<tr><td><code>weights_</code>, <code>means_</code>, <code>covariances_</code></td><td>π、μ、Σ（一维时 covariances_ 存<b>方差</b>）</td></tr>
+<tr><td><code>predict_proba</code></td><td><b>责任度</b>（每行和为 1）——保留不确定性</td></tr>
+<tr><td><code>predict</code></td><td>硬标签，<b>丢掉不确定性</b></td></tr>
+<tr><td><code>score_samples</code> / <code>bic()</code> / <code>aic()</code></td><td>对数混合密度 / 模型比较</td></tr>
+<tr><td><b>StandardScaler</b></td><td><code>fit_transform</code> vs <code>transform</code></td><td><b>训练集 fit，测试集只 transform</b>（防泄漏）</td></tr>
+</table>
+<p class="lead">⚠️ 常见混淆：<code>n_init</code> 是<b>重启次数</b>不是迭代次数；NumPy 的 <code>scale</code> 参数是<b>标准差</b>而 <code>covariances_</code> 存<b>方差</b>（差一个平方）。</p>
+
+<!-- ══════════════════ 英文句库 ══════════════════ -->
+<h2 id="en">英文句库 <em>直接抄进答卷</em></h2>
+<div class="grid2">
+<div class="box g">
+  <div class="h">报结果 → 解释</div>
+  <ul style="margin-bottom:0;font-size:13.5px">
+    <li>The first principal component retains <b>90%</b> of the total variance, which means …</li>
+    <li>The responsibilities are <b>4/7</b> and <b>3/7</b>, indicating that component 1 explains this observation better under the fitted model.</li>
+    <li>One complete iteration moves the centroids to … and the objective decreases to …</li>
+    <li>Points A and C are <b>border points</b> because each lies within ε of core point B but has fewer than MinPts neighbours itself.</li>
+  </ul>
+</div>
+<div class="box y">
+  <div class="h">用证据支撑</div>
+  <ul style="margin-bottom:0;font-size:13.5px">
+    <li>This is supported by … but should also be checked against <b>stability across initialisations</b>.</li>
+    <li>Comparing <b>nearby values of k</b> and <b>refitting across random seeds</b> would show whether this partition is stable.</li>
+    <li>Inspecting the <b>plots and cluster summaries</b>, rather than a single score, gives …</li>
+    <li>Both criteria reach their lowest value at K = 2, and the improvement from K = 3 does not offset its extra parameters.</li>
+  </ul>
+</div>
+<div class="box r">
+  <div class="h">说出局限（拿分的关键一句）</div>
+  <ul style="margin-bottom:0;font-size:13.5px">
+    <li>This describes <b>within-cluster cohesion and between-cluster separation for the chosen representation</b>; it does not establish that the grouping is unique or natural.</li>
+    <li>PCA <b>preserves variance, not necessarily meaning</b>, and it does not use the target labels.</li>
+    <li>A lower BIC supports this choice <b>among the fitted candidates</b>; it does not prove that the population contains that many natural groups.</li>
+    <li>The noise label means <b>「not assigned to a dense region under the current settings」</b>, not that the observation is erroneous.</li>
+    <li>A density value is <b>not a point probability</b>.</li>
+  </ul>
+</div>
+<div class="box b">
+  <div class="h">建议下一步</div>
+  <ul style="margin-bottom:0;font-size:13.5px">
+    <li>Standardise the features so that both contribute comparably to the Euclidean distance.</li>
+    <li>Fit the scaler and PCA on the <b>training data only</b>, then apply the fitted transformation to validation data.</li>
+    <li>Repeat the fit with <code>n_init=10</code> and compare which observations remain together (a <b>label-invariant</b> comparison).</li>
+    <li>Compare validation performance <b>with and without</b> PCA rather than assuming an improvement.</li>
+  </ul>
+</div>
+</div>
+
+<!-- ══════════════════ 陷阱 ══════════════════ -->
+<h2 id="trap">陷阱清单 <em>考前 10 分钟看这栏</em></h2>
+<table>
+<tr><th style="width:70px">主题</th><th>陷阱</th><th>正确</th></tr>
+<tr><td><span class="pill">T1</span></td><td>忘记中心化直接算 XᵀX</td><td>永远先减<b>每一列</b>的均值，并验证<b>列和为 0</b></td></tr>
+<tr><td><span class="pill">T1</span></td><td>重构时漏加 μ</td><td><b>X̂ = Z Wᵀ + 1ₙμᵀ</b>，均值只在重构时加回</td></tr>
+<tr><td><span class="pill">T1</span></td><td>把 S 的特征值当方差报出去</td><td>方差要<b>除 (n−1)</b>；但主方向与解释方差比不受影响</td></tr>
+<tr><td><span class="pill">T1</span></td><td>忘记归一化特征向量</td><td>‖v‖=1 之后再投影，否则得分整体差倍数</td></tr>
+<tr><td><span class="pill">T1</span></td><td>「保住 90% 方差 = 保住 90% 信息」</td><td>by-hand 例里第二个特征的差异<b>完全消失</b>了</td></tr>
+<tr><td><span class="pill">T1</span></td><td>看到成分符号相反以为算错</td><td>v 与 −v 张成同一条轴，<b>子空间与重构不变</b></td></tr>
+<tr><td><span class="pill t2">T2</span></td><td>边分配边更新质心</td><td>整个<b>分配步</b>里质心保持不动，分完再统一更新</td></tr>
+<tr><td><span class="pill t2">T2</span></td><td>把 n_init 当迭代次数</td><td>是<b>独立重启次数</b>，保留 inertia 最低的一次</td></tr>
+<tr><td><span class="pill t2">T2</span></td><td>用 inertia 最小来选 k</td><td>它随 k 增大必降；看<b>肘部 + silhouette + 稳定性 + 领域</b></td></tr>
+<tr><td><span class="pill t2">T2</span></td><td>比较稳定性时比标签号</td><td><b>比成员</b>：标签 0/1 互换但分组相同即同一个解</td></tr>
+<tr><td><span class="pill t2">T2</span></td><td>DBSCAN 邻域忘了含自身</td><td><b>MinPts 把点自己算进去</b>（sklearn 同此约定）</td></tr>
+<tr><td><span class="pill t2">T2</span></td><td>把噪声点当成异常/错误数据</td><td>−1 只表示<b>当前设置下未进入任何稠密区</b></td></tr>
+<tr><td><span class="pill t2">T2</span></td><td>认为 border 点能继续扩张簇</td><td><b>只有 core 点能扩张</b>；border 只加入</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>把密度当概率（说 p(x)&gt;1 是错的）</td><td><b>密度是高度可以 &gt;1</b>；概率是面积；P(X=x)=0</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>M 步均值除以 n</td><td><b>除以 Nₖ</b>（该成分的有效计数）</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>方差更新除以 Nₖ−1</td><td><b>除 Nₖ</b>——这是极大似然，不是无偏样本方差</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>把 Nₖ 四舍五入成整数</td><td>有效计数是<b>分数</b>，Σₖ Nₖ = n</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>「权重大所以责任度大」</td><td>责任度 ∝ <b>先验 × 该点密度</b>，两者共同决定</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>混合方差 = 成分方差的加权平均</td><td>还要加<b>组间项</b>（成分均值之间的离散）</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>「BIC 最低 ⇒ 有这么多自然类别」</td><td>只支持<b>在候选中</b>的选择，不证明自然分组</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>⚠ 对数似然从 −1028.9 变到 −778.9，说成「下降了」</td><td><b>是上升</b>（+250.0）。<b>负数看方向要当心</b>——这是反馈里点名的高频错</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>把 0.64 的责任度说成「模型有 64% 的把握是对的」</td><td>它是<b>模型自己算的成员概率</b>，<b>和真实标签无关</b>，不是准确率</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>直接比较两次拟合的「成分 1」</td><td><b>成分编号是任意的</b>，0 和 1 可互换而模型不变 ⇒ <b>先按均值对齐/排序再比</b></td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>把责任度加权放进平方里面算方差</td><td><b>先对新均值算离差并平方，再用责任度加权</b>——顺序反了就是另一个错误公式</td></tr>
+<tr><td><span class="pill t3">T3</span></td><td>报「生成数据时用的真值」当拟合结果</td><td>要报<b>拟合表里的估计值</b>；<b>有限样本本来就不必复原真值</b></td></tr>
+<tr><td><b>通用</b></td><td>算完就停笔</td><td>补一句<b>说明什么</b> + 一句<b>不能证明什么</b></td></tr>
+<tr><td><b>通用</b></td><td>只在第一页写名字</td><td><b>每一页</b>（含附加答题纸）都要写全名</td></tr>
+</table>
+
+<!-- ══════════════════ 模板 ══════════════════ -->
+<h2 id="tpl">大题答题模板 <em>四类，各背一套</em></h2>
+<div class="box y">
+  <div class="h">评分公式（四类通用）</div>
+  <p style="margin:0"><b>① 报出结果</b>（数字/方向/判定） → <b>② 解释它说明什么</b>（在当前表示下代表什么） →
+  <b>③ 用可见证据支撑</b>（解释方差 / silhouette / BIC / 稳定性 / 图） → <b>④ 说出证据的局限</b>（它<b>不能</b>证明什么）。
+  <span class="w">大多数人停在第一步，那最多拿一半分。</span></p>
+</div>
+
+<h3>Style A · 计算并解释（PCA 全链路 / k-means 一轮 / GMM 责任度+M步）</h3>
+<div class="box b">
+<ol style="margin-bottom:0">
+  <li><b>写出约定与公式</b>：例如「Use S = XcᵀXc and Cov = S/(n−1)」「比较平方距离即可」「MinPts 含点自身」。<span class="k">一行，免费的分。</span></li>
+  <li><b>逐步计算，每个中间量都标名字</b>：μ → Xc → S → λ → v → Z → X̂。算错时能定位，阅卷也看得见过程。</li>
+  <li><b>写出自检</b>：列和为 0 / Σλ=迹 / 责任度和为 1 / ΣNₖ=n。<span class="k">这本身就是采分点。</span></li>
+  <li><b>解释</b>：这个数字在当前表示下意味着什么。</li>
+  <li><b>局限</b>：一句「它不能证明什么」。</li>
+</ol>
+</div>
+
+<h3>Style B · 评价或纠正一个说法</h3>
+<div class="box b">
+<p style="margin:6px 0"><b>每条说法三句话</b>：</p>
+<ol style="margin-bottom:0">
+  <li><b>这个说法哪一部分是对的</b>（先承认对的部分，别一上来全盘否定）。</li>
+  <li><b>哪一部分不成立，为什么</b>（指出它混淆了什么、或忽略了什么假设）。</li>
+  <li><b>要怎样才能支持这个结论</b>（补什么证据、做什么检查）。</li>
+</ol>
+<p style="margin:8px 0 0;font-size:13px;color:var(--dim)">例：「我们跑了一次 k=3，silhouette 0.69，所以恰好有三类。」
+→ ① silhouette 0.69 确实说明在当前表示下簇内紧凑、簇间分离尚可；
+② 但它只描述<b>所选表示</b>下的几何，而且<b>只跑了一次</b>、偏爱凸形簇，不能确立「唯一的自然分组」；
+③ 需要补：多次初始化与重采样的<b>稳定性</b>、对 k 与缩放的<b>敏感性</b>、形状与离群点的<b>检视</b>、簇摘要在应用上是否讲得通。</p>
+</div>
+
+<h3>Style C · 找出机器学习流程中的问题</h3>
+<div class="box b">
+<p style="margin:6px 0"><b>每个问题三段</b>：<b>是什么问题 → 会造成什么后果 → 怎么改</b>。按这个顺序扫一遍流程：</p>
+<ol style="margin-bottom:0">
+  <li><b>特征与尺度</b>：量纲差很多却没缩放？缩放了但方差差异本身有意义？</li>
+  <li><b>划分与泄漏</b>：在全量数据上 fit 了 scaler / PCA 再划分？测试集自己 fit 了一次？</li>
+  <li><b>算法假设</b>：用 k-means 处理弯曲结构？用一组全局 (ε,MinPts) 处理密度差异大的数据？</li>
+  <li><b>初始化与稳定性</b>：只跑了一次？没设 n_init / random_state？</li>
+  <li><b>证据与结论</b>：只报了一个分数？把簇/成分当成真实类别？把噪声当成异常？</li>
+</ol>
+</div>
+
+<h3>Style D · 用证据比较方案并论证决策</h3>
+<div class="box b">
+<ol style="margin-bottom:0">
+  <li><b>先说判据</b>：我要用哪几类证据来比（内部指标 / 稳定性 / 假设 / 有用性）。</li>
+  <li><b>逐候选给出证据</b>，做成小表：候选 → 内部证据 → 稳定性 → 应用意义。</li>
+  <li><b>给出选择并说明理由</b>：不是「分最高」，而是<b>多路证据一致</b>。</li>
+  <li><b>说明这个决定的代价</b>与<b>还需要什么检查</b>。</li>
+  <li>收尾一句：<b>这是有依据的判断，不是证明</b>（a reasoned judgement, not proof）。</li>
+</ol>
+</div>
+
+<!-- ══════════════════ 模拟卷 MCQ ══════════════════ -->
+<h2 id="mcq">模拟卷 · 第一部分 <em>20 题 × 3 分 = 60 分 · 建议 30 分钟</em></h2>
+<p class="lead">每题四个选项，选<b>最佳</b>答案。答案与解析在本节末尾，做完再看。</p>
+
+<div class="q"><div class="stem"><span class="n">1</span>关于中心化，下列哪项是正确的？</div>
+<ol type="A"><li>中心化必须在标准化之后做</li><li>中心化会改变主方向的相对顺序</li><li>中心化会让每个特征的方差变成 1</li><li>中心化后每一列的和为 0</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">2</span>同一份中心化数据，用 S = XcᵀXc 与用 S/(n−1) 做特征分解：</div>
+<ol type="A"><li>特征向量相同，特征值差 (n−1) 倍，解释方差比相同</li><li>两者结果完全无关</li><li>特征向量不同，特征值相同</li><li>只有后者能得到正确的主方向</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">3</span>若 (λ, v) 是协方差矩阵的一个特征对且 ‖v‖=1，λ 在 PCA 中的含义是：</div>
+<ol type="A"><li>重构时要加回的均值</li><li>数据投影到 v 上之后得分的方差</li><li>观测的个数</li><li>v 的长度</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">4</span>某数据集两列分别是以 mph 和 km/h 记录的同一个速度。关于这份数据：</div>
+<ol type="A"><li>PCA 无法处理相关特征</li><li>数据近似落在低一维的子空间上，PCA 能自动发现这种冗余</li><li>必须先标准化才能发现这种关系</li><li>两列都应当删除</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">5</span>对 X = (−3,0), (3,0), (0,−1), (0,1) 只保留第一主成分，总平方重构误差是：</div>
+<ol type="A"><li>10</li><li>0</li><li>18</li><li>2</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">6</span>某分类任务在做 PCA 降维后表现变差。最合理的解释是：</div>
+<ol type="A"><li>被丢弃的低方差方向可能携带判别信息，而 PCA 不使用标签</li><li>解释方差比算错了</li><li>保留的成分太多</li><li>PCA 实现有 bug</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">7</span>在「StandardScaler + PCA + 分类器」流程中，正确做法是：</div>
+<ol type="A"><li>训练集和测试集各自 fit 一次</li><li>先划分，只在训练集 fit，测试集只 transform</li><li>PCA 不会造成泄漏，怎么 fit 都行</li><li>先用全部数据 fit，再划分训练测试</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">8</span>K-means 的目标 J = Σ‖xᵢ − μ_c(i)‖² 直接鼓励的是：</div>
+<ol type="A"><li>簇的大小尽可能均衡</li><li>簇内尽可能紧凑</li><li>簇之间尽可能分开</li><li>簇的个数尽可能少</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">9</span>关于 K-means 的收敛性，最完整的说法是：</div>
+<ol type="A"><li>它可能永远不收敛</li><li>它一定收敛到全局最优</li><li>两步都不增加 J 且分配方式有限，所以必然收敛；但 J 非凸，只保证局部极小</li><li>只有用 k-means++ 才会收敛</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">10</span>sklearn 中 <code>n_init=10</code> 的含义是：</div>
+<ol type="A"><li>最多迭代 10 轮</li><li>用 10 组不同初始质心各做一次完整拟合，保留 inertia 最低的</li><li>最多允许 10 个簇</li><li>保留 10 个候选簇</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">11</span>观测 {1, 2, 8, 9}，k=2，初始质心为 1 和 8。完成<b>一轮</b>分配与更新后，两个质心分别是：</div>
+<ol type="A"><li>1.5 和 8.5</li><li>1 和 8</li><li>4.5 和 5.5</li><li>2 和 9</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">12</span>为什么不能用「inertia 最小」来选 k？</div>
+<ol type="A"><li>因为 inertia 随 k 增大必然下降，k=n 时为 0</li><li>因为 inertia 只对球形簇有效</li><li>因为 inertia 与 silhouette 总是矛盾</li><li>inertia 计算不准确</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">13</span>点 A=0, B=0.5, C=1.0, D=3.0, E=3.4，取 ε=0.6、MinPts=3（邻域含自身）。各点角色是：</div>
+<ol type="A"><li>A、B、C 都是 core；D、E 是 border</li><li>全部是 core</li><li>B 是 core；A、C 是 border；D、E 是 noise</li><li>没有 core 点</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">14</span>DBSCAN 中一个点先被标为噪声、后来变成边界点，原因是：</div>
+<ol type="A"><li>后来访问的某点被认出是核心点，而该点的 ε 邻域包含它</li><li>它的邻域点数增加了</li><li>算法有随机性</li><li>ε 被自动调整了</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">15</span>关于 silhouette，下列哪项正确？</div>
+<ol type="A"><li>它衡量的是簇的个数是否正确</li><li>负值表示该点可能更该属于另一个簇；且它偏爱紧凑凸形簇</li><li>它的取值范围是 0 到 1</li><li>它对 DBSCAN 的评估必须包含噪声点</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">16</span>对连续数据，混合密度 p(x) 的正确理解是：</div>
+<ol type="A"><li>p(x) 是密度，可以大于 1；概率要对区间求面积</li><li>p(x) 就是责任度</li><li>p(x) 就是 X 恰好等于 x 的概率</li><li>p(x) 一定在 0 和 1 之间</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">17</span>π=(0.7, 0.3)，某点处两成分密度为 0.2420 与 0.0540。第一个成分的责任度约为：</div>
+<ol type="A"><li>0.700</li><li>0.500</li><li>0.242</li><li>0.913</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">18</span>M 步更新成分均值时，分母应该是：</div>
+<ol type="A"><li>观测总数 n</li><li>Nₖ − 1</li><li>成分个数 K</li><li>该成分的有效计数 Nₖ = Σᵢ rᵢₖ</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">19</span>一维、每成分一个方差的 K 成分 GMM，自由参数个数 p 是：</div>
+<ol type="A"><li>3K</li><li>2K</li><li>3K − 1</li><li>K + 1</li></ol></div>
+
+<div class="q"><div class="stem"><span class="n">20</span>两个成分权重各 0.5、各自方差都很小，但中心相距很远。整个混合分布的方差：</div>
+<ol type="A"><li>无法计算</li><li>等于成分方差的加权平均，所以很小</li><li>等于两个方差之和</li><li>远大于成分方差，因为还要加上成分均值之间的离散</li></ol></div>
+
+<details>
+<summary>▸ 选择题答案与解析（做完再展开）</summary>
+<table>
+<tr><th style="width:44px">题</th><th style="width:44px">答案</th><th>解析</th></tr>
+<tr><td>1</td><td><b>D</b></td><td>中心化只保证<b>每个特征均值为 0</b>，等价于列和为 0。方差变 1 是标准化的效果。</td></tr>
+<tr><td>2</td><td><b>A</b></td><td>只差正常数因子：Sv=λv ⟺ (S/(n−1))v=(λ/(n−1))v，同一个 v；比值上下同缩不变。</td></tr>
+<tr><td>3</td><td><b>B</b></td><td>vᵀΣv 是投影方差；当 Σv=λv 且 vᵀv=1 时 vᵀΣv=λ。<b>特征值就是该方向的投影方差</b>。</td></tr>
+<tr><td>4</td><td><b>B</b></td><td>两列严格成比例（只差舍入）⇒ 数据住在 d−1 维子空间；对应方向特征值≈0，丢掉几乎无损。</td></tr>
+<tr><td>5</td><td><b>D</b></td><td>PC1 为水平方向；(0,±1) 得分为 0、被重构到 (0,0)，各差 1 ⇒ 共 <b>2</b> = 被丢的 λ₂。</td></tr>
+<tr><td>6</td><td><b>A</b></td><td>PCA 只最大化<b>输入方差</b>、不看 y。要用<b>验证数据</b>比较有无 PCA。</td></tr>
+<tr><td>7</td><td><b>B</b></td><td>全量 fit ⇒ 泄漏；测试集自己 fit ⇒ 两边坐标系不一致。</td></tr>
+<tr><td>8</td><td><b>B</b></td><td>只对「点到<b>自己</b>质心」的平方距离求和 ⇒ 直接优化簇内紧凑；不显式最大化簇间分离。</td></tr>
+<tr><td>9</td><td><b>C</b></td><td>两步都不增 + 分配方式有限 ⇒ 必然收敛；<b>J 非凸</b> ⇒ 局部极小 ⇒ 需多次初始化。</td></tr>
+<tr><td>10</td><td><b>B</b></td><td><b>重启次数</b>，不是迭代次数；保留 inertia 最低的一次。</td></tr>
+<tr><td>11</td><td><b>A</b></td><td>分配得 {1,2} 与 {8,9}；均值为 <b>1.5</b> 与 <b>8.5</b>；此时 J=1，再分配不变即收敛。</td></tr>
+<tr><td>12</td><td><b>A</b></td><td>k 越大质心越多、J 不会上升，k=n 时 J=0。只能看<b>肘部</b>并结合其它证据。</td></tr>
+<tr><td>13</td><td><b>C</b></td><td>邻域（含自身）：A=2, B=3, C=2, D=2, E=2。仅 B 达 3 ⇒ core；A、C 挨着 B ⇒ border；D、E ⇒ noise。</td></tr>
+<tr><td>14</td><td><b>A</b></td><td>噪声标签在遍历中只是<b>临时</b>的；被后发现的 core 点吸收即成 border。</td></tr>
+<tr><td>15</td><td><b>B</b></td><td>范围是 <b>−1 到 1</b>；负值 = 可能属于别的簇；偏爱凸形；评 DBSCAN 时应<b>排除</b>噪声点并报告比例。</td></tr>
+<tr><td>16</td><td><b>A</b></td><td>连续分布下 P(X=x)=0；<b>密度是高度可以 &gt;1</b>，概率是面积。</td></tr>
+<tr><td>17</td><td><b>D</b></td><td>加权 0.1694 与 0.0162；混合密度 0.1856；0.1694/0.1856 ≈ <b>0.913</b>。</td></tr>
+<tr><td>18</td><td><b>D</b></td><td>责任度加权平均，分母是<b>用于加权的总权重 Nₖ</b>。方差同样除 Nₖ（<s>不是 Nₖ−1</s>）。</td></tr>
+<tr><td>19</td><td><b>C</b></td><td>(K−1) 个独立权重 + K 个均值 + K 个方差 = <b>3K−1</b>。</td></tr>
+<tr><td>20</td><td><b>D</b></td><td>Var = 组内 Σπσ² + <b>组间</b> [Σπμ² − (Σπμ)²]。成分再窄，中心离得远整体方差也大。</td></tr>
+</table>
+<p style="margin:10px 0 0;font-size:13px;color:var(--dim)">
+<b>自评</b>：错 0–2 题 = 概念扎实，把时间放到大题写作；错 3–6 题 = 回头看对应主题的速查栏；错 7 题以上 = 重走一遍逐页精读。</p>
+</details>
+
+<!-- ══════════════════ 模拟卷 ERQ ══════════════════ -->
+<!-- ══════════════════ 官方材料加练 ══════════════════ -->
+<h2 id="off">官方 T3 答案加练 <em>8 题 · 全部出自官方 Tutorial 答案与讲师共性反馈</em></h2>
+<p class="lead">这 8 题不是我编的考点，而是<b>官方答案里真考过的算法</b>和<b>讲师逐题点名的失分处</b>。
+2026-10-07 Canvas 才放出这批材料，<b>优先级高于上面那 20 题</b>。</p>
+
+<div class="q"><div class="stem"><span class="n">T1</span>某两成分 GMM 的 π=(0.6,0.4)，在 x_B 处两个成分的密度分别是 0.12 与 0.18。关于 x_B：</div>
+<ol type="A"><li>它的混合密度是 0.30</li><li>它的责任度是 (0.5, 0.5)，对成分归属完全含糊</li><li>它一定属于成分 2，因为成分 2 的密度更高</li><li>无法计算，还需要知道 μ 和 σ</li></ol></div>
+<div class="q"><div class="stem"><span class="n">T2</span>接上题，若把权重改成 π=(0.2,0.8)，而成分密度保持不变，x_A（密度 0.30 与 0.10）的责任度变成：</div>
+<ol type="A"><li>(0.818, 0.182)，不变</li><li>(0.5, 0.5)</li><li>(0.429, 0.571)，最大责任换到成分 2</li><li>无法确定</li></ol></div>
+<div class="q"><div class="stem"><span class="n">T3</span>E 步算出四个观测对成分 1 的责任度为 0.9, 0.7, 0.2, 0.1（x = −4, −1, 2, 5）。μ₁ 的正确更新是：</div>
+<ol type="A"><li>(0.9·(−4)+0.7·(−1)+0.2·2+0.1·5) / 1.9 ≈ −1.789</li><li>(0.9·(−4)+0.7·(−1)+0.2·2+0.1·5) / 4 = −0.85</li><li>(−4−1+2+5) / 4 = 0.5</li><li>(0.9·(−4)+0.7·(−1)+0.2·2+0.1·5) / 2.1 ≈ −1.619</li></ol></div>
+<div class="q"><div class="stem"><span class="n">T4</span>某同学报告：拟合的对数似然从 −1028.912 变到 −778.898，并写道「似然下降，说明 EM 出了问题」。正确的判断是：</div>
+<ol type="A"><li>他说得对，EM 实现有误</li><li>似然其实上升了 250.014，EM 行为正常</li><li>对数似然不能比较大小</li><li>需要先把它转成正数才能判断</li></ol></div>
+<div class="q"><div class="stem"><span class="n">T5</span>模型给某观测的责任度是 (0.64, 0.36)。下列解读正确的是：</div>
+<ol type="A"><li>模型对这个点有 64% 的准确率</li><li>这个点有 64% 的可能被正确分类</li><li>在当前模型下，它属于成分 1 的后验概率是 0.64</li><li>需要真实标签才能解释这个数</li></ol></div>
+<div class="q"><div class="stem"><span class="n">T6</span>比较两次 GMM 拟合的结果时，第一件要做的事是：</div>
+<ol type="A"><li>直接比较两次的「成分 0」与「成分 0」</li><li>把对数似然转成 BIC 再比</li><li>先检查两次的随机种子是否相同</li><li>先按均值把成分对齐或排序，再逐一比较</li></ol></div>
+<div class="q"><div class="stem"><span class="n">T7</span>关于 M 步里方差的更新，下列哪个顺序是对的？</div>
+<ol type="A"><li>先对更新后的均值算离差、平方，再用责任度加权求和，最后除以 Nₖ</li><li>先用责任度加权每个观测，再对加权值算离差并平方</li><li>先对旧均值算离差、平方，再加权，最后除以 Nₖ−1</li><li>把责任度写进平方里面：Σ(rᵢₖ(xᵢ−μ))² / Nₖ</li></ol></div>
+<div class="q"><div class="stem"><span class="n">T8</span>用 BIC 选出 K=3 之后，下列哪种表述最符合官方口径？</div>
+<ol type="A"><li>数据中存在 3 个自然分组，已由 BIC 证明</li><li>K=3 的 BIC 最低，所以它是唯一正确的模型</li><li>BIC 越低说明拟合越好，与复杂度无关</li><li>在比较过的候选模型中 K=3 的 BIC 最低；这是支持它的证据，但不证明数据真有 3 个自然分组</li></ol></div>
+
+<details>
+<summary>▸ 加练答案与解析（做完再展开）</summary>
+<table>
+<tr><th style="width:44px">题</th><th style="width:44px">答案</th><th>解析</th></tr>
+<tr><td>T1</td><td><b>B</b></td><td>加权贡献 0.6×0.12=0.072 与 0.4×0.18=0.072 <b>恰好相等</b> ⇒ p=0.144、γ=(0.5,0.5)。⚠ 密度高的那个成分<b>不一定</b>责任度大——先验权重会把它拉回来。</td></tr>
+<tr><td>T2</td><td><b>C</b></td><td>0.2×0.30=0.06、0.8×0.10=0.08 ⇒ p=0.14 ⇒ γ=(0.429,0.571)。<b>密度一个字没改，只改先验，归属就翻了</b> ⇒ 责任度 ∝ 先验 × 密度。</td></tr>
+<tr><td>T3</td><td><b>A</b></td><td>分母必须是<b>该成分自己的有效计数</b> N₁=0.9+0.7+0.2+0.1=<b>1.9</b>，不是观测数 4、也不是 N₂。⚠ 错用 4 会把 μ₁ 拉到 −0.85，两个成分挤到一起。</td></tr>
+<tr><td>T4</td><td><b>B</b></td><td>−778.898 &gt; −1028.912。<b>负数看方向</b>是共性反馈点名的高频错。⚠ 另外注意：似然不下降只说明<b>局部在改善或持平</b>，<b>不保证全局最优</b>。</td></tr>
+<tr><td>T5</td><td><b>C</b></td><td>责任度是<b>模型自己算出的成员概率</b>，<b>与真实标签完全无关</b>，所以它既不是准确率、也不是「分对的概率」。这是反馈逐字纠正过的误读。</td></tr>
+<tr><td>T6</td><td><b>D</b></td><td><b>成分编号是任意的</b>——成分 0 和 1 互换不改变拟合出来的混合模型。不先对齐就比，等于在比两个随机的编号。</td></tr>
+<tr><td>T7</td><td><b>A</b></td><td>官方原话：<em>first square the deviations from the <b>updated</b> mean, then weight those squared deviations by responsibilities</em>。⚠ 选项 D 是反馈点名的那个「另一个、错误的更新式」；除数是 <b>Nₖ</b> 不是 Nₖ−1。</td></tr>
+<tr><td>T8</td><td><b>D</b></td><td>原话：<em>the lowest BIC is <b>evidence for a model among those compared</b>—not proof that the data contain that many natural groups</em>。⚠ 反馈还给了反例：<b>几个高斯成分可能只是在逼近一个非高斯的组</b>。</td></tr>
+</table>
+<p style="margin:10px 0 0;font-size:13px;color:var(--dim)">
+这 8 题错任意一题，都回头看 <a href="#t3">T3 速查</a>里那个「官方 Tutorial 原题与答案」盒子。</p>
+</details>
+
+<h2 id="erq">模拟卷 · 第二部分 <em>4 题 × 10 分 = 40 分 · 建议 60 分钟</em></h2>
+<p class="lead">要求展示中间步骤、写明假设、解释推理。<b>只写正确的最终数字可能拿不到应有的分数。</b></p>
+
+<div class="q">
+<div class="stem"><span class="n">21</span>（10 分）给定四个观测
+<code>X = (2,3), (3,5), (0,−1), (−1,−3)</code>。两个特征已在可比尺度上。</div>
+<ol type="a" style="color:var(--ink)">
+  <li>计算特征均值向量与中心化矩阵 Xc，并给出一个确认中心化正确的检查。<b>(3 分)</b></li>
+  <li>计算散布矩阵 S = XcᵀXc 与样本协方差矩阵，并求出全部特征值。给出一个验证特征值的快速检查。<b>(4 分)</b></li>
+  <li>选出并归一化第一主成分，说明选择它的理由，并计算保留一个成分时的解释方差比。<b>(3 分)</b></li>
+</ol>
+</div>
+
+<div class="q">
+<div class="stem"><span class="n">22</span>（10 分）某团队用「年度消费额」（0–80,000）和「到访次数」（0–60）两个特征对社区做聚类。
+他们用 k=3 跑了<b>一次</b> k-means，得到 silhouette = 0.71，并据此宣称「该地区恰好存在三种社区类型」。</div>
+<ol type="a" style="color:var(--ink)">
+  <li>指出特征尺度可能造成的问题，并提出一个有理由的预处理步骤。<b>(3 分)</b></li>
+  <li>说明 silhouette = 0.71 支持什么，以及为什么它不能确立该团队的结论。<b>(3 分)</b></li>
+  <li>给出两项能加强或挑战该结论的进一步检查，并说明每一项各自揭示什么。<b>(4 分)</b></li>
+</ol>
+</div>
+
+<div class="q">
+<div class="stem"><span class="n">23</span>（10 分）一个两成分的一维高斯混合模型，混合权重为 π₁ = 0.2、π₂ = 0.8。
+在观测 x 处，两个成分的密度分别为 0.90 与 0.15。</div>
+<ol type="a" style="color:var(--ink)">
+  <li>计算两个加权贡献与 x 处的混合密度。<b>(3 分)</b></li>
+  <li>计算两个后验责任度，并给出一个检查它们是否正确的方法。<b>(3 分)</b></li>
+  <li>解释为什么较大的混合权重在这个观测上没有得到较大的责任度。<b>(2 分)</b></li>
+  <li>解释 E 步与 M 步各自的作用。<b>(2 分)</b></li>
+</ol>
+</div>
+
+<div class="q">
+<div class="stem"><span class="n">24</span>（10 分）某学生按以下流程分析一份含两个弯曲带状结构的二维数据：
+先在<b>全部数据</b>上拟合 StandardScaler 与 PCA（保留 1 个成分，解释方差 92%），
+再在降维后的数据上跑 k-means（k=2，默认设置只跑一次），
+最后报告 silhouette = 0.61，结论是「两个自然分组已被成功识别」。</div>
+<ol type="a" style="color:var(--ink)">
+  <li>指出该流程中<b>三处</b>问题，并分别说明会造成什么后果。<b>(6 分)</b></li>
+  <li>提出一个更合适的方案，并说明你会用哪些证据来判断它是否更好。<b>(4 分)</b></li>
+</ol>
+</div>
+
+<details>
+<summary>▸ 大题参考答案与采分点（做完再展开）</summary>
+
+<h3 style="margin-top:8px">Q21 · PCA 手算</h3>
+<div class="eq">(a) μ = <b>(1, 1)</b>； Xc = (1,2), (2,4), (−1,−2), (−2,−4)
+    检查：<b>每一列加起来为 0</b>（1+2−1−2=0；2+4−2−4=0）✓
+(b) S₁₁ = 1+4+1+4 = <b>10</b>； S₁₂ = 2+8+2+8 = <b>20</b>； S₂₂ = 4+16+4+16 = <b>40</b>
+    S = [[10,20],[20,40]]； Cov = S/3 = [[10/3, 20/3],[20/3, 40/3]]
+    det(S−λI) = (10−λ)(40−λ) − 400 = λ² − 50λ ⇒ <b>λ = 50 与 0</b>
+    检查：<b>Σλ = 50 = 迹(S) = 10+40 ✓</b>； Πλ = 0 = det(S) = 400−400 ✓
+(c) S(1,2)ᵀ = (50,100)ᵀ = 50(1,2)ᵀ ⇒ 对应 λ=50
+    <b>v₁ = (1,2)/√5</b>，理由：<b>对应最大特征值，投影方差最大</b>
+    解释方差比 = 50/(50+0) = <b>100%</b></div>
+<div class="box g"><div class="h">采分点</div>
+<ul style="margin-bottom:0">
+  <li>(a) 均值<b>按列</b>算 · Xc 正确 · <b>写出列和为 0 的检查</b>（这一分很多人丢）</li>
+  <li>(b) S 三个元素正确 · 除 (n−1)=3 得 Cov · 特征方程与两个 λ · <b>写出迹/行列式检查</b></li>
+  <li>(c) 选最大 λ 并<b>说明理由</b> · <b>归一化</b>（少了 1/√5 扣分）· 解释方差比</li>
+  <li><b>加分表述</b>：「该数据四点共线，第二个特征值为 0，因此一维即可完整重构，重构误差为 0；但这是退化情形，<b>保住 100% 方差不代表在一般数据上也能无损</b>。」</li>
+</ul></div>
+
+<h3>Q22 · 评价聚类结论</h3>
+<div class="box g"><div class="h">(a) 尺度问题（3 分）</div>
+<p style="margin:0">消费额量程 0–80,000，到访次数 0–60，<b>相差三个数量级</b>。k-means 用欧氏距离，
+<b>消费额会完全主导距离</b>，等于只按消费额分组，到访次数几乎不起作用。
+建议：<b>当两个特征应当同等贡献时做标准化</b>（StandardScaler），并<b>比较标准化前后的结果</b>；
+若量程差异本身有业务含义，则需要论证为什么保留。</p></div>
+<div class="box g"><div class="h">(b) silhouette 支持什么（3 分）</div>
+<p style="margin:0">0.71 说明<b>在所选特征与缩放下</b>，簇内较紧凑、簇间较分离。
+但它<b>不能</b>确立「恰好存在三种类型」：① 它只描述<b>当前表示</b>下的几何；
+② 它<b>偏爱紧凑凸形簇</b>，对弯曲或密度型结构会误导；
+③ <b>只跑了一次</b>，没有任何稳定性证据；④ 它不涉及 k 是否是唯一合理的选择。</p></div>
+<div class="box g"><div class="h">(c) 两项进一步检查（4 分，每项 2 分：做什么 + 揭示什么）</div>
+<ul style="margin-bottom:0">
+  <li><b>稳定性</b>：用 <code>n_init=10</code> 并换多个随机种子/重采样重拟合，<b>比较成员（不是标签号）</b>。
+      揭示：这个划分是稳定结构还是某次初始化的偶然产物。</li>
+  <li><b>对 k 与缩放的敏感性</b>：比较 k=2,3,4 与标准化/不标准化的组合。
+      揭示：结论是否只在某一个特定设置下成立。</li>
+  <li><i>（其它可接受）</i>看散点图与簇摘要（形状、离群点）；检查三个簇在业务上是否<b>可解释、可行动</b>。</li>
+</ul></div>
+<div class="box r" style="margin-top:8px"><div class="h">收尾必须有的一句</div>
+<p style="margin:0">「即使这些检查都通过，也只能说这是一个<b>有依据的判断</b>（a reasoned judgement），
+<b>不是</b>『恰好存在三种自然类型』的证明。」</p></div>
+
+<h3>Q23 · GMM 责任度</h3>
+<div class="eq">(a) 加权贡献： 0.2 × 0.90 = <b>0.18</b>　　0.8 × 0.15 = <b>0.12</b>
+    混合密度： p(x) = 0.18 + 0.12 = <b>0.30</b>
+(b) r₁ = 0.18/0.30 = <b>0.6</b>　　r₂ = 0.12/0.30 = <b>0.4</b>
+    检查：<b>r₁ + r₂ = 1</b> ✓</div>
+<div class="box g"><div class="h">(c) 为什么权重大的没拿到更大责任度（2 分）</div>
+<p style="margin:0">责任度 ∝ <b>先验权重 × 该点处的成分密度</b>，是两个因素的<b>乘积</b>再归一化。
+成分 2 的权重是成分 1 的 <b>4 倍</b>（0.8 vs 0.2），但成分 1 在这个 x 处的密度是它的 <b>6 倍</b>（0.90 vs 0.15），
+<b>密度上的优势压过了先验上的劣势</b>，所以 0.18 &gt; 0.12，最终 <b>r₁ = 0.6 &gt; r₂ = 0.4</b>。
+结论：<b>混合权重只是先验，归属还取决于该观测处每个成分解释得有多好</b>。</p></div>
+<div class="box g"><div class="h">(d) E 步与 M 步（2 分）</div>
+<p style="margin:0"><b>E 步</b>：<b>参数固定</b>，用当前的 π、μ、Σ 计算每个观测对每个成分的<b>后验责任度</b>。
+<b>M 步</b>：<b>责任度固定</b>，把它们当作<b>分数计数</b>更新参数——
+Nₖ=Σᵢrᵢₖ，πₖ=Nₖ/n，μₖ=Σᵢrᵢₖxᵢ/Nₖ。两步交替直到对数似然改善可忽略。</p></div>
+<div class="box r" style="margin-top:8px"><div class="h">常见扣分</div>
+<p style="margin:0">把 0.45/0.15 直接当概率相加；忘记先乘权重；责任度不做和为 1 的检查；
+只说「E 步算责任度、M 步更新参数」而<b>没说各自固定了什么</b>；忘了补一句<b>密度不是点概率</b>。</p></div>
+
+<h3>Q24 · 诊断流程</h3>
+<div class="box g"><div class="h">(a) 三处问题（6 分，每处 2 分：是什么 + 后果）</div>
+<ol style="margin-bottom:0">
+  <li><b>在全部数据上 fit Scaler 与 PCA ⇒ 数据泄漏。</b>
+      后果：若后续要评估或接下游模型，评估结果会<b>偏乐观</b>，因为测试集信息已进入均值与主方向。
+      正确做法是<b>先划分，只在训练集 fit</b>。</li>
+  <li><b>对弯曲带状结构用 PCA 降到一维再跑 k-means ⇒ 方法与几何不匹配。</b>
+      PCA 只保留线性高方差方向，<b>把两条带子投到同一条轴上会把它们压叠在一起</b>；
+      k-means 又假设紧凑凸形簇，<b>会横切</b>弯曲结构。后果：得到的两个簇很可能只是沿主轴切了一刀，与真实结构无关。</li>
+  <li><b>k-means 只跑一次（未设 n_init / random_state）⇒ 没有稳定性证据。</b>
+      后果：J 非凸，结果可能是某个较差的<b>局部极小</b>，且不可复现。</li>
+  <li style="color:var(--dim)"><i>（其它可接受的第三点）</i>把「silhouette=0.61」当成「识别出自然分组」的证明——
+      silhouette <b>偏爱凸形簇</b>，在弯曲结构上反而会<b>偏袒错误的划分</b>；
+      另外 92% 解释方差只说明保住了输入方差，<b>不代表保住了区分两条带子的信息</b>。</li>
+</ol></div>
+<div class="box g"><div class="h">(b) 更好的方案与判据（4 分）</div>
+<p style="margin:0 0 6px"><b>方案（2 分）</b>：在<b>标准化后的原始二维特征</b>上直接用 <b>DBSCAN</b>，
+因为它基于<b>密度连通</b>、能跟随弯曲形状，并且允许把稀疏点标为噪声；
+ε 用 k-距离图的拐点作为<b>起点</b>再在邻近值上做敏感性测试。
+若必须用 k-means，则应保留二维、增大 k 并接受「一个真实结构被切成多个簇」再后处理。</p>
+<p style="margin:0"><b>判据（2 分）</b>：① <b>几何检视</b>——把标签画回散点图，看是否跟随了带状结构；
+② <b>噪声比例</b>——DBSCAN 是否把大量有效点丢成 −1；
+③ <b>稳定性</b>——在邻近的 (ε, MinPts) 上结果是否一致；
+④ 若有下游任务，<b>在验证数据上比较</b>。
+⚠️ <b>不要用 silhouette 在两个算法之间做唯一裁判</b>（它偏袒凸形），
+也<b>不要跨算法比较 inertia</b>（DBSCAN 根本不优化它）。</p></div>
+
+<div class="box y" style="margin-top:12px"><div class="h">整卷自评</div>
+<p style="margin:0">大题按<b>四步</b>逐问打勾：报结果 ✓ / 解释 ✓ / 证据 ✓ / 局限 ✓。
+任何一问缺了「局限」那一句，就扣掉那一问约三分之一的分。
+统计一下你最常缺哪一步——<b>绝大多数人缺的是第 ④ 步</b>。</p></div>
+
+</details>
+
+<div class="box b" style="margin-top:34px">
+  <div class="h">打印建议</div>
+  <p style="margin:0">点右上角<b>打印</b>（或 Ctrl+P）。已做过打印排版：深色转白底、卡片不跨页断开、答案默认折叠不会被印出来。
+  建议只打印 <b>T1/T2/T3 速查 + 评估证据 + sklearn + 英文句库 + 陷阱清单 + 答题模板</b> 这几节带进考场；
+  模拟卷单独打印用来限时练习。</p>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var KEY="mlreader-theme", root=document.documentElement, btn=document.getElementById("themeBtn");
+  function apply(t){ root.setAttribute("data-theme",t);
+    if(btn){ btn.textContent = (t==="dark"?"☀":"☾");
+             btn.title = (t==="dark"?"切到浅色":"切到暗色"); } }
+  var s; try{ s=localStorage.getItem(KEY); }catch(e){}
+  apply(s==="dark"?"dark":"light");
+  if(btn) btn.addEventListener("click",function(){
+    var n = root.getAttribute("data-theme")==="dark" ? "light" : "dark";
+    apply(n); try{ localStorage.setItem(KEY,n); }catch(e){}
+  });
+})();
+</script>
+</body>
+</html>

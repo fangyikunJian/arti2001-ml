@@ -1,0 +1,827 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>官方讲义精读 · M2T3 GMM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+/* ── 等比坐标映射，安全区 y∈[90,470] ── */
+function PX(x){return 640+52*x;}
+function PY(y){return 285-52*y;}
+function ax(w,h){w=w||5.2;h=h||3.4;
+  link(PX(-w),PY(0),PX(w),PY(0));link(PX(0),PY(-h),PX(0),PY(h));
+  note("x₁",PX(w)+16,PY(0)+5,"","start");note("x₂",PX(0)+18,PY(h)+2,"","start");}
+function P(pts,cls,r){dots(pts.map(function(p){return [PX(p[0]),PY(p[1])];}),cls,r||9);}
+function dirLine(vx,vy,t,cls){var n=Math.sqrt(vx*vx+vy*vy),ux=vx/n,uy=vy/n;
+  curve([[PX(-t*ux),PY(-t*uy)],[PX(t*ux),PY(t*uy)]],cls||"fit g");}
+function feet(pts,vx,vy,cls){var n=Math.sqrt(vx*vx+vy*vy),ux=vx/n,uy=vy/n;
+  var F=pts.map(function(p){var s=p[0]*ux+p[1]*uy;return [s*ux,s*uy];});
+  pts.forEach(function(p,i){link(PX(p[0]),PY(p[1]),PX(F[i][0]),PY(F[i][1]));});
+  P(F,cls||"c",7);return F;}
+/* ── 一维高斯 ── */
+function bell(cx,cy,w,h,cls){var p=[],i;
+  for(i=0;i<=90;i++){var t=-3.4+6.8*i/90;
+    p.push([cx+w*t/6.8, cy-h*Math.exp(-t*t/2)]);}
+  curve(p,cls||"fit b");}
+/* ── 讲义页码标记（右上角）── */
+function src(s){note("讲义 "+s,1180,96,"","end");}
+
+var CFG={title:"官方讲义精读 · GMM.pdf（41 页）",subtitle:"按讲义自带的三节 + 五个讨论题走 · 包裹重量贯穿全片 · 空格推进 · N 开关讲解",video:""};
+
+KP("\u5f00\u573a",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("\u5b98\u65b9\u8bb2\u4e49\u7cbe\u8bfb","GMM.pdf \u00b7 41 \u9875",
+      "\u6982\u7387\u3001\u8d23\u4efb\u5ea6\u4e0e EM");},
+    "\u8fd9\u662f M2 Topic 3 \u7684\u5b98\u65b9\u8bb2\u4e49\u3002<b>\u5b83\u6bd4 PCA \u90a3\u4efd\u597d\u8bfb</b>\uff1a\u6587\u5b57\u5747\u5300\u5206\u5e03\u5728\u6bcf\u4e00\u9875\u4e0a\uff0c\u800c\u4e14<em>\u4ece\u5934\u5230\u5c3e\u53ea\u7528\u4e00\u4e2a\u4f8b\u5b50\u2014\u2014\u5305\u88f9\u7684\u91cd\u91cf</em>\u3002<br>\u6574\u4efd\u8bb2\u4e49\u5206\u4e09\u8282\uff0c\u800c\u4e14<b>\u81ea\u5e26\u4e94\u4e2a\u8ba8\u8bba\u9898</b>\uff0c\u6bcf\u4e2a\u95ee\u9898\u540e\u9762\u7d27\u8ddf\u4e00\u9875\u7b54\u6848\u3002\u672c\u7247\u5c31\u6309\u8fd9\u4e2a\u8282\u594f\u8d70\u3002");
+  S(0,function(){clearScene();setCap("\u8bb2\u4e49 p2\uff1a\u56db\u4e2a\u95ee\u9898\u7ec4\u6210\u7684\u8def\u7ebf\u56fe");src("p2");
+    boxNode(90,180,250,86,"\u5bc6\u5ea6","b");
+    boxNode(385,180,250,86,"\u6df7\u5408","b");
+    boxNode(680,180,250,86,"\u6210\u5458\u5ea6","g");
+    boxNode(975,180,215,86,"EM \u66f4\u65b0","y");
+    note("\u54ea\u4e9b\u503c\u662f\u5408\u7406\u7684\uff1f",215,308,"");
+    note("\u66f2\u7ebf\u600e\u4e48\u53e0\uff1f",510,308,"");
+    note("\u8c01\u80fd\u89e3\u91ca x\uff1f",805,308,"");
+    note("\u6a21\u578b\u600e\u4e48\u5b66\uff1f",1082,308,"");
+    note("\u6700\u540e\u518d\u6bd4\u62df\u5408\u5ea6\u3001\u7a33\u5b9a\u6027\u548c\u6210\u5206\u7684\u542b\u4e49",640,398,"y");},
+    "\u8bb2\u4e49\u7b2c\u4e8c\u9875\u5c31\u628a\u5168\u7a0b\u62c6\u6210\u56db\u4e2a\u95ee\u9898\uff0c<b>\u8fd9\u56db\u4e2a\u95ee\u9898\u5c31\u662f\u672c\u7247\u7684\u9aa8\u67b6</b>\uff1a<em>\u54ea\u4e9b\u503c\u662f\u5408\u7406\u7684\uff08\u5bc6\u5ea6\uff09\u3001\u66f2\u7ebf\u600e\u4e48\u53e0\uff08\u6df7\u5408\uff09\u3001\u8c01\u80fd\u89e3\u91ca\u8fd9\u4e2a\u70b9\uff08\u6210\u5458\u5ea6\uff09\u3001\u6a21\u578b\u600e\u4e48\u5b66\uff08EM\uff09</em>\u3002<br>\u5f00\u59cb\u4e4b\u524d\u5148\u8bb0\u4f4f\u8fd9\u56db\u683c\uff0c<b>\u540e\u9762\u6bcf\u4e00\u8282\u90fd\u80fd\u5bf9\u5230\u5176\u4e2d\u4e00\u683c</b>\u3002");
+});
+KP("1 · 中心与散布：高斯的两个旋钮（讲义 p4）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u4e00\u6761\u9489\u5f62\u66f2\u7ebf\u7531\u4ec0\u4e48\u51b3\u5b9a");src("p4");
+   bell(400,360,340,130,"fit b");
+   bell(880,360,340,130,"fit v");
+   note("\u03bc = 2",400,196,"b");note("\u03bc = 3",880,196,"v");
+   note("\u4e24\u6761\u5f62\u72b6\u5b8c\u5168\u4e00\u6837\uff0c\u53ea\u662f\u4f4d\u7f6e\u4e0d\u540c",640,398,"y");},"高斯只有两个旋钮。<b>均值 µ 决定中心在哪</b>——把它调大，整条曲线<em>整体右移，形状一点不变</em>。<br>讲义用的例子是包裹重量：蓝色那条 µ = 2 kg，紫色那条 µ = 3 kg。<br>这是最容易的一个旋钮，先把它和另一个分清楚。");
+  S(0,function(){clearScene();setCap("\u7b2c\u4e8c\u4e2a\u65cb\u94ae\uff1a\u6563\u5e03");src("p4");
+   bell(430,370,300,150,"fit b");
+   bell(880,370,480,94,"fit r");
+   note("\u03c3 = 0.25\uff1a\u53c8\u7a84\u53c8\u9ad8",430,186,"b");
+   note("\u03c3 = 0.50\uff1a\u53c8\u5bbd\u53c8\u77ee",880,232,"r");
+   note("\u4e24\u6761\u66f2\u7ebf\u4e0b\u7684\u9762\u79ef\u90fd\u662f 1 \u2014\u2014 \u6240\u4ee5\u644a\u5f97\u8d8a\u5f00\uff0c\u5cf0\u5c31\u5fc5\u7136\u8d8a\u77ee",640,398,"y");},"<b>标准差 σ 决定散布</b>。σ 越大，曲线越宽。<br><b>⚠ 这里有一条性质必须现在就建立：两条曲线下的面积都等于 1。</b><br>所以<em>摊得越开，峰就必然越矮</em>——这不是画图的巧合，是归一化逼出来的。<br>后面讲「密度可以大于 1」时，靠的就是这一条。");
+  S(0,function(){clearScene();setEq(null);setCap("\u65b9\u5dee\u662f\u5e73\u65b9\u5355\u4f4d\uff0c\u522b\u548c\u6807\u51c6\u5dee\u641e\u6df7");src("p4");
+   setEq("$$\\sigma = 0.25\\ \\mathrm{kg} \\quad\\Longrightarrow\\quad \\sigma^{2} = 0.0625\\ \\mathrm{kg}^{2}$$");
+   note("\u6807\u51c6\u5dee\u548c\u89c2\u6d4b\u540c\u5355\u4f4d\uff1b\u65b9\u5dee\u662f\u5e73\u65b9\u5355\u4f4d",640,196,"b");
+   note("\u2016 \u516c\u5f0f\u91cc\u7684 N(x | \u03bc, \u03c3\u00b2) \u7b2c\u4e8c\u4e2a\u53c2\u6570\u662f\u65b9\u5dee\uff0c\u4e0d\u662f\u6807\u51c6\u5dee",640,240,"r");},"讲义特意算了一步：<em>σ = 0.25 kg ⇒ σ² = 0.0625 kg²</em>。<br><em>标准差和观测同单位，方差是平方单位</em>。<br><b>⚠ 这个区分在记号上会反复坑人</b>：公式里 N(x | µ, σ²) 的第二个参数是<b>方差</b>；而 NumPy 的 `scale` 参数要的是<b>标准差</b>。");
+  SUM(0,1,{h:"µ 管中心，σ 管散布；面积恒为 1",k:"<b>µ 调位置（形状不变），σ 调宽窄</b>。",m:"<b>曲线下面积恒为 1</b> ⇒ <b>摊得越开，峰必然越矮</b>。",w:"<b>σ = 0.25 kg ⇒ σ² = 0.0625 kg²</b>：标准差同单位，方差是平方单位。",e:"⚠ <b>N(x|µ,σ²) 的第二个参数是方差</b>；NumPy 的 <code>scale</code> 是标准差。"});
+  QUIZ(0,1,{t:"σ 从 0.25 增大到 0.50，曲线会怎样变化？",o:["整体右移，形状不变","变宽，峰变矮，面积仍然是 1","变窄，峰变高","变宽，峰变高"],a:1,w:"右移是<em>均值</em>的作用。峰变矮是<b>面积必须保持为 1</b>逼出来的，不是画图的巧合。"});
+});
+KP("2 · ★ 把高斯公式拆成三步（讲义 p5）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u90a3\u4e2a\u5f0f\u5b50\u5230\u5e95\u5728\u7b97\u4ec0\u4e48");src("p5");
+   boxNode(90,180,310,80,"\u2460 \u7b97\u8ddd\u79bb","b");
+   boxNode(445,180,310,80,"\u2461 \u6362\u6210\u51e0\u4e2a \u03c3","g");
+   boxNode(800,180,310,80,"\u2462 \u964d\u9ad8\u5ea6\u518d\u7f29\u653e","y");
+   note("2.5 \u2212 2 = 0.5 kg",245,306,"");
+   note("z = 0.5 / 0.25 = 2",600,306,"");
+   note("1.596 \u00d7 exp(\u2212z\u00b2/2)",955,306,"");
+   note("\u8fd9\u4e09\u6b65\u5c31\u662f\u9ad8\u65af\u5bc6\u5ea6\u516c\u5f0f\u7684\u5168\u90e8\u5185\u5bb9",640,398,"y");},"讲义没有直接甩公式，而是<b>把它拆成三个动作</b>，这页很值得照抄。<br>以 µ = 2、σ = 0.25、x = 2.5 为例：<em>① 先算离中心多远：2.5 − 2 = 0.5 kg</em>；<br><em>② 把这个距离换算成「几个 σ」：z = 0.5 / 0.25 = 2</em>；③ 再用它去压峰值高度。");
+  S(0,function(){clearScene();setCap("\u7b97\u51fa\u6765\uff1a0.216 \u6bcf\u5343\u514b");src("p5");
+   setEq("$$f(2.5) = 1.596 \\times \\exp(-z^{2}/2) = 1.596 \\times \\exp(-2) \\approx 0.216$$");
+   note("1.596 \u662f\u5cf0\u503c\u9ad8\u5ea6\uff08\u5728 x = \u03bc = 2 \u5904\uff09",640,196,"b");
+   note("\u8f93\u51fa\u7684\u662f\u66f2\u7ebf\u9ad8\u5ea6\uff0c\u4e0d\u662f\u6982\u7387",640,240,"y");},"把三步合起来：<em>峰值高度 1.596，乘上 exp(−z²/2)，得到 0.216 每千克</em>。<br>讲义在这页底下强调了一句：<b>输出的是曲线高度，不是概率。</b><br><em>在中心处高度约 1.60，离中心越远高度掉得越快</em>——这就是那个指数项在干的事。");
+  S(0,function(){clearScene();setEq(null);setCap("\u26a0 \u8fd9\u9875\u6709\u4e2a\u5de7\u5408\u4f1a\u5751\u4eba");src("p5");
+   boxNode(110,172,480,80,"z = 2 \u65f6\uff0cz\u00b2/2 \u6070\u597d\u4e5f\u7b49\u4e8e 2","y");
+   boxNode(690,172,480,80,"\u4e8e\u662f\u8bb2\u4e49\u5199\u6210\u4e86 exp(\u22122)","r");
+   note("\u2016 \u6307\u6570\u662f \u2212z\u00b2/2\uff0c\u4e0d\u662f \u2212z",640,296,"r");
+   note("z = 3 \u65f6\u5e94\u8be5\u662f exp(\u22124.5) \u2248 0.011\uff0c\u82e5\u8bef\u7528 exp(\u22123) \u4f1a\u5f97 0.050",640,344,"g");
+   note("\u5dee\u4e86 4.5 \u500d \u2014\u2014 \u6362\u4e2a\u6570\u5b57\u5c31\u66b4\u9732\u4e86",640,398,"y");},"这里要提醒一句讲义没说的：<b>z = 2 时 z²/2 恰好也等于 2</b>，所以写成 exp(−2) 是对的。<br><b>⚠ 但它是个巧合。</b><em>指数里是 −z²/2，不是 −z</em>。<br>换个数字就露馅：<em>z = 3 时应该是 exp(−4.5) ≈ 0.011，误用 exp(−3) 会得到 0.050，差了 4.5 倍。</em>");
+  SUM(0,2,{h:"★ 高斯密度三步：算距离 → 换成几个 σ → 压峰值",k:"µ=2, σ=0.25, x=2.5：<b>距离 0.5 → z = 2 → 1.596 × exp(−z²/2) ≈ 0.216</b>。",m:"1.596 是<b>峰值高度</b>（x = µ 处）。<b>输出是曲线高度，不是概率。</b>",w:"⚠ <b>指数是 −z²/2，不是 −z</b>。讲义写 exp(−2) 只因为 z = 2 时两者恰好相等。",e:"验这条：<b>z = 3 ⇒ exp(−4.5) ≈ 0.011</b>；误用 exp(−3) 得 0.050，差 4.5 倍。"});
+  QUIZ(0,2,{t:"高斯密度公式里，指数项是下面哪一个？",o:["exp(−z²/2)","exp(−2z)","exp(−z)","exp(−z/2)"],a:0,w:"讲义例子里 z = 2，而 z²/2 也等于 2，<em>所以 exp(−2) 两种算法恰好相同</em>——这是巧合。换成 z = 3 就会差 4.5 倍。"});
+});
+KP("3 · ★★ 概率是面积，密度是高度（讲义 p6）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u4e3a\u4ec0\u4e48\u5bc6\u5ea6\u80fd\u5927\u4e8e 1");src("p6");
+   bell(640,380,420,170,"fit b");
+   link(640,380,640,210);
+   note("x = 2 \u5904\u7684\u9ad8\u5ea6 \u2248 1.60 \u6bcf\u5343\u514b",640,186,"b");
+   note("\u2016 \u8fd9\u662f\u5408\u6cd5\u7684\u5bc6\u5ea6\uff0c\u4e0d\u662f\u300c160% \u7684\u6982\u7387\u300d",640,398,"r");},"讲义这一页只讲一件事，但它是整个 T3 最该先过关的。<b>密度是曲线的高度</b>。<br>例子里峰值高度约 <b>1.60 每千克</b>——<em>大于 1 完全正常</em>。<br><b>⚠ 它不是「160% 的概率」</b>，概率根本不是从高度读出来的。");
+  S(0,function(){clearScene();setEq(null);setCap("\u6982\u7387\u662f\u9762\u79ef");src("p6");
+   setEq("$$P(1.75 \\le X \\le 2.25) = \\int_{1.75}^{2.25} f(x)\\,dx \\approx 0.683$$");
+   note("\u628a\u533a\u95f4\u4e0a\u7684\u9762\u79ef\u79ef\u51fa\u6765\uff0c\u624d\u662f\u6982\u7387",640,196,"b");
+   note("\u6574\u6761\u66f2\u7ebf\u7684\u603b\u9762\u79ef\u662f 1",640,240,"y");},"要得到概率，<b>必须在一个区间上求面积</b>。<br>讲义给的数：<em>1.75 到 2.25 kg 这一段的面积约 68.3%</em>。<br><em>而整条曲线的总面积恒为 1</em>——这就是「摊得开峰就矮」的来源。");
+  S(0,function(){clearScene();setEq(null);setCap("\u90a3\u300c\u79f0\u663e\u793a 2.00 kg\u300d\u600e\u4e48\u7b97");src("p6");
+   boxNode(110,176,480,80,"\u6570\u5b66\u4e0a\uff1aP(X = 2.00) = 0","r");
+   boxNode(690,176,480,80,"\u5b9e\u9645\u4e0a\uff1a\u8bfb\u6570\u4ee3\u8868\u4e00\u4e2a\u820d\u5165\u533a\u95f4","g");
+   note("\u70b9\u6ca1\u6709\u5bbd\u5ea6 \u21d2 \u9762\u79ef\u4e3a 0",350,306,"");
+   note("\u533a\u95f4\u6709\u5bbd\u5ea6 \u21d2 \u6982\u7387\u4e0d\u4e3a 0",920,306,"");
+   note("\u7a84\u533a\u95f4\u65f6\uff1a\u6982\u7387 \u2248 \u5bc6\u5ea6 \u00d7 \u5bbd\u5ea6\uff0c\u5982 1.60 \u00d7 0.01 = 0.016",640,398,"y");},"顺着上一条会冒出一个疑问：<b>连续模型下恰好取到某个精确值的概率是 0</b>，<br>那秤显示「2.00 kg」为什么还有概率？<b>因为那个读数代表一个舍入区间，区间有宽度。</b><br><em>窄区间时有个好用的近似：概率 ≈ 密度 × 区间宽度</em>，比如 1.60 × 0.01 = 0.016。");
+  SUM(0,3,{h:"★★ 密度是高度（可以 >1），概率是面积（0 到 1）",k:"峰值密度约 <b>1.60 每千克</b>，<b>大于 1 完全正常</b>。",m:"<b>P(1.75 ≤ X ≤ 2.25) ≈ 0.683</b>；整条曲线总面积恒为 1。",w:"<b>P(X = 某个精确值) = 0</b>（点没有宽度）；秤显示 2.00 kg 代表<b>舍入区间</b>。",e:"窄区间近似：<b>概率 ≈ 密度 × 宽度</b>，如 1.60 × 0.01 = 0.016。"});
+  QUIZ(0,3,{t:"某高斯在峰值处的密度是 1.60，这说明什么？",o:["该分布的方差一定大于 1","计算出错，密度不可能大于 1","该点的概率是 160%","这是合法的密度值，密度是高度不是概率"],a:3,w:"概率要从<em>区间上的面积</em>得到。σ 很小时曲线又窄又高，峰值轻易超过 1，<b>但面积仍然是 1</b>。"});
+});
+KP("4 · ❓讨论题一：更可变会怎样（讲义 p8–p9）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8bb2\u4e49\u81ea\u5e26\u7684\u7b2c\u4e00\u4e2a\u95ee\u9898");src("p8");
+   setBig("\u5305\u88f9\u91cd\u91cf\u53d8\u5f97\u66f4\u53c2\u5dee\u4e0d\u9f50\u65f6\uff0c<br>\u9ad8\u65af\u66f2\u7ebf\u4f1a\u600e\u4e48\u53d8\uff1f");},"讲义在这里停下来，<b>先抛一个问题再给答案</b>——这是它比 PCA 那份好读的地方。<br>问题是：<b>包裹重量变得更参差不齐时，高斯曲线会怎么变？</b><br><em>先自己答一遍再往下看</em>。");
+  S(0,function(){clearScene();setBig(null);setCap("\u7b54\u6848\uff1a\u66f4\u5bbd\u3001\u66f4\u77ee\u3001\u9762\u79ef\u4e0d\u53d8");src("p9");
+   bell(400,370,260,170,"fit g");
+   bell(900,370,470,94,"fit y");
+   note("\u53d8\u5f02\u5c0f",400,166,"g");note("\u53d8\u5f02\u5927",900,232,"y");
+   note("\u2460 \u66f4\u5bbd\u3000\u2461 \u5cf0\u66f4\u77ee\u3000\u2462 \u603b\u9762\u79ef\u4ecd\u7136\u662f 1\u3000\u2463 \u5747\u503c\u4e0d\u53d8\u5219\u4e2d\u5fc3\u4e0d\u52a8",640,398,"y");},"讲义给的答案是四条：<em>曲线变宽、峰变矮、总面积不变、均值不变则中心不动</em>。<br>前两条互为因果——<em>因为面积必须守恒，变宽就只能变矮</em>。<br>第四条值得单独记：<b>散布变了不代表中心变了，这两个旋钮互不干涉。</b>");
+  SUM(0,4,{h:"❓变异变大 ⇒ 更宽、更矮、面积不变、中心不动",k:"四条答案：<b>变宽 / 峰变矮 / 总面积仍是 1 / 均值不变则中心不动</b>。",m:"前两条互为因果：<b>面积守恒 ⇒ 变宽就只能变矮</b>。",w:"<b>散布变了不代表中心变了</b>——µ 和 σ 两个旋钮互不干涉。",e:"这题是 p4「两个旋钮」那一节的直接复查。"});
+  QUIZ(0,4,{t:"数据变得更参差不齐，但平均值没变。曲线会怎样？",o:["变宽、变矮，中心也随之右移","形状不变，整体平移","变宽、变矮，中心保持不动，面积仍为 1","变窄、变高，中心不动"],a:2,w:"<em>平移是 µ 的作用，宽窄是 σ 的作用</em>，两者独立。面积守恒使「变宽」与「变矮」必然同时发生。"});
+});
+KP("5 · 术语小结：别把这几个词搞混（讲义 p10）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8bb2\u4e49\u5728\u8fd9\u91cc\u5148\u628a\u8bcd\u7edf\u4e00\u4e86");src("p10");
+   matrix({rows:4,cols:2,cw:430,ch:50,x:210,y:176,
+     cell:function(i,j){var t=[
+       ["\u8bcd","\u6307\u7684\u662f"],
+       ["\u9ad8\u65af","\u4e00\u6761\u949f\u5f62\u5bc6\u5ea6\u66f2\u7ebf"],
+       ["\u6210\u5206","\u6a21\u578b\u91cc\u7684\u5176\u4e2d\u4e00\u6761\u9ad8\u65af"],
+       ["GMM","\u8fd9\u4e9b\u66f2\u7ebf\u7684\u52a0\u6743\u6df7\u5408"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===2?"hl":"";}});},"讲义在进入混合之前，先花一页统一了词。<b>高斯</b>是一条钟形曲线；<b>成分</b>是模型里的其中一条；<b>GMM</b> 是这些曲线的加权混合。<br><em>三个词是「一般 → 具体 → 整体」的关系</em>，别混着用。");
+  S(0,function(){clearScene();setEq(null);setCap("\u6570\u636e\u8fd9\u4e00\u8fb9\u4e5f\u6709\u4e09\u4e2a\u8bcd");src("p10");
+   matrix({rows:4,cols:2,cw:430,ch:50,x:210,y:176,
+     cell:function(i,j){var t=[
+       ["\u8bcd","\u6307\u7684\u662f"],
+       ["\u5305\u88f9","\u4e00\u4e2a\u7269\u7406\u5b9e\u4f53"],
+       ["\u89c2\u6d4b","\u4e00\u6761\u88ab\u8bb0\u5f55\u4e0b\u6765\u7684\u6570\u636e"],
+       ["\u7279\u5f81","\u5b83\u88ab\u6d4b\u91cf\u7684\u90a3\u4e2a\u91cd\u91cf"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("\u8fd9\u4e00\u6392\u5bf9\u5e94\u7684\u662f\u300c\u73b0\u5b9e \u2192 \u6570\u636e \u2192 \u5217\u300d",640,398,"y");},"数据这一边也有三个词：<em>包裹是物理实体，观测是记录下来的那一条，特征是它被测量的那个量</em>。<br>讲义把它们分开写，是因为<em>后面讲「责任度」时，说的始终是「观测」而不是「包裹」</em>——<b>模型只看得见数字，看不见包裹本身</b>。");
+  SUM(0,5,{h:"高斯 → 成分 → GMM；包裹 → 观测 → 特征",k:"<b>高斯</b>是一条曲线，<b>成分</b>是模型里的其中一条，<b>GMM</b> 是它们的加权混合。",m:"数据侧：<b>包裹（实体）→ 观测（记录）→ 特征（被测的量）</b>。",w:"<b>模型只看得见数字，看不见包裹本身</b>——所以责任度说的始终是「观测」。",e:"这一页读起来像废话，<em>但后面所有表述都建立在这套词上</em>。"});
+  QUIZ(0,5,{t:"「成分」这个词在 GMM 里指什么？",o:["一个被观测到的数据点","模型里的其中一条高斯曲线","整个混合模型本身","一个被测量的特征"],a:1,w:"<em>GMM 是这些成分的加权混合</em>；数据点叫「观测」。三个词是「一般 → 具体 → 整体」的关系。"});
+});
+KP("6 · 生成故事：先选成分，再抽一个值（讲义 p15）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u6a21\u578b\u60f3\u8c61\u6570\u636e\u662f\u600e\u4e48\u751f\u51fa\u6765\u7684");src("p15");
+   boxNode(90,180,300,84,"\u2460 \u9009\u4e00\u4e2a\u6210\u5206","b");
+   boxNode(450,180,300,84,"\u2461 \u4ece\u5b83\u7684\u9ad8\u65af\u91cc\u62bd","g");
+   boxNode(810,180,300,84,"\u2462 \u89c2\u6d4b\u5230\u4e00\u4e2a\u91cd\u91cf","y");
+   link(390,222,450,222);link(750,222,810,222);
+   note("A\uff1a60%\u3000B\uff1a40%",240,306,"");
+   note("A\uff1a\u03bc=2, \u03c3=0.25\u3000B\uff1a\u03bc=3, \u03c3=0.40",600,306,"");
+   note("\u6bd4\u5982 2.5 kg",960,306,"");
+   note("\u2016 \u4e00\u4e2a\u89c2\u6d4b\u53ea\u6765\u81ea\u4e00\u4e2a\u6210\u5206\uff0c\u4e0d\u662f\u4e24\u8005\u7684\u5e73\u5747",640,398,"r");},"混合模型的「生成故事」只有两步：<em>先按权重选中一个成分，再从那个成分的高斯里抽一个值</em>。<br>讲义的设置是：<em>A 占 60%（µ=2, σ=0.25），B 占 40%（µ=3, σ=0.40）</em>。<br><b>⚠ 最容易想歪的一点：一个观测只来自一个成分，不是两个成分的平均。</b>");
+  S(0,function(){clearScene();setCap("\u6df7\u5408\u5bc6\u5ea6\uff1a\u5728\u540c\u4e00\u4e2a x \u5904\u628a\u9ad8\u5ea6\u76f8\u52a0");src("p16");
+   setEq("$$0.1296 + 0.1826 = 0.3122\\ \\text{\\u6bcf\\u5343\\u514b}$$");
+   note("x = 2.5 \u5904\uff1aA \u8d21\u732e 0.1296\u3000B \u8d21\u732e 0.1826",640,196,"b");
+   note("\u52a0\u7684\u662f\u66f2\u7ebf\u9ad8\u5ea6\uff0c\u4e0d\u662f\u628a\u4e24\u4e2a\u5305\u88f9\u7684\u91cd\u91cf\u5e73\u5747",640,240,"y");},"把两个成分各自的密度<b>先乘权重、再相加</b>，就得到混合密度。<br>在 x = 2.5 处：<em>A 贡献 0.1296，B 贡献 0.1826，合计 0.3122 每千克</em>。<br><em>⚠ 加的是同一个 x 处的曲线高度</em>——<b>不是把两个包裹的重量平均起来</b>。");
+  SUM(0,6,{h:"生成故事：按权重选成分 → 从它的高斯里抽值",k:"讲义设置：<b>A 占 60%（µ=2, σ=0.25），B 占 40%（µ=3, σ=0.40）</b>。",m:"混合密度 = <b>各成分密度先乘权重再相加</b>：0.1296 + 0.1826 = <b>0.3122</b>。",w:"⚠ <b>一个观测只来自一个成分</b>，不是两者的平均；<b>加的是曲线高度</b>。",e:"加权后 A 曲线面积 0.6、B 曲线面积 0.4，<b>混合曲线面积是 1</b>。"});
+  QUIZ(0,6,{t:"混合模型里，一个观测是怎么产生的？",o:["把两个成分的密度相乘后抽样","先抽一个值，再根据大小决定它属于哪个成分","从两个成分各抽一个值再平均","先按权重选中一个成分，再从那个成分的高斯里抽一个值"],a:3,w:"D 描述的是<em>事后的推断</em>（责任度），不是生成过程。混合密度是把加权<b>高度</b>相加，不是把观测平均。"});
+});
+KP("7 · ★★ 责任度：四步算出来（讲义 p18）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u89c2\u6d4b\u5230 2.5 kg \u540e\uff0c\u8c01\u7684\u8d23\u4efb\u66f4\u5927");src("p18");
+   setEq("$$r_{k} = \\frac{\\pi_{k}\\,f_{k}(x)}{\\sum_{j}\\pi_{j}\\,f_{j}(x)}$$");
+   note("\u8d23\u4efb\u5ea6 = \u8be5\u6210\u5206\u7684\u52a0\u6743\u5bc6\u5ea6 \u00f7 \u603b\u5bc6\u5ea6",640,196,"b");
+   note("\u8fd9\u5c31\u662f\u8d1d\u53f6\u65af\u516c\u5f0f\u7684\u5bc6\u5ea6\u7248",640,240,"y");},"责任度回答的是<b>反方向的问题</b>：生成故事是「先选成分再抽值」，<br>而我们看到的只有值，<em>于是要反推「它更可能来自谁」</em>。<br><b>公式一句话：该成分的加权密度，除以总密度。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("\u56db\u884c\u8868\uff0c\u4ece\u4e0a\u5f80\u4e0b\u7b97");src("p18");
+   matrix({rows:5,cols:3,cw:300,ch:44,x:170,y:166,
+     cell:function(i,j){var t=[
+       ["x = 2.5 kg","A","B"],
+       ["\u5148\u9a8c \u03c0\u2096","0.6","0.4"],
+       ["\u5bc6\u5ea6 f\u2096(2.5)","0.2160","0.4566"],
+       ["\u52a0\u6743\u5bc6\u5ea6","0.1296","0.1826"],
+       ["\u8d23\u4efb\u5ea6","0.415","0.585"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===4?"hl":"";}});
+   note("\u5206\u6bcd = 0.1296 + 0.1826 = 0.3122",640,398,"y");},"讲义把整个计算摆成一张四行表，<b>照着从上往下填就行</b>：<br><em>先验 → 密度 → 加权密度 → 除以总和</em>。<br>最后一行就是答案：<b>A 的责任度 0.415，B 的 0.585</b>。两者相加等于 1。");
+  S(0,function(){clearScene();setCap("\u89c2\u6d4b\u524d\u540e\uff0c\u4fe1\u5ff5\u53d8\u4e86");src("p18\u3001p23");
+   boxNode(110,176,480,80,"\u89c2\u6d4b\u524d\uff1aA 60%\u3000B 40%","b");
+   boxNode(690,176,480,80,"\u89c2\u6d4b\u540e\uff1aA 41.5%\u3000B 58.5%","g");
+   link(590,216,690,216);
+   note("\u8fd9\u5c31\u662f\u300c\u5148\u9a8c \u2192 \u540e\u9a8c\u300d",640,300,"");
+   note("\u6743\u91cd \u03c0\u2096 \u662f\u6210\u5206\u7ea7\u7684\uff1b\u8d23\u4efb\u5ea6 r\u1d62\u2096 \u662f\u8fd9\u4e2a\u89c2\u6d4b\u7684",640,398,"y");},"把观测前后并排看，就能分清两个最容易混的词。<br><em>π_k 是成分级的先验，所有观测共用；r_ik 是这个观测的后验，每个点各不相同。</em><br><em>看到 2.5 kg 这个具体重量之后，信念从 60/40 变成了 41.5/58.5</em>。");
+  SUM(0,7,{h:"★★ 责任度 = 加权密度 ÷ 总密度",k:"四行表：<b>先验 → 密度 → 加权密度 → 除以总和</b>。",m:"x = 2.5 处：0.6×0.2160 = 0.1296，0.4×0.4566 = 0.1826，<b>分母 0.3122 ⇒ (0.415, 0.585)</b>。",w:"<b>π_k 是成分级先验（共用）；r_ik 是观测级后验（各不相同）。</b>",e:"观测前 60/40 ⇒ 观测后 41.5/58.5，<em>这就是「先验 → 后验」</em>。"});
+  QUIZ(0,7,{t:"责任度的分母是什么？",o:["所有成分的加权密度之和，也就是混合密度","该成分的先验权重","观测总数 N","该成分的方差"],a:0,w:"分母是<em>同一个 x 处所有成分加权密度的和</em>，所以一个观测的各责任度必然加起来等于 1。"});
+});
+KP("8 · ❓讨论题二：为什么不直接给一个标签（讲义 p13–p14、p19–p21）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8bb2\u4e49\u81ea\u5e26\u7684\u7b2c\u4e8c\u4e2a\u95ee\u9898");src("p13");
+   setBig("\u4e3a\u4ec0\u4e48\u8981\u4fdd\u7559\u4e24\u4e2a\u6210\u5206\u7684\u6210\u5458\u5ea6\uff0c<br>\u800c\u4e0d\u662f\u76f4\u63a5\u7ed9\u4e00\u4e2a\u6807\u7b7e\uff1f");},"第二个讨论题，问得很实际：<em>既然最后还是要做决定，为什么不直接给一个标签？</em><br>提示一个思考方向：<em>设想两个点，一个是 99% 对 1%，另一个是 51% 对 49%</em>——<em>它们取硬标签会得到同一个结果吗？如果会，那丢掉的是什么？</em><br>想好了再往下。");
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap("\u7b54\u6848\uff1a\u786c\u6807\u7b7e\u4f1a\u628a\u4e0d\u786e\u5b9a\u6027\u85cf\u8d77\u6765");src("p20\u3001p21");
+   matrix({rows:4,cols:3,cw:300,ch:50,x:170,y:176,
+     cell:function(i,j){var t=[
+       ["","\u89c2\u6d4b 1","\u89c2\u6d4b 2"],
+       ["\u8f6f\u6210\u5458\u5ea6","A 1%\u3000B 99%","A 49%\u3000B 51%"],
+       ["\u786c\u6807\u7b7e","B","B"],
+       ["\u5b9e\u9645\u60c5\u5f62","\u51e0\u4e4e\u7a33\u5403 B","\u51e0\u4e4e\u5e73\u5c40"]];return t[i][j];},
+     dim:function(i,j){return i===0||j===0;},
+     hl:function(i,j){return i===2?"hl":"";}});
+   note("\u4e24\u4e2a\u89c2\u6d4b\u62ff\u5230\u540c\u4e00\u4e2a\u6807\u7b7e\uff0c\u4f46\u628a\u63e1\u5929\u5dee\u5730\u522b",640,398,"y");},"讲义用一张对照表回答：<em>两个观测都会被判成 B，可一个是 99% 的把握，另一个几乎是平局。</em><br><b>⚠ 硬标签把这个差别彻底抹掉了。</b><br><em>软成员度的价值，就是把这份不确定性留在明面上</em>。");
+  S(0,function(){clearScene();setEq(null);setCap("\u4ec0\u4e48\u65f6\u5019\u8fd9\u4efd\u4e0d\u786e\u5b9a\u6027\u771f\u7684\u6709\u7528");src("p14");
+   boxNode(110,180,480,84,"\u4e00\u4e2a\u987e\u5ba2\u672c\u6765\u5c31\u517c\u5177\u4e24\u8fb9\u7684\u7279\u5f81","b");
+   boxNode(690,180,480,84,"\u8f6f\u6210\u5458\u5ea6\u628a\u8fd9\u79cd\u91cd\u53e0\u7559\u5728\u660e\u9762\u4e0a","g");
+   link(590,222,690,222);
+   note("\u8bb2\u4e49\u539f\u8bdd\uff1a\u5355\u4e00\u6807\u7b7e\u4f1a\u8ba9\u4e00\u4e2a\u4e0d\u786e\u5b9a\u7684\u5f52\u5c5e\u770b\u8d77\u6765\u5f88\u786e\u5b9a",640,398,"y");},"讲义补了一个很实在的场景：<b>一个顾客本来就同时具备两类的特征。</b><br>这时候强行二选一，<em>丢掉的不是精度，而是「这件事本来就说不准」这个事实</em>。<br><em>原话值得抄：单一标签会让一个不确定的归属看起来很确定。</em>");
+  SUM(0,8,{h:"❓软成员度的价值：把不确定性留在明面上",k:"<b>[1%, 99%] 和 [49%, 51%] 都会被判成 B</b>，但把握天差地别。",m:"<b>硬标签把这个差别彻底抹掉。</b>",w:"场景：<b>一个顾客本来就兼具两类特征</b>，强行二选一丢掉的是「本来就说不准」这个事实。",e:"讲义原话：<b>单一标签会让一个不确定的归属看起来很确定。</b>"});
+  QUIZ(0,8,{t:"两个观测的责任度分别是 [1%, 99%] 与 [49%, 51%]，取硬标签会怎样？",o:["两个都会被标成噪声","分别得到 B 和 A 两个不同标签","都得到 B，但把握的差别被完全抹掉","第二个观测无法给出标签"],a:2,w:"硬标签只保留「谁最大」。<em>49% 对 51% 几乎是平局，却和 1% 对 99% 得到同样的结论</em>——这正是要保留软成员度的理由。"});
+});
+KP("9 · ❓讨论题三：先验大，为什么责任度反而小（讲义 p22–p23）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8bb2\u4e49\u81ea\u5e26\u7684\u7b2c\u4e09\u4e2a\u95ee\u9898");src("p22");
+   setBig("A \u7684\u5148\u9a8c\u66f4\u5927\u3002<br>\u4e3a\u4ec0\u4e48 B \u7684\u8d23\u4efb\u5ea6\u53cd\u800c\u66f4\u5927\uff1f");},"第三个讨论题，直指刚才那组数字里最反直觉的地方：<br><em>A 的先验是 60%，比 B 大；可算出来 B 的责任度是 58.5%，反而更大。</em><br><em>为什么？</em>");
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap("\u7b54\u6848\uff1a\u8d23\u4efb\u5ea6\u662f\u4e24\u4e2a\u56e0\u7d20\u7684\u4e58\u79ef");src("p23");
+   boxNode(110,180,480,84,"\u5148\u9a8c\uff1aA \u66f4\u5e38\u89c1\uff080.6 > 0.4\uff09","b");
+   boxNode(690,180,480,84,"\u5bc6\u5ea6\uff1aB \u66f4\u8d34\u8fd1 2.5 kg","g");
+   note("0.6 \u00d7 0.2160 = 0.1296",350,310,"");
+   note("0.4 \u00d7 0.4566 = 0.1826",920,310,"");
+   note("\u5bc6\u5ea6\u5dee\u4e86\u4e24\u500d\u591a\uff0c\u8db3\u4ee5\u538b\u8fc7\u5148\u9a8c\u7684 1.5 \u500d",640,398,"y");},"答案在那个乘积里：<b>责任度 = 先验 × 密度</b>，两个因素都要算进去。<br><em>A 的先验是 B 的 1.5 倍，但 B 在 2.5 kg 处的密度是 A 的两倍多</em>（0.4566 对 0.2160）。<br><em>密度这一边赢得更多，所以最终 B 胜出</em>。");
+  S(0,function(){clearScene();setEq(null);setCap("\u628a\u8fd9\u6761\u8bb0\u6210\u4e00\u53e5\u8bdd");src("p23");
+   boxNode(110,190,1060,86,"\u6574\u4f53\u6709\u591a\u5e38\u89c1\uff08\u5148\u9a8c\uff09\uff0b \u8fd9\u4e2a\u89c2\u6d4b\u6709\u591a\u8d34\u5408\uff08\u5bc6\u5ea6\uff09","y");
+   note("\u4e24\u8005\u7f3a\u4e00\u4e0d\u53ef\uff0c\u6240\u4ee5\u5148\u9a8c\u5927\u4e0d\u4fdd\u8bc1\u8d23\u4efb\u5ea6\u5927",640,330,"");
+   note("\u8003\u8bd5\u91cc\u95ee\u300c\u4e3a\u4ec0\u4e48\u53cd\u8f6c\u300d\u65f6\uff0c\u628a\u8fd9\u4e24\u4e2a\u56e0\u7d20\u5206\u5f00\u5199\u5c31\u662f\u6ee1\u5206\u7b54\u6848",640,398,"g");},"讲义的收尾句很好用：<em>整体的常见程度要算，这个观测本身带来的新证据也要算。</em><br><em>所以「先验大」绝不保证「责任度大」</em>。<br>考试里遇到这类反转题，<b>把先验和密度分开写出来，再说明谁压过了谁</b>，分就拿到了。");
+  SUM(0,9,{h:"❓责任度 = 先验 × 密度，两者都要算",k:"A 先验 0.6 是 B 的 1.5 倍；<b>但 B 在 2.5 kg 处的密度 0.4566 是 A 的两倍多</b>。",m:"<b>0.6×0.2160 = 0.1296 < 0.4×0.4566 = 0.1826</b> ⇒ B 胜出。",w:"<b>先验大不保证责任度大。</b>",e:"答题模板：<b>分开写先验与密度，再说明谁压过了谁</b>。"});
+  QUIZ(0,9,{t:"A 的先验 0.6 大于 B 的 0.4，但 B 的责任度更大。原因是？",o:["先验在责任度公式里不起作用","责任度只看哪个成分的方差更大","B 在该观测处的密度高得多，压过了先验的差距","计算一定出错了"],a:2,w:"<b>责任度 = 先验 × 密度 ÷ 总密度</b>。这里密度之比（约 2.1 倍）大于先验之比（1.5 倍），所以结果反转。"});
+});
+KP("10 · GMM 要解决什么（讲义 p25）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u4e3a\u4ec0\u4e48\u4e0d\u7528\u4e00\u4e2a\u9ad8\u65af\u5c31\u597d");src("p25");
+   bell(640,380,760,120,"fit r");
+   dots([[330,300],[400,286],[470,296],[560,276],[700,284],[800,272],[880,290],[950,300]],"b",8);
+   note("\u5355\u4e00\u9ad8\u65af\uff1a\u628a\u8d28\u91cf\u644a\u5230\u4e86\u5f88\u591a\u5176\u5b9e\u5f88\u5c11\u89c1\u7684\u503c\u4e0a",640,196,"r");
+   note("\u6570\u636e\u5176\u5b9e\u805a\u5728\u4e24\u5757\uff0c\u4e2d\u95f4\u662f\u7a7a\u7684",640,398,"y");},"讲义用一句话给 GMM 定位：<em>当整体模式对单个高斯来说太复杂时，用几个重叠的高斯来描述。</em><br>图上就是典型情形：<em>数据明明聚在两块，单个高斯却把概率质量摊到了中间那片空地上</em>。");
+  S(0,function(){clearScene();setEq(null);setCap("\u4e24\u4e2a\u7528\u9014\uff0c\u4e0d\u53ea\u662f\u805a\u7c7b");src("p25");
+   boxNode(110,180,480,86,"\u5bc6\u5ea6\u5efa\u6a21","b");
+   boxNode(690,180,480,86,"\u8f6f\u805a\u7c7b","g");
+   note("\u54ea\u4e9b\u503c\u5e38\u89c1\u3001\u54ea\u4e9b\u7f55\u89c1",350,320,"");
+   note("\u6bcf\u4e2a\u70b9\u5c5e\u4e8e\u5404\u6210\u5206\u7684\u6982\u7387",920,320,"");
+   note("\u8bb2\u4e49\uff1a\u7ec4\u4e4b\u95f4\u91cd\u53e0\u3001\u5f52\u5c5e\u4e0d\u786e\u5b9a\u65f6\uff0c\u5b83\u7279\u522b\u5408\u9002",640,398,"y");},"GMM 有两个用途，<b>而且密度建模是排在前面的那个</b>。<br><em>一是描述哪些值常见、哪些罕见；二才是用成分当候选分组做软聚类</em>。<br>讲义点明了它的适用场景：<b>组之间重叠、归属本来就不确定的时候。</b>");
+  SUM(0,10,{h:"GMM：几个重叠高斯描述单个高斯装不下的分布",k:"单个高斯会<b>把概率质量摊到很多其实很少见的值上</b>。",m:"两个用途：<b>密度建模</b>（哪些值常见）与<b>软聚类</b>（每点属各成分的概率）。",w:"<b>密度建模排在前面</b>——GMM 首先是个密度模型，聚类是衍生用法。",e:"适用场景：<b>组之间重叠、归属本来就不确定</b>。"});
+  QUIZ(0,10,{t:"讲义给 GMM 的首要定位是什么？",o:["一种比 k-means 更准的聚类算法","一个概率密度模型，用几个重叠高斯描述复杂分布","一种异常检测的专用算法","一种降维方法"],a:1,w:"<em>软聚类是它的衍生用法</em>，异常检测也是（低密度可作异常分数）。但讲义把<b>密度建模</b>放在第一位。"});
+});
+KP("11 · EM 的循环：两步轮流（讲义 p26–p27）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u6ca1\u6709\u6807\u7b7e\uff0c\u6a21\u578b\u600e\u4e48\u5b66");src("p26");
+   boxNode(140,176,440,86,"E \u6b65\uff1a\u7b97\u6210\u5458\u5ea6","g");
+   boxNode(700,176,440,86,"M \u6b65\uff1a\u66f4\u65b0\u6210\u5206","y");
+   link(580,200,700,200);
+   link(700,250,580,250);
+   note("\u53c2\u6570\u56fa\u5b9a \u2192 \u95ee\u6bcf\u4e2a\u70b9\u6709\u591a\u8d34\u5408\u5404\u6210\u5206",360,320,"");
+   note("\u8d23\u4efb\u5ea6\u56fa\u5b9a \u2192 \u91cd\u7b97\u4e2d\u5fc3\u3001\u6563\u5e03\u3001\u6743\u91cd",920,320,"");
+   note("\u2016 \u6bcf\u4e00\u6b65\u56fa\u5b9a\u4e00\u534a\u3001\u66f4\u65b0\u53e6\u4e00\u534a",640,398,"r");},"EM 的结构非常对称：<b>每一步固定一半，更新另一半。</b><br><b>E 步固定参数，算每个点对各成分的成员度</b>；<b>M 步固定责任度，重算中心、散布和权重</b>。<br><em>讲义的说法很形象：成员度越强，这个点对该成分的影响就越大</em>。");
+  S(0,function(){clearScene();setEq(null);setCap("\u505c\u5728\u54ea\u91cc\uff1a\u770b\u5bf9\u6570\u4f3c\u7136\u8fd8\u6539\u4e0d\u6539\u5f97\u52a8");src("p27\u3001p32");
+   boxNode(90,176,250,80,"\u521d\u59cb\u53c2\u6570","b");
+   boxNode(385,176,250,80,"E \u6b65","g");
+   boxNode(680,176,250,80,"M \u6b65","y");
+   boxNode(975,176,215,80,"\u67e5\u4f3c\u7136","r");
+   link(340,216,385,216);link(635,216,680,216);link(930,216,975,216);
+   note("\u6539\u5584\u5f88\u5c0f\u5c31\u505c\uff1b\u5426\u5219\u5e26\u7740\u65b0\u53c2\u6570\u518d\u8f6c\u4e00\u5708",640,320,"");
+   note("\u2016 \u4e0d\u540c\u7684\u8d77\u59cb\u70b9\u53ef\u80fd\u6536\u655b\u5230\u4e0d\u540c\u7684\u89e3",640,398,"r");},"整个循环是：<em>初始参数 → E 步 → M 步 → 查对数似然 → 改善很小就停</em>。<br><em>否则带着新参数再转一圈</em>。<br><b>⚠ 讲义在收敛那一页加了一句很要紧的话：不同的起始点可能收敛到不同的解。</b>所以要多试几个初始化。");
+  SUM(0,11,{h:"EM：每一步固定一半、更新另一半",k:"<b>E 步固定参数算责任度；M 步固定责任度更新参数。</b>",m:"循环：<b>初始参数 → E → M → 查对数似然 → 改善很小就停</b>。",w:"⚠ <b>不同起始点可能收敛到不同的解</b> ⇒ 要多试几个初始化。",e:"直觉：<b>成员度越强，这个点对该成分的影响越大</b>。"});
+  QUIZ(0,11,{t:"E 步期间，什么是固定不变的？",o:["参数固定，责任度被算出来","责任度固定，参数被更新","两者同时更新","只有混合权重固定"],a:0,w:"M 步才是反过来：<em>固定责任度、更新参数</em>。把这一对记死，E/M 两步就不会搞反。"});
+});
+KP("12 · ★ 责任度是一个「分数计数」（讲义 p28）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u6ca1\u6709\u786c\u6807\u7b7e\uff0c\u600e\u4e48\u6570\u4e2a\u6570");src("p28");
+   boxNode(140,176,440,86,"2 kg \u5305\u88f9 \u2192 \u5bf9 A \u8d21\u732e 0.8","b");
+   boxNode(700,176,440,86,"3 kg \u5305\u88f9 \u2192 \u5bf9 A \u8d21\u732e 0.2","b");
+   note("\u6709\u6548\u8ba1\u6570 N_A = 0.8 + 0.2 = 1",640,320,"g");
+   note("\u2016 \u5206\u6570\u662f\u5408\u6cd5\u7684\uff1b\u6ca1\u6709\u54ea\u4e2a\u5305\u88f9\u88ab\u771f\u7684\u5207\u5f00",640,398,"r");},"M 步要算「每个成分摊到多少个观测」，<b>可成员度是概率，怎么数？</b><br>讲义的答案：<b>责任度 0.8 就贡献 0.8 个计数</b>。<br>两个包裹对 A 的贡献是 0.8 和 0.2，<em>加起来 N_A = 1</em>。<b>⚠ 分数完全合法，没有哪个包裹被真的切开。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("\u6709\u4e86\u6743\u91cd\uff0c\u5747\u503c\u5c31\u662f\u52a0\u6743\u5e73\u5747");src("p28");
+   setEq("$$\\mu_{A} = \\frac{0.8\\times 2 + 0.2\\times 3}{1} = 2.2\\ \\mathrm{kg}$$");
+   note("\u7ed3\u679c\u66f4\u9760\u8fd1 2 kg\uff0c\u56e0\u4e3a\u90a3\u4e2a\u89c2\u6d4b\u8d21\u732e\u5f97\u66f4\u591a",640,196,"b");
+   note("\u2016 \u5206\u6bcd\u662f N_A\uff0c\u4e0d\u662f\u89c2\u6d4b\u4e2a\u6570",640,240,"r");},"有了分数计数，<b>均值更新就是一个加权平均</b>：权重用责任度。<br>算出来 <b>µ_A = 2.2 kg</b>，<em>比 2.5 更靠近 2，因为那个包裹的责任度更大</em>。<br><b>⚠ 分母是 N_A，不是观测个数</b>——这是 M 步最高频的扣分点。");
+  SUM(0,12,{h:"★ 责任度 0.8 就贡献 0.8 个计数",k:"<b>有效计数 N_k = 把该成分的责任度全部加起来</b>，可以是分数。",m:"均值更新是<b>加权平均</b>：µ_A = (0.8×2 + 0.2×3)/1 = <b>2.2 kg</b>。",w:"⚠ <b>分母是 N_k，不是观测个数。</b>",e:"<b>分数是合法的</b>——没有哪个包裹被真的切开，它表示的是期望的观测数。"});
+  QUIZ(0,12,{t:"两个观测对成分 A 的责任度是 0.8 和 0.2，A 的有效计数是多少？",o:["0.8，取最大的那个","2，因为有两个观测","0，因为两个都不到 1","1，把责任度加起来"],a:3,w:"<b>N_k = Σ r_ik</b>。它是「期望的观测数」，<em>可以是分数</em>，而且所有成分的有效计数加起来等于观测总数。"});
+});
+KP("13 · ★★ M 步算例（一）：权重与均值（讲义 p29）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u4e09\u4e2a\u89c2\u6d4b\uff0c\u8d23\u4efb\u5ea6\u5df2\u7ed9");src("p29");
+   matrix({rows:4,cols:3,cw:300,ch:50,x:170,y:176,
+     cell:function(i,j){var t=[
+       ["x\u1d62","r\u1d62A","r\u1d62B"],
+       ["\u22122","0.9","0.1"],
+       ["0","0.6","0.4"],
+       ["3","0.1","0.9"]];return t[i][j];},
+     dim:function(i,j){return i===0;}});
+   note("\u6bcf\u4e00\u884c\u52a0\u8d77\u6765\u90fd\u662f 1\uff08\u6bcf\u4e2a\u89c2\u6d4b\u603b\u5171\u8d21\u732e 1 \u4e2a\u8ba1\u6570\uff09",640,398,"y");},"讲义给了一个三点算例，<b>数字很小但每一步都踩在考点上</b>。<br>三个观测 −2、0、3，E 步的责任度已经给好。<br><em>先验一眼：每一行加起来都是 1</em>——<b>因为每个观测总共只贡献一个计数</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("\u7b2c\u4e00\u6b65\uff1a\u6309\u5217\u76f8\u52a0\u5f97\u6709\u6548\u8ba1\u6570");src("p29");
+   setEq("$$N_{A} = 0.9+0.6+0.1 = 1.6 \\qquad N_{B} = 0.1+0.4+0.9 = 1.4$$");
+   note("1.6 + 1.4 = 3 = \u89c2\u6d4b\u603b\u6570",640,196,"g");
+   note("\u2016 \u522b\u628a 1.6 \u53d6\u6574\uff0c\u4e5f\u522b\u6362\u6210\u786c\u6807\u7b7e",640,240,"r");},"<b>有效计数是「按列」相加</b>：N_A = 1.6，N_B = 1.4。<br><em>校验很简单：两者相加等于 3，正是观测总数</em>。<br><b>⚠ 1.6 是合法的</b>——它的意思是「成分 A 的总成员权重相当于 1.6 个被完全指派的观测」。");
+  S(0,function(){clearScene();setEq(null);setCap("\u7b2c\u4e8c\u3001\u4e09\u6b65\uff1a\u6743\u91cd\u4e0e\u5747\u503c");src("p29");
+   setEq("$$\\pi_{A} = 1.6/3 \\approx 0.533 \\qquad \\mu_{A} = \\frac{0.9(-2)+0.6(0)+0.1(3)}{1.6} = -0.9375$$");
+   note("\u6743\u91cd\u7684\u5206\u6bcd\u662f N = 3\uff1b\u5747\u503c\u7684\u5206\u6bcd\u662f N_A = 1.6",640,196,"r");
+   note("\u03bc_B = 2.5 / 1.4 \u2248 1.7857",640,240,"b");},"接下来两步的<b>分母不一样，这里最容易出错</b>：<br><b>权重除以观测总数 N = 3</b>（π_A ≈ 0.533）；<b>均值除以有效计数 N_A = 1.6</b>（µ_A = −0.9375）。<br><em>⚠ 取值为 0 的那个观测对分子贡献 0，但它的责任度仍然计入分母</em>——所以不能除以 3。");
+  SUM(0,13,{h:"★★ N_A=1.6, N_B=1.4；π_A≈0.533；µ_A=−0.9375",k:"<b>有效计数按列相加</b>；校验：1.6 + 1.4 = 3 = 观测总数。",m:"<b>权重的分母是 N = 3；均值的分母是 N_k = 1.6。</b>两个分母不一样。",w:"⚠ <b>取值为 0 的观测对分子贡献 0，但责任度仍计入分母</b> ⇒ 不能除以 3。",e:"µ_B = 2.5/1.4 ≈ <b>1.7857</b>。<em>两个均值分别被拉向负侧和正侧</em>。"});
+  QUIZ(0,13,{t:"更新成分 A 的均值时，分母应该是什么？",o:["观测总数 3","该成分的混合权重 0.533","有效计数 N_A = 1.6","N_A − 1 = 0.6"],a:2,w:"除以 3 会得到 −0.5，是典型错误答案。<em>这是加权平均，分母必须是被平均的总权重</em>。"});
+});
+KP("14 · ★★ M 步算例（二）：散布（讲义 p30）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u56db\u6b65\uff1a\u56f4\u7ed5\u300c\u65b0\u5747\u503c\u300d\u7b97\u52a0\u6743\u5e73\u65b9\u8ddd\u79bb");src("p30");
+   matrix({rows:4,cols:3,cw:300,ch:50,x:170,y:176,
+     cell:function(i,j){var t=[
+       ["x\u1d62","r\u1d62A","\u52a0\u6743\u5e73\u65b9\u8ddd\u79bb"],
+       ["\u22122","0.9","1.0160"],
+       ["0","0.6","0.5273"],
+       ["3","0.1","1.5504"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("\u65b0\u5747\u503c = \u22120.9375\uff08\u521a\u7b97\u51fa\u6765\u7684\u90a3\u4e2a\uff09",640,398,"y");},"方差更新用的是<b>刚算出来的新均值 −0.9375</b>，不是旧的。<br>三项加权平方距离分别是 1.0160、0.5273、1.5504。<br><em>⚠ 留意标黄那一行</em>：<em>x = 3 的责任度只有 0.1，可它离中心太远，贡献反而最大。</em>");
+  S(0,function(){clearScene();setEq(null);setCap("\u9664\u4ee5\u6709\u6548\u8ba1\u6570\uff0c\u5f97\u65b9\u5dee");src("p30");
+   setEq("$$\\sigma_{A}^{2} = 3.0938 / 1.6 \\approx 1.9336 \\qquad \\sigma_{A} \\approx 1.391$$");
+   note("\u2016 \u9664\u4ee5 N_A\uff0c\u4e0d\u662f N_A \u2212 1 \u2014\u2014 \u8fd9\u662f\u6781\u5927\u4f3c\u7136\uff0c\u4e0d\u662f\u65e0\u504f\u6837\u672c\u65b9\u5dee",640,196,"r");
+   note("\u65b9\u5dee 1.9336\uff0c\u5f00\u6839\u53f7\u624d\u662f\u6807\u51c6\u5dee 1.391",640,240,"b");},"三项相加是 3.0938，除以 N_A = 1.6，得到 <b>σ²_A ≈ 1.9336</b>。<br><b>⚠ 两个高频陷阱都在这一行</b>：<b>除的是 N_k 而不是 N_k − 1</b>（这是极大似然，不是无偏样本方差）；<br><em>以及方差 1.9336 开根号之后才是标准差 1.391</em>。");
+  S(0,function(){clearScene();setEq(null);setCap("\u8bb2\u4e49\u7ed9\u7684\u4e24\u6761\u7eaa\u5f8b");src("p30");
+   boxNode(110,180,480,84,"\u7528\u65b0\u5747\u503c","r");
+   boxNode(690,180,480,84,"M \u6b65\u5168\u7a0b\u8d23\u4efb\u5ea6\u4e0d\u53d8","r");
+   note("\u522b\u62ff\u4e0a\u4e00\u8f6e\u7684 \u03bc \u53bb\u7b97",350,320,"");
+   note("\u522b\u7b97\u5230\u4e00\u534a\u91cd\u65b0\u7b97 r",920,320,"");
+   note("\u8fd9\u4e24\u6761\u5199\u5728\u8bb2\u4e49\u8fd9\u4e00\u9875\u7684\u6700\u4e0b\u65b9\uff0c\u662f\u6700\u5bb9\u6613\u88ab\u8df3\u8fc7\u7684\u4e00\u884c",640,398,"y");},"讲义在这一页底下用小字写了两条纪律，<b>都是大题的扣分点</b>：<br><em>① 用新均值；② 整个 M 步期间责任度保持不变。</em><br><em>这两条看起来像废话，但手算时顺手拿旧均值、或者算到一半重算责任度，都很常见</em>。");
+  SUM(0,14,{h:"★★ σ²_A = 3.0938/1.6 ≈ 1.9336，σ_A ≈ 1.391",k:"三项加权平方距离：<b>1.0160 + 0.5273 + 1.5504 = 3.0938</b>。",m:"⚠ <b>除以 N_k，不是 N_k − 1</b>——这是极大似然更新。",w:"⚠ <b>用新均值</b>；<b>M 步全程责任度不变</b>。",e:"注意 <b>x=3 责任度只有 0.1，贡献却最大</b>——因为离中心远。方差开根号才是标准差。"});
+  QUIZ(0,14,{t:"GMM 的方差更新为什么除以 N_k 而不是 N_k − 1？",o:["为了保证方差为正","因为这是极大似然更新，不是无偏样本方差公式","为了让估计无偏","因为 N_k 通常不是整数"],a:1,w:"<em>无偏样本方差</em>才用 n − 1。GMM 的 M 步是在最大化似然，<b>公式里就是除以 N_k</b>。"});
+});
+KP("15 · ❓讨论题四：为什么要反复更新（讲义 p33–p34）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8bb2\u4e49\u81ea\u5e26\u7684\u7b2c\u56db\u4e2a\u95ee\u9898");src("p33");
+   setBig("EM \u4e3a\u4ec0\u4e48\u8981\u53cd\u590d\u66f4\u65b0<br>\u6210\u5458\u5ea6\u548c\u6210\u5206\u63cf\u8ff0\uff1f");},"第四个讨论题，问的是 EM 为什么非得<b>转圈</b>。<br><em>既然 M 步已经把参数算好了，为什么不能就此收工？</em><br>提示：回想责任度是怎么算的——<b>它依赖当前的权重、均值和散布</b>。那么 M 步把这三样都改了之后，<b>原来那组责任度还成立吗？</b>");
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap("\u7b54\u6848\uff1a\u53c2\u6570\u4e00\u53d8\uff0c\u6210\u5458\u5ea6\u5c31\u53d8\u4e86");src("p34");
+   boxNode(110,176,480,86,"M \u6b65\u4e4b\u524d\uff1aA 41.5%\u3000B 58.5%","b");
+   boxNode(690,176,480,86,"M \u6b65\u4e4b\u540e\uff1aA 47.3%\u3000B 52.7%","g");
+   link(590,219,690,219);
+   note("\u4e24\u6761\u7ad6\u7ebf\u6807\u7684\u662f\u540c\u4e00\u4e2a\u5305\u88f9\uff1a2.5 kg",640,320,"");
+   note("\u89c2\u6d4b\u6ca1\u53d8\uff0c\u53d8\u7684\u662f\u89e3\u91ca\u5b83\u7684\u90a3\u4e24\u6761\u66f2\u7ebf",640,398,"y");},"讲义用<b>同一个 2.5 kg 的包裹</b>给出答案：<br><em>M 步之前它的责任度是 41.5% / 58.5%，M 步之后变成了 47.3% / 52.7%。</em><br><em>观测一点没变，变的是用来解释它的那两条曲线</em>——<b>所以必须回到 E 步重算一遍。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("\u4e8e\u662f\u5f62\u6210\u4e00\u4e2a\u95ed\u73af");src("p35");
+   boxNode(90,180,250,82,"\u63cf\u8ff0","b");
+   boxNode(385,180,250,82,"\u53e0\u52a0","b");
+   boxNode(680,180,250,82,"\u5f52\u4e00\u5316","g");
+   boxNode(975,180,215,82,"\u66f4\u65b0","y");
+   note("\u4e2d\u5fc3\u4e0e\u6563\u5e03",215,316,"");
+   note("\u52a0\u6743\u5bc6\u5ea6\u6c42\u548c",510,316,"");
+   note("\u5f97\u5230\u6210\u5458\u5ea6",805,316,"");
+   note("\u52a0\u6743\u91cd\u7b97\u53c2\u6570",1082,316,"");
+   note("\u56db\u4e2a\u52a8\u4f5c\u8f6c\u6210\u4e00\u5708\uff0c\u5c31\u662f\u6574\u4e2a GMM",640,398,"y");},"讲义最后把全过程压成四个词：<b>描述 → 叠加 → 归一化 → 更新</b>。<br><em>描述中心与散布，叠加成混合密度，归一化得到成员度，再用成员度加权重算参数</em>。<br><em>然后回到第一步。EM 做的就是让这四个动作一直转下去。</em>");
+  SUM(0,15,{h:"❓参数一变，成员度就变 ⇒ 必须回到 E 步",k:"同一个 2.5 kg 包裹：<b>M 步前 41.5/58.5 ⇒ M 步后 47.3/52.7</b>。",m:"<b>观测没变，变的是解释它的那两条曲线。</b>",w:"全过程四个词：<b>描述 → 叠加 → 归一化 → 更新</b>，然后回到第一步。",e:"⚠ 讲义没给更新后的参数，<em>这组数字是用来说明「会变」，不是让你去验算的</em>。"});
+  QUIZ(0,15,{t:"M 步更新完参数之后，为什么还要回到 E 步？",o:["因为 M 步只更新了均值，没更新权重","为了检查上一轮的计算有没有算错","为了把责任度重新归一化到 1","因为参数变了，同一个观测的责任度也跟着变了"],a:3,w:"讲义用同一个 2.5 kg 包裹演示：<b>41.5/58.5 变成 47.3/52.7</b>。观测没变，<em>变的是解释它的那两条曲线</em>。"});
+});
+KP("16 · 协方差控制形状（讲义 p31）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u5747\u503c\u5b9a\u4f4d\u7f6e\uff0c\u534f\u65b9\u5dee\u5b9a\u5f62\u72b6\u4e0e\u503e\u659c");src("p31");
+   matrix({rows:5,cols:2,cw:420,ch:44,x:220,y:166,
+     cell:function(i,j){var t=[
+       ["\u7c7b\u578b","\u4e8c\u7ef4\u5f62\u72b6"],
+       ["spherical","\u5706\u5f62\uff0c\u5927\u5c0f\u53ef\u4e0d\u540c"],
+       ["diagonal","\u4e0e\u5750\u6807\u8f74\u5bf9\u9f50\u7684\u692d\u5706\uff0c\u4e0d\u503e\u659c"],
+       ["tied","\u5f62\u72b6\u503e\u659c\u5168\u540c\uff0c\u53ea\u662f\u4e2d\u5fc3\u4e0d\u540c"],
+       ["full","\u5404\u81ea\u6709\u81ea\u5df1\u7684\u5927\u5c0f\u3001\u62c9\u4f38\u4e0e\u503e\u659c"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===4?"hl":"";}});
+   note("\u8981\u8ba9\u4e24\u4e2a\u6210\u5206\u503e\u659c\u5f97\u4e0d\u4e00\u6837 \u21d2 \u53ea\u80fd\u9009 full",640,398,"y");},"这一页把四种协方差类型并排摆出来。<b>均值定位置，协方差定形状和倾斜。</b><br><em>spherical 只有圆；diagonal 的椭圆不能斜；tied 各成分形状完全一样</em>。<br><em>只有 full 允许每个成分有自己的大小、拉伸和倾斜。</em>");
+  S(0,function(){clearScene();setEq(null);setCap("\u4e09\u4e2a\u53c2\u6570\u5404\u7ba1\u4e00\u4ef6\u4e8b");src("p31");
+   boxNode(110,180,320,84,"\u03bc\u2096\uff1a\u4e2d\u5fc3\u5728\u54ea","b");
+   boxNode(470,180,320,84,"\u03a3\u2096\uff1a\u6563\u5e03\u4e0e\u671d\u5411","g");
+   boxNode(830,180,320,84,"\u03c0\u2096\uff1a\u603b\u4f53\u5360\u591a\u5927\u4efd\u989d","y");
+   note("\u628a\u8fd9\u4e09\u4e2a\u5206\u5f00\u8bb0\uff0c\u8bfb\u62df\u5408\u7ed3\u679c\u65f6\u5c31\u4e0d\u4f1a\u4e32",640,330,"");
+   note("\u2016 \u03c0\u2096 \u662f\u5360\u6bd4\uff0c\u4e0d\u662f\u300c\u6210\u5206\u7684\u5927\u5c0f\u300d",640,398,"r");},"讲义把三个参数的分工写在同一行：<em>µ_k 管中心，Σ_k 管散布与朝向，π_k 管总体份额。</em><br><b>⚠ 最后一个最容易误读</b>：<em>π_k 是这个成分占了多大比例的概率质量，不是它在图上画出来有多大</em>。<br>画出来的大小是 Σ_k 决定的。");
+  SUM(0,16,{h:"µ 定位置，Σ 定形状与倾斜，π 定份额",k:"四种类型：<b>spherical 圆 / diagonal 轴对齐椭圆 / tied 全同 / full 各自不同</b>。",m:"<b>要让两个成分倾斜得不一样 ⇒ 只能选 full。</b>",w:"⚠ <b>π_k 是占比，不是「成分画出来有多大」</b>——大小由 Σ_k 决定。",e:"更灵活不等于更好：<em>数据有限时简单类型估得更稳</em>。"});
+  QUIZ(0,16,{t:"两个成分需要有不同的倾斜方向，必须用哪种协方差类型？",o:["full","tied","spherical","diagonal"],a:0,w:"spherical 只有圆；diagonal 的椭圆<em>只能与坐标轴对齐</em>；tied 强制所有成分形状朝向相同。"});
+});
+KP("17 · 似然与收敛：怎么知道该停了（讲义 p32）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8fd9\u4e00\u8282\u56de\u7b54\uff1a\u62ff\u4ec0\u4e48\u5f53\u300c\u62df\u5408\u5f97\u597d\u4e0d\u597d\u300d\u7684\u5c3a\u5b50");src("p32");
+   boxNode(90,176,290,84,"\u6bcf\u4e2a\u89c2\u6d4b","b");
+   boxNode(425,176,290,84,"\u52a0\u6743\u5bc6\u5ea6\u76f8\u52a0","g");
+   boxNode(760,176,290,84,"\u53d6\u5bf9\u6570\u518d\u603b\u548c","y");
+   link(380,218,425,218);link(715,218,760,218);
+   note("\u5f97\u5230\u7684\u5c31\u662f\u5bf9\u6570\u4f3c\u7136",640,320,"");
+   note("\u6539\u5584\u53d8\u5f97\u5f88\u5c0f\u4e86\uff0c\u5c31\u53ef\u4ee5\u505c",640,398,"y");},"EM 需要一把尺子来判断「还要不要再转一圈」，这把尺子就是<b>对数似然</b>。<br>算法讲义写得很直白：<em>对每个观测，把加权密度加起来；取对数；再对所有观测求和</em>。<br><b>每一轮之后看它涨了多少，改善很小就停。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("\u4e24\u4e2a\u9636\u6bb5\u7684\u5178\u578b\u8868\u73b0");src("p32");
+   boxNode(110,176,480,84,"\u65e9\u671f\u8fed\u4ee3\uff1a\u6539\u5584\u5f88\u5927","g");
+   boxNode(690,176,480,84,"\u540e\u671f\u8fed\u4ee3\uff1a\u6539\u5584\u5f88\u5c0f","y");
+   note("\u53c2\u6570\u8fd8\u5728\u5927\u5e45\u632a\u52a8",350,316,"");
+   note("\u57fa\u672c\u5b9a\u4e0b\u6765\u4e86",920,316,"");
+   note("\u2016 \u4e0d\u540c\u7684\u8d77\u59cb\u70b9\u53ef\u80fd\u6536\u655b\u5230\u4e0d\u540c\u7684\u89e3",640,398,"r");},"讲义画了两段曲线对比：<b>早期迭代改善很大，后期很小</b>。<br>但它在同一页加了一句分量很重的话：<b>不同的起始点可能收敛到不同的解。</b><br><em>所以「似然不再涨了」只说明这一次跑停住了，不说明它找到了最好的那个</em>——要用多个初始化去试。");
+  SUM(0,17,{h:"对数似然是 EM 的停止尺子",k:"算法：<b>每个观测的加权密度相加 → 取对数 → 对所有观测求和</b>。",m:"<b>早期改善大，后期改善小；改善很小就停。</b>",w:"⚠ <b>不同起始点可能收敛到不同的解</b>——「不再涨」≠「找到最好的」。",e:"⇒ 实践上要<b>多个初始化各跑一遍，比较最终的似然</b>。"});
+  QUIZ(0,17,{t:"EM 的对数似然不再明显上升，说明什么？",o:["这一次运行收敛了，但不保证是最好的解","模型的成分数选对了","已经找到了全局最优解","数据确实服从高斯混合分布"],a:0,w:"讲义明说<em>不同起始点可能收敛到不同解</em>。收敛只是「这一次停住了」，<b>既不保证全局最优，也不验证分布假设</b>。"});
+});
+KP("18 · GMM 与 k-means 的差别（讲义 p36）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u540c\u4e00\u4e2a\u70b9\uff0c\u4e24\u79cd\u62a5\u6cd5");src("p36");
+   matrix({rows:4,cols:3,cw:300,ch:52,x:170,y:176,
+     cell:function(i,j){var t=[
+       ["","k-means","GMM"],
+       ["\u5b66\u5230\u4ec0\u4e48","\u53ea\u5b66\u4e2d\u5fc3","\u4e2d\u5fc3 + \u6563\u5e03 + \u4efd\u989d"],
+       ["\u600e\u4e48\u5f52\u7c7b","\u5f52\u7ed9\u6700\u8fd1\u7684\u4e2d\u5fc3","\u7ed9\u51fa\u6bcf\u4e2a\u6210\u5206\u7684\u6982\u7387"],
+       ["\u8f93\u51fa","\u4e00\u4e2a\u6807\u7b7e","\u4e00\u4e2a\u6982\u7387\u5411\u91cf"]];return t[i][j];},
+     dim:function(i,j){return i===0||j===0;},
+     hl:function(i,j){return i===1?"hl":"";}});
+   note("\u8bb2\u4e49\u7684\u4f8b\u5b50\uff1a\u540c\u4e00\u4e2a\u70b9\uff0ck-means \u7ed9 B\uff0cGMM \u7ed9 A 40% / B 60%",640,398,"y");},"讲义用<b>同一个点</b>来对比两者，这个设计很清楚。<br><em>k-means 只学中心，然后把点归给最近的那个</em>；<b>GMM 还学散布和份额，给出的是一组概率</b>。<br><em>同一个点：k-means 判成 B，GMM 说「A 占 40%、B 占 60%」</em>。");
+  S(0,function(){clearScene();setEq(null);setCap("\u591a\u5b66\u7684\u90a3\u4e24\u6837\u4e1c\u897f\u6709\u4ec0\u4e48\u7528");src("p36\u3001p31");
+   boxNode(110,180,480,84,"\u6563\u5e03 \u03a3\u2096\uff1a\u6210\u5206\u53ef\u4ee5\u6709\u5f62\u72b6\u4e0e\u503e\u659c","g");
+   boxNode(690,180,480,84,"\u4efd\u989d \u03c0\u2096\uff1a\u6210\u5206\u53ef\u4ee5\u4e00\u5927\u4e00\u5c0f","g");
+   note("k-means \u7684\u6bcf\u4e2a\u7c07\u90fd\u662f\u300c\u5706\u7684\u3001\u4e00\u6837\u5927\u300d",640,320,"");
+   note("\u2016 \u4f46\u66f4\u7075\u6d3b\u4e0d\u7b49\u4e8e\u66f4\u597d \u2014\u2014 \u53c2\u6570\u591a\u4e86\uff0c\u8981\u4f30\u7684\u4e5c\u591a\u4e86",640,398,"r");},"GMM 多学的两样东西各有用处：<em>散布让成分能有形状和倾斜，份额让成分可以一大一小</em>。<br>相比之下，<em>k-means 眼里的簇都是「圆的、一样大的」</em>。<br><b>⚠ 但更灵活不等于更好</b>：参数多了，要估的也多了，数据不够时反而更不稳。");
+  SUM(0,18,{h:"k-means 只学中心给标签；GMM 还学散布与份额给概率",k:"同一个点：<b>k-means 判 B；GMM 给 (A 40%, B 60%)</b>。",m:"GMM 多学两样：<b>Σ_k（形状与倾斜）</b>和 <b>π_k（一大一小）</b>。",w:"k-means 眼里的簇都是<b>圆的、一样大的</b>。",e:"⚠ <b>更灵活 ≠ 更好</b>：参数多了要估的也多，数据不够时反而更不稳。"});
+  QUIZ(0,18,{t:"相比 k-means，GMM 额外学到了什么？",o:["特征之间的因果关系","每个观测的真实类别标签","只是多学了一个簇数 k","每个成分的散布（形状、倾斜）和份额（权重）"],a:3,w:"<em>k-means 只学中心</em>，所以它的簇隐含「圆的、一样大」。但 GMM 的灵活性是有代价的：<b>参数更多，数据不够时更不稳</b>。"});
+});
+KP("19 · ❓讨论题五：三个成分 = 三类顾客吗（讲义 p38–p39）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("\u8bb2\u4e49\u81ea\u5e26\u7684\u6700\u540e\u4e00\u4e2a\u95ee\u9898");src("p38");
+   setBig("\u627e\u5230\u4e09\u4e2a\u6210\u5206\uff0c<br>\u5c31\u610f\u5473\u7740\u771f\u7684\u5b58\u5728\u4e09\u7c7b\u987e\u5ba2\u5417\uff1f");},"最后一个讨论题，也是整份讲义立场最鲜明的一页。<br><em>模型拟合出三个成分，能不能说「现实中就有三类顾客」？</em><br>先别急着答「能」或「不能」，<em>想想要拿什么来支持这个说法</em>：<em>换一批样本重跑，这三个成分还在吗？换一组特征或缩放呢？</em>");
+  S(0,function(){clearScene();setBig(null);setEq(null);setCap("\u7b54\u6848\uff1a\u4e0d\u80fd\u3002\u6210\u5206\u63cf\u8ff0\u7684\u662f\u5206\u5e03\u7684\u4e00\u90e8\u5206");src("p39");
+   matrix({rows:4,cols:2,cw:430,ch:52,x:210,y:176,
+     cell:function(i,j){var t=[
+       ["\u8981\u67e5\u7684\u8bc1\u636e","\u5177\u4f53\u95ee\u4ec0\u4e48"],
+       ["\u7a33\u5b9a\u6027","\u6362\u4e00\u6b21\u8fd0\u884c\u3001\u6362\u4e00\u6279\u6837\u672c\uff0c\u6210\u5206\u8fd8\u5728\u5417"],
+       ["\u5efa\u6a21\u9009\u62e9","\u6362\u7279\u5f81\u3001\u6362\u7f29\u653e\u3001\u6362\u534f\u65b9\u5dee\u5047\u8bbe\u4f1a\u53d8\u5417"],
+       ["\u542b\u4e49\u4e0e\u7528\u9014","\u9886\u57df\u77e5\u8bc6\u548c\u5b9e\u9645\u8bc1\u636e\u652f\u6301\u8fd9\u4e9b\u6807\u7b7e\u5417"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===1?"hl":"";}});
+   note("\u8bb2\u4e49\u539f\u8bdd\uff1a\u5149\u662f\u300c\u62df\u5408\u5f97\u597d\u300d\u4e0d\u80fd\u7acb\u8d77\u771f\u5b9e\u7684\u987e\u5ba2\u7c7b\u578b",640,398,"y");},"讲义的回答是一个干脆的<b>「不能」</b>，然后给了三类要补的证据：<br><b>稳定性</b>（换运行、换样本还在吗）、<b>建模选择</b>（换特征/缩放/协方差假设会变吗）、<b>含义与用途</b>（领域知识支持吗）。<br><em>原话收尾很硬：光是「拟合得好」不能立起真实的顾客类型。</em>");
+  S(0,function(){clearScene();setEq(null);setCap("\u56db\u4e2a\u8981\u7d20\u600e\u4e48\u914d\u5408\uff08\u8bb2\u4e49\u6700\u540e\u4e00\u9875\uff09");src("p40");
+   matrix({rows:5,cols:2,cw:430,ch:44,x:210,y:166,
+     cell:function(i,j){var t=[
+       ["\u8981\u7d20","\u5b83\u5e72\u4ec0\u4e48"],
+       ["\u2460 \u9ad8\u65af\u6210\u5206","\u6bcf\u4e2a\u6210\u5206\u7684\u4e2d\u5fc3\u4e0e\u6563\u5e03"],
+       ["\u2461 \u6df7\u5408\u6743\u91cd","\u5404\u81ea\u5bf9\u603b\u5bc6\u5ea6\u8d21\u732e\u591a\u5c11"],
+       ["\u2462 \u8d23\u4efb\u5ea6","\u6bcf\u4e2a\u89c2\u6d4b\u591a\u652f\u6301\u54ea\u4e2a\u6210\u5206"],
+       ["\u2463 \u52a0\u6743\u5e73\u5747","\u7528\u8d23\u4efb\u5ea6\u91cd\u7b97\u4e2d\u5fc3\u3001\u6563\u5e03\u4e0e\u6743\u91cd"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===4?"hl":"";}});
+   note("\u2460\u2461 \u5411\u524d\u751f\u6210\uff0c\u2462\u2463 \u5411\u540e\u63a8\u65ad\uff0c\u8f6c\u4e00\u5708\u5c31\u662f EM",640,398,"y");},"讲义最后一页把四个要素摆在一起，<b>正好可以当全片的总结</b>：<br><em>① 成分描述中心与散布，② 权重决定各自的贡献</em>——这两个是<b>向前的生成方向</b>；<br><em>③ 责任度反推归属，④ 加权平均重算参数</em>——这两个是<b>向后的推断方向</b>。转一圈就是 EM。");
+  SUM(0,19,{h:"❓不能。成分只是分布的一部分，不是真实类别",k:"三类要补的证据：<b>稳定性 / 建模选择 / 含义与用途</b>。",m:"<b>光是「拟合得好」不能立起真实的顾客类型。</b>",w:"四个要素：<b>①成分 ②权重</b>（向前生成）<b>③责任度 ④加权平均</b>（向后推断）。",e:"<em>转一圈就是 EM</em>——这是全片最好的一句总结。"});
+  QUIZ(0,19,{t:"GMM 拟合出三个成分，能否据此说「存在三类真实顾客」？",o:["能，只要 BIC 在 3 个成分处最低","不能，因为 GMM 只能做密度估计不能聚类","不能，还需要稳定性、建模选择与领域证据的支持","能，只要每个成分的权重都大于 0.1"],a:2,w:"<em>GMM 当然可以做软聚类</em>，所以 D 错。问题在于<b>成分是分布的一部分，不是验证过的真实类别</b>。"});
+});
+KP("\u5b8c",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("\u5b98\u65b9\u8bb2\u4e49\u7cbe\u8bfb \u00b7 GMM.pdf","\u5b8c",
+      "\u5bc6\u5ea6 \u2192 \u6df7\u5408 \u2192 \u6210\u5458\u5ea6 \u2192 EM");},
+    "\u6574\u4efd\u8bb2\u4e49\u56de\u5230\u5b83\u81ea\u5df1\u7b2c\u4e8c\u9875\u90a3\u56db\u683c\uff1a<b>\u5bc6\u5ea6\uff08\u9ad8\u5ea6\u4e0d\u662f\u6982\u7387\uff09\u2192 \u6df7\u5408\uff08\u52a0\u6743\u76f8\u52a0\uff09\u2192 \u6210\u5458\u5ea6\uff08\u5148\u9a8c\u00d7\u5bc6\u5ea6\u518d\u5f52\u4e00\u5316\uff09\u2192 EM\uff08\u56fa\u5b9a\u4e00\u534a\u3001\u66f4\u65b0\u53e6\u4e00\u534a\uff09</b>\u3002<br>\u6700\u503c\u5f97\u5e26\u8d70\u7684\u5177\u4f53\u6570\u5b57\uff1a<em>2.5 kg \u7684\u8d23\u4efb\u5ea6 0.415/0.585\uff0cM \u6b65\u540e\u53d8\u6210 0.473/0.527\uff1bN_A=1.6\u3001\u03bc_A=\u22120.9375\u3001\u03c3\u00b2_A\u22481.9336</em>\u3002<br>\u8fd8\u6709\u4e00\u5904\u8bb2\u4e49\u6ca1\u8bf4\u900f\u7684\uff1a<b>p5 \u7684 exp(\u22122) \u662f\u5de7\u5408\uff0c\u6307\u6570\u5b9e\u9645\u662f \u2212z\u00b2/2</b>\u3002");
+});
+window.__startProjector(CFG);
+})();
+</script>

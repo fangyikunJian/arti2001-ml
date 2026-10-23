@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲义精读 · 深度学习（讲义） · 逐页精读</title>
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --panel2:#FAF8F4; --sunken:#EDEAE3;
+  --stage:#E9E6DF; --hover:#F0EDE6;
+  --line:#E3DFD6; --line2:#D2CCC0;
+  --dot:#DDD8CE; --dot2:#B9B1A2; --errdot:#D08A8A;
+  --ink:#23272C; --ink2:#111417; --ink3:#4A525C; --dim:#616973;
+  --acc:#0E7355; --acc2:#845808; --warn:#B23540; --blue:#1C6AA6;
+  --mark:#FFF6DC; --codeink:#17506E; --eqink:#1E2833;
+  --okink:#0B5B43; --noink:#8F2A33; --violet:#6A4BA3; --tintviolet:rgba(106,75,163,.07);
+  --okfill:rgba(14,115,85,.10); --nofill:rgba(178,53,64,.09);
+  --missbg:rgba(245,243,238,.97);
+  --tintacc:rgba(14,115,85,.07); --tintacc2:rgba(14,115,85,.05);
+  --tintblue:rgba(28,106,166,.06); --tintwarn:rgba(178,53,64,.05);
+  --tintwarn2:rgba(178,53,64,.06);
+  --lift:rgba(60,54,44,.022); --lift2:rgba(60,54,44,.028);
+  --scrim:rgba(58,52,42,.40);
+  --shadow:0 1px 2px rgba(40,34,20,.05), 0 6px 18px rgba(40,34,20,.05);
+
+  --cjk:"PingFang SC","Microsoft YaHei","微软雅黑","Deng",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --bar:50px; --strip:36px;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f15; --panel:#121823; --panel2:#0d141c; --sunken:#0a0e14;
+  --stage:#070a0f; --hover:#0d141c;
+  --line:#212c3c; --line2:#2a3b4f;
+  --dot:#18212e; --dot2:#2c3c52; --errdot:#7a3a3a;
+  --ink:#e7eef7; --ink2:#f4f8fd; --ink3:#c3d2e3; --dim:#8b9ab0;
+  --acc:#6fd3bb; --acc2:#f2bd63; --warn:#ff8f8f; --blue:#7fb8ff;
+  --mark:#16202e; --codeink:#cfe3f5; --eqink:#dbe8f7;
+  --okink:#d8fff4; --noink:#ffdede; --violet:#B48BF5; --tintviolet:rgba(180,139,245,.08);
+  --okfill:rgba(111,211,187,.13); --nofill:rgba(255,143,143,.12);
+  --missbg:rgba(10,14,20,.97);
+  --tintacc:rgba(111,211,187,.09); --tintacc2:rgba(111,211,187,.07);
+  --tintblue:rgba(127,184,255,.055); --tintwarn:rgba(255,120,120,.055);
+  --tintwarn2:rgba(255,143,143,.08);
+  --lift:rgba(255,255,255,.022); --lift2:rgba(255,255,255,.025);
+  --scrim:rgba(6,9,13,.82);
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--cjk);font-size:15px;line-height:1.75}
+
+#bar{height:var(--bar);display:flex;align-items:center;gap:11px;padding:0 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+#bar h1{margin:0;font-size:14.5px;font-weight:650;white-space:nowrap}
+#bar h1 span{color:var(--acc)}
+.btn{background:var(--sunken);border:1px solid var(--line);border-radius:7px;color:var(--dim);
+  font:13px var(--cjk);padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{color:var(--acc);border-color:var(--acc)}
+#pnum{width:48px;background:var(--sunken);border:1px solid var(--line);border-radius:7px;
+  color:var(--ink);font:13px var(--mono);text-align:center;padding:5px 0}
+#bar .sp{flex:1}
+#tot{font:12px var(--mono);color:var(--dim)}
+
+#strip{height:var(--strip);display:flex;align-items:center;gap:2px;padding:0 14px;
+  background:var(--sunken);border-bottom:1px solid var(--line);overflow-x:auto}
+#strip::-webkit-scrollbar{height:0}
+#strip b{flex:0 0 auto;width:13px;height:16px;border-radius:3px;background:var(--dot);
+  cursor:pointer;font:0/0 a}
+#strip b.has{background:var(--dot2)}
+#strip b.on{background:var(--acc2)}
+#strip b:hover{background:var(--acc)}
+
+#main{display:flex;height:calc(100% - var(--bar) - var(--strip))}
+/* 左栏 = 一块板，板中央摆一张 4:3 的幻灯片。
+   幻灯片本身就是 363×272（4:3），把框裁成同样比例再用 view=FitH，
+   这一页正好铺满框，下一页落到框外 —— 这样才是「一页」，
+   而不是一个能上下滚、还露出半张下一页的阅读器。 */
+#left{width:50%;min-width:280px;position:relative;background:var(--stage);
+  display:flex;align-items:center;justify-content:center;padding:14px}
+#stage{aspect-ratio:4/3;width:100%;max-width:100%;max-height:100%;
+  border-radius:8px;overflow:hidden;background:#fff;
+  box-shadow:var(--shadow)}
+#stage iframe{width:100%;height:100%;border:0;display:block}
+#drag{width:6px;cursor:col-resize;background:var(--line);flex:0 0 6px}
+#drag:hover{background:var(--acc)}
+#right{flex:1;overflow-y:auto;padding:24px 28px 40px}
+
+.pg{font:11.5px var(--mono);color:var(--bg);background:var(--acc2);border-radius:999px;
+  padding:2px 11px;font-weight:700;display:inline-block;margin-bottom:12px}
+.pg.multi{background:var(--blue)}
+h2{margin:0 0 14px;font-size:21px;font-weight:680;line-height:1.4}
+.one{font-size:16.5px;line-height:1.7;color:var(--ink2);border-left:3px solid var(--acc);
+  padding:9px 0 9px 14px;margin:0 0 16px;
+  background:linear-gradient(90deg,var(--tintacc),transparent)}
+ul{margin:0 0 16px;padding-left:0;list-style:none}
+ul li{margin-bottom:11px;padding-left:22px;position:relative;line-height:1.72}
+ul li::before{content:"";position:absolute;left:6px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--acc)}
+b{font-weight:650;color:var(--ink2)}
+.k{color:var(--acc);font-weight:650}
+.w{color:var(--warn);font-weight:650}
+code{font-family:var(--mono);font-size:.9em;background:var(--mark);padding:1.5px 6px;
+  border-radius:4px;color:var(--codeink)}
+.eq{display:block;text-align:center;background:var(--mark);border-radius:8px;padding:12px 8px;
+  margin:14px 0;font-family:var(--mono);font-size:14px;color:var(--eqink);overflow-x:auto}
+.say{border:1px solid var(--line2);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;background:var(--tintblue);font-size:14px;line-height:1.72}
+.say .t{color:var(--blue);font-weight:700;font-size:12.5px;display:block;margin-bottom:5px;
+  letter-spacing:.5px}
+.tip{border:1px solid var(--line);border-radius:9px;padding:11px 15px;margin:14px 0;
+  background:var(--lift2);font-size:14px;line-height:1.72}
+.tip .t{font-weight:700;color:var(--acc);margin-right:7px}
+.tip.w2{border-color:var(--warnline);background:var(--tintwarn)}
+.tip.w2 .t{color:var(--warn)}
+.star{color:var(--acc2);font-size:14px;margin-left:8px;letter-spacing:1px}
+.nav{display:flex;gap:10px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+.nav .btn{flex:1;text-align:center;padding:9px}
+.empty{color:var(--dim);font-size:14px;padding:36px 0;text-align:center;line-height:2}
+#miss{position:absolute;inset:0;background:var(--missbg);z-index:5;display:none;
+  padding:26px;color:var(--dim);font-size:13.5px;line-height:1.9}
+#miss code{background:var(--mark);padding:2px 6px;border-radius:4px;color:var(--acc2)}
+
+
+.qbadge{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;
+  margin-left:9px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 9px;font:11.5px var(--mono);color:var(--acc);cursor:pointer;
+  background:var(--sunken);transition:border-color .12s}
+.qbadge:hover{border-color:var(--acc)}
+.qbadge.bad{color:var(--warn)}
+#wrongBox .tally{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+#wrongBox .tally span{border:1px solid var(--line);border-radius:8px;padding:5px 11px;
+  font-size:12.5px;color:var(--dim);background:var(--sunken)}
+#wrongBox .tally b{color:var(--ink);font-weight:650}
+#wrongBox .tally b.hot{color:var(--warn)}
+.wrow .h{gap:3px}
+.wrow .h u{display:flex;gap:2px;text-decoration:none;
+  padding-right:7px;margin-right:4px;border-right:1px solid var(--line)}
+.wrow .h u:last-child{border-right:0;padding-right:0;margin-right:0}
+#revChip{display:none;align-items:center;gap:9px;border:1px solid var(--warn);
+  border-radius:8px;padding:5px 11px;font-size:12.5px;color:var(--warn);
+  background:var(--tintwarn2);white-space:nowrap}
+#revChip.on{display:inline-flex}
+#revChip b{font:650 12px var(--mono)}
+#revChip button{background:none;border:0;color:var(--dim);cursor:pointer;
+  font:12px var(--cjk);text-decoration:underline;padding:0}
+#revChip button:hover{color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn:disabled:hover{border-color:var(--line)}
+
+/* ── 自测 ── */
+.quiz{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.quiz>h3{margin:0 0 12px;font-size:13px;color:var(--dim);letter-spacing:.16em;
+  display:flex;align-items:center;gap:8px}
+.quiz>h3 b{color:var(--acc2);font-weight:700}
+.qq{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:11px;
+  background:var(--lift)}
+.qq .t{font-size:14.5px;font-weight:600;margin-bottom:10px;line-height:1.6}
+.opt{display:block;width:100%;text-align:left;background:var(--sunken);border:1px solid var(--line);
+  border-radius:8px;color:var(--ink);font:14px var(--cjk);padding:8px 12px;margin-bottom:7px;
+  cursor:pointer;line-height:1.5;transition:border-color .12s,background .12s}
+.opt:hover:not(:disabled){border-color:var(--acc);background:var(--hover)}
+.opt:disabled{cursor:default}
+.opt.ok{border-color:var(--acc);background:var(--okfill);color:var(--okink)}
+.opt.no{border-color:var(--warn);background:var(--nofill);color:var(--noink)}
+.opt .m{float:right;font-weight:700;margin-left:10px}
+.why{font-size:13.5px;line-height:1.7;color:var(--ink3);border-left:3px solid var(--acc);
+  padding:8px 0 8px 12px;margin-top:9px;background:linear-gradient(90deg,var(--tintacc2),transparent)}
+.qhist{font:11px var(--mono);color:var(--dim);margin-top:8px;display:flex;
+  align-items:center;gap:5px}
+.qhist i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.qhist i.o{background:var(--acc)} .qhist i.x{background:var(--warn)}
+.qagain{background:none;border:0;color:var(--dim);font:12px var(--cjk);cursor:pointer;
+  text-decoration:underline;padding:0;margin-left:auto}
+.qagain:hover{color:var(--acc2)}
+#strip b.err{background:var(--errdot)}
+#strip b.err.on{background:var(--acc2)}
+/* 错题本 */
+#wrongPanel{position:fixed;inset:0;background:var(--scrim);z-index:80;display:none;
+  align-items:center;justify-content:center;padding:28px}
+#wrongPanel.on{display:flex}
+#wrongBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  width:min(760px,100%);max-height:84vh;overflow:auto;padding:22px 24px}
+#wrongBox h3{margin:0 0 4px;font-size:18px}
+#wrongBox .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+.wrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--line);margin-bottom:8px;cursor:pointer;background:var(--sunken)}
+.wrow:hover{border-color:var(--acc2)}
+.wrow .p{font:700 12px var(--mono);color:var(--acc2);flex:0 0 52px}
+.wrow.done{opacity:.5}
+.wrow.done .p{color:var(--acc)}
+.wrow .n2{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.wrow .s{font:11.5px var(--mono);color:var(--dim);flex:0 0 auto}
+.wrow .h{display:flex;gap:3px;flex:0 0 auto}
+.wrow .h i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.wrow .h i.o{background:var(--acc)} .wrow .h i.x{background:var(--warn)}
+#wrongBox .none{color:var(--dim);text-align:center;padding:30px 0;line-height:2}
+#wrongFoot{display:flex;gap:10px;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--line)}
+#wrongFoot .btn{flex:1;text-align:center}
+
+@media (max-width:900px){
+  #main{flex-direction:column} #left{width:100%;height:40%} #drag{display:none}
+  #right{padding:16px 16px 30px}
+}
+
+/* ══ EXTRA_CSS:BEGIN ══ */
+/* ══ 讲解区里的链接兜底 ══
+   ⚠ 2026-10-03 查出来的：原先只给 .ng a 上了色，放在 tip / say / pts / exam 里的链接
+   会退回浏览器默认的 #0000EE —— 浅色下还能看（8.47:1），**暗色下只有 1.95:1**。
+   做 notes2 时第一次往 tip 里放时间码链接就撞上了。这条规则管住所有其它位置。 */
+#card a{color:var(--blue);text-decoration:none;border-bottom:1px solid var(--blue)}
+#card a:hover{opacity:.75}
+
+/* ══ 「从零补基础 · Andrew Ng」栏 ══ */
+.ng{border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintviolet)}
+.ng .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--violet);
+  letter-spacing:.4px;margin-bottom:5px}
+/* ⚠ 要用 #card .ng a 而不是 .ng a —— 上面的兜底规则带了 #card 这个 id，
+   光写 .ng a（0,1,1）会被 #card a（1,0,1）压过去，紫色链接会变蓝。 */
+#card .ng a{color:var(--violet);text-decoration:none;border-bottom:1px solid var(--violet)}
+#card .ng a:hover{opacity:.75}
+.ng .src{display:block;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+:root:not([data-theme="dark"]) .ng{box-shadow:var(--shadow)}
+
+/* ══ 「课件原话」栏：引官方英文 ══ */
+.quote{border-left:3px solid var(--dim);background:var(--lift2);border-radius:0 8px 8px 0;
+  padding:10px 15px;margin:12px 0;font-size:13px;line-height:1.7;color:var(--ink3)}
+.quote .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--dim);
+  letter-spacing:.4px;margin-bottom:5px}
+.quote b{color:var(--ink2)}
+.quote em{font-style:normal;color:var(--ink2);font-weight:560}
+
+/* ══ 笔记表格：对比表 / 情况表 / 数值表 ══ */
+.tw{margin:13px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.tc{font-size:11.5px;font-family:var(--mono);color:var(--dim);letter-spacing:.3px;
+  padding:7px 12px;background:var(--sunken);border-bottom:1px solid var(--line)}
+table.nt{width:100%;border-collapse:collapse;font-size:12.8px;line-height:1.55}
+table.nt th{text-align:left;font-weight:620;font-size:11.5px;color:var(--dim);
+  background:var(--panel2);padding:7px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.nt td{padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.nt tbody tr:last-child td{border-bottom:none}
+table.nt td:first-child{font-weight:560;color:var(--ink2)}
+table.nt b{color:var(--ink2)}
+:root:not([data-theme="dark"]) .tw{box-shadow:var(--shadow)}
+
+/* ══ 「与考试的联系」栏 ══ */
+.exam{border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintacc2)}
+.exam .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--acc2);
+  letter-spacing:.4px;margin-bottom:5px}
+:root:not([data-theme="dark"]) .exam{box-shadow:var(--shadow)}
+
+/* ══ 双主题补丁：浅色下的可读性与质感 ══ */
+html{color-scheme:light dark}
+:root:not([data-theme="dark"]) #right{background:var(--bg)}
+:root:not([data-theme="dark"]) .quiz,
+:root:not([data-theme="dark"]) details,
+:root:not([data-theme="dark"]) .opt{box-shadow:var(--shadow)}
+:root:not([data-theme="dark"]) body{-webkit-font-smoothing:antialiased}
+:root:not([data-theme="dark"]) h2{letter-spacing:-.1px}
+:root:not([data-theme="dark"]) .one{font-weight:520}
+:root:not([data-theme="dark"]) .pg{color:#fff}
+:root:not([data-theme="dark"]) #strip b.on{background:var(--acc2)}
+/* 主题切换按钮 */
+#themeBtn{min-width:34px;text-align:center;font-size:14px;line-height:1}
+/* ══ EXTRA_CSS:END ══ */
+
+</style>
+</head>
+<body data-key="cs234-2019-l01">
+
+<div id="bar">
+  <h1>CS229 讲义精读 · <span>深度学习（讲义）</span></h1>
+  <button class="btn" id="prev">← 上一页</button>
+  <input id="pnum" value="1" inputmode="numeric">
+  <span id="tot">/ 15</span>
+  <button class="btn" id="next">下一页 →</button>
+  <div class="sp"></div>
+  <span id="revChip">复习模式 <b></b><button id="revOff">退出</button></span>
+  <button class="btn" id="wrongBtn">错题本</button>
+  <button class="btn" id="themeBtn" title="切换主题">☾</button>
+  <button class="btn" id="help">打不开？</button>
+</div>
+
+<div id="strip"></div>
+
+
+<div id="wrongPanel"><div id="wrongBox">
+  <h3>错题本</h3>
+  <p class="sub">错过的题<b>连着答对两次就毕业</b>，自动从这里和复习模式里退出。<br>
+  还没毕业的排在前面，最近错得多的更靠前。点任意一行跳到那一页重看。</p>
+  <div class="tally" id="wrongTally"></div>
+  <div id="wrongList"></div>
+  <div id="wrongFoot">
+    <button class="btn" id="revOn">只复习这些页</button>
+    <button class="btn" id="wrongClose">关闭</button>
+    <button class="btn" id="wrongReset">清空全部记录</button>
+  </div>
+</div></div>
+
+<div id="main">
+  <div id="left">
+    <div id="stage"><iframe id="pdf" title="原课件"></iframe></div>
+    <div id="miss">
+      <p><b>左边没显示课件？</b></p>
+      <p>本页直接引用同目录下的 <code>slides/cs229-notes-deep_learning.pdf</code>。</p>
+      <p>确认文件在即可。若浏览器拦本地 iframe 读 PDF，在 <code>精读</code> 目录下执行
+      <code>python -m http.server 8080</code>，再访问
+      <code>http://127.0.0.1:8080/CS229-DL-精读.html</code>。</p>
+    </div>
+  </div>
+  <div id="drag"></div>
+  <div id="right"><div id="card"></div></div>
+</div>
+
+<script>
+
+/* ══ 主题切换：浅色默认，记住选择 ══ */
+(function(){
+  var KEY = "mlreader-theme";
+  var root = document.documentElement, btn = document.getElementById("themeBtn");
+  function apply(t){
+    root.setAttribute("data-theme", t);
+    if (btn) btn.textContent = (t === "dark" ? "☀" : "☾");
+    if (btn) btn.title = (t === "dark" ? "切到浅色" : "切到暗色");
+  }
+  var saved;
+  try { saved = localStorage.getItem(KEY); } catch(e){}
+  apply(saved === "dark" ? "dark" : "light");
+  if (btn) btn.addEventListener("click", function(){
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next);
+    try { localStorage.setItem(KEY, next); } catch(e){}
+  });
+})();
+
+/* 每页一条。r:[起,止] = 这几页是同一张图的不同阶段，点哪页都显示同一条。
+   one 一句话 · pts 要点 · say CS229 / 讲义补充（课件上没有）· tip 提醒 */
+
+/* ══ 题库。键 = 该单元的起始页；a 是正确项下标；why 是判完给的解释 ══ */
+var Q = {"1": [{"q": "讲义说「最简单的神经网络」是什么？", "o": ["一个线性回归", "一个 sigmoid 单元", "一个神经元 f(x) = max(ax+b, 0)，也就是一个 ReLU", "一个两层全连接网络"], "a": 2, "why": "原文：<em>One of the simplest possible neural networks is to define f(x) as a single “neuron” … f(x) = max(ax+b, 0) … this function is called a <b>ReLU</b></em>。动机是房价不该为负，所以在直线上折一下——那个折点就是 ReLU。"}], "3": [{"q": "隐藏层为什么叫「隐藏」？", "o": ["因为它的参数是随机初始化的", "因为我们没有隐藏单元的 ground truth / 训练真值，而输入层和输出层都有", "因为它在网络中间，看不见", "因为它的激活函数是非线性的"], "a": 1, "why": "原文：<em>The term hidden layer is called “hidden” because <b>we do not have the ground truth/training value for the hidden units</b></em>。⭐ 这一条顺带解释了<b>为什么需要反向传播</b>——中间层没有监督信号，只能从输出层往回推。"}, {"q": "「端到端学习」在这份讲义里指什么？", "o": ["从头到尾只用一个激活函数", "同时训练多个模型再集成", "从数据收集到模型部署的完整流程", "你只提供输入特征 x 和输出 y，网络自己学出中间的特征"], "a": 3, "why": "原文说神经网络的「魔法」之一是<em>你只需要输入特征 x 和输出 y，中间的一切网络自己搞定</em>，这个过程叫 end-to-end learning。⚠️ 代价是<b>可解释性</b>——网络发明的特征常常难以理解，这正是「黑箱」说法的由来。"}], "7": [{"q": "如果把所有激活函数都换成恒等函数 g(z)=z，会发生什么？", "o": ["网络只能输出正数", "多层会塌成单层：W[2]W[1] 合并成一个矩阵 W̃，整个网络等价于线性回归", "网络训练会变慢但结果相同", "梯度会消失"], "a": 1, "why": "讲义四行推导：z[2] = W[2]g(z[1]) = W[2]z[1] = W[2]W[1]x = <b>W̃x</b>。<b>线性套线性还是线性</b>，深度完全失去意义。原文结论：<em>Without non-linear activation functions, the neural network will simply perform linear regression.</em>"}], "9": [{"q": "已知输入 x ∈ R^{d×1}、第一层输出 z[1] ∈ R^{3×1}，那么 W[1] 的形状是？", "o": ["3 × d", "d × d", "3 × 3", "d × 3"], "a": 0, "why": "z[1] = W[1]x，矩阵乘法要求 <b>(3×?)·(d×1) = (3×1)</b>，所以 ? = d，即 <b>W[1] 是 3×d</b>。⭐ 口诀：<b>行看本层（3 个单元），列看上层（d 维输入）</b>。"}], "11": [{"q": "把所有权重初始化成同一个<b>非零</b>值会有什么问题？", "o": ["没有问题，只是收敛慢一点", "同一层所有神经元的激活值相同、收到的梯度也相同，于是永远学到一样的东西——这叫对称性", "输出恒为 0.5", "梯度会爆炸"], "a": 1, "why": "原文：<em>each neuron (within a layer) will receive the <b>exact same gradient update value</b> … We call this property <b>symmetry</b></em>。⚠️ 「输出恒为 0.5」是<b>全零</b>初始化的后果（sigmoid(0)=0.5）。<b>随机初始化的目的是打破对称，不只是避开 0。</b>"}, {"q": "Xavier/He 初始化在随机之外还做了什么？", "o": ["把权重限制在 [0,1] 内", "保证权重全为正", "让所有层的权重相同", "按层的神经元个数调整方差，鼓励一层输入的方差与输出的方差相近"], "a": 3, "why": "w[ℓ] ~ N(0, √(2/(n[ℓ]+n[ℓ−1])))。讲义说它起到<b>一种迷你归一化</b>的作用——<b>鼓励 σ(in) 与 σ(out) 相近</b>，让信号在层间传递时方差不至于爆炸或消失。"}], "12": [{"q": "为什么这个算法叫「反向」传播？", "o": ["因为算某一层的梯度必须先知道后一层的，所以计算顺序从输出层倒推回输入层", "因为损失函数是反的", "因为要反向读取数据", "因为权重要取负号"], "a": 0, "why": "链式法则下，本层的梯度依赖后一层的梯度，所以<b>必须从输出层往输入层倒着算</b>，而且中间结果可以复用。⭐ 更根本的原因在第 3 页：<b>隐藏层没有真值，只能从有真值的输出层出发往回推</b>。"}], "14": [{"q": "加了 L2 正则之后，梯度下降的更新式变成什么？", "o": ["W ← (1−αλ)W − α∂J/∂W", "W ← W − αλ∂J/∂W", "W ← W − α∂J/∂W + λ", "W ← W/(1+λ) − α∂J/∂W"], "a": 0, "why": "原文给的就是 <b>W = (1−αλ)W − α∂J/∂W</b>。⭐ 多出来的 <b>(1−αλ)</b> 是一个略小于 1 的<b>收缩因子</b>——每次更新都先把权重缩小一点，这正是「权重衰减」这个名字的由来。"}], "15": [{"q": "足球那个例子说明了全连接逻辑回归的什么问题？", "o": ["无法处理彩色图像", "训练速度太慢", "θ₁ 永远只看左上角那个像素，所以训练时没见过的位置在测试时很可能认不出来", "参数太少"], "a": 2, "why": "原文：<em>θ₁ always looks at the top left pixel of the image no matter what</em>。所以如果训练集里没有左上角的足球，测试时出现就很可能漏检。<b>解法是参数共享</b>——让一个小矩阵 θ 滑过整张图，带来<b>①参数量大降②平移不变性</b>。"}]};
+
+var N = [{"r": [1, 2], "star": 2, "t": "从一条折线开始：最简单的神经网络就是一个 ReLU", "one": "想让房价不为负，就在直线上折一下——那个「折点」就是一个神经元。", "quote": "<em>One of the simplest possible neural networks is to define f(x) as a <b>single “neuron”</b> … <b>f(x) = max(ax + b, 0)</b> … this function is called a <b>ReLU</b> (pronounced “ray-lu”), or rectified linear unit.</em>", "eq": "f(x) = max(a·x + b, 0)        ← 一个 ReLU 神经元", "pts": ["<b>动机极其朴素</b>：还是房价预测，但<b>房价不该是负的</b>。所以把直线在价格 0 处「折」一下——图上那个 <b>kink（折点）</b>。", "⭐ <b>那条折线就是一个神经元</b>：f(x) = max(ax+b, 0)，输出 (ax+b) 和 0 之中<b>较大的那个</b>。这个函数叫 <b>ReLU</b>（rectified linear unit，整流线性单元）。", "<b>更复杂的网络怎么来</b>：把这样的神经元<b>堆叠</b>起来，一个神经元的输出作为下一个的输入，就得到更复杂的函数。", "⚠️ <b>注意讲义是从「一个神经元」讲起的</b>，不是从「网络」讲起。<b>先把单个神经元 = 一个线性组合 + 一个非线性函数</b>这件事坐实，后面所有符号才不会乱。"], "tbl": [{"cap": "一个神经元拆开来看", "head": ["部分", "是什么", "例子"], "rows": [["线性部分", "a·x + b", "和线性回归一模一样"], ["非线性部分", "<b>max(·, 0)</b>", "<b>ReLU</b>，把负值压成 0"], ["合起来", "f(x) = max(ax+b, 0)", "<b>最简单的神经网络</b>"]]}], "say": "⭐ <b>为什么从「折线」切入特别好</b>：它让你看见<b>非线性到底加在哪里</b>。线性回归只能画直线；加一个 max(·,0) 之后就能画出带折点的折线；<b>堆叠更多神经元就能逼近更复杂的曲线</b>。<br>这条线索一直贯穿到第 7 页——那里会证明<b>如果把 max(·,0) 换成恒等函数，整个网络会塌回成线性回归</b>。<b>非线性不是装饰，是全部的表达力来源。</b>", "ng": "Ng 在 <a href=\"https://www.youtube.com/watch?v=MfIjxPh6Pys&t=2365s\" target=\"_blank\">39:25</a> 讲 ReLU：<em>这就叫整流线性单元，ReLU</em>。⭐ 课堂上他是<b>先画房价那条折线再给名字</b>，顺序和讲义一致。<b>建议先看这 2 分钟</b>，比读定义快。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>", "exam": "M3 概念题最可能的问法：<b>「为什么需要激活函数」「ReLU 是什么」</b>。答 ReLU = max(z,0)，并点明<b>它提供了网络的非线性</b>——没有它网络会塌成线性模型（第 7 页会证）。", "tip": {"t": "读音", "v": "ReLU 读作 <b>“ray-lu”</b>（讲义特意标了），不是逐字母念 R-E-L-U。"}}, {"r": [3, 3], "star": 3, "t": "★★ 隐藏层为什么叫「隐藏」，与端到端学习", "one": "隐藏是因为我们没有它的真值；网络自己发明中间特征，这叫端到端学习。", "quote": "<em>The term hidden layer is called “hidden” because <b>we do not have the ground truth/training value for the hidden units</b>.</em> … <em>The process of a neural network learning the intermediate features is called <b>end-to-end learning</b>.</em>", "pts": ["⭐ <b>「隐藏」这个词的确切含义</b>：不是因为看不见、也不是因为在中间——<b>是因为我们没有隐藏单元的 ground truth</b>。输入层和输出层的真值都来自 (x⁽ⁱ⁾, y⁽ⁱ⁾)，<b>中间那层没有任何监督信号</b>。", "⭐ <b>端到端学习</b>：讲义说神经网络的「魔法」之一是——<b>你只需要给输入特征 x 和输出 y，中间的一切网络自己搞定</b>。你不需要事先想清楚「哪三个因素决定房价」。", "⚠️ <b>代价是可解释性</b>：讲义坦率地说，网络常常会发明出<b>对预测很有用、但人难以理解</b>的复杂特征，<em>因为它们没有「通常的」含义</em>——<b>这正是有人把神经网络叫黑箱的原因</b>。", "<b>层的编号用零索引</b>：<b>输入层是第 0 层</b>，第一个隐藏层是第 1 层，输出层是第 2 层（单隐层时）。", "<b>符号 a 的来历</b>：a 指 <b>activation（激活值）</b>。<b>a[1]₁</b> 表示<b>第 1 个隐藏层里第 1 个单元</b>的输出。"], "tbl": [{"cap": "三种层 · 有没有真值", "head": ["层", "编号", "有 ground truth 吗"], "rows": [["输入层", "<b>第 0 层</b>", "有（就是 x⁽ⁱ⁾）"], ["隐藏层", "第 1 层…", "<b>没有 —— 所以叫「隐藏」</b>"], ["输出层", "最后一层", "有（就是 y⁽ⁱ⁾）"]]}], "say": "⭐ <b>「隐藏 = 没有真值」这个定义值得记死</b>，因为它一句话解释了<b>训练神经网络为什么需要反向传播</b>：<br>如果隐藏单元有真值，你就能像训练线性回归那样<b>直接对每一层算误差</b>。正因为<b>中间层没有任何监督信号</b>，你只能从输出层的误差出发、<b>用链式法则一层层往回推</b>——那就是反向传播。<b>第 12–13 页讲的就是这件事。</b>", "ng": "Ng 在 <a href=\"https://www.youtube.com/watch?v=MfIjxPh6Pys&t=2676s\" target=\"_blank\">44:36</a> 当场问了同一个问题：<em>我们为什么把它叫隐藏层？</em> ⭐ 他在 <a href=\"https://www.youtube.com/watch?v=MfIjxPh6Pys&t=2903s\" target=\"_blank\">48:23</a> 讲<b>端到端学习</b>这个词。<b>课堂和讲义在这一页几乎逐句对应</b>，听哪个都行。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>", "exam": "M3 很可能考<b>「隐藏层为什么叫隐藏」</b>这个概念题。答：<b>因为我们没有隐藏单元的真值</b>，只有输入和输出有。顺带能接上「所以才需要反向传播」。"}, {"r": [4, 5], "star": 2, "t": "符号系统：方括号是层，圆括号是样本", "one": "逻辑回归就是一个神经元；把它复制几份并排放，就是一个隐藏层。", "quote": "<em>Note the difference between <b>square brackets [·]</b>, which refer to the <b>layer number</b>, and <b>parenthesis (·)</b>, which refer to the <b>training example number</b>.</em>", "eq": "z[ℓ]ⱼ = W[ℓ]ⱼᵀ · a[ℓ−1] + b[ℓ]ⱼ\na[ℓ]ⱼ = g( z[ℓ]ⱼ )", "pts": ["⭐ <b>先把逻辑回归看成一个神经元</b>：g(x) = 1/(1+exp(−wᵀx))——<b>输入几个特征，输出一个标量</b>。这正是一个神经元干的事。<b>所以神经网络不是全新的东西，是逻辑回归的堆叠。</b>", "<b>一个隐藏单元需要两样参数</b>：一个<b>权重向量</b> W[1]₁ ∈ R³（输入是 3 维时）和一个<b>标量偏置</b> b[1]₁ ∈ R。", "<b>第 2、3 个隐藏单元同理</b>：各有自己的 W 和 b，各自算出 z 再过激活函数 g 得到 a。<b>同一层的单元互不相连，各算各的。</b>", "⚠️ <b>符号最容易搞混的一点</b>：<b>方括号 [ℓ] 指第几层，圆括号 (i) 指第几个训练样本</b>。所以 <b>z[1](2)</b> 是「<b>第 2 个样本</b>在<b>第 1 层</b>的 z」。<b>看到两种括号同时出现时先分清谁是谁。</b>"], "tbl": [{"cap": "⚠ 两种括号别搞混", "head": ["写法", "含义", "例子"], "rows": [["<b>[ℓ]</b> 方括号", "<b>层号</b>", "W[1] = 第 1 层的权重矩阵"], ["<b>(i)</b> 圆括号", "<b>样本号</b>", "x(2) = 第 2 个训练样本"], ["<b>下标 j</b>", "该层第几个单元", "a[1]₃ = 第 1 层第 3 个单元"]]}], "say": "⭐ <b>「逻辑回归 = 一个神经元」这个对照能省很多事</b>：<br>逻辑回归你已经学过了——<b>线性得分 wᵀx + b，再过一个 sigmoid</b>。神经元做的完全一样，只是<b>①激活函数可以换成 ReLU 等 ②输出会喂给下一层而不是直接当预测</b>。<br>所以 <b>M1 的逻辑回归不是白学的</b>，它是神经网络的基本构件。<br>⚠️ <b>一个容易忽略的结构细节</b>：<b>同一层内的单元彼此不相连</b>，各算各的 z 和 a；连接只发生在<b>相邻层之间</b>。这就是为什么一层的计算可以写成<b>一次</b>矩阵乘法（下一页的向量化就靠这一点）。", "exam": "符号题。记牢<b>方括号＝层、圆括号＝样本</b>。M3 的手算题（如果有）一定会用到这套记号。", "ng": "⭐ <b>Ng 整堂课就是从逻辑回归切入的</b>：<a href=\"https://www.youtube.com/watch?v=MfIjxPh6Pys&t=0s\" target=\"_blank\">00:00</a> 开场第一句就说<em>我们先从一个你们已经见过的算法开始，叫逻辑回归</em>，然后把它<b>画成一个神经元</b>。L11 开篇（<a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=3s\" target=\"_blank\">00:03</a>）也复述了一遍：<em>上周我们从神经网络的视角定义了逻辑回归</em>。<br><b>所以这套符号不是凭空来的</b>——W 对应逻辑回归的 w，b 对应 b，g 对应 sigmoid。<b>唯一新增的是上标 [ℓ]：现在有很多层，每层各有一套 W 和 b。</b><span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [6, 6], "star": 2, "t": "向量化：把 for 循环换成矩阵乘法", "one": "样本按列堆叠成矩阵 X，一次矩阵乘法算完所有样本。", "quote": "<em>vectorization takes advantage of matrix algebra and <b>highly optimized numerical linear algebra packages (e.g., BLAS)</b> to make neural network computations run quickly</em> … <em>Note that we are <b>stacking training examples in columns and not rows</b>.</em>", "eq": "Z[1] = W[1] · X + b[1]        （X 的每一<b>列</b>是一个样本）", "pts": ["<b>朴素实现是 for 循环</b>：对每个样本分别算 z[1](1)、z[1](2)、z[1](3)…", "<b>向量化的做法</b>：把样本<b>按列</b>堆成矩阵 X，一次 <b>W[1]X + b[1]</b> 就算完所有样本。", "⚠️ <b>「按列不按行」这一点要留意</b>——讲义特意强调了。这和你在 M1 见过的「每一行一个样本」的数据矩阵<b>正好相反</b>。", "<b>为什么快</b>：矩阵乘法能用上 <b>BLAS 这类高度优化的数值线性代数库</b>，比逐个样本循环快几个数量级。"], "tbl": [{"cap": "⚠ 两种数据矩阵的排法", "head": ["场景", "一个样本是", "形状"], "rows": [["M1 常见的 X", "<b>一行</b>", "n × d"], ["这份讲义的 X", "<b>一列</b>", "d × n"]]}, {"cap": "向量化前后", "head": ["", "朴素实现", "向量化"], "rows": [["怎么算", "for 循环逐个样本", "<b>一次矩阵乘法</b>"], ["用到什么", "Python 循环", "<b>BLAS 等优化库</b>"], ["快多少", "基准", "<b>通常快几个数量级</b>"]]}], "say": "⚠️ <b>「按列堆叠」造成的实际后果</b>：这份讲义里 <b>W[1]X</b> 的写法，和你在 M1 习惯的 <b>Xθ</b> 是<b>转置关系</b>。读到维度对不上时先检查这一点，通常不是你算错了，是排法不同。<br>⭐ 顺带一提：<b>sklearn 和大多数库用的是「一行一个样本」</b>，而很多深度学习教材（包括这份）用「一列一个样本」。<b>两种都要认得。</b>", "exam": "维度题可能考。做题时<b>先写清楚「一个样本是行还是列」</b>，再推形状。", "ng": "Ng 在 <a href=\"https://www.youtube.com/watch?v=MfIjxPh6Pys&t=3171s\" target=\"_blank\">52:51</a> 讲向量化：<em>现在有意思的是，我们要把代码进一步向量化</em>。L11 一开场（<a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=161s\" target=\"_blank\">02:41</a>）又把向量化单独拎出来复习了一遍——⭐ <b>连着两讲都强调，说明这是实现层面最关键的一步</b>。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [7, 7], "star": 3, "t": "★★★ 为什么不能用恒等激活：网络会塌回线性回归", "one": "两层线性复合还是线性——W[2]W[1] 会合并成一个 W̃，表达力全丢。", "quote": "<em>Notice how W[2]W[1] <b>collapsed into W̃</b> … applying a linear function to another linear function will result in a linear function over the original input … <b>Without non-linear activation functions, the neural network will simply perform linear regression.</b></em>", "eq": "若 g(z) = z（恒等）：\nz[2] = W[2]a[1] = W[2]g(z[1]) = W[2]z[1] = W[2]W[1]x = W̃ x\n⇒ 整个网络等价于<b>一次线性变换</b>", "pts": ["⭐ <b>这一页是整份讲义最该理解透的一页</b>，而且推导只有四行。假设偏置为零，把 g(z)=z 代进去——<b>z[2] 一路化简成 W̃x</b>，其中 W̃ = W[2]W[1]。", "<b>为什么会塌</b>：<b>线性函数套线性函数，结果还是线性函数</b>。不管你堆多少层，总能找到一个 W̃ 使 W̃x 等于整串乘积。<b>层数白加了。</b>", "⭐ <b>结论讲义说得很直白</b>：<b>没有非线性激活函数，神经网络就只是在做线性回归。</b>", "⚠️ <b>所以激活函数的地位要摆正</b>：它<s>不是</s>「让输出落在某个范围」这种技术细节，<b>它是整个网络表达力的来源</b>。去掉它，深度就毫无意义。", "<b>回头看第 1 页</b>：那条带折点的折线之所以画得出来，正是因为有 max(·,0)。<b>非线性让网络能表示「折」，而折的叠加能逼近任意曲线。</b>"], "tbl": [{"cap": "四行推导", "head": ["步", "式子", "用到什么"], "rows": [["①", "z[2] = W[2]a[1]", "定义"], ["②", "= W[2]g(z[1])", "a = g(z)"], ["③", "= W[2]z[1]", "<b>假设 g(z)=z</b>"], ["④", "= W[2]W[1]x = <b>W̃x</b>", "<b>两个矩阵合并</b>"]]}], "say": "⭐ <b>这个论证有个很好的推广</b>：它说明<b>「深度」本身不带来表达力，带来表达力的是「深度 + 非线性」</b>。<br>同样的道理可以反过来用：如果有人给你一个「十层但全是线性」的模型，你立刻知道<b>它等价于一个单层线性模型</b>，参数再多也没用。<b>这是 M3 最可能考的概念题之一。</b>", "ng": "Ng 在 L11 的 <a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=2456s\" target=\"_blank\">40:56</a> 问了同一个问题：<em>我们为什么要考虑这些（激活）函数？</em> 他在 <a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=1906s\" target=\"_blank\">31:46</a> 讲 ReLU 作为常用激活函数。⭐ <b>课堂和讲义这一页的论证是一致的</b>。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>", "exam": "<b>M3 高概率考点</b>。问法可能是「为什么需要非线性激活函数」或「如果所有激活函数都是恒等函数会怎样」。答：<b>线性复合仍是线性，W[2]W[1] 合并成一个矩阵，整个网络等价于线性回归，深度失去意义</b>。", "tip": {"t": "容易答浅", "v": "只答「为了引入非线性」<b>拿不到满分</b>。要说清<b>后果</b>：不加非线性时<b>多层会塌成单层</b>（W[2]W[1] = W̃），网络退化成线性回归。"}}, {"r": [8, 8], "star": 1, "t": "广播：一个严格来说不合法、但大家都这么写的加法", "one": "b ∈ R^{4×1} 加到 W X ∈ R^{4×3} 上，靠的是逐列复制。", "quote": "<em>Strictly following the rules of linear algebra, this is <b>not allowed</b>. In practice however, this addition is performed using <b>broadcasting</b>.</em>", "pts": ["<b>问题</b>：Z[1] = W[1]X + b[1] 里，W[1]X 是 4×3（4 个单元、3 个样本），而 b[1] 是 4×1。<b>形状不一样，严格的线性代数不允许相加。</b>", "<b>实践中的做法叫广播（broadcasting）</b>：把 b 这一列<b>复制 3 份</b>变成 4×3，再逐元素相加。<b>效果等于「每个样本都加上同一个偏置」</b>，这正是我们想要的。", "⚠️ <b>知道这是「约定」而不是「定理」很重要</b>：NumPy、PyTorch 都默认做广播，<b>所以代码能跑</b>；但写数学推导时<b>严格说应该写成 b·1ᵀ</b>（1 是全 1 行向量）。", "<b>为什么偏置要对每个样本都一样</b>：因为 b 是<b>模型参数</b>，不是样本的属性。同一个神经元对所有样本用同一个阈值——<b>这正是「参数」与「数据」的分界</b>。"], "say": "⭐ <b>广播是代码和数学之间常见的「缝」</b>。类似的缝还有几处：<b>①按行还是按列堆样本（第 6 页）②sklearn 的 covariances_ 在一维下是方差不是标准差</b>（你在 T3 见过）。<br><b>遇到维度对不上时，先想想是不是踩到了这类约定，而不是急着怀疑自己推错了。</b>", "exam": "不太可能单独考，但<b>做维度题时要知道广播的存在</b>，否则会觉得讲义的式子写错了。", "ng": "⭐ <b>这个细节 Ng 课上也专门讲了</b>：<a href=\"https://www.youtube.com/watch?v=MfIjxPh6Pys&t=3576s\" target=\"_blank\">59:36</a> 他说<em>这是一种叫广播的技术</em>。<b>讲义和课堂都觉得有必要单独点出来</b>，说明初学者在这里确实容易卡住——看到维度对不上以为自己推错了。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>", "tbl": [{"cap": "广播在做什么", "head": ["", "形状", "说明"], "rows": [["W[1]X", "4 × 3", "4 个单元 × 3 个样本"], ["b[1]", "<b>4 × 1</b>", "每个单元一个偏置"], ["广播后的 b", "4 × 3", "<b>把那一列复制 3 份</b>"], ["结果 Z[1]", "4 × 3", "每个样本都加上了同一组偏置"]]}]}, {"r": [9, 10], "star": 2, "t": "数参数：从输出维度倒推每个 W 的形状", "one": "知道每层的输出维度，就能把所有权重矩阵的形状推出来。", "quote": "<em>Using matrix multiplication, we conclude that <b>? × ?</b> must be <b>3 × d</b></em>", "eq": "z[1] = W[1]x⁽ⁱ⁾ + b[1],  a[1] = g(z[1])\nz[2] = W[2]a[1] + b[2],  a[2] = g(z[2])\nz[3] = W[3]a[2] + b[3],  ŷ⁽ⁱ⁾ = a[3] = g(z[3])", "pts": ["<b>全连接层</b>（fully connected layer）：<b>前一层的每个输入都连到下一层的每个神经元</b>。", "<b>怎么数参数</b>：讲义给的办法是<b>手推一遍前向传播</b>，把每一步的形状写出来。", "⭐ <b>倒推的技巧</b>：已知 x ∈ R^{d×1}、z[1] ∈ R^{3×1}，而 z[1] = W[1]x，所以 <b>W[1] 必须是 3×d</b>——<b>矩阵乘法的形状要求把答案逼出来了</b>。同理可推出 W[2]、W[3]。", "<b>偏置的形状</b>：b[ℓ] 的行数等于该层<b>单元数</b>，列数为 1。", "<b>参数总数</b> = 所有 W 的元素数 + 所有 b 的元素数。<b>这是最可能出现的计算题形式。</b>"], "tbl": [{"cap": "形状倒推（讲义的例子：3→2→1）", "head": ["层", "输出形状", "W 的形状", "b 的形状"], "rows": [["第 1 层", "z[1] ∈ R³ˣ¹", "<b>3 × d</b>", "3 × 1"], ["第 2 层", "z[2] ∈ R²ˣ¹", "<b>2 × 3</b>", "2 × 1"], ["第 3 层", "z[3] ∈ R¹ˣ¹", "<b>1 × 2</b>", "1 × 1"]]}], "say": "⭐ <b>这个倒推技巧在考场上很好用</b>：你不需要记住任何形状公式，<b>只要记住「W[ℓ] 的行数 = 本层单元数，列数 = 上一层单元数」</b>，而这条本身就是从矩阵乘法要求推出来的。<br><b>一句口诀：行看本层，列看上层。</b>", "exam": "<b>M3 很可能出「数参数个数」的计算题</b>。做法：按「行看本层、列看上层」写出每个 W 的形状，加上各层 b 的单元数，求和。⚠️ <b>别忘了偏置</b>。", "ng": "Ng 在 <a href=\"https://www.youtube.com/watch?v=MfIjxPh6Pys&t=623s\" target=\"_blank\">10:23</a> 问的正是这个问题：<em>首先我想讲的是，这个模型有多少个参数？</em> ⭐ <b>他把「数参数」当成理解网络结构的第一步</b>——因为<b>数得出参数，就说明你真的搞清了每层的形状</b>。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>", "tip": {"t": "高频失分点", "v": "<b>数参数时漏掉偏置 b。</b> 每层的参数 = <b>W 的元素数（本层单元数 × 上层单元数）＋ b 的元素数（本层单元数）</b>。一个 3→2→1 的网络若输入是 d 维，参数总数是 (3d+3) + (2·3+2) + (1·2+1) = <b>3d + 14</b>。"}}, {"r": [11, 11], "star": 3, "t": "★★★ 初始化：为什么不能全设成 0，也不能全设成同一个数", "one": "全零 ⇒ 输出恒为 0.5；全同 ⇒ 同层神经元永远学一样的东西（对称性）。", "quote": "<em>each neuron (within a layer) will receive the <b>exact same gradient update value</b> (i.e., all neurons will learn the same thing). We call this property <b>symmetry</b>.</em>", "eq": "Xavier/He 初始化：\nw[ℓ] ~ N( 0,  √( 2 / (n[ℓ] + n[ℓ−1]) ) )\n其中 n[ℓ] 是第 ℓ 层的神经元个数", "pts": ["<b>全设成 0 会怎样</b>：z[3] 恒为 0，而输出是 a[3] = g(z[3]) = <b>sigmoid(0) = 0.5</b>。<b>不管输入什么 x，网络永远输出 0.5。</b>", "⭐ <b>全设成同一个非零值更隐蔽</b>：此时同一层里<b>每个激活值都相同</b>（因为 W[1] 的每一行都一样），而且这个现象会<b>在每一层都发生</b>。", "⭐ <b>后果叫「对称性」</b>：算梯度时，<b>同层所有神经元对最终损失的「责任」完全相同</b>，于是<b>收到完全相同的梯度更新</b>——<b>所有神经元会学到同一样东西</b>。一层 100 个神经元等于只有 1 个。", "<b>所以必须随机初始化</b>——打破对称性。", "<b>但还有更好的</b>：<b>Xavier/He 初始化</b>，按 N(0, √(2/(n[ℓ]+n[ℓ−1]))) 取值。讲义说它起到<b>一种迷你归一化</b>的作用：<b>鼓励一层输入的方差 σ(in) 与输出的方差 σ(out) 相近</b>。"], "tbl": [{"cap": "三种初始化的后果", "head": ["做法", "后果", "能用吗"], "rows": [["全零", "输出恒为 <b>sigmoid(0)=0.5</b>，与输入无关", "<b>不能</b>"], ["全同（非零）", "<b>对称性</b>：同层神经元收到相同梯度，学一样的东西", "<b>不能</b>"], ["随机", "打破对称性", "可以"], ["<b>Xavier/He</b>", "随机 ＋ 让 σ(in) ≈ σ(out)", "<b>更好</b>"]]}], "say": "⭐ <b>「对称性」这个词要理解到位</b>：问题不在于初始值是 0 还是别的数，<b>而在于同层的神经元彼此「无法区分」</b>。既然它们在前向传播里算出一样的值、在反向传播里收到一样的梯度，<b>它们就永远保持相同</b>——网络的宽度完全浪费了。<br><b>随机初始化的唯一目的就是让它们从一开始就不一样。</b> Xavier/He 在此基础上还顺手解决了另一个问题：<b>让信号在层与层之间传递时方差不至于爆炸或消失</b>。", "ng": "Ng 在 <a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=3104s\" target=\"_blank\">51:44</a> 强调 <em>实践中权重怎么初始化非常重要</em>；<a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=3750s\" target=\"_blank\">62:30</a> 专门讲 <b>Xavier 初始化</b>；<a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=3811s\" target=\"_blank\">63:31</a> 解释<b>为什么要用随机函数</b>——正是对称性那个理由。⭐ <b>课堂在这一页比讲义展开得更多</b>，值得听。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>", "exam": "<b>M3 极可能考</b>。标准问法：<b>「为什么不能把权重全初始化为 0」</b>。答两层：<b>①全零时输出恒定（sigmoid(0)=0.5）②更一般地，同层权重相同会导致对称性——所有神经元收到相同梯度、学到相同的东西</b>，所以必须随机初始化。", "tip": {"t": "容易答一半", "v": "只答「全零会让输出恒定」<b>不够</b>。要点在于<b>对称性</b>——即使初始化成同一个<b>非零</b>值，同层神经元照样永远学一样的东西。<b>随机的目的是打破对称，不只是避开 0。</b>"}}, {"r": [12, 13], "star": 3, "t": "★★ 反向传播：没有中间层真值，只能用链式法则往回推", "one": "从输出层的误差出发，逐层用链式法则把梯度传回去。", "quote": "<em>For any single layer ℓ, the update rule is defined as: <b>W[ℓ] = W[ℓ] − α ∂J/∂W[ℓ]</b></em>", "pts": ["<b>讲义先算输出层那一项</b>：损失对 z[3] 的导数。把交叉熵损失 −y log σ(z) − (1−y) log(1−σ(z)) 对 z 求导，<b>利用 σ′ = σ(1−σ)</b>，中间大量项会约掉。", "⭐ <b>这一步的结果出奇地干净</b>——这正是<b>交叉熵配 sigmoid</b> 的好处：导数化简后形式非常简单。（你在 M1 的逻辑回归里见过同一个现象。）", "<b>然后是梯度下降的更新式</b>：对任意一层 ℓ，<b>W[ℓ] ← W[ℓ] − α·∂J/∂W[ℓ]</b>，b 同理。α 是学习率。", "⭐ <b>为什么叫「反向」</b>：因为要算第 1 层的梯度，必须先知道第 2 层的；要算第 2 层的，必须先知道第 3 层的。<b>所以计算顺序是从输出层往输入层倒着走</b>，每一步用<b>链式法则</b>。", "⚠️ <b>回到第 3 页那个定义</b>：正因为<b>隐藏层没有真值</b>，你没法直接算它的误差，<b>只能从有真值的输出层出发往回推</b>。<b>反向传播是「隐藏层没有监督信号」这个事实的必然结果。</b>"], "tbl": [{"cap": "前向 vs 反向", "head": ["", "方向", "算什么", "为什么是这个方向"], "rows": [["前向传播", "输入 → 输出", "各层的 z 和 a", "下一层要用上一层的输出"], ["<b>反向传播</b>", "<b>输出 → 输入</b>", "各层的 <b>∂J/∂W</b>", "<b>链式法则：本层梯度要用后一层的</b>"]]}], "say": "⭐ <b>把反向传播理解成「记账」会很直观</b>：前向传播时每一层都对最终输出有贡献；反向传播就是<b>把最终的误差按贡献大小分摊回每一层</b>。<br>链式法则在这里的作用是<b>复用</b>：算第 2 层梯度时用到的中间结果，算第 1 层时还能继续用——<b>所以反向传播比「对每个参数单独求数值导数」快得多</b>。这也是它被叫作一个「算法」而不只是「一个公式」的原因。", "ng": "Ng 在 <a href=\"https://www.youtube.com/watch?v=MfIjxPh6Pys&t=4615s\" target=\"_blank\">76:55</a> 一句话点明了名字的由来：<em>这就是为什么叫反向传播——我先用链式法则算 w3 的导数，再算 w2 的时候就能复用</em>。整个 <b>L11 开篇</b>（<a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=3s\" target=\"_blank\">00:03</a>）就是<b>用链式法则推导反向传播</b>。⭐ <b>这部分课堂讲得比讲义细得多</b>，想搞懂推导就听 L11 前半。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>", "exam": "M3 可能考<b>概念</b>（为什么叫反向、链式法则的作用）而<b>不太可能要求手推完整推导</b>。能说清「<b>隐藏层没有真值 ⇒ 只能从输出层用链式法则往回推</b>」这条因果就够了。"}, {"r": [14, 14], "star": 2, "t": "过拟合与 L2 正则：每次更新都先把权重缩小一点", "one": "96% vs 64% 就是过拟合；L2 让更新式多出一个 (1−αλ) 的收缩因子。", "quote": "<em>achieves <b>96% accuracy on the training set but only 64% on the testing set</b></em> … <em>W = <b>(1 − αλ)W</b> − α ∂J/∂W</em>", "eq": "J_L2 = J + (λ/2)‖W‖²\n更新式：W ← (1 − αλ)·W  −  α·∂J/∂W", "pts": ["<b>过拟合的症状</b>：讲义给的例子是<b>训练集 96%、测试集只有 64%</b>——差距巨大。", "<b>三类解法</b>：<b>收集更多数据、使用正则化、把模型变浅</b>。", "<b>L2 正则做了什么</b>：在代价函数上加一项 <b>(λ/2)‖W‖²</b>，λ 越大正则越强。", "⭐ <b>关键是看更新式的变化</b>：加了 L2 之后，更新式变成 <b>W ← (1−αλ)W − α∂J/∂W</b>。<b>多出来的 (1−αλ) 是一个小于 1 的收缩因子</b>——<b>每一次更新都会先把权重缩小一点点</b>。", "<b>效果</b>：这个惩罚<b>鼓励每个参数的绝对值变小</b>，从而减少过拟合。（这就是「权重衰减」这个名字的由来。）"], "tbl": [{"cap": "加 L2 前后的更新式", "head": ["", "更新式", "差别"], "rows": [["普通梯度下降", "W ← W − α∂J/∂W", "—"], ["<b>加 L2</b>", "W ← <b>(1−αλ)W</b> − α∂J/∂W", "<b>每步先把 W 缩小</b>"]]}, {"cap": "过拟合的三类解法（讲义原文列的）", "head": ["办法", "思路"], "rows": [["收集更多数据", "让模型见到更多变化"], ["<b>使用正则化</b>", "惩罚大权重，<b>本页的 L2</b>"], ["把模型变浅", "直接降低容量"]]}], "say": "⭐ <b>这个 (1−αλ) 因子把「正则化在干什么」变得很具体</b>：它不是什么抽象的「惩罚复杂度」，<b>就是每一步更新前先把所有权重乘以一个略小于 1 的数</b>。<br>⚠️ 顺带一个连接：<b>你在 T1 学过「PCA 降维也能防过拟合」，但 Ng 说那是「可疑」的做法，他推荐的正是正则化</b>——就是这一页的东西。<b>两处对上了。</b>", "exam": "M3 可能考 <b>L2 更新式的形式</b>或<b>过拟合的识别与应对</b>。答应对时写全三条：<b>更多数据 / 正则化 / 更浅的模型</b>。", "ng": "Ng 在 L11 快结束时（<a href=\"https://www.youtube.com/watch?v=zUazLXZZA2U&t=3811s\" target=\"_blank\">63:31</a>）说<em>要么讲正则化、要么讲优化</em>——⭐ <b>说明这部分在课堂上是被时间挤掉的，讲义反而更完整</b>。<br>⚠️ 顺带一个跨 Module 的连接：你在 <b>T1 学过「PCA 降维也能防过拟合」</b>，但 Ng 在 L15 把那个用法点名为<b>「可疑」</b>，并说他自己<b>改用正则化</b>——<b>就是这一页的 L2</b>。两处对上了。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [15, 15], "star": 2, "t": "参数共享：从「足球在左上角就认不出」到卷积", "one": "逻辑回归的 θ₁ 永远盯着左上角那个像素；让参数滑过整张图，就是卷积。", "quote": "<em>θ₁ always looks at the top left pixel of the image no matter what</em> … <em>whether the soccer ball appears in the bottom right or top left of the image, the neural network will successfully detect the soccer ball</em>", "pts": ["<b>问题从一个具体场景讲起</b>：把图像喂给逻辑回归时，<b>参数向量 θ 必须和输入向量 x 一样长</b>，于是 <b>θ₁ 永远只看左上角那个像素</b>。", "⚠️ <b>后果</b>：如果训练时<b>从没见过左上角的足球</b>，测试时出现一个左上角的足球，<b>模型很可能判定「没有足球」</b>。<b>位置变了就认不出来。</b>", "⭐ <b>解法是让 θ 从向量变成矩阵，并在图上滑动</b>：取一个 4×4 的 θ，和图像左上 4×4 区域做<b>逐元素乘积再求和</b>，得到一个激活值；然后<b>窗口右移，重复</b>；走完一行换下一行。", "⭐ <b>滑完整张图之后，θ「见过」所有像素</b>——<b>θ₁ 不再只和左上角那个像素绑定</b>。于是<b>足球出现在哪里都能被检出</b>。", "<b>这就是卷积神经网络的核心思想：参数共享</b>。<b>同一组参数在不同位置重复使用</b>，既大幅减少参数量，又带来<b>平移不变性</b>。"], "tbl": [{"cap": "全连接 vs 参数共享", "head": ["", "全连接（逻辑回归）", "<b>参数共享（卷积）</b>"], "rows": [["θ 的形状", "向量，长度 = 像素数", "<b>小矩阵</b>（如 4×4）"], ["θ₁ 看什么", "<b>永远是左上角那个像素</b>", "<b>滑过整张图</b>"], ["换个位置还认得吗", "<b>不一定</b>", "<b>认得</b>（平移不变）"], ["参数量", "大", "<b>小得多</b>"]]}], "say": "⭐ <b>足球这个例子好在它把「为什么需要 CNN」讲成了一个具体的失败</b>，而不是抽象的「图像有空间结构」。<br>⚠️ 注意这里其实有两个收益，讲义主要强调了第二个：<b>①参数量大幅减少（4×4 共 16 个参数，而不是 64×64=4096 个）②平移不变性</b>。考试若问「参数共享的好处」，<b>两条都要写</b>。", "exam": "M3 若涉及 CNN，<b>这一页就是最核心的直觉</b>。答「为什么用卷积」时写：<b>参数共享带来①参数量大幅下降②平移不变性</b>，并能举出足球那个例子。", "ng": "⚠️ <b>卷积与参数共享不在 L10/L11 的范围内</b>——我在两讲字幕里都查不到 convolution 或 parameter sharing。CS229 只在这份讲义的最后一页点到为止，<b>完整的 CNN 属于 CS230 / CS231n</b>。<br>⭐ <b>所以这一页要靠读，不是靠听。</b> 如果 M3 真考到 CNN，这一页的足球例子就是你能拿到的最直观的解释。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}];
+
+(function(){
+  var PDF="slides/cs229-notes-deep_learning.pdf", MAX=15;
+  var frame=document.getElementById("pdf"), card=document.getElementById("card"),
+      pnum=document.getElementById("pnum"), strip=document.getElementById("strip"),
+      right=document.getElementById("right");
+  var cur=0, map={}, cells=[];
+
+  /* 存档键带课程前缀 —— file:// 下所有本地页面共用一个 origin，
+     两门课都用 "cs229-dlquiz" 会互相覆盖。 */
+  var KEY = document.body.dataset.key;
+  try {                       // 一次性迁移：早期版本用的是不带课程前缀的键
+    if(!localStorage.getItem(KEY+"quiz")){
+      var _old = localStorage.getItem("cs229-dlquiz");
+      if(_old){
+        localStorage.setItem(KEY+"quiz", _old);
+        var _p = localStorage.getItem("cs229-dlp");
+        if(_p) localStorage.setItem(KEY+"p", _p);
+      }
+      /* 搬完就把旧键删掉。不删的话它会一直躺在那儿，
+         用户「清空全部记录」之后下次打开又被复活一遍。 */
+      localStorage.removeItem("cs229-dlquiz");
+      localStorage.removeItem("cs229-dlp");
+    }
+  } catch(e) {}
+
+  N.forEach(function(n,i){ for(var p=n.r[0];p<=n.r[1];p++) map[p]=i; });
+
+  for(var p=1;p<=MAX;p++){
+    var b=document.createElement("b");
+    b.title="第 "+p+" 页";
+    if(map[p]!=null) b.className="has";
+    b.onclick=(function(x){ return function(){ go(x); }; })(p);
+    strip.appendChild(b); cells.push(b);
+  }
+
+  function navHtml(){
+    return '<div class="nav"><button class="btn" id="p2">← 上一页</button>'+
+           '<button class="btn" id="n2">下一页 →</button></div>';
+  }
+  function bindNav(){
+    var a=document.getElementById("p2"), b=document.getElementById("n2");
+    if(a) a.onclick=function(){ step(-1); };
+    if(b) b.onclick=function(){ step(1); };
+  }
+  function render(p){
+    var i=map[p];
+    if(i==null){
+      card.innerHTML='<div class="empty">这一页没有单独的讲解。<br>'+
+        '它多半是上一页的<b>增量构建</b>——往前翻一页即可。</div>'+navHtml();
+      bindNav(); return;
+    }
+    var n=N[i], multi=n.r[0]!==n.r[1], h="";
+    h+='<span class="pg'+(multi?" multi":"")+'">p'+n.r[0]+(multi?"–"+n.r[1]:"")+'</span>';
+    h+='<h2>'+n.t+(n.star?'<span class="star">'+Array(n.star+1).join("★")+'</span>':'')+
+        qBadge(n.r[0])+'</h2>';
+    if(n.one) h+='<div class="one">'+n.one+'</div>';
+    if(n.quote) h+='<div class="quote"><span class="t">课件原话</span>'+n.quote+'</div>';
+    if(n.eq)  h+='<span class="eq">'+n.eq.replace(/\n/g,"<br>")+'</span>';
+    if(n.pts) h+='<ul>'+n.pts.map(function(x){ return "<li>"+x+"</li>"; }).join("")+'</ul>';
+    if(n.tbl) h+=n.tbl.map(function(T){var s='<div class="tw">'+(T.cap?'<div class="tc">'+T.cap+'</div>':"")+'<table class="nt">';if(T.head) s+='<thead><tr>'+T.head.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead>';s+='<tbody>'+T.rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>';}).join("")+'</tr>';}).join("")+'</tbody></table></div>';return s;}).join("");
+    if(n.say) h+='<div class="say"><span class="t">CS229 / 讲义补充</span>'+n.say+'</div>';
+    if(n.ng) h+='<div class="ng"><span class="t">从零补基础 · Andrew Ng CS229</span>'+n.ng+'</div>';
+    if(n.exam) h+='<div class="exam"><span class="t">与考试的联系</span>'+n.exam+'</div>';
+    if(n.tip) h+='<div class="tip'+(n.tip.w?" w2":"")+'"><span class="t">'+n.tip.t+'</span>'+n.tip.v+'</div>';
+    card.innerHTML=h+quizHtml(n.r[0])+navHtml();
+    bindNav();
+    bindQuiz();
+    bindBadge();
+  }
+  function go(p){
+    p=Math.max(1,Math.min(MAX,parseInt(p,10)||1));
+    if(p===cur) return;
+    cur=p; pnum.value=p;
+    // 只改 #hash 不会让 Chrome 内置 PDF 阅读器翻页 —— 实测 src 已是 #page=49
+    // 而工具栏仍停在 1/78。必须让它认为这是一次**新的导航**，所以加查询参数。
+    frame.src=PDF+"?p="+p+"#page="+p+"&toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    render(p);
+    paintStrip();
+    revPaint();
+    right.scrollTop=0;
+    var on=strip.querySelector("b.on");
+    if(on) on.scrollIntoView({block:"nearest",inline:"center"});
+    try{ localStorage.setItem(KEY+"p",p); }catch(e){}
+  }
+
+
+  /* ══ 自测与错题记录 ══════════════════════════════════════════════
+     记录形状： ST["起始页#题号"] = {n:做过几次, w:错过几次, r:[最近 6 次 1/0]}
+     全部存 localStorage，纯本地。 */
+  var ST = {};
+  try { ST = JSON.parse(localStorage.getItem(KEY+"quiz") || "{}") || {}; } catch(e){ ST = {}; }
+  function save(){ try{ localStorage.setItem(KEY+"quiz", JSON.stringify(ST)); }catch(e){} }
+
+  function rec(key, ok){
+    var d = ST[key] || {n:0, w:0, r:[]};
+    d.n++; if(!ok) d.w++;
+    d.r.push(ok ? 1 : 0);
+    if(d.r.length > 6) d.r = d.r.slice(-6);
+    ST[key] = d; save();
+  }
+  /* 最近错次数 —— 薄弱点排序用的就是它，不是历史总错数：
+     一个月前错过三次但最近三次全对，不该再排在最前面。 */
+  function recentWrong(d){ return (d.r||[]).filter(function(x){ return x===0; }).length; }
+  /* 「还算不算薄弱」：错过、且最近两次没有连对。
+     用连对而不是「最近窗口里没有 0」，是为了让规则能一句话说清楚，
+     用户看得见自己离毕业还差几次；也挡住了蒙对一次就算掌握。 */
+  function isWeak(d){
+    if(!d || !d.w) return false;
+    var r = d.r || [];
+    return !(r.length >= 2 && r[r.length-1] === 1 && r[r.length-2] === 1);
+  }
+  function unitWrong(start){
+    var qs = Q[start] || [], rw = 0, w = 0, n = 0, qw = 0;
+    qs.forEach(function(_,i){
+      var d = ST[start+"#"+i]; if(!d) return;
+      rw += recentWrong(d); w += d.w; n += d.n; if(isWeak(d)) qw++;
+    });
+    // rw 数的是最近错的**次数**（只用来排序，谁更该先复习）；
+    // qw 数的是**还没毕业的题数**（给人看，也决定标红和进不进复习队列）。
+    return {rw:rw, w:w, n:n, qw:qw};
+  }
+  function histHtml(d){
+    var h = "";
+    for(var i=0;i<6;i++){
+      var v = d && d.r ? d.r[d.r.length-6+i] : undefined;
+      h += '<i class="'+(v===1?"o":v===0?"x":"")+'"></i>';
+    }
+    return h;
+  }
+
+  function quizHtml(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var h = '<div class="quiz"><h3>自测 <b>'+qs.length+'</b> 题</h3>';
+    qs.forEach(function(q,i){
+      var key = start+"#"+i, d = ST[key];
+      h += '<div class="qq" data-k="'+key+'" data-a="'+q.a+'">';
+      h += '<div class="t">'+q.q+'</div>';
+      q.o.forEach(function(o,j){
+        h += '<button class="opt" data-j="'+j+'">'+o+'</button>';
+      });
+      h += '<div class="why" style="display:none"></div>';
+      h += '<div class="qhist">'+histHtml(d)+
+           '<span style="margin-left:6px">'+
+           (d ? "做过 "+d.n+" 次 · 错 "+d.w : "还没做过")+'</span>'+
+           '<button class="qagain">重做</button></div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  function bindQuiz(){
+    document.querySelectorAll(".qq").forEach(function(box){
+      var key = box.dataset.k, ans = +box.dataset.a;
+      var why = box.querySelector(".why"), opts = box.querySelectorAll(".opt");
+      var qs = Q[key.split("#")[0]], q = qs[+key.split("#")[1]];
+      opts.forEach(function(b){
+        b.onclick = function(){
+          var j = +b.dataset.j, ok = (j === ans);
+          opts.forEach(function(x){
+            x.disabled = true;
+            if(+x.dataset.j === ans){ x.classList.add("ok"); x.innerHTML += '<span class="m">✓</span>'; }
+          });
+          if(!ok){ b.classList.add("no"); b.innerHTML += '<span class="m">✗</span>'; }
+          why.innerHTML = q.why; why.style.display = "block";
+          rec(key, ok);
+          box.querySelector(".qhist").innerHTML =
+            histHtml(ST[key]) + '<span style="margin-left:6px">做过 '+ST[key].n+
+            ' 次 · 错 '+ST[key].w+'</span><button class="qagain">重做</button>';
+          bindAgain(box); paintStrip(); revSync();
+          var bd = document.querySelector('#card>h2 .qbadge');
+          if(bd) bd.outerHTML = qBadge(+key.split('#')[0]);
+          bindBadge();
+        };
+      });
+      bindAgain(box);
+    });
+  }
+  function bindBadge(){
+    var b = document.querySelector("#card>h2 .qbadge");
+    if(b) b.onclick = function(){
+      var q = document.querySelector(".quiz");
+      if(q) q.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+  }
+  function bindAgain(box){
+    var a = box.querySelector(".qagain");
+    if(a) a.onclick = function(){ render(cur); };
+  }
+
+  /* 页条上标红：这一单元最近还在错 */
+  function paintStrip(){
+    cells.forEach(function(c,k){
+      var i = map[k+1];
+      var cls = (i!=null ? "has" : "");
+      if(i!=null){
+        if(unitWrong(N[i].r[0]).qw > 0) cls += " err";
+      }
+      if(k+1===cur) cls += " on";
+      c.className = cls;
+    });
+  }
+
+
+  /* ── 标题角标：不用滚到底就知道这页有没有题、错没错过 ── */
+  function qBadge(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var st = unitWrong(start);
+    return '<span class="qbadge'+(st.qw?" bad":"")+'" title="跳到自测">'+
+      (st.qw ? "还错 "+st.qw+"/"+qs.length+" 题" : qs.length+" 题")+' ↓</span>';
+  }
+
+  /* ── 复习模式：前进/后退只在「最近还在错」的页之间跳 ──
+     用户要的是「专项针对薄弱部分复习」。光有一张错题清单还得自己一条条点，
+     所以把它接到翻页上：开了之后 ← → 就只在这些页里走。
+     依据是**最近**错次，不是累计——早就改对的题不该再拦路。 */
+  var rev = false, revList = [];
+  function weakPages(){
+    return N.filter(function(n){ return unitWrong(n.r[0]).qw > 0; })
+            .map(function(n){ return n.r[0]; });
+  }
+  function revPaint(){
+    var chip = document.getElementById("revChip");
+    chip.classList.toggle("on", rev);
+    if(!rev) return;
+    var i = revList.indexOf(mapStart(cur));
+    chip.querySelector("b").textContent =
+      (i < 0 ? "?" : (i+1)) + " / " + revList.length + " 页";
+  }
+  function mapStart(p){ var i = map[p]; return i==null ? -1 : N[i].r[0]; }
+
+  function step(d){
+    if(!rev) return go(cur + d);
+    if(!revList.length) return exitRev(true);
+    var here = mapStart(cur), i = revList.indexOf(here);
+    if(i < 0){                       // 当前不在清单里：跳到顺着方向最近的一页
+      var t = null;
+      for(var k=0;k<revList.length;k++){
+        if(d > 0 ? revList[k] > cur : revList[k] < cur){ t = revList[k]; if(d>0) break; }
+      }
+      return go(t == null ? revList[d>0 ? 0 : revList.length-1] : t);
+    }
+    go(revList[(i + d + revList.length) % revList.length]);
+  }
+  function enterRev(){
+    revList = weakPages();
+    if(!revList.length){ alert("没有待复习的页——错过的题都连对两次毕业了。"); return; }
+    rev = true; wp.classList.remove("on");
+    go(revList.indexOf(mapStart(cur)) >= 0 ? cur : revList[0]);
+    revPaint();
+  }
+  function exitRev(done){
+    rev = false; revPaint();
+    if(done) alert("待复习的页都毕业了，已退出复习模式。");
+  }
+  document.getElementById("revOff").onclick = function(){ exitRev(false); };
+
+  /* 答完一题就重算一次清单：刚改对的页当场从复习队列里消失。 */
+  function revSync(){
+    if(!rev) return;
+    revList = weakPages();
+    if(!revList.length) exitRev(true); else revPaint();
+  }
+
+  /* 错题本 */
+  var wp = document.getElementById("wrongPanel");
+  function openWrong(){
+    var list = [];
+    N.forEach(function(n){
+      var st = unitWrong(n.r[0]);
+      if(st.n === 0 || st.w === 0) return;
+      list.push({n:n, rw:st.rw, w:st.w, tot:st.n, qw:st.qw});
+    });
+    // 还没毕业的一律排前面；同样没毕业的，最近错得多的更靠前。
+    list.sort(function(a,b){
+      return (b.qw > 0) - (a.qw > 0) || (b.rw - a.rw) || (b.w - a.w); });
+    var box = document.getElementById("wrongList");
+    if(!list.length){
+      box.innerHTML = '<div class="none">还没有错题。<br>做几道自测再回来看。</div>';
+    } else {
+      box.innerHTML = list.map(function(it){
+        var qs = Q[it.n.r[0]] || [];
+        // 每道题的六格单独成一组，多题的单元才不会连成一片看不出边界
+        var h = qs.map(function(_,i){
+          return "<u>"+histHtml(ST[it.n.r[0]+"#"+i])+"</u>"; }).join("");
+        return '<div class="wrow'+(it.qw ? "" : " done")+'" data-p="'+it.n.r[0]+'">'+
+          '<span class="p">p'+it.n.r[0]+'</span>'+
+          '<span class="n2">'+it.n.t+'</span>'+
+          '<span class="h">'+h+'</span>'+
+          '<span class="s">'+(it.qw ? "还差 "+it.qw+" 题毕业" : "已毕业")+
+          ' · 累计错 '+it.w+'/'+it.tot+'</span></div>';
+      }).join("");
+      box.querySelectorAll(".wrow").forEach(function(r){
+        r.onclick = function(){ wp.classList.remove("on"); go(+r.dataset.p); };
+      });
+    }
+    // 总账。三个数分工明确：做了多少、还有多少没过关、一共栽过几次。
+    var done=0, tot=0, weak=0, wsum=0;
+    Object.keys(Q).forEach(function(k){
+      Q[k].forEach(function(_,i){
+        tot++;
+        var d = ST[k+"#"+i]; if(!d) return;
+        done++; wsum += d.w; if(isWeak(d)) weak++;
+      });
+    });
+    document.getElementById("wrongTally").innerHTML =
+      '<span>做过 <b>'+done+'</b> / '+tot+' 题</span>'+
+      '<span>没毕业 <b class="hot">'+weak+'</b> 题</span>'+
+      '<span>累计错 <b>'+wsum+'</b> 次</span>'+
+      '<span>待复习 <b>'+weakPages().length+'</b> 页</span>';
+    document.getElementById("revOn").disabled = !weakPages().length;
+    wp.classList.add("on");
+  }
+  document.getElementById("wrongBtn").onclick = openWrong;
+  document.getElementById("revOn").onclick = enterRev;
+  document.getElementById("wrongClose").onclick = function(){ wp.classList.remove("on"); };
+  document.getElementById("wrongReset").onclick = function(){
+    if(!confirm("清空全部自测记录？此操作不可撤销。")) return;
+    ST = {}; save(); exitRev(false); paintStrip(); openWrong(); render(cur);
+  };
+  wp.onclick = function(e){ if(e.target === wp) wp.classList.remove("on"); };
+
+  document.getElementById("prev").onclick=function(){ step(-1); };
+  document.getElementById("next").onclick=function(){ step(1); };
+  pnum.addEventListener("change",function(){ go(pnum.value); });
+  pnum.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ go(pnum.value); this.blur(); }
+  });
+  document.addEventListener("keydown",function(e){
+    if(document.activeElement===pnum) return;
+    if(e.key==="ArrowLeft"||e.key==="PageUp"){ step(-1); e.preventDefault(); }
+    if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){ step(1); e.preventDefault(); }
+  });
+
+  var miss=document.getElementById("miss");
+  frame.addEventListener("error",function(){ miss.style.display="block"; });
+  frame.addEventListener("load", function(){ miss.style.display="none"; });
+  document.getElementById("help").onclick=function(){
+    miss.style.display = miss.style.display==="block" ? "none" : "block";
+  };
+
+  var drag=document.getElementById("drag"), left=document.getElementById("left"), dragging=0;
+  drag.addEventListener("mousedown",function(){ dragging=1; document.body.style.userSelect="none"; });
+  document.addEventListener("mouseup",function(){ dragging=0; document.body.style.userSelect=""; });
+  document.addEventListener("mousemove",function(e){
+    if(!dragging) return;
+    left.style.width=Math.max(20,Math.min(78,e.clientX/window.innerWidth*100))+"%";
+  });
+
+  var s=1; try{ s=parseInt(localStorage.getItem(KEY+"p"),10)||1; }catch(e){}
+  go(s);
+})();
+</script>
+
+
+
+
+
+
+<!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
+<style>
+#nopdf{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+#nopdf .in{max-width:380px;text-align:center;font-size:14px;line-height:1.85;
+  color:var(--dim,#6a7686)}
+#nopdf b{color:var(--ink,#23272c)}
+#nopdf code{font-size:12.5px}
+</style>
+<script>
+(function(){
+  /* 公开站上 slides/*.pdf 不在仓库里（著作权）。与其让左栏挂一个空 iframe，
+     不如说清楚它去哪了 —— 右栏的讲解和自测题完全不受影响。
+     本地预览同样加 ?public=1 。*/
+  if (!/\.github\.io$/.test(location.hostname)
+      && !/[?&]public=1\b/.test(location.search)) return;
+  function go(){
+    var stage = document.getElementById("stage");
+    var frame = document.getElementById("pdf");
+    if (!stage) return;
+    if (frame) frame.remove();
+    var d = document.createElement("div");
+    d.id = "nopdf";
+    d.innerHTML = '<div class="in"><p><b>原课件不在公开仓库里。</b></p>'
+      + '<p>课件著作权属于学校与各课作者，本仓库不转载。</p>'
+      + '<p>右栏的逐页讲解与自测题是自己写的，<b>照常可用</b>。</p>'
+      + '<p style="opacity:.75">要让这一栏显示出来：把原 PDF 放回 <code>精读/slides/</code>，'
+      + '用本地静态服务器打开即可。</p></div>';
+    stage.appendChild(d);
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+</script>
+<!-- deploy-public-mode : end -->
+</body></html>

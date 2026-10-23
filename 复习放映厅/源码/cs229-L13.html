@@ -1,0 +1,925 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L13 · k-means、混合高斯与 EM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L13 · k-means、混合高斯与 EM",
+  subtitle:"从零讲起 · 每个术语先解释再使用 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=rVfZHWTwXSA&t="};
+
+/* ── 一条钟形曲线：中心 cx、峰高 h、胖瘦 w、基线 y0 ── */
+function bell(cx,y0,h,w,cls){
+  var p=[],i;
+  for(i=0;i<=70;i++){
+    var x=cx-2.6*w+i*(5.2*w/70), t=(x-cx)/w;
+    p.push([x, y0-h*Math.exp(-t*t/2)]);}
+  curve(p,cls||"b");}
+
+/* ── 一条开口向上的抛物线（讲凸函数用）── */
+function para(cx,y0,k,halfw,cls,up){
+  var p=[],i,s=(up===false)?-1:1;
+  for(i=0;i<=60;i++){
+    var x=cx-halfw+i*(2*halfw/60), t=(x-cx)/halfw;
+    p.push([x, y0-s*k*(t*t)+ (s>0?0:0)]);}
+  curve(p,cls||"b");}
+
+/* ── 两团点 ── */
+var CL1=[[300,250],[345,215],[262,228],[318,292],[270,300]];
+var CL2=[[800,390],[855,352],[770,365],[830,430],[885,410]];
+
+/* ── Ng 原话：画面顶部一行，摘自 L13 字幕 ── */
+function says(ts,en){
+  note("\uD83C\uDF99 Ng "+ts+"  \u00AB"+en+"\u00BB",640,150,"g");}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L13","k-means、混合高斯与 EM",
+      "一节课三个算法，而且后一个是前一个的「软化版」");},
+    "这一讲是 CS229 第一次正式进入<b>无监督学习</b>，一口气讲三样东西：<b>k-means 聚类</b>、<b>混合高斯模型</b>、<b>EM 算法</b>。<br><b>⭐ 先说清它们的关系，后面会好懂很多</b>：k-means 是最朴素的聚类办法，<b>每个点被硬性划归某一个簇</b>；混合高斯是它的「<b>软化版</b>」，<b>一个点可以七成属于这个簇、三成属于那个簇</b>；而 EM 就是用来训练混合高斯的那套方法。<br><b>这一版片子是重做的</b>：上一版把三个主题压得太紧，而且凡是出现新名词就直接用了。这一版的规矩是——<b>每一个术语，先花一整个镜头说清「它是什么、为什么需要它」，然后才拿来用</b>。你如果是从零开始，按顺序看下来应该不会卡。");
+});
+KP("1 · 先搞清楚：无监督学习和你学过的有什么不同",function(){
+  S(65,function(){clearScene();setEq(null);setCap("监督学习：每个点都带着答案");
+   dots([[300,250],[345,215],[262,228]],"g",11);
+   dots([[800,390],[855,352],[770,365]],"r",11);
+   note("✓ 这些是「好的」",302,180,"g");
+   note("✗ 这些是「坏的」",808,366,"r");
+   note("每个点旁边都写着答案（标签 y）",640,405,"d");},"先把参照系立起来。<b>你之前学的线性回归、逻辑回归都属于「监督学习」</b>——它的特点是：<b>训练数据里每个样本都带着一个「正确答案」</b>。比如给你一堆房子，每栋房子旁边都写着它的实际成交价；或者给你一堆邮件，每封旁边都标着「是垃圾邮件」或「不是」。<b>这个答案通常记作 y，叫「标签」。</b>算法要做的就是学会从 x 推出 y。<br><b>「监督」这个词就是这么来的</b>——好像有个老师在旁边，每做一题就告诉你对不对。");
+  S(160,function(){clearScene();setEq(null);setCap("无监督学习：答案没有了");
+       says("02:40","So all these are unlabeled examples.");
+   dots(CL1,"d",11); dots(CL2,"d",11);
+   note("所有点都是一个颜色",640,180,"d");
+   note("没有任何标签告诉你谁是哪一类",640,376,"y");
+   note("⭐ 任务变成了：你自己看出这里面有结构吗？",640,405,"g");},"<b>无监督学习就是把那个答案拿掉。</b>现在你只有一堆 x，<b>没有任何 y</b>。Ng 的原话是——这些全都是<em>unlabeled examples</em>（没有标签的样本）。<br><b>那还能干什么呢？</b>任务变成了：<b>你自己从数据里看出结构来。</b>就像给你一盘散落的照片，没人告诉你谁是谁，但你能看出「这几张像是同一个人」。<br><b>⭐ 这一讲要学的「聚类」，就是最典型的无监督任务</b>：把数据自动分成几堆，而且<b>没有标准答案可以对照</b>。这也是无监督学习最麻烦的地方——<b>你很难说自己做得「对不对」</b>，这一点后面还会再碰到。");
+  SUM(160,1,{h:"无监督学习 = 把「答案」拿掉",k:"<b>监督学习</b>：每个样本都带标签 y，算法学从 x 推 y。<b>无监督学习</b>：<b>只有 x，没有 y</b>，要自己从数据里看出结构。",m:"「监督」＝ 有老师在旁边告诉你对不对。拿掉老师，就是无监督。",w:"⚠ 没有标准答案带来一个后果：<b>很难判断自己做得对不对</b>。这是无监督学习贯穿始终的麻烦。",e:"本课 M2 整个模块都是无监督。<b>第一句话先写清「没有 y」，是很多大题的得分点。</b>"});
+  QUIZ(160,1,{t:"无监督学习和监督学习最核心的区别是什么？",o:["无监督学习不需要训练","无监督学习的训练数据没有标签 y，只有 x，要自己从数据里找出结构","无监督学习只能处理数值型数据","无监督学习用的数据更多"],a:1,w:"<b>区别就在「有没有 y」。</b>⚠ 由此带来一个贯穿始终的麻烦：<b>没有标准答案，就很难判断结果对不对</b>。"});
+});
+KP("2 · 聚类想干什么：给你一个真实的用途",function(){
+  S(128,function(){clearScene();setEq(null);setCap("Ng 举的例子：把客户分群");
+       says("02:08","people of a different age range");
+   dots(CL1,"b",11); dots(CL2,"g",11);
+   note("年轻、消费频繁",302,175,"b");
+   note("年长、单次金额大",828,365,"g");
+   note("市场部想对这两群人投不同的广告",640,405,"y");},"<b>「聚类」这两个字说白了就是「分堆」</b>：把一大堆数据自动分成几堆，<b>同一堆里的互相像，不同堆之间不像</b>。<br>Ng 在课上举的用途是<b>市场细分</b>（market segmentation）：你有一大批客户的数据，<b>市场部想针对不同人群设计不同的营销方案</b>——但你事先并不知道该分成哪几群、每群长什么样。<b>聚类就是让数据自己告诉你。</b><br>他还提到另一个说法：<b>按年龄段把人分开</b>。注意这里的关键——<b>你没有给算法「年龄段」这个标签，是算法自己把相近的人聚到一起的</b>。");
+  SUM(872,2,{h:"聚类 ＝ 自动分堆",k:"把数据分成几堆，<b>堆内相似、堆间不似</b>。事先不知道该分几堆、每堆什么样。",m:"Ng 的用途举例：<b>市场细分</b>——市场部想对不同人群投不同的广告，但不知道人群该怎么划。",w:"⭐ 注意：<b>算法并没有拿到「年龄段」这种标签</b>，是它自己把相近的点聚到一起的。",e:"大题问「聚类有什么实际用途」时，<b>市场细分是最稳的答案</b>。"});
+  QUIZ(872,2,{t:"Ng 在课上给聚类举的实际用途是什么？",o:["市场细分——对不同客户群设计不同的营销方案，而人群怎么划事先并不知道","压缩图像文件","预测房价","识别垃圾邮件"],a:0,w:"关键在于<b>「事先不知道该分成哪几群」</b>——如果已经知道，那就是监督学习的分类问题了。"});
+});
+KP("3 · 先认识一个词：质心",function(){
+  S(223,function(){clearScene();setEq(null);setCap("质心 = 一堆点的「平均位置」");
+   dots(CL1,"b",11);
+   dots([[299,237]],"y",14);
+   note("把这 5 个点的 x 坐标求平均 → 得到质心的 x",700,230,"d");
+   note("把 5 个点的 y 坐标求平均 → 得到质心的 y",700,280,"d");
+   note("⭐ 质心不一定是某个真实的点",700,350,"y");
+   note("它是一个「代表位置」，可以悬在半空",700,400,"d");},"在讲算法之前，先把一个会反复出现的词说清楚：<b>质心</b>（centroid）。<br><b>它就是一堆点的「平均位置」</b>——把这些点的横坐标求个平均，得到质心的横坐标；纵坐标求个平均，得到质心的纵坐标。就这么简单。<br><b>⚠ 要注意的一点</b>：<b>质心不一定正好落在某个真实的数据点上</b>。它是一个「代表位置」，完全可以悬在几个点中间的空处。你可以把它想成这堆点的<b>重心</b>——如果这几个点是等重的小球，用一根针顶住的那个平衡点。<br><b>k-means 里的 k 个质心，就是 k 个这样的「代表位置」，每个代表一个簇。</b>");
+  SUM(223,3,{h:"质心 ＝ 一堆点的平均位置",k:"横坐标取平均、纵坐标取平均，得到的那个位置就是质心。它是这堆点的<b>重心</b>。",m:"⚠ <b>质心不一定是某个真实数据点</b>，可以悬在空处。它只是一个「代表位置」。",w:"k-means 里有 k 个质心，<b>每个质心代表一个簇</b>。算法做的事就是不断调整它们的位置。",e:"手算题里要自己算质心：<b>把该簇所有点的各维坐标分别求平均</b>。"});
+  QUIZ(223,3,{t:"关于「质心」，下面哪句话正确？",o:["质心就是离原点最近的那个点","质心必须是数据集中真实存在的某个点","质心一定在所有点的最左下角","质心是一堆点各维坐标的平均值，可以落在没有数据点的空处"],a:3,w:"质心是<b>平均位置</b>，相当于重心。⚠ 「必须是真实点」是另一个算法（k-medoids）的要求，<b>k-means 不要求</b>。"});
+});
+KP("4 · k-means 第一步：分配 —— 每个点认领最近的质心",function(){
+  S(223,function(){clearScene();setEq(null);setCap("先随便放两个质心（叉）");
+   dots(CL1,"d",11); dots(CL2,"d",11);
+   dots([[430,300]],"b",14); dots([[700,330]],"g",14);
+   note("✕",430,300,"b"); note("✕",700,314,"g");
+   note("此刻所有点都还没有归属（灰色）",640,405,"d");},"k-means 只有两个动作，<b>来回交替</b>。我们先看第一个。<br><b>开始之前，先随便放 k 个质心</b>。这里 k 取 2，所以放两个，图上用<b>叉</b>表示。<b>这两个位置一开始是瞎放的</b>，放得好不好完全不要紧——后面会慢慢挪。<br>此刻所有数据点都还是灰的，<b>因为它们还没有归属</b>。");
+  S(223,function(){clearScene();setEq(null);setCap("① 分配：每个点看看自己离哪个叉近，就归谁");
+   dots(CL1,"b",11); dots(CL2,"g",11);
+   dots([[430,300]],"b",14); dots([[700,330]],"g",14);
+   CL1.forEach(function(p){link(p[0],p[1],430,300);});
+   CL2.forEach(function(p){link(p[0],p[1],700,330);});
+   note("每个点连向它最近的那个叉",640,405,"y");},"<b>第一个动作叫「分配」</b>：<b>每个数据点都看一眼——我离哪个叉更近？——然后就归到那个叉名下。</b>图上每个点都连了一根线到它认领的那个叉。<br>于是点就被染上了颜色：蓝叉收下的染蓝，绿叉收下的染绿。<b>这一步做完，每个点都有归属了。</b><br><b>⚠ 这一步里有个细节很容易在考试丢分</b>：<b>整个分配过程中，质心是一动不动的。</b>必须把<b>所有</b>点都分完，才进入下一步。<b>不能分一个点就挪一下质心。</b>");
+  SUM(223,4,{h:"① 分配：每个点归给最近的质心",k:"先随便放 k 个质心；然后<b>每个点看自己离哪个质心最近，就归到那一簇</b>。",m:"初始质心放得好不好不要紧，后面会挪。<b>这一步结束后每个点都有了归属。</b>",w:"⚠ <b>整个分配步里质心一动不动</b>，要把所有点分完才进下一步。<b>不能分一个挪一下。</b>",e:"手算题的第一步就是它：<b>逐个点比较到各质心的距离，写出归属</b>。"});
+  QUIZ(223,4,{t:"k-means 的「分配」这一步，关于质心有什么要求？",o:["每分配一个点就立即更新一次质心","质心必须随机重新选取","整个分配步中质心保持不动，必须把所有点都分完才进入更新步","质心要先归一化"],a:2,w:"⚠ 这是手算题常见的失分点。<b>分配步里质心冻结</b>；「分一个挪一下」是另一种在线算法，<b>不是 k-means</b>。"});
+});
+KP("5 · k-means 第二步：更新 —— 质心搬到自己那堆的中间",function(){
+  S(223,function(){clearScene();setEq(null);setCap("② 更新：每个叉搬到自己那一簇的质心位置");
+       says("03:43","Just find the mean of all the blue dots");
+   dots(CL1,"b",11); dots(CL2,"g",11);
+   dots([[430,300]],"d",12); dots([[700,330]],"d",12);
+   dots([[299,237]],"b",15); dots([[828,389]],"g",15);
+   link(430,300,299,237); link(700,330,828,389);
+   note("旧位置（灰）",430,265,"d");
+   note("新位置 = 这一簇所有点的平均",640,405,"y");},"<b>第二个动作叫「更新」</b>：<b>每个质心搬家，搬到「归它管的那些点」的平均位置去。</b><br>Ng 在课上说得很直白：<em>找出所有蓝点的均值，把蓝色的质心搬过去</em>；红点同理。<b>这就是上一个知识点讲的「质心 = 平均位置」在起作用。</b><br>图上灰色的是旧位置，彩色的是搬完之后的新位置。<b>注意质心明显往自己那堆点的中间挪了。</b><br><b>然后呢？然后回到第一步，重新分配。</b>因为质心动了，有些点离它原来的质心可能已经不是最近的了。<b>分配 → 更新 → 分配 → 更新……就这么来回转。</b>");
+  S(780,function(){clearScene();setEq(null);setCap("两步交替，直到不再变化");
+   boxNode(300,215,290,76,"① 分配","b");
+   boxNode(700,215,290,76,"② 更新","g");
+   link(590,253,700,253);
+   curve([[700,320],[640,360],[590,320]],"d");
+   note("每个点归给最近的质心",445,330,"d");
+   note("质心搬到自己那簇的平均位置",845,330,"d");
+   note("⭐ 什么时候停？ 当一轮下来「谁归谁」完全没变的时候",640,385,"y");
+   note("因为归属没变 ⇒ 质心也不会变 ⇒ 下一轮还是一样 ⇒ 永远不会再变了",640,405,"d");},"<b>整个 k-means 就是这两步来回交替</b>，没有别的东西了。<br><b>那什么时候停下来？</b>答案很朴素：<b>当某一轮分配完，发现「谁归谁」和上一轮完全一样的时候。</b><br><b>⭐ 为什么这时候可以放心停？</b>想一下：<b>归属没变 ⇒ 每簇的成员没变 ⇒ 算出来的平均位置也不会变 ⇒ 质心不动 ⇒ 下一轮的分配还是同一个结果。</b>再转下去只是原地打转。<b>所以可以停了。</b><br>这个「停」在数学上叫 <b>收敛</b>（converge）——<b>就是「不再变化」的意思</b>，别被这个词吓到。");
+  SUM(780,5,{h:"② 更新：质心搬到自己那簇的平均位置",k:"每个质心搬到「归它管的那些点」的<b>平均位置</b>。然后回到第一步重新分配，<b>两步来回交替</b>。",m:"<b>停止条件</b>：某一轮分配后「谁归谁」和上一轮完全相同。此时质心也不会变，再转就是原地打转。",w:"<b>「收敛」这个词就是「不再变化」的意思</b>，不用被它吓到。",e:"手算题通常只让你走一到两轮。<b>每轮都要写出：分配结果 + 新质心坐标。</b>"});
+  QUIZ(780,5,{t:"k-means 什么时候可以停下来？",o:["当所有点都落在质心上时","当某一轮分配后「谁归哪个簇」和上一轮完全相同时——此时质心也不会再变","跑满固定的 100 轮之后","当簇的个数不再变化时"],a:1,w:"归属不变 ⇒ 每簇成员不变 ⇒ 平均位置不变 ⇒ 质心不动 ⇒ 下一轮还是同样结果。<b>这就是「收敛」——不再变化。</b>"});
+});
+KP("6 · 初始质心怎么放：Ng 给了两种做法",function(){
+  S(379,function(){clearScene();setEq(null);setCap("做法一：随便挑几个位置");
+       says("06:19","as if we're just choosing these as random vectors");
+   dots(CL1,"d",10); dots(CL2,"d",10);
+   dots([[520,480],[600,500]],"y",13);
+   note("✕",520,380,"y"); note("✕",600,386,"y");
+   note("凭空指定两个坐标 —— 可能离所有数据都很远",640,405,"d");
+   setCap("做法二（Ng 推荐）：直接挑 k 个真实的样本点当初始质心");},"初始的 k 个质心放在哪？Ng 讲了两种。<br><b>第一种：随便指定几个坐标</b>。他说自己讲的时候<em>就当成是随机挑的向量</em>。<b>问题是这样挑可能离所有数据都很远</b>，开头几轮会很浪费。<br><b>第二种，也是他推荐的做法</b>：<b>从训练数据里随机挑 k 个真实的样本点，把质心就设在这些点的位置上。</b>这样至少保证每个质心一开始就落在数据堆里。<br><b>⚠ 注意区分</b>：这里只是「<b>初始位置</b>借用真实样本点」。<b>一旦开始迭代，质心就会挪到平均位置去，不再是某个真实样本了</b>。");
+  S(941,function(){clearScene();setEq(null);setCap("为什么初始位置要紧：同一份数据，两种结局");
+       says("15:41","k-means get stuck on local minima");
+   dots([[280,250],[330,220],[250,290]],"b",10);
+   dots([[470,255],[520,225],[440,295]],"g",10);
+   dots([[375,430],[425,400],[345,470]],"y",10);
+   note("好的初始：三个质心各落一堆 ⇒ 分对",380,405,"g");
+   dots([[800,250],[850,220],[770,290]],"b",10);
+   dots([[990,255],[1040,225],[960,295]],"b",10);
+   dots([[895,430],[945,400],[865,470]],"g",10);
+   note("坏的初始：上面两堆被并成一堆，下面那堆被劈开",900,405,"r");
+   note("⚠ k-means 会卡在局部最优，不保证找到最好的分法",640,180,"y");},"<b>初始位置为什么要紧？</b>Ng 在课上明确说了一句：<b><em>k-means 会卡在局部最小值上</em></b>（get stuck on local minima）。<br><b>意思是</b>：同一份数据，<b>换一组初始质心，可能得到完全不同的结果</b>——而且 k-means <b>自己察觉不到</b>自己卡住了，因为它满足了停止条件（归属不再变化），它以为自己干完了。<br>图上右边就是一个坏结局：<b>上面两堆被当成了一堆，而下面那堆被劈成了两半</b>。它确实「收敛」了，但分得很糟。<br><b>⭐ 实践中的对策很朴素：多跑几次，每次换一组随机初始，然后挑「最好的那次」。</b>至于怎么比较哪次更好，下一个知识点就要讲。");
+  SUM(941,6,{h:"初始质心：挑真实样本点，而且要多跑几次",k:"Ng 推荐<b>从训练数据里随机挑 k 个真实样本点</b>当初始质心（比凭空指定坐标靠谱）。但初始位置<b>只是初始</b>，之后质心会挪到平均位置。",m:"⚠ <b>k-means 会卡在局部最优</b>（Ng 原话）。同一份数据换组初始就可能分得完全不同，<b>而算法自己察觉不到</b>——它满足了停止条件就以为干完了。",w:"对策：<b>多跑几次、每次换随机初始，挑最好的那次</b>。",e:"⭐ 「k-means 的缺点」是高频考点，<b>「对初始化敏感、可能收敛到局部最优」必须写上</b>。"});
+  QUIZ(941,6,{t:"为什么说 k-means「会卡在局部最优」是个真问题？",o:["因为它会无限循环","因为质心会跑到数据之外","因为算法会报错退出","因为换一组初始质心可能得到完全不同的分法，而算法满足停止条件后察觉不到自己分得不好"],a:3,w:"关键在于<b>算法自己察觉不到</b>：归属不再变化就停了，它以为干完了。⭐ 所以要<b>多跑几次换初始、挑最好的那次</b>。"});
+});
+KP("7 · 为什么用「平方距离」，以及代价函数是什么",function(){
+  S(586,function(){clearScene();
+       setEq("$$\\lVert x - \\mu \\rVert^2 = (x_1-\\mu_1)^2 + (x_2-\\mu_2)^2$$");
+       setCap("两个竖杠就是「距离」的意思");
+       dots([[430,330]],"b",12); dots([[700,250]],"y",14);
+       link(430,330,700,250);
+       note("x",410,215,"b"); note("µ",722,170,"y");
+       note("横着差多少 → 平方",640,234,"d");
+       note("竖着差多少 → 平方",640,250,"d");
+       note("两个加起来 —— 就是勾股定理",640,267,"g");},"<b>先把那个符号认一下。</b>‖x − µ‖ 这种<b>两边各两根竖杠</b>的写法，读作「范数」，<b>在这里的意思就是「距离」</b>。<b>右上角的平方表示「距离的平方」</b>。<br><b>它怎么算？</b>就是<b>勾股定理</b>：横着差了多少，平方；竖着差了多少，平方；两个加起来。<b>就这么回事，别被符号唬住。</b><br><b>⭐ 为什么用平方、不直接用距离本身？</b>两个原因：<b>① 省掉开根号，算起来更简单</b>；<b>② 平方之后求导很干净</b>——这一点后面证明「质心就是最优位置」时会用到。");
+  S(586,function(){clearScene();setEq(null);setCap("Ng 顺带提到：也可以不用平方距离");
+       says("09:46","if it's L1 norm, we usually write this");
+       boxNode(230,215,420,80,"L2（平方距离）","b");
+       boxNode(700,215,420,80,"L1（绝对值距离）","y");
+       note("横差² + 竖差²",440,330,"d");
+       note("|横差| + |竖差|",910,330,"d");
+       note("最优位置是「平均数」",440,359,"b");
+       note("最优位置是「中位数」",910,359,"y");
+       note("⭐ 换了距离的定义，「中心」的含义也跟着换",640,405,"g");},"Ng 在课上<b>顺带提了一句</b>：距离不是非得用平方不可，<b>也可以用 L1 范数</b>——就是「横着差的绝对值 ＋ 竖着差的绝对值」，不平方。<br><b>⭐ 这个顺带一句其实很有意思</b>：<b>换了距离的定义，「中心」的含义也跟着变</b>。用平方距离时，让总距离最小的位置是<b>平均数</b>；而用绝对值距离时，最优位置变成了<b>中位数</b>。<br><b>所以「质心＝平均值」这件事不是天经地义的</b>，它是「<b>你选了平方距离</b>」的结果。<b>标准 k-means 用的是平方距离，所以才取平均。</b>");
+  S(749,function(){clearScene();
+       setEq("$$J = \\sum_{i} \\lVert x^{(i)} - \\mu_{c^{(i)}} \\rVert^2$$");
+       setCap("代价函数 J：把所有点到自己质心的平方距离加起来");
+       dots([[300,250],[345,215],[262,228]],"b",10);
+       dots([[299,237]],"b",14);
+       link(300,250,299,237);link(345,215,299,237);link(262,228,299,237);
+       dots([[800,390],[855,352],[770,365]],"g",10);
+       dots([[808,369]],"g",14);
+       link(800,390,808,369);link(855,352,808,369);link(770,365,808,369);
+       note("把图上每一根小线段的长度平方，全部加起来",640,170,"y");
+       note("⭐ J 越小，说明每个点离自己的质心越近 ⇒ 簇越紧凑",640,265,"g");},"现在引入一个很重要的量。<b>「代价函数」这个词听起来吓人，其实就是「给当前这个分法打一个分，分越低越好」</b>。<br>k-means 的代价函数记作 <b>J</b>，它的定义特别朴素：<b>把每个点到「它自己那个质心」的距离平方，全部加起来。</b>就是图上每一根小线段，长度平方，求和。<br><b>⭐ 这个数字在说什么？</b><b>J 越小，说明每个点离自己的质心越近，也就是每一簇越紧凑。</b>所以我们当然希望 J 越小越好。<br><b>⚠ 这个 J 有好几个名字</b>：讲义叫 <b>distortion function（失真函数）</b>，你们课件和 sklearn 里叫 <b>inertia</b> 或 <b>WCSS</b>。<b>三个名字，同一个东西，别被绕晕。</b>");
+  SUM(749,7,{h:"★ 代价函数 J：所有点到自己质心的平方距离之和",k:"<b>‖·‖ 就是距离</b>（勾股定理算出来的）。<b>J = 每个点到它自己质心的距离平方，全部加起来</b>。<b>J 越小 ⇒ 簇越紧凑。</b>",m:"用平方距离，最优中心是<b>平均数</b>；Ng 提到也可以用 L1 绝对值距离，那时最优中心变成<b>中位数</b>。<b>「质心＝平均」是「选了平方距离」的结果。</b>",w:"⚠ 同一个 J 有三个名字：讲义的 <b>distortion（失真函数）</b>、课件/sklearn 的 <b>inertia / WCSS</b>。",e:"手算题经常让你算 J。<b>公式要写对：是到「自己那个」质心的距离，不是到所有质心。</b>"});
+  QUIZ(749,7,{t:"k-means 的代价函数 J 衡量的是什么？",o:["每个点到它自己所属那个质心的平方距离，全部加起来——J 越小说明簇越紧凑","质心之间互相的距离","每个点到所有质心的距离之和","簇的个数"],a:0,w:"⚠ 是到<b>「自己那个」</b>质心，不是到所有质心。<b>别名</b>：distortion（讲义）、inertia / WCSS（sklearn）。"});
+});
+KP("8 · ★ 为什么 k-means 一定会停下来（Ng 的两句话论证）",function(){
+  S(780,function(){clearScene();setEq(null);setCap("Ng 的论证只有两句");
+       says("13:00","this function must converge");
+       boxNode(200,205,880,76,"① 每一轮迭代都把 J 往下压（J 不会变大）","g");
+       boxNode(200,300,880,76,"② J 是非负的 —— 它压不到 0 以下","b");
+       note("一个「一直在降」又「降不到底」的量，总得停下来",640,375,"y");
+       note("⭐ 这就是「单调有界必收敛」",640,405,"g");},"<b>凭什么保证 k-means 不会永远转下去？</b>Ng 的论证只有两句话：<br><b>① 每一轮迭代都把 J 往下压</b>——两个动作都不会让 J 变大（下一镜解释为什么）。<br><b>② J 是非负的</b>——它是一堆平方的和，<b>最小也就是 0，不可能是负数</b>。<br><b>⭐ 一个「一直在往下降」、又「有个底、降不下去了」的量，总得在某个地方停住。</b>这在数学上叫「<b>单调有界必收敛</b>」，但你记住那个画面就够了：<b>水位一直在降，但池底就在那儿，降到底就不动了。</b>");
+  S(780,function(){clearScene();setEq(null);setCap("为什么两个动作都不会让 J 变大");
+       boxNode(170,200,480,80,"① 分配步","b");
+       boxNode(700,200,480,80,"② 更新步","g");
+       note("每个点改选「最近」的质心",410,315,"d");
+       note("本来就是挑距离最小的那个",410,338,"d");
+       note("⇒ 这个点的那一项只会变小或不变",410,362,"b");
+       note("质心搬到「平均位置」",940,315,"d");
+       note("而平均位置正是让平方距离和最小的点",940,338,"d");
+       note("⇒ 这一簇的总和只会变小或不变",940,362,"g");
+       note("⭐ 两个动作各自都是「子问题的最优解」，不是凭经验的做法",640,405,"y");},"<b>为什么这两个动作都不会让 J 变大？</b>分开看。<br><b>分配步</b>：每个点<b>改选离自己最近的那个质心</b>。既然挑的就是距离最小的，<b>那它贡献给 J 的那一项只可能变小或者不变</b>，不可能变大。<br><b>更新步</b>：质心搬到那一簇的<b>平均位置</b>。而<b>「平均位置」恰恰就是让这一簇平方距离之和最小的那个点</b>（这是可以证明的，也是为什么前面要用平方距离）。所以<b>这一簇的总和也只会变小或不变</b>。<br><b>⭐ 这说明两个动作不是「凭经验觉得这样好」，而是各自都在精确地解一个小的最优化问题。</b>");
+  SUM(780,8,{h:"★ 为什么一定收敛：单调 ＋ 有下界",k:"<b>① 每轮都把 J 往下压；② J 是平方和，非负、有底。</b>一直降又降不到底 ⇒ 必然停住。",m:"<b>两个动作各自都是子问题的最优解</b>：分配步挑的就是最近的（那一项只会更小）；更新步的平均位置正是让平方距离和最小的点。",w:"⚠ 收敛<b>不等于</b>找到了最好的分法——它只保证「停下来」，不保证停在全局最优（见前面的局部最优）。",e:"⭐ 大题问「为什么 k-means 一定收敛」，<b>答「J 单调不增 ＋ J 非负有下界」即可</b>，两句话满分。"});
+  QUIZ(780,8,{t:"「k-means 一定会收敛」这个结论靠的是什么？",o:["数据点个数有限","质心个数有限","J 每轮不增（单调），且 J 是平方和所以非负（有下界）——一直降又降不到底，必然停住","学习率会逐渐减小"],a:2,w:"⚠ 但要分清：<b>收敛 ≠ 找到最优</b>。它只保证停下来，<b>可能停在局部最优</b>。"});
+});
+KP("9 · k 该取几？Ng 说这本来就没有标准答案",function(){
+  S(843,function(){clearScene();setEq(null);setCap("同一张图，不同的人看出不同的簇数");
+       says("14:03","some of you will see two clusters");
+       dots([[300,250],[345,215],[262,228],[320,290]],"b",10);
+       dots([[470,255],[520,225],[440,295],[495,290]],"b",10);
+       dots([[380,430],[430,400],[350,470],[420,465]],"b",10);
+       note("有人说：2 簇（上面一片 + 下面一片）",640,215,"y");
+       note("有人说：3 簇（左上、右上、下面）",640,247,"g");
+       note("⭐ 都不能说谁错 —— 没有标签，就没有标准答案",640,405,"r");},"<b>k 要你自己给</b>——算法不会帮你决定分几堆。那该给几？<br>Ng 在课上说了个很实在的现象：<b>同一张散点图，<em>有些人会看出两个簇</em>，有些人会看出三个。</b>而且<b>你不能说谁错了</b>。<br><b>⭐ 这正好呼应了最开头那句话</b>：无监督学习<b>没有标签，就没有标准答案</b>。「分成几堆才对」这个问题，<b>数据本身答不了，得靠你的业务目的来定</b>。<br>回到市场细分那个例子：<b>如果市场部只有预算做两套方案，那 k 就取 2</b>——这是业务决定的，不是数据决定的。<b>这是无监督学习和监督学习非常不一样的地方。</b>");
+  SUM(843,9,{h:"k 没有标准答案，要靠业务目的定",k:"<b>k 必须你自己给</b>。Ng 指出同一张图<b>有人看出 2 簇、有人看出 3 簇，都不能说谁错</b>。",m:"⭐ 根源还是那句话：<b>没有标签就没有标准答案</b>。「该分几堆」数据本身答不了。",w:"<b>实践中常由业务目的决定</b>：市场部只有预算做两套方案，k 就取 2。",e:"本课会教一些<b>辅助选 k 的指标</b>（肘部法、silhouette）。⚠ 但要记住它们是<b>参考</b>，不是裁决。"});
+  QUIZ(843,9,{t:"关于 k-means 中 k 的取值，Ng 的观点是什么？",o:["总存在一个数学上唯一正确的 k","k 应该等于特征的维数","同一份数据有人看出 2 簇有人看出 3 簇，都不能说谁错——没有标签就没有标准答案，常由业务目的决定","k 越大越好"],a:2,w:"⭐ 这呼应了无监督学习的根本特点。<b>肘部法、silhouette 这些指标是参考，不是裁决。</b>"});
+});
+KP("10 · 换个场景：飞机发动机下线了，怎么知道它有没有毛病",function(){
+  S(1039,function(){clearScene();setEq(null);setCap("Ng 的场景：一台新发动机刚下生产线");
+       says("15:06","if you get a new aircraft engine that comes off the assembly line");
+       axes({x0:260,x1:1020,y0:470,y1:190});
+       dots([[420,400],[470,375],[510,395],[455,420],[530,360],[400,425],
+             [490,350],[445,390],[520,415],[475,405]],"b",9);
+       dots([[880,240]],"r",13);
+       note("震动强度 →",640,405,"d");
+       note("发热量 ↑",230,284,"d");
+       note("历史上造的发动机都落在这片",470,373,"b");
+       note("这台新的落在这里",880,200,"r");
+       note("⚠ 要不要叫人把它拆开查一查？",880,258,"y");},"k-means 讲完了，Ng 换了个场景——<b>这个场景是「为什么还需要混合高斯」的全部动机，上一版片子完全漏掉了，这次补上。</b><br><b>场景是这样</b>：你是飞机发动机厂的工程师。<b>一台新发动机刚从生产线下来</b>，你测了它两个指标，比如<b>震动强度</b>和<b>发热量</b>。<br><b>问题是：要不要叫人把它拆开进一步检查？</b>拆开查很贵；可要是放过了一台有毛病的发动机，后果不堪设想。<br>图上蓝点是<b>历史上造过的所有发动机</b>，红点是<b>这台新的</b>。<b>你一眼就觉得它不太对劲——但「觉得」不能当依据，得有个能自动判断的办法。</b>");
+  S(1132,function(){clearScene();setEq(null);setCap("这类任务有个名字：异常检测");
+       boxNode(230,210,420,80,"正常","g");
+       boxNode(700,210,420,80,"异常（anomaly）","r");
+       note("落在大家都在的地方",440,325,"d");
+       note("落在几乎没人去过的地方",910,325,"d");
+       note("⭐ 关键：「异常」＝「在历史数据里很少见」",640,371,"y");
+       note("Ng 还举了另一个用途：机房里某台机器的行为很反常 ⇒ 叫 IT 来看看",640,405,"d");},"<b>这类任务叫「异常检测」</b>（anomaly detection）。<b>它要回答的是：这个新来的样本，是不是「很不像」以前见过的那些？</b><br><b>⭐ 请注意这里的定义很特别</b>：<b>「异常」不是「坏」，而是「在历史数据里很少见」。</b>我们并没有一堆标好「这台是坏的」的发动机来训练——<b>我们只有一堆正常的，然后找出不像它们的。</b><b>所以这是个无监督任务。</b><br>Ng 还举了另一个用途：<b>监控机房</b>——如果某台机器的行为模式很反常，<b>就让运维人员去看一眼</b>。同样是「不像平时」就报警。");
+  SUM(1132,10,{h:"异常检测：这个新样本「像不像」见过的那些",k:"场景：新发动机下线，<b>要不要花钱拆开检查</b>？办法是看它<b>像不像历史上造过的那些</b>。",m:"⭐ <b>「异常」＝「在历史数据里很少见」</b>，不是「坏」。我们没有标好坏的样本，<b>只有一堆正常的</b> ⇒ 这是无监督任务。",w:"Ng 的另一个例子：<b>监控机房</b>，某台机器行为反常就叫运维来看。",e:"这一段是<b>「为什么需要混合高斯」的动机</b>，不是闲聊。下一个知识点会接上。"});
+  QUIZ(1132,10,{t:"在 Ng 讲的异常检测场景里，「异常」指的是什么？",o:["人工标记为「有故障」的样本","在历史数据里很少出现的样本——我们只有一堆正常样本，找出不像它们的","被 k-means 分错簇的样本","数值超过某个固定阈值的样本"],a:1,w:"⚠ 关键是<b>我们没有「坏样本」的标签</b>，只有一堆正常的。<b>所以是无监督任务</b>，靠「像不像见过的」来判断。"});
+});
+KP("11 · 要判断「像不像」，先得认识一个词：概率密度 p(x)",function(){
+  S(1101,function(){clearScene();setEq(null);setCap("p(x)：在 x 这个位置，数据有多「稠密」");
+       axes({x0:260,x1:1020,y0:470,y1:190});
+       bell(520,470,230,110,"b");
+       dots([[520,470]],"y",10); dots([[880,470]],"r",10);
+       note("p(x) 大",520,250,"g");
+       note("这个位置数据很密",520,277,"d");
+       note("p(x) 小",880,293,"r");
+       note("这个位置几乎没数据",880,319,"d");
+       note("⭐ 曲线的高度 = 该位置的「拥挤程度」",640,405,"y");},"要把「像不像」变成一个能算的数，我们需要 <b>p(x)</b> 这个东西。<b>先把它说清楚，因为后面会一直用。</b><br><b>p(x) 叫「概率密度」。你可以就把它理解成「在 x 这个位置，数据有多拥挤」。</b>图上那条曲线的<b>高度</b>就是 p(x)：<b>曲线高的地方，说明历史数据大量集中在那儿；曲线低的地方，说明那里几乎没有数据去过。</b><br><b>⚠ 一个容易混的点</b>：<b>p(x) 不是概率</b>，它可以大于 1。<b>概率是「曲线下面的面积」，而 p(x) 只是「曲线的高度」。</b>不过对我们的用途来说，<b>只要记住「高＝常见，低＝罕见」就够了</b>。");
+  S(1101,function(){clearScene();setEq(null);setCap("于是异常检测就有了一个能算的判据");
+       says("18:21","So then if p of x is very small");
+       boxNode(260,215,760,80,"算出这个新样本的 p(x)","b");
+       boxNode(260,320,760,80,"p(x) 很小 ⇒ 它落在罕见的地方 ⇒ 报警","r");
+       link(640,295,640,320);
+       note("Ng 的原话：如果 p of x 非常小，就叫人进一步检查",640,385,"y");
+       note("⭐ 所以整个问题变成了：怎么从历史数据里学出 p(x)",640,405,"g");},"<b>有了 p(x)，异常检测就变成一件能算的事了</b>：<b>把新样本代进去算一下 p(x)，如果这个值很小，说明它落在「历史上几乎没去过」的地方，就报警。</b>Ng 的原话就是——<b><em>如果 p(x) 非常小</em>，就让团队进一步检查它</b>。<br><b>⭐ 于是整个问题被转化成了一句话：怎么从历史数据里把 p(x) 学出来？</b><br>这个任务有个名字叫「<b>密度估计</b>」（density estimation）——<b>说白了就是「摸清数据的分布长什么样」</b>。<b>下一个知识点会说明：这件事没有看起来那么容易。</b>");
+  SUM(1101,11,{h:"★ p(x)：某个位置的「拥挤程度」",k:"<b>p(x) 叫概率密度，就是「在 x 这个位置数据有多拥挤」</b>。曲线高＝常见，低＝罕见。",m:"异常检测的判据：<b>算新样本的 p(x)，很小就报警</b>（Ng 原话）。于是问题变成「<b>怎么学出 p(x)</b>」，这叫<b>密度估计</b>。",w:"⚠ <b>p(x) 不是概率</b>，它可以大于 1。概率是曲线下的<b>面积</b>，p(x) 只是<b>高度</b>。对本讲够用的是「高＝常见、低＝罕见」。",e:"⭐ 「密度估计」这个词后面会反复出现，<b>它就是「摸清数据分布长什么样」</b>。"});
+  QUIZ(1101,11,{t:"关于概率密度 p(x)，下面哪句话正确？",o:["p(x) 是「该位置的拥挤程度」，可以大于 1；概率是曲线下的面积，p(x) 只是高度","p(x) 就是概率，所以一定不超过 1","p(x) 只能取 0 或 1","p(x) 必须由人工指定"],a:0,w:"⚠ 这是常见混淆。<b>密度是高度，概率是面积。</b>本讲只需记住「<b>高＝常见、低＝罕见</b>」。"});
+});
+KP("12 · ★ 关键的一步：没有任何现成的分布能套上去",function(){
+  S(1223,function(){clearScene();setEq(null);setCap("先看一个「能套」的例子：单个高斯");
+       axes({x0:260,x1:1020,y0:470,y1:190});
+       bell(640,470,230,120,"b");
+       dots([[560,462],[600,466],[640,458],[680,464],[720,460],[610,470],
+             [670,468],[590,456],[700,470],[650,464]],"y",8);
+       note("数据堆成一个包 ⇒ 用一个高斯就能描述它",640,240,"g");
+       note("高斯分布就是这个「钟形」——中间高两边低，左右对称",640,405,"d");},"要学出 p(x)，最自然的想法是：<b>找一个现成的、我们认识的分布，把它「套」到数据上</b>。<br><b>最常用的那个叫「高斯分布」，也叫正态分布。</b>它长什么样？<b>就是图上这个「钟形」——中间高、两边低、左右对称</b>。身高、测量误差这类东西大致都是这个形状。<b>它只有两个参数：中心在哪（均值），胖瘦如何（方差）。</b><br>如果你的数据像图上这样<b>堆成一个包</b>，那太好了——<b>调一调中心和胖瘦，一个高斯就能把它描述得很好。</b>");
+  S(1223,function(){clearScene();setEq(null);setCap("但真实数据常常长这样");
+       says("20:23","there is no textbook distribution");
+       axes({x0:260,x1:1020,y0:470,y1:190});
+       dots([[400,400],[440,380],[380,420],[420,430],[460,405],[410,375],
+             [820,330],[860,310],[800,350],[840,360],[880,335],[810,315]],"y",9);
+       note("两坨",640,230,"r");
+       note("⚠ 一个钟形罩不住 —— 它只有一个峰",640,380,"r");
+       bell(640,470,150,220,"d");
+       note("硬套一个高斯：峰落在中间的空处，两坨反而都不在峰上",640,405,"d");},"<b>⚠ 但真实数据常常不是一个包。</b>图上这份数据明显是<b>两坨</b>。<br><b>如果硬套一个高斯会怎样？</b>灰色那条就是硬套的结果：<b>它的峰落在了两坨中间的空处</b>——<b>那个地方其实一个数据点都没有，模型却认为那里最拥挤</b>。而真正有数据的两边，模型反而认为比较稀疏。<b>完全拟合反了。</b><br>Ng 在课上对这种情况的判断很干脆：<b><em>没有任何教科书上的现成分布</em>能描述这样的数据</b>。<b>⭐ 这句话是整个混合高斯模型的起点。</b>");
+  S(2380,function(){clearScene();setEq(null);setCap("那就别只用一个 —— 把两个加起来");
+       says("35:40","a mixture of Gaussians can fit distributions that look like this");
+       axes({x0:260,x1:1020,y0:470,y1:190});
+       bell(420,470,150,70,"b"); bell(840,470,170,75,"g");
+       dots([[400,462],[440,458],[380,466],[420,452],[460,464]],"y",8);
+       dots([[820,460],[860,452],[800,464],[840,456],[880,462]],"y",8);
+       note("高斯 A",420,294,"b"); note("高斯 B",840,290,"g");
+       note("⭐ 两个钟形按一定比例混起来 ⇒ 就能有两个峰了",640,387,"y");
+       note("这就是「混合高斯模型」（Mixture of Gaussians）",640,405,"g");},"<b>解决办法朴素得让人高兴：既然一个罩不住，那就用两个。</b><br><b>拿两个钟形，各自管一坨，再按一定比例把它们加起来</b>——得到的那条曲线<b>就有两个峰了</b>，正好对上数据。<b>这就是「混合高斯模型」</b>（Mixture of Gaussians，常简称 GMM）。<br><b>「混合」这个词就是字面意思：几个高斯按比例掺在一起。</b>Ng 说，<b>两个高斯的混合能拟合这样的分布，而更多个高斯的混合能拟合更复杂的形状。</b><br><b>⭐ 现在问题清楚了</b>：我们要从数据里学出——<b>每个高斯的中心在哪、胖瘦如何、以及各占多大比例</b>。<b>这就是接下来 EM 算法要干的事。</b>");
+  SUM(1223,12,{h:"★★ 一个高斯罩不住 ⇒ 把几个混起来",k:"<b>高斯分布＝钟形</b>，两个参数（中心、胖瘦）。数据若是一个包，一个高斯就够；<b>若是两坨，硬套一个高斯会把峰放在中间的空处——完全拟合反了</b>。",m:"⭐ Ng 的原话：<b>没有任何教科书上的现成分布</b>能描述这种数据。<b>这句话是混合高斯的起点。</b>",w:"<b>办法：拿几个钟形，各管一坨，按比例加起来</b> ⇒ 曲线就能有多个峰。这就是<b>混合高斯模型（GMM）</b>。",e:"要学的东西有三样：<b>每个高斯的中心、胖瘦、以及各自占的比例</b>。⭐ 这正是 EM 要估的参数。"});
+  QUIZ(1223,12,{t:"为什么不能用单个高斯去拟合「两坨」的数据？",o:["单个高斯只能处理一维数据","单个高斯计算太慢","因为高斯分布不对称","高斯只有一个峰，硬套会把峰放在两坨中间的空处——那里其实没有数据，完全拟合反了"],a:3,w:"⭐ Ng 的说法是<b>「没有任何教科书上的现成分布」</b>能描述这种数据。<b>办法是把几个高斯按比例混起来</b>，这样曲线就能有多个峰。"});
+});
+KP("13 · ★ 隐变量 z：存在，但你看不见它的值",function(){
+  S(1549,function(){clearScene();setEq(null);setCap("每个点其实「来自」某一个高斯 —— 但没人告诉你是哪个");
+       says("25:49","it exists but you don't get to see the value directly");
+       dots([[400,400],[440,380],[380,420],[420,430],[460,405]],"d",10);
+       dots([[820,330],[860,310],[800,350],[840,360],[880,335]],"d",10);
+       note("?",400,321,"y"); note("?",860,290,"y");
+       note("每个点背后都有一个「它是从哪个高斯抽出来的」",640,383,"y");
+       note("这个信息真实存在 —— 但数据里没有记下来",640,405,"r");},"现在要引入这一讲最核心的概念，<b>慢一点讲</b>。<br><b>我们假设数据是这样产生的</b>：对每一个点，<b>先掷一次骰子决定它来自哪个高斯</b>，再从那个高斯里抽出它的位置。<b>所以每个点背后都有一个「它来自第几个高斯」的编号</b>，我们把这个编号记作 <b>z</b>。<br><b>⚠ 关键在于：这个编号真实存在，但数据里没有记下来。</b>你拿到的只有点的位置，<b>没有任何一列写着「这个点来自 1 号高斯」</b>。<br>Ng 对这种变量的定义特别好记：<b><em>它存在，但你没法直接看到它的值</em></b>。这样的变量叫 <b>隐变量</b>（latent variable）——<b>「隐」就是「藏起来了」的意思</b>。");
+  S(1612,function(){clearScene();setEq(null);setCap("对照一下你学过的 GDA，差别就一目了然");
+       says("26:52","And GDA, Gaussian discriminant analysis");
+       matrix({rows:4,cols:3,cw:300,ch:56,x:185,y:205,
+         cell:function(i,j){var t=[
+           ["","GDA（你学过的）","混合高斯"],
+           ["类别标签","y，看得见","z，看不见"],
+           ["属于","监督学习","无监督学习"],
+           ["能直接套 MLE 吗","能","不能"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===1&&j===2)?"hl":"";}});
+       note("⭐ 两者的数学几乎一样 —— 唯一的差别就是「标签看不看得见」",640,387,"y");},"<b>Ng 在这里做了一个特别有用的对照</b>：拿混合高斯去比你学过的 <b>GDA（高斯判别分析）</b>。<br><b>GDA 是这么干的</b>：每个类别用一个高斯来描述，然后看新样本更像哪个类。<b>而它是监督学习——每个样本的类别标签 y 是给你的，看得见。</b><br><b>混合高斯几乎是同一套数学</b>，<b>唯一的差别是：那个类别标签看不见了</b>，从「观测到的 y」变成了「隐藏的 z」。<br><b>⭐ 这一个差别带来的后果非常大</b>：GDA 可以直接套极大似然的公式把参数算出来；<b>混合高斯不行，因为公式里要用到 z，而 z 你没有。</b>");
+  SUM(1549,13,{h:"★ 隐变量 z ＝ 存在但看不见的编号",k:"假设每个点<b>先掷骰子决定来自哪个高斯</b>，再从那个高斯抽出位置。那个编号记作 <b>z</b>。",m:"Ng 的定义：<b>它存在，但你没法直接看到它的值</b>。这种变量叫<b>隐变量</b>（latent）。",w:"⭐ <b>对照 GDA</b>：数学几乎一样，<b>唯一差别是标签从「看得见的 y」变成「看不见的 z」</b>。",e:"⚠ 后果很大：<b>GDA 能直接套 MLE，混合高斯不能</b>——因为公式里要用 z，而你没有 z。"});
+  QUIZ(1549,13,{t:"混合高斯模型里的隐变量 z 指的是什么？",o:["每个高斯的均值","簇的个数 k","每个数据点「来自哪个高斯」的编号——它真实存在，但数据里没有记录","数据的噪声"],a:2,w:"Ng 的定义：<b>存在，但看不到值</b>。⭐ 和 GDA 对照：<b>那边标签 y 看得见、这边 z 看不见</b>，这一个差别就让 MLE 没法直接用。"});
+});
+KP("14 · 「要是能看见 z 就好了」—— EM 的全部灵感来自这句话",function(){
+  S(1762,function(){clearScene();setEq(null);setCap("假想：如果每个点都标好了来自哪个高斯");
+       says("27:22","if only you knew the values of the z_i's");
+       dots([[400,400],[440,380],[380,420],[420,430],[460,405]],"b",10);
+       dots([[820,330],[860,310],[800,350],[840,360],[880,335]],"g",10);
+       note("全是 1 号",420,321,"b"); note("全是 2 号",845,285,"g");
+       note("那就太简单了：",640,380,"y");
+       note("1 号高斯的中心 = 所有蓝点的平均；胖瘦 = 蓝点的方差；比例 = 蓝点占几成",640,405,"d");},"<b>Ng 在课上说了一句话，整个 EM 算法的灵感都在里面</b>：<b><em>要是你知道那些 z 的值就好了</em></b>。<br><b>假设真的知道会怎样？</b>那就太简单了——<b>每个点都标好了来自哪个高斯</b>，于是：<b>1 号高斯的中心</b>就是所有标着 1 号的点的平均；<b>胖瘦</b>就是这些点的方差；<b>它占的比例</b>就是标 1 号的点占全体的几成。<b>全部直接算出来，一步到位。</b><br><b>⚠ 问题当然是：我们不知道 z。</b>");
+  S(1823,function(){clearScene();setEq(null);setCap("Ng 的破局办法：那就先猜一个");
+       says("27:22","these equations using the values of this z's we just guessed");
+       boxNode(180,205,460,80,"不知道 z","r");
+       boxNode(760,205,460,80,"那就先猜一个 z","y");
+       link(640,245,760,245);
+       boxNode(180,320,460,80,"用猜的 z 套公式算参数","g");
+       boxNode(760,320,460,80,"参数变好了 ⇒ 再回头把 z 猜得更准","b");
+       link(640,360,760,360);
+       curve([[760,400],[640,440],[410,400]],"d");
+       note("⭐ 来回转，越转越准 —— 这就是 EM 的全部思路",640,405,"y");},"<b>不知道就先猜。</b>Ng 的原话是：<b>用我们刚猜出来的那些 z 的值，去套上面那组公式</b>。<br><b>整个循环是这样的</b>：<b>① 先随便给一组参数；② 用这组参数去猜「每个点大概来自哪个高斯」；③ 用猜出来的归属去重算参数；④ 参数变好了，再回头把归属猜得更准……</b>如此往复。<br><b>⭐ 这就是 EM 的全部思路，一句话能说完：不知道 z 就先猜，猜完算参数，参数好了再重新猜。</b><br><b>注意它和 k-means 的结构有多像</b>——k-means 也是「先分配、再更新、来回转」。<b>区别在于「猜」的方式，下一个知识点就讲这个。</b>");
+  SUM(1823,14,{h:"EM 的灵感：不知道 z 就先猜一个",k:"<b>如果 z 已知</b>，参数一步就能算出来（中心＝该组点的平均、胖瘦＝方差、比例＝占比）。<b>问题是 z 未知。</b>",m:"⭐ 破局：<b>先猜 z → 用猜的 z 算参数 → 参数变好了再重新猜 z → 来回转</b>。",w:"<b>和 k-means 的结构一模一样</b>（分配 ↔ 更新）。差别只在「猜」的方式——下一节讲。",e:"大题问「EM 的基本思想」，<b>这一句话就是标准答案</b>。"});
+  QUIZ(1823,14,{t:"EM 算法的基本思路是什么？",o:["用梯度下降同时优化 z 和参数","不知道 z 就先猜一个，用猜的 z 算参数；参数变好后再回头把 z 猜得更准，来回迭代","把所有可能的 z 枚举一遍取最好的","直接对似然函数求导令其为零"],a:1,w:"Ng 的原话是<b>「用我们刚猜出来的那些 z 的值去套公式」</b>。⭐ 这个结构和 k-means 的「分配↔更新」是一样的。"});
+});
+KP("15 · ★ E 步：算「责任度」—— 这个点有几成像第 j 个高斯",function(){
+  S(1840,function(){clearScene();setEq(null);setCap("k-means 是硬分配：非此即彼");
+       dots([[640,300]],"y",14);
+       boxNode(230,380,330,76,"簇 1","b"); boxNode(720,380,330,76,"簇 2","g");
+       link(640,300,395,380);
+       note("100%",500,345,"b"); note("0%",790,345,"d");
+       note("⚠ 哪怕这个点正好卡在两簇中间，也必须选一个",640,405,"r");},"<b>先看 k-means 是怎么「猜」的：硬分配。</b>每个点必须<b>完完整整</b>归给某一个簇，<b>100% 属于它，0% 属于别人</b>。<br><b>⚠ 问题在于</b>：如果一个点<b>正好卡在两簇中间</b>呢？k-means 也必须逼它选一个，<b>而这个选择其实很武断</b>——稍微挪一点点，归属就翻过去了。<b>这中间的「犹豫」信息被扔掉了。</b>");
+  S(1886,function(){clearScene();setEq(null);setCap("EM 是软分配：按比例分");
+       dots([[640,300]],"y",14);
+       boxNode(230,380,330,76,"高斯 1","b"); boxNode(720,380,330,76,"高斯 2","g");
+       link(640,300,395,380); link(640,300,885,380);
+       note("70%",490,340,"b"); note("30%",800,340,"g");
+       note("⭐ 这两个比例加起来一定是 1",640,388,"y");
+       note("它们有个名字：责任度（responsibility），记作 w",640,405,"g");},"<b>EM 的猜法叫「软分配」：不逼它选，按比例分。</b>这个点可以<b>七成属于 1 号高斯、三成属于 2 号</b>。<br><b>这两个比例有个名字，叫「责任度」</b>（responsibility），通常记作 <b>w</b>。<b>意思就是「第 j 个高斯对这个点负几成责任」。</b><br><b>⭐ 两条性质要记住</b>：<b>① 每个比例都在 0 和 1 之间；② 一个点的所有比例加起来一定等于 1。</b>（毕竟这个点总得来自某个高斯，不可能凭空多出来。）<br><b>这就是 E 步要算的东西</b>——E 是 Expectation（期望）的首字母。");
+  S(1886,function(){clearScene();
+       setEq("$$w_j = \\dfrac{\\text{第 } j \\text{ 个高斯在这点的高度} \\times \\text{它的比例}}{\\text{所有高斯这样算一遍，加起来}}$$");
+       setCap("责任度怎么算：先各算一个分数，再归一化");
+       note("分子：这个高斯在该点的密度 × 这个高斯本身占的比重",640,170,"b");
+       note("分母：把所有高斯的分子加起来",640,191,"g");
+       note("⭐ 为什么要除以分母？为了让几个比例加起来正好是 1",640,220,"y");
+       note("⚠ 「密度高」只说明这点离该高斯近；",640,247,"d");
+       note("还要乘上「这个高斯本身有多大一坨」，才公平",640,265,"r");},"<b>责任度怎么算？</b>分两步。<br><b>第一步，给每个高斯算一个「分数」</b>：<b>这个高斯在该点的密度（还记得吗，密度＝该位置有多拥挤）× 这个高斯本身占的比重</b>。<br><b>第二步，归一化</b>：把所有高斯的分数加起来当分母，各自除一下。<b>这样几个比例加起来就正好是 1 了。</b><br><b>⚠ 为什么分子里还要乘「这个高斯占的比重」？</b>因为<b>光看密度不公平</b>：<b>假如 1 号高斯只占全体数据的 5%，2 号占 95%，那么哪怕某点离 1 号稍近一点，它更可能还是来自 2 号的——毕竟 2 号「人多」。</b><b>乘上比重，就是把这个「先天的人数差异」考虑进来。</b>");
+  SUM(1886,15,{h:"★★ E 步：算责任度（软分配）",k:"<b>k-means 是硬分配</b>（100%/0%）；<b>EM 是软分配</b>——这个点可以七成属于 A、三成属于 B。这些比例叫<b>责任度 w</b>。",m:"算法：<b>分子＝该高斯在这点的密度 × 该高斯占的比重；分母＝所有高斯的分子之和</b>。除一下保证<b>加起来为 1</b>。",w:"⚠ <b>为什么要乘「比重」</b>：若 1 号只占 5%、2 号占 95%，哪怕点离 1 号稍近，也更可能来自「人多」的 2 号。<b>乘比重就是把这个先天差异算进来。</b>",e:"⭐ M2 T3 的手算题就考这个。<b>必写步骤：各算加权密度 → 求和 → 相除</b>，并验证和为 1。"});
+  QUIZ(1886,15,{t:"计算责任度时，分子为什么不只用「该高斯在这点的密度」，还要乘上「该高斯占的比重」？",o:["这只是习惯写法，乘不乘都一样","为了让数值更大，便于计算","为了让密度不超过 1","因为若某个高斯本身占的比例很小，即使点离它稍近，该点也更可能来自「人多」的那个高斯"],a:3,w:"⭐ 光看密度不公平。<b>比重把「先天人数差异」考虑了进来</b>。⚠ 不乘比重就变成了另一个（错误的）模型。"});
+});
+KP("16 · M 步：用责任度当权重，把参数重算一遍",function(){
+  S(2170,function(){clearScene();setEq(null);setCap("和 k-means 的更新步几乎一样，只差一个字");
+       matrix({rows:4,cols:3,cw:300,ch:56,x:185,y:210,
+         cell:function(i,j){var t=[
+           ["要算的","k-means","EM（混合高斯）"],
+           ["中心","属于它的点取平均","所有点按责任度加权平均"],
+           ["胖瘦","（不算）","按责任度加权算方差"],
+           ["比重","（不算）","责任度之和 ÷ 总点数"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2?"hl":"";}});
+       note("⭐ 「属于它的点取平均」→「所有点按责任度加权平均」",640,370,"y");
+       note("硬分配的 0/1，换成了软分配的 0.7/0.3",640,390,"g");},"<b>M 步（M 是 Maximization，最大化）做的事，和 k-means 的「更新」几乎一样</b>——只差一个关键的字。<br><b>k-means 是</b>：把<b>属于</b>这一簇的点取平均。<b>EM 是</b>：把<b>所有</b>点按<b>责任度加权</b>平均。<br><b>⭐ 体会一下这个差别</b>：k-means 里一个点要么算进来（权重 1）、要么不算（权重 0）；<b>EM 里每个点都算进来，只是权重不同——那个七成属于 1 号的点，在算 1 号的中心时就按 0.7 的分量参与。</b><br>此外 EM 还要多算两样 k-means 不管的东西：<b>每个高斯的胖瘦（方差），以及它占的比重</b>。");
+  S(2682,function(){clearScene();setEq(null);setCap("Ng 的比喻：两个供应商的发动机混在了一起");
+       says("44:42","the two suppliers of aircraft engines get to you, they've been mixed together");
+       boxNode(200,200,420,80,"供应商 A 造的","b");
+       boxNode(680,200,420,80,"供应商 B 造的","g");
+       dots([[300,340],[360,330],[420,345],[480,335],[540,342],
+             [740,336],[800,328],[860,344],[920,332],[980,340]],"d",9);
+       note("↓ 运到你这儿，混成一堆，标签丢了",640,390,"r");
+       note("⭐ EM 做的事：先猜每台「几成像 A 造的」，",640,366,"y");
+       note("再把猜的比例当权重，分别算出 A 和 B 的典型参数",640,350,"g");},"<b>Ng 在课上用了一个很好记的比喻</b>，正好对上前面那个发动机场景：<b>两家供应商都给你供发动机，运到你这儿的时候混成了一堆，标签丢了。</b><br>你想知道<b>每家供应商造的发动机典型长什么样</b>。怎么办？<b>Ng 的说法是：你去看所有那些「你猜是 1 号工艺造出来的」发动机</b>，从它们身上算出 1 号工艺的特征。<br><b>⭐ 而 EM 的高明之处在于「猜」不是非黑即白的</b>：某台发动机可以<b>算作 0.7 台 A 家的、0.3 台 B 家的</b>。<b>用这个比例当权重去算，比硬逼它二选一要稳得多。</b>");
+  SUM(2170,16,{h:"M 步：按责任度加权重算参数",k:"和 k-means 的更新步几乎一样，差别在：<b>k-means「属于它的点取平均」→ EM「所有点按责任度加权平均」</b>。EM 还要多算<b>胖瘦（方差）和比重</b>。",m:"k-means 的权重是 0 或 1；<b>EM 的权重是 0.7、0.3 这样的小数</b>——每个点都参与，只是分量不同。",w:"Ng 的比喻：<b>两家供应商的发动机混在一堆、标签丢了</b>。EM 先猜每台「几成像 A 家的」，再用这个比例当权重算出各家的典型参数。",e:"⭐ M2 T3 手算题：<b>M 步要算三样——比重、均值、方差，全部用责任度加权</b>，分母是责任度之和。"});
+  QUIZ(2170,16,{t:"EM 的 M 步和 k-means 的更新步，最关键的差别是什么？",o:["k-means 只把「属于」该簇的点取平均；EM 把所有点都算进来，按责任度加权平均","k-means 要算方差而 EM 不用","EM 用的是中位数而不是平均数","EM 不需要重新计算中心"],a:0,w:"<b>权重从 0/1 变成了 0.7/0.3 这样的小数。</b>⭐ 另外 EM 还多算两样 k-means 不管的：<b>方差和比重</b>。"});
+});
+KP("17 · 要讲「为什么管用」，先补第一个词：期望",function(){
+  S(4002,function(){clearScene();setEq(null);setCap("期望 = 按概率加权的平均");
+       matrix({rows:3,cols:3,cw:290,ch:56,x:195,y:215,
+         cell:function(i,j){var t=[
+           ["取值","概率","贡献"],
+           ["1 元","0.7","1 × 0.7 = 0.7"],
+           ["5 元","0.3","5 × 0.3 = 1.5"]];return t[i][j];},
+         dim:function(i,j){return i===0;}});
+       note("期望 = 0.7 + 1.5 = 2.2 元",640,400,"y");
+       note("⚠ 注意 2.2 这个值本身永远不会真的出现 —— 它是「长期平均」",640,374,"r");
+       note("⭐ 符号写作 E[x]，读作「x 的期望」",640,340,"g");},"<b>接下来要讲「EM 为什么一定管用」，这部分有点数学。我分三步把需要的词先铺好，一个一个来。</b><br><b>第一个词：期望。</b>它就是<b>「按概率加权的平均」</b>。<br>举例：一个游戏，<b>七成概率给你 1 元，三成概率给你 5 元</b>。平均能拿多少？<b>不能简单算 (1+5)/2 = 3</b>，因为两种情况出现的机会不一样。<b>正确算法是：1×0.7 + 5×0.3 = 2.2 元。</b><br><b>⚠ 注意 2.2 这个数本身永远不会真的出现</b>（你要么拿 1 要么拿 5）。<b>它是「玩很多很多次之后的平均」。</b><br><b>符号写作 E[x]</b>，读作「x 的期望」。<b>这个符号后面会一直出现。</b>");
+  SUM(4002,17,{h:"期望 E[x] ＝ 按概率加权的平均",k:"<b>不是简单平均，是按各种情况出现的概率加权</b>。例：0.7 概率拿 1 元、0.3 概率拿 5 元 ⇒ E ＝ 1×0.7 + 5×0.3 ＝ 2.2 元。",m:"⚠ <b>期望值本身可能永远不会真的出现</b>（你要么拿 1 要么拿 5）。它是「长期平均」。",w:"符号 <b>E[x]</b>，读作「x 的期望」。后面讲 Jensen 不等式时会一直用。",e:"⭐ 责任度其实就是一种概率，<b>M 步的「加权平均」本质上就是在算期望</b>。"});
+  QUIZ(4002,17,{t:"「期望」E[x] 的含义是什么？",o:["按各取值出现的概率加权的平均——这个值本身可能永远不会真的出现","出现次数最多的那个取值","所有可能取值的简单平均","最大的那个取值"],a:0,w:"⚠ <b>不是简单平均</b>，要按概率加权。0.7 概率拿 1 元、0.3 概率拿 5 元，期望是 2.2 元——<b>而 2.2 这个数你永远拿不到</b>。"});
+});
+KP("18 · 第二个词：凸函数（以及为什么要关心它）",function(){
+  S(2906,function(){clearScene();setEq(null);setCap("凸函数：形状像个碗");
+       says("48:26","we're actually going to need a concave function");
+       axes({x0:300,x1:980,y0:470,y1:180});
+       para(640,460,250,300,"b",true);
+       note("开口向上，像一个碗",640,230,"b");
+       note("⭐ 判断方法：在曲线上任取两点连一条直线，",640,381,"y");
+       note("这条直线一定在曲线的上方（或重合）",640,405,"g");},"<b>第二个词：凸函数。</b>听起来抽象，其实<b>看形状就行——像一个碗，开口向上。</b><br><b>⭐ 有个一眼就能用的判断方法</b>：<b>在曲线上随便取两个点，拿直尺把它们连起来。如果这条直线总是在曲线的上方（或者正好重合），那它就是凸函数。</b><br>你可以在碗上试试：连接碗沿的两点，那根线肯定悬在碗底上方。<br><b>（严格的判断是「二阶导数 ≥ 0」，Ng 也提了一句「如果 f'' 严格大于 0」。但你记住碗的形状和那根直线就完全够用了。）</b>");
+  S(2937,function(){clearScene();setEq(null);setCap("那根连线和曲线之间的差距，就是 Jensen 不等式");
+       says("48:57","f of the expected value of x is less than or equal to...");
+       axes({x0:300,x1:980,y0:470,y1:180});
+       para(640,460,250,300,"b",true);
+       dots([[400,320],[880,320]],"g",10);
+       curve([[400,320],[880,320]],"g");
+       dots([[640,210]],"y",11);
+       dots([[640,320]],"g",11);
+       link(640,210,640,320);
+       note("f(1)",370,256,"d"); note("f(5)",910,256,"d");
+       note("连线中点 = 两个函数值的平均 = E[f(x)]",900,301,"g");
+       note("曲线上的点 = 平均位置处的函数值 = f(E[x])",900,195,"y");
+       note("⭐ 看图就知道：f(E[x]) ≤ E[f(x)]",640,405,"b");},"<b>现在把「期望」和「凸函数」拼起来，Jensen 不等式就出来了，而且看图就懂。</b><br>Ng 在课上就是这么画的：<b>横轴取 1 和 5 两个点，各占一半概率。</b><br><b>橙色的点</b>：先求 x 的平均（就是 3），<b>再看曲线在 3 这里有多高</b>——这是 <b>f(E[x])</b>。<br><b>绿色的点</b>：先分别算出 f(1) 和 f(5)，<b>再把这两个高度平均</b>——这就是连线的中点，也就是 <b>E[f(x)]</b>。<br><b>⭐ 图上一目了然：绿点在上，橙点在下。</b>写成式子就是 <b>f(E[x]) ≤ E[f(x)]</b>。<b>这就是 Jensen 不等式的凸函数版本——它不过是「连线在曲线上方」这句话的翻译。</b>");
+  SUM(2906,18,{h:"★ 凸函数与 Jensen 不等式（凸版）",k:"<b>凸函数＝碗形</b>。一眼判断法：<b>曲线上任取两点连直线，直线总在曲线上方</b>。",m:"<b>f(E[x]) ≤ E[f(x)]</b>。左边＝先求 x 的平均、再看曲线多高；右边＝先各算函数值、再平均（即连线的高度）。<b>连线在上 ⇒ 右边大。</b>",w:"⭐ <b>Jensen 不等式就是「连线在曲线上方」的翻译</b>，不是什么神秘的定理。",e:"⚠ 先把方向记牢：<b>凸函数时「函数的期望」大于等于「期望的函数」</b>。下一节会翻过来。"});
+  QUIZ(2906,18,{t:"凸函数最直观的判断方法是什么？",o:["函数过原点","函数单调递增","函数值恒为正","在曲线上任取两点连一条直线，这条直线总在曲线上方（或重合）——形状像个碗"],a:3,w:"⭐ 记住碗的形状就够了。<b>Jensen 不等式 f(E[x]) ≤ E[f(x)] 不过是「连线在曲线上方」的数学翻译。</b>"});
+});
+KP("19 · 什么时候取等号？Ng 专门讨论了这个边界情形",function(){
+  S(3229,function(){clearScene();setEq(null);setCap("情形一：直线也是凸函数");
+       says("53:49","a straight line is also a convex function");
+       axes({x0:300,x1:980,y0:470,y1:180});
+       curve([[340,420],[940,240]],"b");
+       dots([[400,402],[880,258]],"g",10);
+       note("曲线和连线完全重合",640,230,"y");
+       note("⇒ 不等号变成等号",640,405,"g");},"<b>Ng 在课上花了几分钟专门讨论「什么时候取等号」</b>，因为<b>这一点正是后面 EM 推导的命门</b>。上一版片子把这段整个跳过了，这次补上。<br><b>第一种情形：直线。</b>Ng 说<b>一条直线也是凸函数</b>（它满足「连线不在曲线下方」——因为连线<b>就是</b>曲线）。<b>这时候不等号自然变成等号。</b>");
+  S(4461,function(){clearScene();setEq(null);setCap("情形二（更重要）：随机变量是个常数");
+       says("72:16","we need the random variable inside to be a constant");
+       axes({x0:300,x1:980,y0:470,y1:180});
+       para(640,460,250,300,"b",true);
+       dots([[640,210]],"y",13);
+       note("两个点挤到了同一个位置",640,258,"y");
+       note("x 永远只取同一个值 ⇒ 它根本不「随机」",640,380,"r");
+       note("⭐ 此时 E[x] 就是那个值，f(E[x]) 和 E[f(x)] 当然相等",640,405,"g");},"<b>第二种情形才是真正要紧的</b>。Ng 的说法是：<b><em>一个总是取同一个值的随机变量</em></b>——也就是说，<b>它根本不随机，是个常数。</b><br><b>这时候图上那两个点会挤到同一个位置</b>，所谓的「连线」缩成一个点，<b>自然就重合了，等号成立。</b><br><b>⭐ 请把这一条记牢：Jensen 不等式取等号 ⟺ 里面那个随机变量实际上是个常数。</b><br>Ng 自己也强调了这点——<b>他后面说「我们需要里面那个随机变量是个常数」</b>。<b>等会儿推导 EM 时，E 步到底该算什么，就是被这个条件逼出来的。</b>");
+  SUM(3229,19,{h:"★★ Jensen 取等号的条件：随机变量是常数",k:"两种取等情形：<b>① 函数是直线</b>（曲线与连线重合）；<b>② 随机变量实际上是个常数</b>（两点挤到同一处）。",m:"⭐ <b>第二条是命门</b>：Ng 原话——「我们需要里面那个随机变量是个常数」。",w:"⚠ 上一版片子把这 9 分钟的讨论整段跳过了。<b>但不懂取等条件，就无法理解 E 步为什么只能算后验。</b>",e:"⭐ 大题问「E 步为什么取后验分布」，<b>答案的根就在这里</b>：要让下界与 ℓ 相切 ⇒ Jensen 取等 ⇒ 里面的量必须是常数。"});
+  QUIZ(3229,19,{t:"Jensen 不等式什么时候取等号？",o:["当函数值全为正时","当概率都相等时","当里面那个随机变量实际上是个常数时（以及函数是直线这种退化情形）","当样本量足够大时"],a:2,w:"⭐ <b>这是整个 EM 推导的命门。</b>Ng 原话：「我们需要里面那个随机变量是个常数」。<b>E 步只能取后验分布，就是被这个条件逼出来的。</b>"});
+});
+KP("20 · 把碗翻过来：凹函数与我们真正要用的那一版",function(){
+  S(3421,function(){clearScene();setEq(null);setCap("凹函数 = 碗倒过来，像一个山丘");
+       says("57:01","the form of Jensen's inequality we are gonna use is actually the...");
+       axes({x0:300,x1:980,y0:470,y1:180});
+       para(640,250,250,300,"g",false);
+       dots([[400,360],[880,360]],"y",10);
+       curve([[400,360],[880,360]],"y");
+       dots([[640,250]],"g",11);
+       note("连线现在在曲线「下方」",640,365,"y");
+       note("⭐ 所以不等号整个反过来：f(E[x]) ≥ E[f(x)]",640,405,"g");},"<b>现在把碗翻过来，就是「凹函数」——形状像一个山丘。</b><br><b>既然形状反了，那根连线的位置也反了</b>：<b>它现在跑到了曲线的下方。</b>于是<b>整个不等号方向反过来</b>：<b>f(E[x]) ≥ E[f(x)]</b>。<br>Ng 在课上明确说了：<b><em>我们要用的那一版 Jensen 不等式，是凹函数的那一版</em></b>。<br><b>⚠ 为什么是凹的那一版？</b>因为 EM 里要处理的函数是 <b>log</b>（对数），<b>而 log 正好是凹函数</b>——它一路上升但越升越慢，形状就是个向上弯的山坡。<b>这就是为什么我们需要凹版。</b>");
+  SUM(3421,20,{h:"凹函数：碗翻过来，不等号也翻过来",k:"<b>凹函数＝山丘形</b>，连线在曲线<b>下方</b> ⇒ <b>f(E[x]) ≥ E[f(x)]</b>，和凸版正好相反。",m:"⭐ <b>EM 要用的就是凹版</b>（Ng 明说），因为要处理的函数是 <b>log</b>，<b>而 log 是凹函数</b>——一路上升但越升越慢。",w:"⚠ 别把两版记混。<b>凸（碗）≤，凹（山）≥</b>。记形状比记符号可靠。",e:"推导里只要看到 log 套在期望外面，就该想到<b>凹版 Jensen</b>。"});
+  QUIZ(3421,20,{t:"EM 推导为什么用的是「凹函数版」的 Jensen 不等式？",o:["因为数据是凹的","因为要处理的函数是 log，而 log 是凹函数（一路上升但越升越慢）","因为凹版更简单","因为参数个数是奇数"],a:1,w:"<b>凸（碗）：f(E[x]) ≤ E[f(x)]；凹（山）：f(E[x]) ≥ E[f(x)]。</b>⭐ log 是凹的，所以用凹版。记形状比记符号可靠。"});
+});
+KP("21 · 第三个词：似然 —— 以及为什么不能直接最大化它",function(){
+  S(3486,function(){clearScene();setEq(null);setCap("似然：这组参数「解释」现有数据的能力有多强");
+       says("58:00","density estimation means you want to estimate P of x");
+       axes({x0:300,x1:980,y0:470,y1:190});
+       bell(480,470,220,80,"d");
+       dots([[600,462],[640,466],[680,458],[720,464],[760,460]],"y",9);
+       note("参数选得差：数据都落在曲线很矮的地方 ⇒ 似然小",640,250,"r");
+       bell(660,470,220,80,"g");
+       note("参数选得好：数据都落在曲线高处 ⇒ 似然大",640,405,"g");},"<b>第三个词：似然。</b>这个词很唬人，<b>但意思很朴素：一组参数「解释」现有数据的能力有多强。</b><br><b>怎么量？</b>把你手上每个数据点代进模型，看<b>模型认为这个点有多常见</b>（就是前面讲的密度 p(x)），<b>然后把所有点的值乘起来</b>。<br><b>⭐ 直觉是这样的</b>：如果参数选得好，<b>数据点都落在曲线的高处</b>——模型说「这些点很正常，我早料到了」，<b>似然就大</b>；如果参数选得差，数据点落在曲线很矮的地方——模型说「这些点怎么会出现」，<b>似然就小</b>。<br><b>所以「极大似然」就是：挑一组让数据看起来最不意外的参数。</b>");
+  S(3486,function(){clearScene();
+       setEq("$$\\ell(\\theta) = \\sum_i \\log \\sum_{z} p(x^{(i)}, z;\\theta)$$");
+       setCap("麻烦就在这里：log 里面套了一个求和");
+       note("log 外面有个求和 —— 这个没问题",450,170,"g");
+       note("可是 log 里面又有一个求和",830,170,"r");
+       note("⚠ log(a + b) 没法拆开成两项",640,211,"r");
+       note("对比：log(a × b) = log a + log b　← 乘法可以拆",640,233,"g");
+       note("⭐ 拆不开 ⇒ 求导之后式子纠缠在一起，解不出来",640,265,"y");},"<b>按理说，直接对似然求导、令导数为零，就能解出最优参数。为什么不这么干？</b><br><b>看这个式子的结构</b>：对数似然是「对所有样本求和」，每一项里是 <b>log</b>，<b>而 log 里面又套了一个对 z 的求和</b>（因为 z 看不见，我们得把它所有可能取值都加起来）。<br><b>⚠ 麻烦就在这个「log 里面的求和」</b>：<b>log(a + b) 没有办法拆开</b>。对比一下——<b>log(a × b) 可以拆成 log a + log b，乘法好拆；但加法不行。</b><br><b>⭐ 拆不开的后果是</b>：求导之后，所有参数纠缠在一起，<b>解不出闭式解</b>。<b>这就是我们必须绕路的原因，而 EM 就是那条路。</b>");
+  SUM(3486,21,{h:"★ 似然，以及「log 里套求和」这个麻烦",k:"<b>似然＝这组参数解释现有数据的能力</b>。数据落在曲线高处 ⇒ 似然大。<b>极大似然＝挑一组让数据看起来最不意外的参数。</b>",m:"⚠ 麻烦在于 <b>log 里面套了一个对 z 的求和</b>（因为 z 看不见，要把所有可能加起来）。",w:"<b>log(a×b) 可以拆成 log a + log b，但 log(a+b) 拆不开</b> ⇒ 求导后参数纠缠，<b>没有闭式解</b>。",e:"⭐ 大题问「为什么不能直接对混合高斯做 MLE」，<b>答「log 内有求和、无法拆开、没有闭式解」</b>。"});
+  QUIZ(3486,21,{t:"为什么不能直接对混合高斯的对数似然求导解出参数？",o:["因为参数个数比样本数多","因为数据量太大","因为 log 里面套了一个对 z 的求和，而 log(a+b) 无法拆开，求导后参数纠缠在一起没有闭式解","因为似然函数不连续"],a:2,w:"<b>对比：log(a×b) 好拆，log(a+b) 不好拆。</b>⭐ 这正是必须绕路用 EM 的原因。"});
+});
+KP("22 · ★★ 那条绿曲线：E 步造下界，M 步爬下界",function(){
+  S(3600,function(){clearScene();setEq(null);setCap("蓝曲线是我们真正想爬的 ℓ(θ)，但它不好爬");
+       axes({x0:260,x1:1020,y0:470,y1:190});
+       var i,p=[];
+       for(i=0;i<=60;i++){var x=280+i*12;
+         p.push([x,450-180*Math.exp(-Math.pow((x-760)/240,2))]);}
+       curve(p,"b");
+       dots([[430,420]],"y",11);
+       note("ℓ(θ)：对数似然",860,230,"b");
+       note("当前的参数 θ 在这里",430,365,"y");
+       note("横轴是参数 θ，纵轴是似然 —— 我们想往高处爬",640,405,"d");},"<b>现在可以讲 EM 为什么一定管用了。</b><br><b>蓝色这条曲线是对数似然 ℓ(θ)</b>：<b>横轴是参数 θ，纵轴是似然</b>。我们想爬到它的高处。<b>但刚才说了，它不好直接爬</b>——求导解不出来。<br>假设我们现在站在橙色那个点（<b>当前的参数</b>）。<b>怎么往上走？</b>");
+  S(3675,function(){clearScene();setEq(null);setCap("E 步：在脚下造一条好爬的绿曲线");
+       says("61:15","the second property that the green curve has is that it is");
+       axes({x0:260,x1:1020,y0:470,y1:190});
+       var i,p=[],q=[];
+       for(i=0;i<=60;i++){var x=280+i*12;
+         p.push([x,450-180*Math.exp(-Math.pow((x-760)/240,2))]);}
+       curve(p,"b");
+       for(i=0;i<=60;i++){var x=280+i*12;
+         q.push([x,450-128*Math.exp(-Math.pow((x-520)/170,2))]);}
+       curve(q,"g");
+       dots([[430,355]],"y",11);
+       note("绿曲线有两条性质：",640,245,"g");
+       note("① 它处处不高于蓝曲线（是个「下界」）",640,290,"g");
+       note("② 在当前这个 θ 处，它和蓝曲线正好相碰",640,335,"y");},"<b>E 步做的事，就是造出图上这条绿曲线。</b>Ng 说它有两条性质：<br><b>① 它是一个「下界」</b>——<b>不管 θ 取什么值，绿曲线都不会高过蓝曲线。</b>（「下界」这个词就是「在下面托着」的意思。）<br><b>② 在当前这个 θ 处，绿曲线和蓝曲线正好相碰、高度相等。</b>图上那个橙点就是相碰的地方。<br><b>⭐ 为什么要造这么一条？因为绿曲线好爬——它有闭式解，一步就能跳到顶。</b>而蓝曲线不好爬。<br><b>⚠ 性质②（相碰）是关键，而它正是前面讲的「Jensen 取等条件」给出来的</b>——下一个知识点细说。");
+  S(3771,function(){clearScene();setEq(null);setCap("M 步：爬到绿曲线的顶");
+       says("62:46","will construct a new lower bound");
+       axes({x0:260,x1:1020,y0:470,y1:190});
+       var i,p=[],q=[];
+       for(i=0;i<=60;i++){var x=280+i*12;
+         p.push([x,450-180*Math.exp(-Math.pow((x-760)/240,2))]);}
+       curve(p,"b");
+       for(i=0;i<=60;i++){var x=280+i*12;
+         q.push([x,450-128*Math.exp(-Math.pow((x-520)/170,2))]);}
+       curve(q,"g");
+       dots([[430,355]],"d",10); dots([[520,322]],"g",12); dots([[520,297]],"y",12);
+       link(430,355,520,322);
+       note("旧 θ",420,356,"d");
+       note("新 θ = 绿曲线的顶",570,345,"g");
+       note("⭐ 蓝曲线在新 θ 处 ≥ 绿曲线在新 θ 处 ≥ 绿曲线在旧 θ 处 = 蓝曲线在旧 θ 处",640,387,"y");
+       note("所以 ℓ 必然不下降",640,405,"g");},"<b>M 步做的事：最大化绿曲线——注意是绿的，不是蓝的。</b>为什么？<b>因为绿曲线好优化，有闭式解</b>（那就是前面 M 步那组加权平均的公式）。<b>走到绿曲线的顶点，得到新的 θ。</b><br><b>⭐ 现在看这个三段不等式，EM 的全部保证都在里面</b>：<br><b>蓝(新θ) ≥ 绿(新θ)</b>　（因为绿永远在蓝下面）<br><b>绿(新θ) ≥ 绿(旧θ)</b>　（因为新 θ 是绿的最高点）<br><b>绿(旧θ) = 蓝(旧θ)</b>　（因为在旧 θ 处两条曲线相碰）<br><b>串起来：蓝(新θ) ≥ 蓝(旧θ)。对数似然必然不下降。</b><br><b>然后在新位置重新造一条绿曲线，再爬一次。如此往复——这就是 EM。</b>");
+  SUM(3675,22,{h:"★★★ E 步造下界，M 步爬下界",k:"<b>E 步</b>造一条绿曲线，满足：<b>① 处处不高于 ℓ（下界）；② 在当前 θ 处与 ℓ 相碰</b>。<b>M 步</b>爬到绿曲线的顶，得到新 θ。",m:"⭐ <b>三段不等式</b>：蓝(新) ≥ 绿(新) ≥ 绿(旧) ＝ 蓝(旧) ⇒ <b>ℓ 必然不下降</b>。<br>第一步靠「下界」，第二步靠「爬到顶」，第三步靠「相碰」。",w:"<b>为什么爬绿不爬蓝</b>：绿曲线有闭式解、一步到顶；蓝曲线求导解不出来。",e:"⭐ 大题问「为什么 EM 保证似然不降」，<b>把三段不等式写出来就是满分答案</b>。⚠ 注意 EM 只保证<b>不降</b>，不保证找到全局最优。"});
+  QUIZ(3675,22,{t:"EM 保证对数似然不下降，靠的是哪三件事？",o:["梯度为零、二阶导为正、学习率足够小","绿曲线处处不高于 ℓ；新 θ 是绿曲线的最高点；在旧 θ 处绿曲线与 ℓ 相碰","似然有界、单调、连续","数据独立同分布、样本量足够大、参数初始化合理"],a:1,w:"三段串起来：<b>蓝(新) ≥ 绿(新) ≥ 绿(旧) ＝ 蓝(旧)</b>。⚠ <b>只保证不降，不保证全局最优</b>——和 k-means 一样会卡局部最优。"});
+});
+KP("23 · ★ 最后一块拼图：那条绿曲线是怎么造出来的",function(){
+  S(3895,function(){clearScene();
+       setEq("$$\\log \\sum_{z} p(x,z;\\theta) \\;=\\; \\log \\sum_{z} Q(z)\\,\\frac{p(x,z;\\theta)}{Q(z)}$$");
+       setCap("第一步：凭空乘一个 Q，再除一个 Q");
+       says("64:55","multiply and divide by this");
+       note("左右两边完全相等 —— 乘了又除，什么都没变",640,170,"d");
+       note("⭐ 那为什么要这么做？",640,207,"y");
+       note("因为「Σ Q(z) × 某个东西」这个形状，",640,239,"g");
+       note("正好就是「某个东西」关于分布 Q 的期望！",640,265,"g");},"<b>绿曲线怎么造？Ng 用了一个看起来很突兀、但极其关键的技巧。</b><br><b>第一步：在求和里面凭空乘一个 Q(z)，再除一个 Q(z)。</b>Ng 的原话就是<b><em>乘以这个、再除以这个</em></b>。<b>乘了又除，等式两边完全相等，什么都没改变。</b><br><b>⭐ 那图什么呢？</b>图的是<b>形状</b>。<b>「对 z 求和：Q(z) × 某个东西」</b>这个形状，<b>正好就是「某个东西」关于分布 Q 的期望</b>——还记得吗，期望就是按概率加权求和。<br><b>于是 log 里面的那一坨，被改写成了一个期望。而一旦变成期望，Jensen 不等式就能用了。</b>");
+  S(4031,function(){clearScene();setEq(null);setCap("第二步：用凹版 Jensen");
+       says("67:17","concave form of Jensen's inequality");
+       boxNode(200,186,880,64,"log ( E[ 某个东西 ] )　← 现在的样子","b");
+       boxNode(200,276,880,64,"≥　E [ log(某个东西) ]　← 用凹版 Jensen 之后","g");
+       link(640,250,640,276);
+       note("log 是凹函数 ⇒ f(E[x]) ≥ E[f(x)]",640,356,"y");
+       note("⭐ 右边这个就是绿曲线 —— 它天然地「不高于」左边",640,378,"g");
+       note("而左边就是我们想爬的 ℓ(θ)",640,400,"b");},"<b>第二步：用凹版 Jensen 不等式。</b><br>现在式子的样子是 <b>log( 期望 )</b>。而 <b>log 是凹函数</b>，凹版 Jensen 说 <b>f(E[x]) ≥ E[f(x)]</b>，于是：<b>log(期望) ≥ 期望(log)</b>。<br><b>⭐ 看右边那个式子——它就是绿曲线。</b>它天然地<b>不高于</b>左边（也就是 ℓ），<b>这就白送了「下界」这条性质</b>。而且它的形状里 <b>log 已经套在了乘法上，可以拆开了</b>，所以好优化。<br><b>⚠ 但还差一条：绿曲线要在当前 θ 处和蓝曲线「相碰」。</b>这就要求<b>刚才那个不等号取等号</b>——<b>而取等的条件我们前面讲过：里面那个随机变量必须是常数。</b>把这个条件解出来，<b>就会发现 Q 只能取一个东西：后验概率 p(z|x)。</b><br><b>⭐ 这就是 E 步算责任度的真正来历——它不是拍脑袋定的，是被「相碰」这个要求逼出来的唯一选择。</b>");
+  SUM(3895,23,{h:"★★ 绿曲线的来历：乘除 Q ＋ 凹版 Jensen",k:"<b>第一步</b>：在求和里乘一个 Q(z) 再除一个 Q(z)（恒等变形），<b>把 log 里面那坨改写成一个期望</b>。<br><b>第二步</b>：log 是凹的，用 Jensen 得 <b>log(期望) ≥ 期望(log)</b>——<b>右边就是绿曲线，「下界」白送</b>。",m:"⭐ 为什么乘除 Q：因为「<b>Σ Q(z) × 某物</b>」这个形状<b>正好是某物关于 Q 的期望</b>，变成期望才能用 Jensen。",w:"⭐⭐ <b>Q 为什么只能取后验</b>：要让绿曲线在当前 θ 处与 ℓ 相碰 ⇒ Jensen 必须取等 ⇒ 里面的量必须是常数 ⇒ 解出来 Q ＝ p(z|x)。<b>E 步算责任度是被逼出来的唯一选择，不是拍脑袋。</b>",e:"⭐ 这是 L13 最深的一块。能说出「<b>E 步取后验，是 Jensen 取等条件逼出来的</b>」，理解就到位了。"});
+  QUIZ(3895,23,{t:"EM 推导中「凭空乘一个 Q(z) 再除一个 Q(z)」的用意是什么？",o:["为了把 log 里面那一坨改写成「关于分布 Q 的期望」——变成期望之后才能用 Jensen 不等式","为了让概率归一化","为了消去隐变量 z","为了让式子变简单"],a:0,w:"<b>「Σ Q(z) × 某物」正好是某物关于 Q 的期望。</b>⭐ 而后续「Q 只能取后验 p(z|x)」，是<b>要求绿曲线与 ℓ 相碰（Jensen 取等）</b>逼出来的。"});
+});
+KP("完 · 这一讲的一条主线",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L13 · 完","k-means、混合高斯与 EM","从「硬分堆」到「按比例分」");},
+    "收一下。<b>这一讲其实只有一条主线：从「硬分堆」走到「按比例分」。</b><br><b>前半段 k-means</b>：质心就是一堆点的平均位置；<b>分配</b>（每点归最近的质心，此时质心不动）和<b>更新</b>（质心搬到自己那簇的平均位置）来回交替；代价函数 <b>J</b> 是所有点到自己质心的平方距离之和，<b>J 单调不增又非负有底，所以一定会停</b>；但<b>会卡在局部最优</b>，所以要多跑几次换初始；<b>k 没有标准答案</b>，常由业务目的定。<br><b>中段的转折</b>：异常检测要算 <b>p(x)</b>（某位置的拥挤程度），可真实数据常常是好几坨，<b>没有任何现成的分布能套</b>——于是把几个高斯按比例混起来，这就是<b>混合高斯</b>。<br><b>后半段 EM</b>：每个点来自哪个高斯是<b>隐变量 z</b>（存在但看不见）；<b>要是 z 已知，参数一步就能算出来</b>，所以就<b>先猜 z</b>——<b>E 步</b>算责任度（软分配，比 k-means 的硬分配多保留了「犹豫」的信息），<b>M 步</b>用责任度当权重重算参数。<br><b>最后的保证</b>：E 步造一条<b>处处不高于 ℓ、且在当前点与 ℓ 相碰</b>的绿曲线，M 步爬到它的顶；<b>三段不等式</b>（蓝新 ≥ 绿新 ≥ 绿旧 ＝ 蓝旧）保证<b>似然必然不降</b>。而<b>绿曲线的来历</b>是「乘一个 Q 再除一个 Q，把 log 里那坨变成期望，然后用凹版 Jensen」；<b>Q 之所以只能取后验，是「相碰」这个要求（Jensen 取等 ⇒ 里面必须是常数）逼出来的唯一选择</b>。<br><b>⚠ 最后提醒一句</b>：<b>EM 和 k-means 一样，只保证不变差，不保证找到最好的那个解。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

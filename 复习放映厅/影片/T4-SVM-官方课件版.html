@@ -1,0 +1,483 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>放映厅模板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(98ch,93%);max-height:85vh;overflow:auto;
+  background:rgba(13,18,26,.94);border:1px solid #253044;border-radius:14px;padding:24px 30px 22px;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 5px}
+#sum h3{font-size:clamp(17px,2.1vw,28px);font-weight:800;margin:0 0 15px;letter-spacing:-.02em;line-height:1.2}
+#sum .rows{display:grid;gap:11px}
+@media(min-width:900px){#sum .rows{grid-template-columns:1fr 1fr;gap:12px 26px}}
+#sum .row{border-left:2px solid #2A3546;padding-left:13px}
+#sum .rk{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 3px}
+#sum .rv{font-size:clamp(11.5px,1.1vw,15px);font-weight:300;line-height:1.7;color:#C3CEDD;margin:0}
+#sum .rv b{color:#F0F4FA;font-weight:600}
+#sum .rv i{font-style:normal;color:var(--blue)}
+#sum .rv em{font-style:normal;color:var(--green)}
+#sum .rv s{text-decoration:none;color:var(--coral)}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes;
+var CFG={title:"ARTI2001 · T4 支持向量机（官方课件·逐张精读）",
+  subtitle:"12 张实质幻灯 · 每张一个知识点 · 每镜都有详解 · 空格推进",video:""};
+
+KP("开场",function(){
+  S(0,function(){clearScene();
+    setTitle("M1 T4 · 支持向量机","官方课件逐张精读",
+      "对应课件 S4–S16 · 每张一个知识点 · 每个讲解镜头都有详细说明");},
+    "这部逐张跟着你课程的 M1T4 SVM 课件走——16 张里去掉封面、致辞、路线图和两张章节页，剩 12 张实质内容，每张做成一个知识点。记号、措辞、判定约定都和考试一致。每个讲解镜头下方都有一段<b>详细说明</b>（默认显示，按 N 可开关），把课件那一张讲透；每个知识点末尾还有一张四字段总结卡和一道用官方 Study check 改编的必答检验。");
+});
+KP("1 · 感知机 vs SVM（S4）",function(){
+  S(0,function(){setCap("<b>课件正面：两者共用 f(x)=wᵀx+b，改变的是训练目标。</b>");boxNode(170,280,330,120,"感知机","b");boxNode(780,280,330,120,"SVM","y");note("找到一条分界即停",335,440,"b");note("找最大间隔的分界",945,440,"y");note("犯错/平局后更新 · 任意有效分界都可能返回",335,478,"");note("硬间隔最大化分离 · 软间隔用 C 平衡 · 用支持向量",945,478,"");},"先建立一个根本区分：感知机和 SVM 用的是<b>同一个线性打分函数</b> f(x)=wᵀx+b——给一个样本 x 算出一个实数，正负决定判到哪一类。它们的差别<em>不在模型形式，而在训练目标</em>。感知机目标很低：只要把训练集分对就停，所以它返回哪条界<i>取决于初值和样本顺序</i>，可能紧贴某些点、非常脆弱。SVM 追加了更高的要求——在所有能分对的界里选<b>离两类都最远</b>的那条（最大间隔）。硬间隔要求完美分离时取最大间隔，软间隔在有噪声/不可分时用 C 平衡「间隔宽度」与「违反」。最终解只由<i>支持向量</i>（对偶影响力非零的少数点）决定。");
+  S(0,function(){setCap("<b>课件提醒：无论哪种目标，都不保证鲁棒的测试表现。</b>");setBig("验证证据","宽间隔 ≠ 更好泛化");},"这一点课件专门强调，也是最容易被误解的：<s>「间隔最大」不等于「泛化最好」</s>。最大间隔的理论动机是<b>降低对小扰动的敏感度</b>——边界离数据越远，输入抖动一点也不容易翻转分类。但这只是<i>鲁棒性</i>的一个论证，真实的测试表现还取决于数据分布、特征是否缩放、核选得对不对、噪声水平、以及 C 和 gamma 这些超参。所以课件要求：任何「哪个模型更好」的结论都必须有<b>验证集证据</b>支撑，不能只凭「它的间隔更宽」就下判断。这也呼应了你课程 Tutorial Q2 第 3 问的标准答法。");
+  SUM(0,1,{h:"感知机与 SVM：共享打分、目标不同（S4）",k:"共用 <b>f(x)=wᵀx+b</b> 与线性边界。感知机<i>分对即停</i>、可能返回任意分界；SVM 选<i>最大间隔</i>的分界。硬间隔最大化分离、软间隔用 C 平衡违反。",m:"支持向量 = 对偶影响力非零（αᵢ>0）的训练点，它们唯一决定边界；删掉其余点边界不变。这是 SVM 稀疏性的来源。",w:"<s>宽间隔 ≠ 更好泛化</s>——它只降低对扰动的敏感度。真实泛化还看数据、缩放、核、噪声、超参，故仍需验证证据。",e:"考「两者共同点与区别」：共用线性打分/边界；感知机分对即停、SVM 最大间隔；补一句宽间隔≠更好泛化。"});
+  QUIZ(0,1,{t:"课件 Study check：两模型共享什么？训练目标如何不同？为什么仍要用验证证据？",o:["共享输出概率；SVM 更快","<b>共享 f(x)=wᵀx+b；感知机分对即停、SVM 选最大间隔；宽间隔不保证更好泛化，故仍需验证</b>","毫无共同点","SVM 不需要验证"],a:1,w:"共享<b>线性打分与线性边界</b>；区别在训练目标——感知机解决训练错误即停，SVM 追加最大间隔。<s>更宽的间隔只降低对扰动的敏感度，不保证测试表现更好</s>，所以要用验证证据。这是课件原样的三问。"});
+});
+KP("2 · ★ 间隔与几何（S5）",function(){
+  S(0,function(){setEq("$$\\gamma^{(i)}=\\frac{y^{(i)}(w^{\\top}x^{(i)}+b)}{\\lVert w\\rVert}$$","top");setCap("<b>课件原话：距离只有除以 ‖w‖ 之后才是几何量。</b>");},"这一张是 T4 <b>最关键、最容易记混</b>的地方，课件用一整张幻灯区分四个量。<b>原始分数</b> f(x)=wᵀx+b：带量纲的实数，会随 w、b 缩放而变，<i>单独看没有几何意义</i>。<b>带符号距离</b> f(x)/‖w‖：除以 ‖w‖ 后才是几何量，正负表示在边界哪一侧、绝对值是到边界距离。<b>点到边界距离</b> |f(x)|/‖w‖：加绝对值恒非负，只说远近不说方向。<b>标签几何间隔</b> y·f(x)/‖w‖：再乘标签 y，把「对错」也编进符号——分对为正、分错为负。理解这四层递进，后面的间隔、违反、判定才不会算错。");
+  S(0,function(){matrix({rows:5,cols:2,cw:340,ch:52,y:150,cell:function(i,j){var t=[["y·f(x) 取值","含义（课件原文）"],["> 0","correct side 正确一侧"],["= 0","on the boundary 在边界上"],["0 < y·f < 1","inside the margin 间隔带内"],["= 1","support hyperplane 支持超平面"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return i===2&&j===0?"hl":(i===4?"hl2":"");},label:"课件的判定阶梯"});setCap("规范化 y·f≥1 下：<b>单侧 1/‖w‖，全宽 2/‖w‖</b>。");},"这张判定阶梯是 Tutorial Q1 的评分依据，必须能默写。按 <b>y·f(x)</b> 从大到小分档：<b>y·f>0</b> 在正确一侧；<b>y·f=0</b> 恰在决策边界上——课件明确写它<em>没有严格的类别归属</em>，手算时既不算「正确分类」，又因 y·f<1 属于「违反间隔」；<b>0<y·f<1</b> 侵入间隔带但仍分对（只是没足够余量）；<b>y·f=1</b> 正好在支持超平面上、是支持向量的位置。规范化（令最近点 y·f=1）后几何被钉死：<b>单侧=1/‖w‖，全宽=2/‖w‖</b>。两个高频失分：把 f=0 当「正确一侧」、把全宽记成 1/‖w‖。记法——<i>1 是一侧、2 是两侧</i>。");
+  SUM(0,2,{h:"★ 四个量与判定阶梯（S5）",k:"<b>分数</b> f → <b>带符号距离</b> f/‖w‖ → <b>点距离</b> |f|/‖w‖ → <b>标签几何间隔</b> y·f/‖w‖。规范化下单侧 1/‖w‖、<em>全宽 2/‖w‖</em>，支持超平面在 y·f=1。",m:"乘 y 把对错编进符号，所以<b>带符号距离和几何间隔对误分类点符号相反</b>——这是「距离远≠分对」的根源。",w:"<s>f(x)=0 不是「在正确一侧」</s>，而是在边界上、无严格类别。<s>全宽是 2/‖w‖，不是 1/‖w‖</s>（后者是单侧）。",e:"<b>T4 Tutorial Q1</b> 逐点算 f、带符号距离、y·f 并判定；<b>Q2</b> 给 w 求间隔宽度。这张阶梯图是判定依据。"});
+  QUIZ(0,2,{t:"课件 Study check：为什么对一个<b>误分类</b>的点，f(x)/‖w‖ 和 y·f(x)/‖w‖ 的符号会不同？",o:["因为 ‖w‖ 为负","<b>误分类点 y 与 f(x) 异号，乘 y 后符号翻转</b>","两式用了不同的 w","符号其实总相同"],a:1,w:"误分类 ⟺ y 与 f(x) <em>异号</em>。带符号距离只跟 f 的符号（在哪一侧）；几何间隔乘了标签 y，把「该在哪一侧」也算进去，于是对误分类点<b>翻转为负</b>。"});
+});
+KP("3 · 可靠的工作流（S6）",function(){
+  S(0,function(){boxNode(280,150,720,64,"① Scale features — scaler 在训练数据上 fit、放进 pipeline","g");boxNode(280,238,720,64,"② Choose baseline — 先用 linear 核 + 可复现的划分","");boxNode(280,326,720,64,"③ Inspect support — 看支持向量与边界","");boxNode(280,414,720,64,"④ Tune carefully — 用验证数据调，别碰测试集","");link(640,214,640,238);link(640,302,640,326);link(640,390,640,414);setCap("<b>课件原话：缩放和验证，和分类器本身同等重要。</b>");},"课件用这张幻灯传达一个态度：<b>做对流程和选对分类器同样重要</b>，很多失分不是模型选错、而是流程漏了或顺序乱了。四步固定顺序——① <b>缩放</b>：SVM 的间隔和 RBF 核都基于距离，量纲大的特征会主导，所以必须标准化，且 scaler 只在训练数据上 fit、放进 Pipeline，否则验证/测试集的统计量会泄漏进变换。② <b>选基线</b>：先用最简单的 linear 核和一个固定 random_state 的划分，有个可复现的起点。③ <b>检查支持向量</b>：看哪些点在定义边界、边界形状是否合理。④ <b>谨慎调参</b>：只用验证数据调 C/kernel/gamma。课件强调顺序不能乱——<i>每一步产生的信息喂给下一步，换序会造成泄漏、无效比较或难查的错误</i>。");
+  S(0,function(){setBig("顺序 = 防线","换序 → 泄漏 / 无效比较");},"为什么顺序本身就是一道防线？举两个换序会翻车的例子。<b>如果先缩放再切分</b>：scaler 用全量数据算均值和标准差，其中就包含了测试集的信息，模型间接「见过」了留出数据——这叫<em>预处理泄漏</em>，测试成绩会乐观偏高。<b>如果用测试集来选核或调 C</b>：测试集就变成了第二个验证集，你反复看它、朝它优化，最终报出去的数字不再是对新数据的无偏估计——这叫<em>选择泄漏</em>。所以「先切分、缩放进 Pipeline、验证调参、测试只碰一次」不是形式主义，而是<b>保证最终估计可信</b>的唯一方式。这正是你课程 Practical Q3/Q5 和大题「识别流程问题」考的核心。");
+  SUM(0,3,{h:"可靠的 SVM 工作流（S6）",k:"四步固定顺序：<b>缩放（进 pipeline）→ linear 基线 → 检查支持向量 → 用验证谨慎调参</b>。课件原话：缩放和验证和分类器<em>同等重要</em>。",m:"顺序重要，因为每步产生的信息被下一步用到。缩放放进 pipeline 使 scaler 只在训练折 fit，避免验证/测试统计量泄漏。",w:"<s>换序的后果</s>：切分前缩放=预处理泄漏；用测试集调参=选择泄漏。两者都让估计乐观偏高。",e:"<b>T4 Practical</b> 的整个工作流就是这条。大题写「修正流程」时照它：先切分、缩放进 pipeline、验证调参、测试只用一次。"});
+  QUIZ(0,3,{t:"课件 Study check：你能区分原始分数、几何距离和间隔条件吗？C 或核如何改变模型灵活度？",o:["分数就是距离，没区别","<b>分数 f(x)、距离 f/‖w‖、间隔条件 y·f≥1 三者不同；C 大或核更复杂 → 更灵活、易过拟合</b>","C 越大越平滑","核不影响灵活度"],a:1,w:"三者层层递进：<b>分数</b> f(x)=wᵀx+b 带量纲；除 ‖w‖ 得<b>几何距离</b>；乘 y 并要求 ≥1 是<b>规范间隔条件</b>。<em>C 越大</em>对违反惩罚越重、间隔越窄越贴数据（易过拟合）；<em>核越复杂 / gamma 越大</em>边界越灵活。"});
+});
+KP("4 · ★ 软间隔与超参（S7）",function(){
+  S(0,function(){matrix({rows:5,cols:2,cw:360,ch:52,y:155,cell:function(i,j){var t=[["松弛 ξ","位置（课件原文）"],["ξ = 0","on / outside 间隔上或之外"],["0 < ξ < 1","inside 间隔带内（仍分对）"],["ξ = 1","boundary 在决策边界上"],["ξ > 1","misclassified 误分类"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return i===3?"hl":(i===4?"hl3":"");},label:"课件的松弛阶梯"});setCap("目标 <b>min ½‖w‖² + C·Σξ</b>。");},"硬间隔要求每个点都 y·f≥1，但现实数据常常线性不可分——只要有一个点越界，这个约束就无解。软间隔的解法是给每个点一个<b>松弛变量 ξ</b>，允许它「欠一点」，但在目标里按 C 收费。ξ 度量违反的深度，课件把它分成四档：<b>ξ=0</b> 点在间隔上或之外（完全满足）；<b>0<ξ<1</b> 侵入了间隔带、但仍分在正确一侧；<b>ξ=1</b> 恰好落在决策边界上；<b>ξ>1</b> 才是真正的误分类。<s>最高频的错误</s>就是把「ξ>0」当成「分错了」——其实 ξ 在 0 到 1 之间时点还是分对的，只是没有足够余量。ξ=1 和 ξ>1 这两个临界值必须记准。");
+  S(0,function(){boxNode(150,180,470,90,"大 C","y");boxNode(150,320,470,90,"小 C","g");note("违反惩罚重 · 间隔窄 · 易过拟合",385,228,"y");note("容忍更多违反 · 间隔宽 · 正则更强",385,368,"g");note("SVC 分数不是概率，除非校准",640,500,"r");},"目标函数 <b>min ½‖w‖² + C·Σξ</b> 里两项在拔河：前一项要间隔宽（‖w‖ 小），后一项要违反少。<b>C 就是这场拔河的权重</b>。<b>大 C</b>：违反很贵，优化器宁可收窄间隔也要避免违反，结果间隔窄、支持向量少、贴合训练数据——容易过拟合。<b>小 C</b>：违反便宜，愿意牺牲几个点换更宽的间隔，支持向量多、正则更强——容易欠拟合。课件还配了另外两个超参：<b>kernel</b> 定义相似度和可能的边界形状，<b>gamma</b> 控 RBF 影响多局部。最后一句常被忽略但会考：<s>SVC 的 decision score 不是概率</s>，除非专门做概率校准。选 C/kernel/gamma 都要用交叉验证在缩放后的训练集上做，测试集只留作最终评估。");
+  SUM(0,4,{h:"★ 软间隔、C、核、gamma、概率（S7）",k:"目标 <b>min ½‖w‖² + C·Σξ</b>。松弛四档：0 在外/上、0-1 侵入但分对、<b>=1 在边界</b>、<b>>1 误分类</b>。C 大→窄→过拟合；C 小→宽→强正则。gamma 控 RBF 影响范围。",m:"C 平衡间隔宽度与违反惩罚。用交叉验证在<i>缩放后的训练集</i>上选 C/kernel/gamma，测试集只做最终评估。",w:"<s>ξ>0 不等于误分类</s>——(0,1) 之间仍分对。<s>SVC decision score 不是概率</s>，除非显式校准。",e:"<b>Tutorial Q2 第 2 问</b>：小 C 偏好宽间隔、大 C 偏好无违反。Practical 实测 C=0.1/1/100 → 支持向量 120/71/36、准确率峰值 C=1。"});
+  QUIZ(0,4,{t:"课件 Study check：ξ = 1 时点在哪？为什么不能说它「在正确一侧」？",o:["间隔带内，分对了","<b>恰好在决策边界上（y·f=0），没有严格类别，故不能说在正确一侧</b>","在支持超平面上","已经误分类"],a:1,w:"ξ = 1 − y·f，故 ξ=1 ⟺ <b>y·f=0 ⟺ 点在决策边界上</b>。边界上的点<em>没有严格类别归属</em>，说它「在正确一侧」不准确。ξ 要<s>大于 1</s>（y·f<0）才是真误分类。"});
+});
+KP("5 · ★ 核的选择（S8）",function(){
+  S(0,function(){setEq("$$K(x,z)=\\phi(x)^{\\top}\\phi(z)$$","top");matrix({rows:4,cols:3,cw:270,ch:52,y:300,cell:function(i,j){var t=[["核","形式","边界与主参数"],["Linear","xᵀz","直线 · C"],["Polynomial","(γxᵀz+r)^d","全局曲线 · C,d,γ,r"],["RBF","exp(−γ‖x−z‖²)","局部曲线 · C,γ"]];return t[i][j];},dim:function(i,j){return i===0||j===0;},hl:function(i,j){return i===3&&j>0?"hl2":"";}});setCap("<b>课件原话：先用 linear 基线，验证支持才加复杂度。</b>");},"核函数 K(x,z)=φ(x)ᵀφ(z) 直接算「变换到高维空间后的内积」，但<b>从不把 φ(x) 真的构造出来</b>——这就是核技巧。课件列了三种常用核：<b>Linear</b> K=xᵀz 保留原特征、边界是直线，类别近似线性可分时是合理基线；<b>Polynomial</b> K=(γxᵀz+r)^d 表示到 d 次的特征交互、产生相对全局的曲线；<b>RBF</b> K=exp(−γ‖x−z‖²) 用距离衡量相似度——近的点相似度接近 1、远的接近 0，产生局部曲线。课件的建议很务实：<i>先用 linear 当基线，只有当验证证据支持时才加复杂度</i>。还有一条容易漏：<s>比较 poly/RBF 之前必须先缩放特征</s>，因为它们都基于距离。");
+  S(0,function(){boxNode(150,200,470,90,"gamma 小","b");boxNode(150,340,470,90,"gamma 大","y");note("影响范围广 · 边界平滑 · 可能欠拟合",385,248,"b");note("影响很局部 · 边界细碎 · 可能过拟合",385,388,"y");note("C 管违反惩罚 · gamma 管影响范围（两个旋钮）",640,500,"r");},"RBF 的 <b>gamma 控制每个训练点的影响半径</b>。<b>小 gamma</b>：exp 衰减慢，每个点的影响范围很广，边界平滑——可能欠拟合（连该分开的都分不开）。<b>大 gamma</b>：衰减快，每个点只影响自己周围一小圈，边界被雕得很碎、贴着个别点——可能过拟合。课件把 C 和 gamma 明确区分成<b>两个独立的旋钮</b>：C 管「违反的惩罚有多重」，gamma 管「每个点的影响有多局部」。两个都调大，会得到又窄又碎的边界，是典型的过拟合组合。你课程 Practical Q4 要求<i>同时</i>在一个 4×3 网格上搜索 C 和 gamma，正是因为它们相互作用、不能各调各的。");
+  SUM(0,5,{h:"★ 三种核与核技巧（S8）",k:"核 <b>K=φ(x)ᵀφ(z)</b> 只算内积、不构造 φ。<b>Linear</b>（直线/基线）· <b>Polynomial</b>（全局曲线，度 d 次交互）· <b>RBF</b>（局部曲线，距离相似度）。",m:"核技巧让高维甚至无穷维特征可操作，因为算法只需内积。RBF 的 φ 是无穷维的，但从不写出。gamma 控 RBF 影响半径：小→平滑/欠拟合，大→细碎/过拟合。",w:"<s>核技巧省的是构造特征、不是计算量</s>——样本多时成对核求值仍贵。<s>比较 poly/RBF 前必须缩放</s>。",e:"<b>Tutorial Q3</b> 展开 φ 证明 (xᵀy)²；<b>Practical Q1/Q4</b> 比较核、搜 C×gamma。课件建议：linear 基线起步，验证支持才加复杂度。"});
+  QUIZ(0,5,{t:"课件 Study check：为什么 linear SVM 是有用的基线？若 RBF 边界太不规则，你会怎么调 gamma？",o:["linear 最准；调大 gamma","<b>linear 在近似线性可分时简单稳健、是合理基线；边界太不规则说明 gamma 太大，应调小 gamma 让影响变广、边界更平滑</b>","linear 没用；gamma 不影响边界","改用更大的 C"],a:1,w:"linear 保留原特征、边界是直线，<b>类别近似线性可分时是最简基线</b>、不易过拟合。RBF 边界不规则 = 每点影响太局部 = <b>gamma 太大</b>，<em>调小 gamma</em> 缓解。别和 C 混：C 管违反惩罚、gamma 管影响范围。"});
+});
+KP("6 · Checkpoint 五个量（S9）",function(){
+  S(0,function(){matrix({rows:5,cols:2,cw:360,ch:54,y:150,cell:function(i,j){var t=[["术语","定义（课件原文）"],["Score 分数","f(x)=wᵀx+b"],["Distance 距离","带符号 f/‖w‖；无符号 |f|/‖w‖"],["Support vector","对偶权重非零、定义边界的点"],["Kernel","把 xᵢᵀxⱼ 替换成 K(xᵢ,xⱼ)"]];return t[i][j];},dim:function(i,j){return i===0;},hl:function(i,j){return j===0&&i>0?"hl":"";}});setCap("<b>课件的自检清单——不看笔记能否全部说出？</b>");},"这是课件的第一节 Checkpoint，把 SVM 的核心量集中起来自检。逐个说清：<b>Score</b> f(x)=wᵀx+b 是原始打分，第一步永远先算它。<b>Distance</b> 有两种——带符号 f/‖w‖ 保留在边界哪一侧、无符号 |f|/‖w‖ 恒非负只说远近。<b>标签间隔条件</b>用 y·f（不是单看距离），它的符号才判对错。<b>Support vector</b> 是对偶系数非零的点、定义了边界，其余点删掉边界不变。<b>Soft margin</b> 用松弛允许受 C 控制的违反。<b>Kernel</b> 把特征空间的点积 xᵢᵀxⱼ 替换成 K(xᵢ,xⱼ)。课件要求你<i>合上笔记，把这五个量的定义和它们之间的联系都说出来</i>——这是考前最好的自测。");
+  SUM(0,6,{h:"Checkpoint：五个必背量（S9）",k:"<b>Score</b> f=wᵀx+b · <b>Distance</b> 带符号 f/‖w‖、点距 |f|/‖w‖ · <b>Support vector</b> 非零对偶权重、定义边界 · <b>Soft margin</b> 松弛受 C 控 · <b>Kernel</b> 把 xᵢᵀxⱼ 换成 K(xᵢ,xⱼ)。",m:"课件强调：<em>标签间隔条件用 y·f，不是单看距离</em>。距离只说远近，y·f 才说对错——这是判定的唯一依据。",w:"<s>别混</s>：点距离总非负，带符号距离可正可负。判定永远看 y·f 的符号。",e:"这五个量是 T4 全部计算题的基础。课件让你「不看笔记全部说出」——考前用这张卡自测。"});
+  QUIZ(0,6,{t:"课件 Study check：不看笔记定义 score、signed distance、point distance、canonical margin condition。哪个用来判定对错？",o:["用 point distance |f|/‖w‖","用 signed distance f/‖w‖","<b>用 canonical margin condition：y·f(x)，其符号判定对错（≥1 才满足规范间隔）</b>","用 score f(x) 本身"],a:2,w:"score=f(x)=wᵀx+b；signed distance=f/‖w‖（带符号）；point distance=|f|/‖w‖（非负）；<b>canonical margin condition 用 y·f(x)</b>——它的符号判对错、≥1 才满足规范间隔。<s>点距离和分数都不能判对错</s>，因为不含标签信息。"});
+});
+KP("7 · Section 1 小结（S10）",function(){
+  S(0,function(){boxNode(200,150,880,58,"SVM 仍从数值特征开始","");boxNode(200,222,880,58,"间隔要小心区分 score 与 distance","");boxNode(200,294,880,58,"是支持向量、不是每个点，定义边界","");boxNode(200,366,880,58,"C 控制「贴合 vs 间隔」的权衡","y");boxNode(200,438,880,58,"核使非线性边界成为可能","");setCap("<b>课件小结：把这些串成一条线，别当孤立定义背。</b>");},"课件的 Key Takeaways 把整个第一节收成五条主线，而且特别叮嘱——<b>重点是把它们连起来，不是当孤立定义背</b>。这五条其实是一条因果链：① SVM 仍以数值特征起步，所以<i>缩放是前提</i>；② 有了尺度，间隔才有意义，但要小心区分 score（原始分数）和 distance（除以 ‖w‖ 的几何量）；③ 定义边界的是<i>支持向量</i>而非所有点——移动支持向量边界会变，移动远处点通常不变；④ C 控制「贴合训练数据」和「保持宽间隔」之间的权衡；⑤ 核让非线性边界成为可能，而代价只是把点积换成 K。能把这五条串成一段话讲出来，第一节就真正掌握了。");
+  SUM(0,7,{h:"Section 1 小结：五条主线（S10）",k:"① SVM 从数值特征起步（要缩放）② 间隔区分 score 与 distance ③ <b>支持向量而非所有点</b>定义边界 ④ C 控贴合↔间隔权衡 ⑤ 核使非线性边界可行。",m:"课件的用意是<em>连接而非罗列</em>：缩放→距离有意义→间隔→支持向量→C 权衡→核扩展。这条链就是前六个知识点的骨架。",e:"考前用这五条当提纲自测：能否对每条展开讲一段、并说出它和相邻一条的联系。"});
+  QUIZ(0,7,{t:"课件小结：是什么决定了 SVM 的决策边界？",o:["全部训练点均等贡献","<b>只有支持向量（对偶权重非零的点）</b>；移动它边界会变、移动远处点通常不变","只有离群点","特征的均值"],a:1,w:"课件原文：<b>support vectors, not every point, define the boundary</b>。只有对偶权重非零的点参与决策函数；删掉一个远处的非支持向量边界不变；移动一个支持向量边界会动。这是 SVM 稀疏性的体现。"});
+});
+KP("8 · Tutorial 三题总览（S11）",function(){
+  S(0,function(){boxNode(220,180,840,66,"Q1 · 算 f(x)、带符号距离、y·f(x) 与违反","b");boxNode(220,286,840,66,"Q2 · 比较单侧/全宽间隔，与 C 的作用","y");boxNode(220,392,840,66,"Q3 · 验证多项式核恒等式 φ 展开 = (xᵀy)²","g");note("三题串起 score → margin → kernel",640,510,"");setCap("<b>课件原话：小组讨论，展示中间计算步骤。</b>");},"课件把 Tutorial 三题定位为「把回顾变成可见的推理」——前面几张讲的定义，在这里要真正动笔算出来。三题正好覆盖本 Topic 的三段主线：<b>Q1</b> 打分与距离（score→margin），给定 f 和几个点，算 f(x)、带符号距离、y·f 并判定违反；<b>Q2</b> 间隔几何与 C（margin），给定 w 求单侧和全宽间隔、讨论 C 的作用；<b>Q3</b> 核（kernel），验证多项式核的恒等式。课件对做法有明确要求：<i>先独立做、再小组比对方法、看完解答后修订自己的答案</i>，而且<b>必须展示中间计算步骤</b>——这也正是你课程 practical feedback 反复强调的评分口径：报数字、解释含义、说局限，缺一步都掉分。");
+  SUM(0,8,{h:"Tutorial 三题：串起 score→margin→kernel（S11）",k:"<b>Q1</b> 算 f/距离/yf/违反 · <b>Q2</b> 间隔宽度 + C 的作用 · <b>Q3</b> 核恒等式 φ 展开=(xᵀy)²。三题串起本 Topic 主线。",m:"课件要求<em>展示中间计算</em>——这也是 practical feedback 反复强调的：报数字 → 解释含义 → 说局限，缺一步都掉分。",e:"三道题的完整解法见 Tutorial_ans。考试大题极可能重现其中一题的结构，务必练到能默写中间步骤。"});
+  QUIZ(0,8,{t:"课件说 Tutorial 三题串起哪条主线？",o:["数据 → 模型 → 部署","<b>score → margin → kernel</b>（分数 → 间隔 → 核）","训练 → 验证 → 测试","偏差 → 方差 → 正则"],a:1,w:"课件原文：three core questions connect <b>score → margin → kernel</b>。Q1 打分与距离、Q2 间隔与 C、Q3 核——正好是 SVM 从「怎么打分」到「怎么定间隔」到「怎么上非线性」的完整链条。"});
+});
+KP("9 · ★ Q1 计算流程（S12）",function(){
+  S(0,function(){boxNode(120,210,240,120,"① 算分数","b");boxNode(390,210,240,120,"② 带符号距离","");boxNode(660,210,240,120,"③ 间隔分数","y");boxNode(930,210,240,120,"④ 判定","g");link(360,270,390,270);link(630,270,660,270);link(900,270,930,270);note("wᵀx+b",240,360,"b");note("f(x)/‖w‖",510,360,"");note("y·f(x)",780,360,"y");note("对/边界/间隔内/违反",1050,360,"g");setCap("<b>课件原话：保持三个量各自分开、标好中间量。</b>");},"课件把 Q1 拆成四步的<b>检查策略</b>，核心不是「算出答案」而是「让每一步可追溯」。① 算<b>原始分数</b> wᵀx+b；② 算<b>带符号距离</b> f(x)/‖w‖；③ 算<b>间隔分数</b> y·f(x)；④ 据 y·f 的值<b>判定</b>：>0 且≥1 正确在间隔外、=0 在边界上（违反）、0<y·f<1 间隔内、<0 误分类。课件强调<em>每个中间量都要标好名字</em>——这样一旦最终判定错了，你能立刻回溯到是分数算错、距离除错、还是符号约定弄反。<s>最容易犯的错</s>是跳过第③步、直接用距离大小判对错：距离只说远近，一个点可以离边界很远却在错误一侧。判对错<b>必须</b>乘上标签 y 看 y·f 的符号。");
+  SUM(0,9,{h:"★ Q1 的四步计算流程（S12）",k:"<b>① wᵀx+b → ② f/‖w‖ → ③ y·f → ④ 判定</b>。四步各产生一个带名字的中间量，逐步核对。",m:"课件把它当<i>检查策略</i>：中间量标好名，最终判定错时能回溯到是分数、距离还是符号约定出错。",w:"<s>最易错</s>：跳过 y·f 直接用距离判对错。距离只说远近，<b>必须乘 y 看符号</b>才能判对错。",e:"<b>Tutorial Q1 原题</b>：f=x₁+x₂−3、四点，答案表 0/2/−3/1，判定=边界(违反)/正确间隔外/误分类/正确在支持面上。考试照四步写、标好中间量。"});
+  QUIZ(0,9,{t:"点 (3,3) 标签 y=−1，f(x)=x₁+x₂−3。按 Q1 四步，间隔分数 y·f 与判定是？",o:["y·f=3，正确","<b>y·f=−3，误分类</b>","y·f=0，在边界上","y·f=1，在支持面上"],a:1,w:"① f(3,3)=3+3−3=<b>3</b> → ② 带符号距离 3/√2（很远）→ ③ 间隔分数 y·f=(−1)(3)=<b>−3</b> → ④ y·f<0 故<em>误分类</em>。<s>距离远不代表分对</s>：这点远在错误一侧。这是 Tutorial Q1 的原题点。"});
+});
+KP("10 · ★ Q2 间隔宽度与 C（S13）",function(){
+  S(0,function(){setEq("$$\\text{单侧}=\\frac{1}{\\lVert w\\rVert},\\qquad \\text{全宽}=\\frac{2}{\\lVert w\\rVert}$$","top");setBig("0.4","w=(3,4) → ‖w‖=5 → 全宽 2/5");setCap("<b>课件原话：规范化把几何与软间隔权衡连起来。</b>");},"课件的 Q2 有四个检查点：算<b>单侧 1/‖w‖</b>、算<b>全宽 2/‖w‖</b>、写出规范间隔条件、以及讨论<b>小 C 时权衡如何变化</b>。它点出一个关键联系：<i>更小的 ‖w‖ 产生更宽的间隔</i>——这就是为什么「最大化间隔」等价于「最小化 ½‖w‖²」，SVM 的目标函数正是这么来的。以 w=(3,4) 为例：‖w‖=√(9+16)=5，单侧间隔=1/5=0.2，全宽=2/5=0.4。<s>最高频的失分</s>是把单侧和全宽记反——问「margin width（间隔宽度）」答的是<b>全宽 2/‖w‖</b>，不是单侧 0.2。记法：1 是一侧、2 是两侧。第二问还会问 C 的权衡：小 C 容忍违反换更宽间隔（偏好宽间隔模型），大 C 收窄间隔避免违反（偏好无违反模型）。");
+  SUM(0,10,{h:"★ Q2：间隔宽度与 C 的权衡（S13）",k:"<b>单侧 1/‖w‖、全宽 2/‖w‖</b>。规范化把几何（间隔宽度）和软间隔权衡（C）连起来：<em>更小的 ‖w‖ = 更宽的间隔</em>。",m:"最大化 2/‖w‖ ⟺ 最小化 ½‖w‖²，这就是 SVM 目标的来历。小 C 容忍违反换更宽间隔，大 C 收窄间隔避免违反。",w:"<s>把单侧和全宽记反是高频失分</s>。记法：1 是一侧、2 是两侧。问 width 答 2/‖w‖。",e:"<b>Tutorial Q2 第 1 问</b>：w=(3,4) → 单侧 0.2、全宽 0.4。<b>第 2 问</b>：模型 A 宽间隔有违反 vs B 窄间隔无违反，小 C 偏 A、大 C 偏 B。"});
+  QUIZ(0,10,{t:"规范化下 w=(6,8)，间隔<b>全宽</b>是？",o:["0.1","<b>0.2</b>","10","0.05"],a:1,w:"‖w‖=√(36+64)=10。单侧=1/‖w‖=<i>0.1</i>，<b>全宽=2/‖w‖=0.2</b>。<s>选项 A（0.1）是经典陷阱</s>——那是单侧。问 width 就是两侧之和。Tutorial Q2 用 w=(3,4)、答案 0.2/0.4，同一套路。"});
+});
+KP("11 · ★ Q3 核恒等式（S14）",function(){
+  S(0,function(){boxNode(140,210,240,110,"① 特征映射","b");boxNode(410,210,240,110,"② 内积","");boxNode(680,210,240,110,"③ 恒等式","g");boxNode(950,210,240,110,"④ 解读","y");link(380,265,410,265);link(650,265,680,265);link(920,265,950,265);note("算 φ(x), φ(y)",260,360,"b");note("展开 φ(x)·φ(y)",530,360,"");note("= (xᵀy)²",800,360,"g");note("核技巧的意义",1070,360,"y");setCap("<b>核在变换空间算点积，无需显式构造每个特征。</b>");},"课件的 Q3 用四步验证一个具体的核恒等式，目的是让你<b>亲手看到核技巧为什么成立</b>。① 对给定向量算<b>特征映射</b> φ(x)、φ(y)——例如 φ(x₁,x₂)=(x₁², √2·x₁x₂, x₂²)，代入具体数字；② 展开这两个高维向量的<b>内积</b> φ(x)·φ(y)，得到三项 x₁²y₁²+2x₁x₂y₁y₂+x₂²y₂²；③ 按完全平方合并，证明它正好<b>等于 (xᵀy)²</b>；④ <b>解读</b>：左边要先造两个三维向量再做内积，右边只需算一次原始内积再平方，结果完全相同——这就是核技巧。那个 √2 不是装饰，正是为了让展开后交叉项的系数凑成 2、拼出完全平方。理解这个例子，就理解了「用得上高维、却从不构造高维」这件事。");
+  SUM(0,11,{h:"★ Q3：验证核恒等式（S14）",k:"四步：算 φ(x)、φ(y) → 展开 φ(x)·φ(y) → 证明 <b>= (xᵀy)²</b> → 解读。核心：<em>核在变换空间算点积，无需显式构造特征</em>。",m:"φ(x₁,x₂)=(x₁², √2·x₁x₂, x₂²)，展开后三项按完全平方合并正好是 (xᵀy)²。√2 就是为了让交叉项系数凑成 2。",w:"<s>核技巧避免的是构造 φ、不是计算量</s>——大数据上成对核求值仍贵。这是 Q3 第 3 问的答案要点。",e:"<b>Tutorial Q3 原题</b>：算 φ(1,1)=(1,√2,1)、φ(2,2)=(4,4√2,4)；展开证明 =(xᵀy)²；说明核技巧避免什么、是否保证大数据便宜（答：避免构造特征，但不保证便宜）。"});
+  QUIZ(0,11,{t:"φ(x₁,x₂)=(x₁², √2·x₁x₂, x₂²)。计算 φ(2,2)。",o:["(2, 2√2, 2)","<b>(4, 4√2, 4)</b>","(4, 8, 4)","(2, 4, 2)"],a:1,w:"逐分量代 x₁=x₂=2：x₁²=<b>4</b>、√2·x₁x₂=√2·4=<b>4√2</b>、x₂²=<b>4</b>，得 (4, 4√2, 4)。<s>选项 C 把 4√2 化成 8 是错的</s>——4√2≈5.66。保留根号。这是 Tutorial Q3 第 1 问。"});
+});
+KP("12 · Practical 五题与纪律（S15–16）",function(){
+  S(0,function(){boxNode(200,150,880,54,"Q1 · 公平比较 linear / poly / RBF 三种核","");boxNode(200,216,880,54,"Q2 · 检查决策边界与支持向量","");boxNode(200,282,880,54,"Q3 · 用验证数据调 C","y");boxNode(200,348,880,54,"Q4 · 一起搜索 C 与 gamma","y");boxNode(200,414,880,54,"Q5 · 重拟合选定 pipeline，测试一次","r");setCap("<b>课件原话：从证据下结论，而不是从单个分数。</b>");},"课件的 Practical 用 two-moons 数据和既定的划分、缩放 pipeline，五题层层推进：<b>Q1</b> 公平比较三种核（同样的 C、缩放、数据，只换核）；<b>Q2</b> 看每种核画出的边界和哪些点成了支持向量；<b>Q3</b> 用验证数据调 C；<b>Q4</b> 把 C 和 gamma 放在一个网格里一起搜；<b>Q5</b> 锁定选中的设置、在 train+val 上重拟合、测试集只碰一次。课件反复强调的是<b>实验推理和代码同样重要</b>：按顺序跑、检查中间输出、<em>从证据（准确率+支持向量数+边界图）而不是单个分数下结论</em>、以及绝不用测试数据做开发决策。");
+  S(0,function(){setBig("测试集 · 一次","重复看 → 变成第二个验证集");},"这一镜单独强调最容易失分、也最常考的一条纪律：<b>测试集只能用一次</b>。开发阶段所有的选择——选哪个核、C 取多少、gamma 取多少——<em>只能用验证集的证据来做</em>。一旦你拿测试集反复试、朝它调参，测试集就变成了第二个验证集，你报出去的准确率不再是对新数据的无偏估计，而是<i>被选择过程污染、系统性偏高</i>的数字。正确流程是：验证集选好设置 → 锁定 → 在 train+validation 上重拟合 → 测试集评估一次、报告、结束。你课程 feedback PDF 里有一句必背的话：<b>「重复查看测试结果并调整设置，会把测试集变成另一个验证集，产生过于乐观的估计。」</b>这就是 Practical Q3/Q5 和大题「识别流程问题」的核心。");
+  SUM(0,12,{h:"Practical 五题与实验纪律（S15–16）",k:"<b>Q1 比较核 → Q2 看边界/支持向量 → Q3 调 C → Q4 搜 C×gamma → Q5 重拟合、测试一次</b>。用 two-moons 数据 + 固定的划分/缩放 pipeline。",m:"核心是<em>实验推理</em>：按顺序跑、看中间输出、从证据下结论。Q4 按准确率排序、平局取支持向量少的；Q5 锁定后在 train+val 重拟合、测试只碰一次。",w:"<s>别用测试数据做开发决策</s>——反复看测试结果会把它变成第二个验证集，估计乐观偏高。这是 feedback PDF 点名的失分点。",e:"<b>Practical Q3/Q5</b> 直接考这条纪律。大题「识别流程问题」的原型也在这里：切分先于缩放、验证选超参、测试只用一次。"});
+  QUIZ(0,12,{t:"课件 Study check：用哪个输出/图/对比作证据？如何避免用测试数据做开发决策？",o:["用测试准确率反复调 C 直到最高","<b>用验证集的准确率和支持向量数作证据调超参；测试集锁定后只评估一次</b>","把测试集并进训练集","只看训练准确率"],a:1,w:"开发决策（核/C/gamma）<em>只能用验证集</em>——它的准确率和支持向量数是证据。测试集锁定到最后只用一次。<s>用测试集反复调 C</s> 会把它变成第二个验证集、最终估计乐观偏高。这是课件反复强调、feedback PDF 点名的核心纪律。"});
+});
+KP("完",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);
+    setTitle("T4 官方课件版 · 完","12 张实质幻灯，逐张过完，每张都有详解",
+      "配合 CS229 SVM 讲座片理解「为什么」");},null);
+});
+window.__startProjector(CFG);
+})();
+</script>

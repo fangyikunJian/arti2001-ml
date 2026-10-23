@@ -1,0 +1,212 @@
+# -*- coding: utf-8 -*-
+"""M2 考前框架走查。样式直接复用 M1 那份（★考前框架走查.html）的 <style> 块，保证视觉一致。
+内容全部来自本 session 核实过的材料：Canvas 讲义 + 官方 PPT + Tutorial，算例均用 numpy 复算过。
+⚠ 考试占总成绩的百分比在所有材料里都查不到，所以不写。
+"""
+import io, os, re, sys
+sys.stdout.reconfigure(encoding="utf-8")
+
+SRC = "../★考前框架走查.html"      # M1 版，借它的 <style>
+OUT = "m2-zoucha.html"
+
+src = io.open(SRC, encoding="utf-8").read()
+head = src[:src.index("</style>") + len("</style>")]
+head = head.replace("<title>M1 考前框架走查</title>", "<title>M2 考前框架走查</title>")
+# ⚠ M1 那份的 --teal:#0E8F9C 在浅底上只有 3.57:1（h2 与 .min 都是小字，要 4.5）。
+#   换成 #0B7480 后三种浅色表面最低 5.07。暗色主题的 #3FC6D4 是 8.28，不动。
+head = head.replace("--teal:#0E8F9C", "--teal:#0B7480")
+
+BODY = r"""
+<div class="controls">
+  <button id="themeBtn">☾ 暗色</button>
+  <button onclick="window.print()">🖨 打印</button>
+</div>
+
+<div class="wrap">
+<header>
+  <h1>M2 考前框架走查 <span class="tag">开卷 · 110 分钟 · 20 选×3 + 4 大题×10 = 100 分</span></h1>
+  <p class="sub">睡醒后 <b>~50 分钟</b>走一遍这张图，把 T1–T3 锁成<b>一根主线</b>。这是框架不是速查表——公式细节看备考包。<b>Week 9（10 月 12–18 日），在你排定的 practical 时段。</b></p>
+</header>
+
+<h2>整个 M2 就一套骨架</h2>
+<div class="flow">
+  <div class="node">选<b>特征</b>与<b>缩放</b></div><div class="arw">→</div>
+  <div class="node">拟合（<b>PCA</b> / <b>聚类</b> / <b>GMM</b>）</div><div class="arw">→</div>
+  <div class="node">用<b>多路证据</b>评估</div><div class="arw">→</div>
+  <div class="node">说出<b>局限</b></div>
+</div>
+<div class="thread">
+  <b>M2 和 M1 最大的不同：没有 ground truth。</b> 监督学习可以report一个准确率就完事；无监督<b>没有那个数字</b>。
+  所以这门课把评分重心整个挪到了「<b>你凭什么相信这个结果</b>」上——这就是为什么每道大题都要求你给证据、并说出证据<b>不能</b>证明什么。
+  <b>记住这一句，四道大题的写法就定了。</b>
+</div>
+
+<h2>三个主题 · 各记 3–4 条 + 头号陷阱</h2>
+<div class="grid">
+
+  <div class="tcard t1">
+    <h3>T1 · PCA <span class="code">换表示</span></h3>
+    <p class="role">造连续的新坐标轴 —— <b>不产生任何簇标签</b></p>
+    <ul>
+      <li>先<b>中心化</b>；量纲不可比时再考虑标准化（<b>要论证</b>，不是默认动作）</li>
+      <li><span class="fml">S = Xcᵀ Xc</span> 与 <span class="fml">Σ = S/(n−1)</span> <b>特征向量相同</b>、特征值差 (n−1) 倍 ⇒ <b>主方向与解释方差比都不变</b></li>
+      <li>约束 <span class="fml">‖v‖=1</span> 下最大化 <span class="fml">vᵀΣv</span> ⇒ 拉格朗日解出 <span class="fml">Σv = λv</span>，且 <span class="fml">vᵀΣv = λ</span>（<b>特征值就是该方向的投影方差</b>）</li>
+      <li>解释方差比 <span class="fml">λⱼ / Σλ</span>；重构误差 = 被丢掉的特征值之和</li>
+      <li><b>只在训练集上 fit 一次</b>，特征向量从此固定；测试集只 transform</li>
+    </ul>
+    <div class="trap"><b>头号陷阱：</b>PCA <b>只最大化输入方差、从不看 y</b>。所以「解释方差 95% 但分类变差」完全正常——被丢掉的低方差方向可能正是判别关键。要判断降维伤没伤到任务，<b>只能用验证数据比</b>。</div>
+  </div>
+
+  <div class="tcard t2">
+    <h3>T2 · 聚类 <span class="code">给分组</span></h3>
+    <p class="role">K-means 认<b>到质心的距离</b>；DBSCAN 认<b>密度连通</b></p>
+    <ul>
+      <li>K-means 两步：<b>分配</b>（质心此刻不动）→ <b>更新</b>（搬到该簇均值）。目标 <span class="fml">J = Σ‖xᵢ − μ_c(i)‖²</span></li>
+      <li>为什么收敛：<b>①每步不增 ②分配方式有限 ⇒ J 取值有限</b>。<b>两句都要写</b>，只写第一句是半句</li>
+      <li>J <b>非凸</b> ⇒ 局部极小 ⇒ <b>k-means++ 加 n_init 多次重启</b>（n_init 是<b>重启次数</b>不是迭代次数）</li>
+      <li>DBSCAN：<b>ε 邻域含自身、距离取等也算</b>；core ≥ MinPts；border 属于簇但<b>不能扩张</b>；noise 只是当前设置下的标签</li>
+      <li>「直接密度可达」定义里那个 <b>「且 p 是核心点」</b> 是一切的源头；因为可达<b>不对称</b>才需要「密度连通」</li>
+    </ul>
+    <div class="trap"><b>头号陷阱：</b>silhouette <b>偏爱紧凑凸形簇</b>，在弯曲结构上可能<b>反而偏袒 K-means</b>。评估 DBSCAN 时必须<b>先排除噪声点（−1）并报告排除比例</b>。范围是 <b>−1 到 1</b>，不是 0 到 1。</div>
+  </div>
+
+  <div class="tcard t3">
+    <h3>T3 · GMM 与 EM <span class="code">给密度</span></h3>
+    <p class="role">责任度 + 完整的 p(x) —— 分组只是副产品</p>
+    <ul>
+      <li>生成故事：<b>掷骰子选成分 → 从那个高斯抽点</b>，骰子结果 <b>z 没被记下来</b></li>
+      <li><b>z 是真实归属（one-hot，看不到）；r 是观测后的后验（0~1，每行和为 1）</b>。EM 从未「猜出」z，只算出它的分布</li>
+      <li>不能直接 MLE：<b>求和号困在 log 里面</b>，log(a+b) 拆不开 ⇒ 无闭式解。<b>若 z 可见就退化成 GDA</b></li>
+      <li>E 步四步：算每成分密度 → 乘权重 → 相加得分母 → 各自除。<b>分母就是 p(x)，每行和必为 1</b></li>
+      <li>M 步三步：<b>N_k = Σr → π=N_k/N 与 μ 加权平均 → 协方差用<u>新</u>均值，分母一律 N_k</b></li>
+    </ul>
+    <div class="trap"><b>头号陷阱：</b>方差分母<b>是 N_k，不是 N 也不是 N_k−1</b>（EM 是极大似然，不是无偏样本方差）。本讲算例里误用 N_k−1 会把 1.93/2.88 变成 <b>5.16/10.09</b>，整题全毁。</div>
+  </div>
+
+  <div class="tcard t4">
+    <h3>贯穿三块 · 四类证据 <span class="code">M2 的主线</span></h3>
+    <p class="role">官方标为 <b>Core and assessable</b>，而 PPT 几乎没讲</p>
+    <ul>
+      <li><b>① 内部结构</b>：解释方差 / inertia / silhouette / 似然 / AIC / BIC</li>
+      <li><b>② 稳定性</b>：换随机种子（探<b>优化</b>敏感性）· 重采样（探<b>采样</b>稳定性）—— 两者问的不是同一件事</li>
+      <li><b>③ 几何与表示</b>：把标签画回散点图看形状；检查缩放与特征选择</li>
+      <li><b>④ 领域有用性</b>：这些组讲不讲得通、下游用不用得上</li>
+    </ul>
+    <div class="trap"><b>用法：</b>被问「该选哪个 k / K / 算法」「这个结论可信吗」，就<b>逐条扫这四类</b>，每条都能得分。<b>只报一个 silhouette 就下结论，最多拿一半分。</b></div>
+  </div>
+
+</div>
+
+<h2>★ 4 道大题的命根子：答题四步</h2>
+<div class="rubric">
+  <div class="steps">
+    <div class="s"><b>①</b> 报结果</div><div class="a">→</div>
+    <div class="s"><b>②</b> 解释它说明什么</div><div class="a">→</div>
+    <div class="s"><b>③</b> 用可见证据支撑</div><div class="a">→</div>
+    <div class="s"><b>④</b> 说出局限</div>
+  </div>
+  <p style="margin:10px 0 4px"><b>大多数人停在第①步，那最多拿一半分。</b>第④步的句子直接从下表挑一句抄上去：</p>
+  <div class="swap"><table>
+    <thead><tr><th>你报了什么</th><th>就补这一句局限</th></tr></thead>
+    <tbody>
+      <tr><td>解释方差 / 重构误差</td><td>只说明保住了多少<b>输入</b>方差；<b>PCA 从不看 y</b>，是否伤到任务要用验证数据比</td></tr>
+      <tr><td>某个主成分的含义</td><td><b>单个特征向量数值上不稳定</b>，可信的是<b>前 k 个张成的子空间</b></td></tr>
+      <tr><td>silhouette 数值</td><td>只描述所选表示下的内聚与分离，且<b>偏爱凸形簇</b></td></tr>
+      <tr><td>一次 k-means 的分组</td><td>单次运行；<b>J 非凸</b>，可能是局部极小</td></tr>
+      <tr><td>DBSCAN 的噪声点</td><td>只表示<b>当前 ε 与 MinPts 下</b>未进任何稠密区，<b>不是异常值判定</b></td></tr>
+      <tr><td>GMM 的责任度</td><td>是<b>当前拟合模型下的后验</b>，不是真实类别归属的已验证概率</td></tr>
+      <tr><td>BIC/AIC 最小的 K</td><td><b>是模型选择的证据，不是「确实存在这么多自然分组」的证明</b></td></tr>
+      <tr><td>选定了某个 k / K</td><td>这是 <b>a reasoned judgement, not proof</b></td></tr>
+    </tbody>
+  </table></div>
+</div>
+
+<h2>三个必背算例（手算大题的原型）</h2>
+<div class="swap"><table>
+  <thead><tr><th>题型</th><th>给定</th><th>过程</th><th>答案</th></tr></thead>
+  <tbody>
+    <tr><td>K-means 一轮</td><td>{1, 2, 8, 9}，k=2，初始质心 1 与 8</td>
+        <td>分配 {1,2} | {8,9} → 取均值</td><td><b>μ = 1.5 与 8.5，J = 1</b></td></tr>
+    <tr><td>DBSCAN 判角色</td><td>A=0, B=0.5, C=1.0, D=3.0, E=3.4；ε=0.6, MinPts=3</td>
+        <td>邻域（含自身）A=2, B=<b>3</b>, C=2, D=2, E=2</td>
+        <td><b>B core；A/C border；D/E noise</b>，簇 = {A,B,C}</td></tr>
+    <tr><td>silhouette</td><td>簇 {1,3} 与 {8,10}，算点 1</td>
+        <td>a = |1−3| = 2；b = (7+9)/2 = 8</td><td><b>s = (8−2)/8 = 0.75</b></td></tr>
+    <tr><td>GMM · E 步</td><td>π=(0.7,0.3)，μ=(−1,2)，σ²=1，求 x=0</td>
+        <td>密度 0.2420 / 0.0540 → 加权 0.1694 / 0.0162 → p(0)=0.1856</td>
+        <td><b>r = (0.913, 0.087)</b></td></tr>
+    <tr><td>GMM · M 步</td><td>x=(−2,0,3)，r=(0.9/0.1, 0.6/0.4, 0.1/0.9)</td>
+        <td>N=(1.6,1.4) → π=(0.5333,0.4667) → μ 加权平均 → σ² 围绕<b>新</b>均值</td>
+        <td><b>μ=(−0.9375, 1.785714)<br>σ²=(1.933594, 2.882653)</b></td></tr>
+    <tr><td>GMM · 参数个数</td><td>一维，每成分一个方差</td>
+        <td>(K−1) 个权重 + K 个均值 + K 个方差</td><td><b>p = 3K − 1</b>（K=2 → 5）</td></tr>
+  </tbody>
+</table></div>
+
+<h2>全 M2 高频陷阱清单（考前扫一眼）</h2>
+<div class="traps">
+  <div class="t"><b>✗</b> 「PCA 降到二维就得到了两个簇」 <span class="ok">✓</span> 那只是视觉印象，<b>簇要另外用聚类算法算</b>——PCA <b>不产生任何簇标签</b></div>
+  <div class="t"><b>✗</b> 跨缩放比较 inertia <span class="ok">✓</span> 它<b>带量纲</b>，标准化前后不在同一尺度，根本不可比</div>
+  <div class="t"><b>✗</b> 用「inertia 最小」选 k <span class="ok">✓</span> <b>k 越大 J 越小</b>（k=n 时 J=0），永远指向 k=n</div>
+  <div class="t"><b>✗</b> 用「似然最大」选 K <span class="ok">✓</span> <b>加成分不会降低最好的训练似然</b>，要用 AIC/BIC</div>
+  <div class="t"><b>✗</b> 看到实际 inertia/似然<b>不单调</b>就以为算错 <span class="ok">✓</span> 那是<b>局部最优</b>造成的，提高 n_init 再比</div>
+  <div class="t"><b>✗</b> n_init 是迭代次数 <span class="ok">✓</span> 是<b>独立重启次数</b>；迭代上限是 <b>max_iter</b>（k-means 与 GMM 都一样）</div>
+  <div class="t"><b>✗</b> 用标签一致率衡量聚类稳定性 <span class="ok">✓</span> <b>簇编号是任意的</b>，要比「哪些点被分在一起」（GMM 的成分编号同理）</div>
+  <div class="t"><b>✗</b> DBSCAN 的 ε 邻域不含自身 / 距离等于 ε 不算 <span class="ok">✓</span> <b>都要算</b>，错一个角色判定全错</div>
+  <div class="t"><b>✗</b> 以为 border 点也能继续扩张簇 <span class="ok">✓</span> <b>只有 core 能扩张</b>（「直接密度可达」定义里的那个「且」）</div>
+  <div class="t"><b>✗</b> 把 DBSCAN 的 −1 当成「这是异常值」 <span class="ok">✓</span> 只表示<b>当前设置下</b>没进任何稠密区</div>
+  <div class="t"><b>✗</b> 「DBSCAN 不用调参」 <span class="ok">✓</span> 簇数不用给，但 <b>ε 与 MinPts 比 k 更难设</b>；<b>ε 必须在缩放之后选</b></div>
+  <div class="t"><b>✗</b> 把 DBSCAN 在密度差异大时的失败归咎于调参不够 <span class="ok">✓</span> 那是<b>方法的内在限制</b>：一组全局参数描述不了两种「稠密」</div>
+  <div class="t"><b>✗</b> silhouette 范围是 0 到 1 <span class="ok">✓</span> 是 <b>−1 到 1</b>；负值表示该点也许更该属于另一个簇</div>
+  <div class="t"><b>✗</b> b(i) 用最近的<b>点</b>或最近的<b>质心</b> <span class="ok">✓</span> 用最近的<b>簇</b>的点对点平均距离；a(i) 要<b>排除自己</b>（分母 |C|−1）</div>
+  <div class="t"><b>✗</b> 把 p(x)=0.2 读成「20% 的概率」 <span class="ok">✓</span> 连续变量的 p(x) 是<b>密度</b>，<b>可以大于 1</b>；概率要对区间积分</div>
+  <div class="t"><b>✗</b> 成分数 = 峰数 <span class="ok">✓</span> 两个成分靠得近、方差大时<b>叠出单峰</b>；单峰<b>推不出</b>只有一个成分</div>
+  <div class="t"><b>✗</b> 混合方差 = 各成分方差的加权平均 <span class="ok">✓</span> 还要加上<b>成分均值之间</b>的差异那一项</div>
+  <div class="t"><b>✗</b> 有效计数 N_k 要凑整 / 是「责任度超过 0.5 的点数」 <span class="ok">✓</span> 是<b>期望计数</b>，0.9 就贡献 0.9；<b>Σ N_k = N</b> 是自检点</div>
+  <div class="t"><b>✗</b> M 步均值除以 N <span class="ok">✓</span> 除以 <b>N_k</b>——这是加权平均。x=0 的点对分子贡献 0，但责任度仍进<b>分母</b></div>
+  <div class="t"><b>✗</b> 方差用旧均值 / 用四舍五入后的均值 <span class="ok">✓</span> 用<b>刚算出的新均值</b>，且全程保留完整精度</div>
+  <div class="t"><b>✗</b> 把 σ² 当成 σ <span class="ok">✓</span> 本课一维高斯的第二个参数是<b>方差</b>；NumPy 的 random.normal 用的是<b>标准差</b></div>
+  <div class="t"><b>✗</b> 用 predict 汇报软归属 <span class="ok">✓</span> <b>predict 丢掉不确定性</b>，要用 <b>predict_proba</b>；score_samples 给的是<b>对数</b>密度</div>
+  <div class="t"><b>✗</b> 全量数据上 fit PCA 后再切分 <span class="ok">✓</span> <b>数据泄漏</b>；测试集上重新 fit 则是<b>坐标系不一致</b>。正确：split → train 上 fit → 同一变换 transform 两边</div>
+  <div class="t"><b>✗</b> 认为收敛 = 找到最优解 <span class="ok">✓</span> k-means 与 EM <b>都只保证不变差</b>，停在<b>局部</b>最优</div>
+</div>
+
+<h2>睡醒 50 分钟 · 走查顺序</h2>
+<ol class="plan">
+  <li><span class="min">5 分钟</span> 把最上面那条<b>骨架</b>和「<b>没有 ground truth</b>」那句默写一遍。M2 所有大题都挂在这上面。</li>
+  <li><span class="min">10 分钟</span> 三张 <b>tcard</b> 逐条过，每个 Topic 只需说得出<b>它认什么</b>（距离 / 密度 / 概率）和<b>头号陷阱</b>。</li>
+  <li><span class="min">10 分钟</span> <b>三个必背算例</b>动手默算一遍——尤其 <b>DBSCAN 判角色</b>与 <b>GMM 的 M 步</b>，这两个最可能出手算大题。</li>
+  <li><span class="min">10 分钟</span> 扫<b>陷阱清单</b>，把还会犹豫的几条圈出来，回头只翻这几条。</li>
+  <li><span class="min">10 分钟</span> 把<b>四步答题法</b>和<b>局限句表</b>念熟。考场上大题第一句写「结果是…」，最后一句写「但这不能证明…」，中间填证据。</li>
+  <li><span class="min">5 分钟</span> 检查带齐：学生证、<b>非编程非图形计算器</b>、速查表（按 T1/T2/T3 分栏贴标签）。<b>每一页都写全名</b>，交卷要出示学生证并签到。</li>
+</ol>
+
+<div class="foot">
+  <b>时间预算：</b>110 分钟 —— 选择题 <b>30 分钟</b>（≈1.5 分钟/题，<b>别翻书</b>，翻一次预算就没了）· 大题 <b>60 分钟</b>（≈15 分钟/题）· 检查 <b>20 分钟</b>（算错 + 漏签名）。<br>
+  <b>开卷的真相：</b>能不能<b>快速翻到</b>才是关键。速查表按 T1/T2/T3 分栏贴标签，翻页不超过 5 秒。翻书只留给大题的公式核对。<br>
+  <b>这页是框架不是速查表</b> —— 公式细节看 <b>M2 备考包</b>，推导过程看三部<b>精读动画深度版</b>，逐页对着课件看用<b>逐页精读</b>。
+</div>
+
+</div>
+
+<script>
+(function(){
+  var KEY="mlreader-theme", root=document.documentElement, btn=document.getElementById("themeBtn");
+  function apply(t){ root.setAttribute("data-theme",t);
+    if(btn) btn.textContent = (t==="dark" ? "☀ 浅色" : "☾ 暗色"); }
+  var saved; try{ saved=localStorage.getItem(KEY); }catch(e){}
+  apply(saved==="dark" ? "dark" : "light");
+  if(btn) btn.addEventListener("click", function(){
+    var next = root.getAttribute("data-theme")==="dark" ? "light" : "dark";
+    apply(next); try{ localStorage.setItem(KEY,next); }catch(e){}
+  });
+})();
+</script>
+"""
+
+io.open(OUT, "w", encoding="utf-8").write(head + BODY)
+print("%s: %d 字符" % (OUT, len(head + BODY)))
+print("  复用 M1 样式 %d 字符；正文 %d 字符" % (len(head), len(BODY)))
+print("  陷阱条目 %d；算例 %d；局限句 %d" % (
+      BODY.count('<div class="t">'), BODY.count("<tr><td>") - BODY.count("就补这一句局限"),
+      len(re.findall(r'<tr><td>[^<]*</td><td>[^<]*(?:<b>)?', BODY))))

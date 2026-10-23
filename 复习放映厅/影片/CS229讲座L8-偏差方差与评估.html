@@ -1,0 +1,761 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 第八讲 放映厅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#77849A; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.23em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(82ch,93%);width:100%;max-height:38vh;overflow-y:auto;margin-bottom:58px;display:flex;flex-direction:column;align-items:center;pointer-events:auto;-webkit-mask-image:none}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:1em 0 0;max-width:min(78ch,100%);text-align:left;
+  font-size:clamp(11px,1.12vw,15.5px);font-weight:300;line-height:1.78;color:#93A1B5;
+  border-top:1px solid #1E2634;padding-top:.85em;transition:opacity .4s ease}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(98ch,93%);max-height:85vh;overflow:auto;
+  background:rgba(13,18,26,.94);border:1px solid #253044;border-radius:14px;
+  padding:24px 30px 22px;transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 5px}
+#sum h3{font-size:clamp(17px,2.1vw,28px);font-weight:800;margin:0 0 15px;letter-spacing:-.02em;line-height:1.2}
+#sum .rows{display:grid;gap:11px}
+@media(min-width:900px){#sum .rows{grid-template-columns:1fr 1fr;gap:12px 26px}}
+#sum .row{border-left:2px solid #2A3546;padding-left:13px}
+#sum .rk{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 3px}
+#sum .rv{font-size:clamp(11.5px,1.1vw,15px);font-weight:300;line-height:1.7;color:#C3CEDD;margin:0}
+#sum .rv b{color:#F0F4FA;font-weight:600}
+#sum .rv i{font-style:normal;color:var(--blue)}
+#sum .rv em{font-style:normal;color:var(--green)}
+#sum .rv s{text-decoration:none;color:var(--coral)}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;
+  transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;
+  color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;z-index:6;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.seg{stroke:none}
+.seg.tr{fill:#1E3A52} .seg.dv{fill:#4A3A15} .seg.te{fill:#3A1A1E}
+.seg.on{fill:var(--yellow)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+
+/* ── caption placement: P cycles bottom / top / side ──────────────────────
+   The caption block carries a translucent backdrop so it stays readable even
+   when it lands on top of the artwork; side mode also shifts the scene left
+   so the two never fight for the same pixels. */
+#capWrap{background:rgba(8,11,17,.74);backdrop-filter:blur(7px);
+  -webkit-backdrop-filter:blur(7px);border-radius:13px;padding:13px 20px 15px}
+#capL.pos-top{align-items:flex-start}
+#capL.pos-top #capWrap{margin-bottom:0;margin-top:3.4vh}
+#capL.pos-side{align-items:center;justify-content:flex-end}
+#capL.pos-side #capWrap{margin-bottom:0;margin-right:2vw;max-width:min(44ch,36%);align-items:flex-start}
+#capL.pos-side #cap{text-align:left}
+#capL.pos-side #narr{max-width:100%}
+/* Percentage translations on an SVG element resolve unreliably, so side mode
+   narrows the canvas instead: preserveAspectRatio re-centres the artwork
+   inside the smaller box, which moves it clear of the caption panel. */
+svg#scene{transition:width .5s cubic-bezier(.2,.7,.3,1)}
+body.scene-shift svg#scene{width:64%;right:auto}
+#posHint{position:fixed;left:50%;top:16px;transform:translateX(-50%);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--yellow);background:rgba(8,11,17,.86);padding:5px 13px;border-radius:20px;
+  opacity:0;transition:opacity .3s ease;pointer-events:none;z-index:9}
+#posHint.show{opacity:1}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解 · P 字幕位置</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var VID="https://www.youtube.com/watch?v=rjbkWSTjHzM&t=";
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();}
+
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function axes(P,xl,yl){
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);
+  if(xl)note(xl,P.r,P.b+30,"","end");
+  if(yl)note(yl,P.l-8,P.t-14,"","end");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+function sample(seed,x0,x1,y0,n){var r=rng(seed),p=[];
+  for(var i=0;i<n;i++){var x=x0+(x1-x0)*(i+0.5)/n+(r()-.5)*18;
+    p.push([x,y0-90*Math.sin((x-x0)/((x1-x0))*2.6)-(r()-.5)*80]);}
+  return p;}
+function bar(x,y,w,h,segs){
+  var cx=x;
+  segs.forEach(function(sg){
+    var sw=w*sg[0];
+    gS.append("rect").attr("class","seg "+sg[1]).attr("x",cx).attr("y",y).attr("width",sw-3).attr("height",h).attr("rx",4);
+    if(sg[2])note(sg[2],cx+sw/2-1,y+h/2+5,sg[3]||"");
+    cx+=sw;});}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+
+/* ── text layers ── */
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  if(FAST){cap.innerHTML=h;cap.classList.remove("off");return;}
+  cap.classList.add("off");setTimeout(function(){cap.innerHTML=h;cap.classList.remove("off");},150);}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+a+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;
+  if(FAST){narrEl.innerHTML=t;narrEl.classList.remove("off");return;}
+  narrEl.classList.add("off");setTimeout(function(){narrEl.innerHTML=t;narrEl.classList.remove("off");},150);}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+/* ═══════════ THE FILM ═══════════ */
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();
+  KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){
+  clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){
+  clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* ── 开场 ── */
+KP("开场",function(){
+S(0,function(){clearScene();setEq(null);
+  setTitle("Stanford CS229 · Lecture 8","偏差、方差<br>与怎样诚实地评估",
+    "17 个知识点 · 你 T1 大题的直接出处 · 空格推进");},null);
+S(120,function(){noTitle();clearScene();
+  boxNode(150,160,380,74,"偏差 / 方差 / 正则化","g");
+  boxNode(150,268,380,74,"模型选择与开发集","g");
+  boxNode(150,376,380,74,"交叉验证：hold-out / k 折 / 留一","g");
+  boxNode(150,484,380,74,"特征选择","");
+  note("→ T1「训练好测试差」诊断题",710,205,"g","start");
+  note("→ T1「识别流程问题」大题 ★★",710,313,"g","start");
+  note("→ T4 Practical Q3 · Q5",710,421,"g","start");
+  note("→ 了解即可",710,529,"","start");
+  setCap("<b>这一讲几乎全程压在你的 T1 上。</b><br>其中一段是你「识别机器学习流程中的问题」那道大题的<em>直接出处</em>。");},
+  "前面几讲教的是<b>算法本身</b>，这一讲教的是<i>怎么用好它们</i>——Ng 说这类「实践建议」在真实项目里的价值，往往超过多学一个算法。对你而言更实在：<s>你课程 T1 的整个 Topic</s>加上四份 practical feedback 反复强调的东西，源头都在这里。尤其是「<b>为什么不能用测试集选超参</b>」这条，是大题的固定考点。");
+});
+
+/* ── 1 · 方差的直觉 ── */
+KP("1 · 方差",function(){
+S(506,function(){clearScene();setEq(null);
+  var P={l:180,r:600,t:170,b:450};axes(P,"x","y");
+  var d1=sample(7,210,570,420,6);dots(d1,"a",8);
+  curve(fn(function(x){var t=(x-210)/360;return 420-90*Math.sin(t*2.6)-70*Math.sin(t*9);},210,570,80),"fit r");
+  var P2={l:680,r:1100,t:170,b:450};axes(P2,"x","y");
+  var d2=sample(31,710,1070,420,6);dots(d2,"c",8);
+  curve(fn(function(x){var t=(x-710)/360;return 420-90*Math.sin(t*2.6)+65*Math.sin(t*8.2);},710,1070,80),"fit r");
+  note("同学 A 收集的 6 个样本",390,510,"b");note("同学 B 收集的 6 个样本",890,510,"g");
+  setCap("<b>方差的直觉</b>：换一批样本重新拟合，<br>如果结果<em>差别很大</em>，说明模型方差高。");},
+  "这是理解方差最好的思想实验：<i>你和同学各自独立收集 6 个样本，各自拟合一个模型</i>。如果两条曲线长得完全不一样，说明模型<b>学到的主要是这批样本的偶然特征</b>，而不是普遍规律。<s>换一批数据结论就变</s>——这样的模型不可信。方差高的典型表现就是<b>训练误差极低、测试误差很高</b>。");
+S(506,function(){clearScene();setEq(null);
+  var P={l:180,r:600,t:170,b:450};axes(P,"x","y");
+  dots(sample(7,210,570,420,6),"a",8);
+  curve(fn(function(x){return 420-(x-210)*0.28;},210,570,40),"fit y");
+  var P2={l:680,r:1100,t:170,b:450};axes(P2,"x","y");
+  dots(sample(31,710,1070,420,6),"c",8);
+  curve(fn(function(x){return 420-(x-710)*0.27;},710,1070,40),"fit y");
+  note("同学 A",390,510,"b");note("同学 B",890,510,"g");
+  note("两条线几乎一样 · 方差低",640,570,"y");
+  setCap("换成简单模型：<b>两次拟合几乎一致</b>。<br>方差低了——但<s>它可能根本没抓住数据的形状</s>。");},
+  "换成直线后，两批数据给出的结果<b>高度一致</b>，方差很低。但代价是它<i>可能系统性地偏离真实关系</i>——这就是<b>偏差</b>。方差和偏差往往此消彼长：模型越灵活，越能贴合数据（低偏差）但越随样本晃动（高方差）；模型越简单，越稳定（低方差）但越可能拟合不足（高偏差）。<s>这就是「偏差—方差权衡」</s>。");
+});
+SUM(506,1,{h:"方差 = 换一批数据结论就变",
+ k:"<b>方差</b>衡量模型对训练样本的敏感度：独立收集两批数据分别拟合，若<em>结果差别很大</em>，说明模型学到的是这批样本的偶然特征而非普遍规律。<b>偏差</b>则是模型系统性地偏离真实关系。",
+ m:"两者<i>此消彼长</i>：模型越灵活 ⟹ 越贴合数据（低偏差）但越随样本晃动（<b>高方差</b>）；模型越简单 ⟹ 越稳定（低方差）但可能拟合不足（<b>高偏差</b>）。这就是偏差—方差权衡。",
+ w:"<s>别把方差理解成「预测值的波动」</s>。它说的是<b>模型本身</b>随训练集变化的程度——同一个 x，不同训练集训出的模型给出的预测差多少。",
+ e:"T1 的经典诊断题：<b>训练准确率 1.00 而测试只有 0.62</b>。答法是先命名（<i>过拟合 / 高方差</i>），再给两个方向：<em>简化模型或加正则化</em>、<em>增加训练数据</em>。"});
+QUIZ(506,1,{t:"两位同学各自独立收集 6 个样本、用同一种高次多项式拟合，得到的曲线<b>形状差别很大</b>。这说明模型？",
+ o:["偏差高","<b>方差高</b>——它学到的主要是各自样本的偶然特征","既无偏差也无方差","训练数据太多了"],
+ a:1,
+ w:"<b>方差</b>衡量的正是「换一批训练数据，模型会变多少」。<br><br>两条曲线差别大 ⟹ 模型<em>高度依赖具体拿到了哪几个样本</em> ⟹ 它拟合的是噪声而非规律 ⟹ <s>高方差 / 过拟合</s>。<br><br>如果两次拟合<i>一致但都偏离数据</i>，那才是<b>高偏差</b>（欠拟合）。<br><br>这两种病的<em>处方完全相反</em>：高方差要简化/加正则/加数据，高偏差要加特征/换更灵活的模型。"});
+
+/* ── 2 · 过拟合与欠拟合 ── */
+KP("2 · 过拟合",function(){
+S(730,function(){clearScene();setEq(null);
+  var base=sample(11,0,1,0,7);
+  [[160,"欠拟合 · 高偏差","fit y",function(x,t){return 430-70*t;}],
+   [500,"刚好","fit g",function(x,t){return 430-90*Math.sin(t*2.6);}],
+   [840,"过拟合 · 高方差","fit r",function(x,t){return 430-90*Math.sin(t*2.6)-62*Math.sin(t*10);}]
+  ].forEach(function(cfg){
+    var x0=cfg[0],w=280;
+    gS.append("line").attr("class","axline").attr("x1",x0).attr("x2",x0+w).attr("y1",450).attr("y2",450);
+    var d=[];for(var i=0;i<7;i++){var t=(i+.5)/7;d.push([x0+t*w,430-90*Math.sin(t*2.6)-(((i*37)%23)-11)*3.4]);}
+    dots(d,"a",6);
+    curve(fn(function(x){var t=(x-x0)/w;return cfg[3](x,t);},x0,x0+w,70),cfg[2]);
+    note(cfg[1],x0+w/2,505,cfg[2].indexOf("y")>0?"y":(cfg[2].indexOf("g")>0?"g":"r"));});
+  setCap("<b>三种状态。</b>左边太简单，右边太贴合，<br><em>中间那个才是要找的</em>。");},
+  "判断落在哪一档，靠的是<b>比较训练误差和测试误差</b>：<i>两个都高</i> ⟹ 欠拟合（模型没能力）；<i>训练低测试高</i> ⟹ 过拟合（学过头了）；<i>两个都低且接近</i> ⟹ 刚好。<s>只看训练误差什么都判断不了</s>——它随模型复杂度单调下降，永远告诉你「更复杂更好」。这就是必须留出数据的根本原因。");
+});
+SUM(730,2,{h:"欠拟合 / 刚好 / 过拟合",
+ k:"三档的判据是<b>比较训练误差与测试误差</b>：<i>两个都高</i> ⟹ 欠拟合（高偏差）；<i>训练低、测试高</i> ⟹ 过拟合（高方差）；<i>两个都低且接近</i> ⟹ 刚好。",
+ m:"训练误差随模型复杂度<b>单调下降</b>，所以它永远推荐更复杂的模型——<em>只看训练误差无法做任何选择</em>。测试误差则呈 U 形：先降后升。这就是必须留出数据的根本原因。",
+ w:"<s>过拟合不等于「模型太大」</s>。同一个模型在小数据上会过拟合、在大数据上可能刚好。判断依据永远是<b>两个误差的对比</b>，不是模型的参数量。",
+ e:"T1 大题会问「<b>训练表现很好但测试很差，诊断并给出两个改进方向</b>」。诊断：过拟合/高方差。方向：① 简化模型或加正则化（SVM 里就是<i>减小 C、减小 γ</i>）；② 增加训练数据或做特征选择。"});
+QUIZ(730,2,{t:"模型在训练集和测试集上<b>误差都很高</b>。这是？",
+ o:["过拟合，应该加正则化","<b>欠拟合</b>——模型太简单，应该加特征或换更灵活的模型",
+    "数据泄漏","正常现象，继续训练即可"],
+ a:1,
+ w:"<b>两个都高 = 欠拟合（高偏差）</b>：模型连训练数据都拟合不了，说明它<em>没有足够的表达能力</em>。<br><br>处方与过拟合<s>完全相反</s>：<br>· 欠拟合 ⟹ <i>加特征、提高模型复杂度、减小正则化</i><br>· 过拟合 ⟹ <i>简化模型、加正则化、增加数据</i><br><br>用错方向会越治越糟——这也是为什么 Ng 强调<b>先诊断再动手</b>。"});
+
+/* ── 3 · 正则化 ── */
+KP("3 · 正则化",function(){
+S(880,function(){clearScene();setEq(null);
+  setEq("$$\\min_\\theta\\ J(\\theta)+\\frac{\\lambda}{2}\\lVert\\theta\\rVert^2$$","top");
+  setCap("<b>正则化</b>：在原来的目标后面<em>加一项惩罚</em>，<br>逼着参数不要太大。");},
+  "直觉是这样的：<b>参数越大，模型能画出的曲线越剧烈</b>。一个 x⁵ 的系数如果是 0.001，那一项几乎没影响；如果是 500，曲线就会疯狂扭动。所以<i>压住参数的大小，就等于压住模型的灵活度</i>。加的这一项叫<b>惩罚项</b>或<b>正则项</b>，用 L2 范数（平方和）时叫岭回归。");
+S(1008,function(){clearScene();setEq(null);
+  boxNode(140,270,300,100,"λ = 0","r");
+  boxNode(490,270,300,100,"λ 适中","g");
+  boxNode(840,270,300,100,"λ → ∞","y");
+  note("不惩罚 · 可能过拟合",290,420,"r");
+  note("刚好",640,420,"g");
+  note("参数全被压成 0 · 欠拟合",990,420,"y");
+  setCap("<b>λ 控制惩罚的力度。</b><br>两端都是坏的，好的在中间。");},
+  "两个极端很有启发。<b>λ = 0</b> 就是没有正则化，回到原来的问题。<b>λ 极大</b>时，惩罚项完全主导，最优解会把所有 θ 都压到 0——<i>模型退化成一条水平线</i>，严重欠拟合。<s>所以 λ 本身也是一个需要选的超参</s>，这就引出了整个模型选择的问题。SVM 里的 <b>C 其实扮演相反的角色</b>：C 大 ≈ 正则弱，C 小 ≈ 正则强。");
+});
+SUM(880,3,{h:"正则化：压住参数就是压住灵活度",
+ k:"在目标函数后面加一个<b>惩罚项</b> λ‖θ‖²/2，逼参数不要太大。因为<em>参数越大，模型能画出的曲线越剧烈</em>，压住参数就等于压住模型的灵活度。用 L2 范数时叫<i>岭回归</i>。",
+ m:"<b>λ = 0</b> ⟹ 无正则化，可能过拟合。<b>λ → ∞</b> ⟹ 参数全被压成 0，模型退化成常数、严重欠拟合。好的取值在中间，<em>λ 本身也是一个要选的超参</em>。",
+ w:"<s>SVM 的 C 方向相反</s>：C 在目标里乘的是<b>违反项</b>而非参数项，所以 <i>C 大 ≈ 正则弱（易过拟合）</i>，<i>C 小 ≈ 正则强（易欠拟合）</i>。别把 C 和 λ 的方向记混。",
+ e:"T4 会考 C 的方向：<b>C 小 → 间隔宽、违反多、支持向量多、正则强</b>；<b>C 大 → 间隔窄、违反少、支持向量少、易过拟合</b>。这张表要能默写。"});
+QUIZ(1008,3,{t:"正则化系数 λ 取<b>非常大</b>的值，会发生什么？",
+ o:["模型过拟合更严重","<b>参数几乎全被压成 0，模型退化成常数，严重欠拟合</b>",
+    "训练误差降到 0","对模型没有影响"],
+ a:1,
+ w:"λ 极大时，目标函数里<b>惩罚项完全主导</b>，优化器为了让 λ‖θ‖² 尽量小，会把所有参数压向 0。<br><br>结果是模型<em>退化成一条水平线</em>（只剩截距），连训练数据都拟合不了——<s>严重欠拟合</s>。<br><br><b>注意 SVM 的 C 方向相反</b>：C 极大意味着对违反惩罚极重、正则化<i>弱</i>，反而容易过拟合。C 小才对应强正则化。"});
+
+/* ── 4 · 模型复杂度曲线 ── */
+KP("4 · 复杂度曲线",function(){
+S(2265,function(){clearScene();setEq(null);
+  var P={l:280,r:1000,t:150,b:470};axes(P,"模型复杂度 →","误差");
+  curve(fn(function(x){var t=(x-280)/720;return 200+250*Math.exp(-t*3.2);},280,1000,80),"fit g");
+  curve(fn(function(x){var t=(x-280)/720;return 210+230*Math.exp(-t*3.4)+300*Math.pow(Math.max(0,t-0.42),2);},280,1000,80),"fit r");
+  gS.append("line").attr("class","guide").attr("x1",580).attr("x2",580).attr("y1",150).attr("y2",470);
+  note("训练误差 · 单调下降",980,265,"g","end");
+  note("测试误差 · U 形",980,180,"r","end");
+  note("最佳复杂度",580,505,"y");
+  note("欠拟合",400,505,"");note("过拟合",800,505,"");
+  setCap("<b>这张图要能默画。</b><br>训练误差<em>一路下降</em>，测试误差<s>先降后升</s>。");},
+  "这是全讲最该记住的一张图。<b>训练误差随复杂度单调下降</b>——模型越灵活越能记住训练数据，一直到完全记住为止。但<b>测试误差是 U 形的</b>：一开始复杂度不够（欠拟合），误差下降；越过某个点后开始学噪声（过拟合），误差回升。<i>我们要找的就是那个谷底</i>。<s>而谷底的位置无法从训练误差看出来</s>——这就是为什么必须有留出数据。");
+});
+SUM(2265,4,{h:"训练误差单调降，测试误差 U 形",
+ k:"<b>训练误差随模型复杂度单调下降</b>（越灵活越能记住数据）；<b>测试误差呈 U 形</b>——先因摆脱欠拟合而下降，越过某点后因开始学噪声而回升。<em>目标是找到 U 形的谷底</em>。",
+ m:"谷底左边是<i>偏差主导</i>（模型不够用），右边是<i>方差主导</i>（模型学了噪声）。<b>谷底的位置无法从训练误差看出来</b>——训练误差在那里还在继续下降，它会一直推荐更复杂的模型。",
+ w:"<s>这就是「不能用训练集选模型」的图形证明</s>。任何用训练误差做的选择，结果永远是「选最复杂的那个」。必须有一份模型没见过的数据来定位谷底。",
+ e:"T1 大题里如果要求<b>说明为什么需要验证集</b>，这张图就是标准答案的骨架：训练误差单调降、测试误差 U 形、谷底只能靠留出数据定位。"});
+QUIZ(2265,4,{t:"为什么<b>不能用训练误差</b>来选择模型复杂度？",
+ o:["训练误差计算太慢","<b>训练误差随复杂度单调下降</b>，用它选择的结果永远是「选最复杂的」",
+    "训练误差不准确","训练集样本太少"],
+ a:1,
+ w:"训练误差<em>没有 U 形</em>——它一路下降。<br><br>所以如果拿它当选择标准，优化的结果必然是<s>把复杂度推到最大</s>：一个能完美记住每个训练样本的模型，训练误差为 0，看起来「最好」。<br><br>但这恰恰是<b>过拟合的极端</b>。<br><br>要定位测试误差的谷底，就必须有<em>一份模型在选择过程中没见过的数据</em>——这就是验证集/开发集存在的全部理由。"});
+
+/* ── 5 · 模型选择问题 ── */
+KP("5 · 模型选择",function(){
+S(2516,function(){clearScene();setEq(null);
+  matrix({rows:5,cols:2,cw:330,ch:54,y:200,
+    cell:function(i,j){var t=[["要选的东西","例子"],
+      ["多项式次数","1 次 / 2 次 / 5 次"],
+      ["正则化系数 λ","0.01 / 0.1 / 1 / 10"],
+      ["SVM 的 C 与 γ","0.1 / 1 / 10 / 100"],
+      ["核函数","linear / poly / RBF"]];return t[i][j];},
+    dim:function(i,j){return i===0;},
+    hl:function(i,j){return i===3&&j===1?"hl":"";}});
+  setCap("<b>模型选择</b>不是一件小事——<br>它是同一个问题的许多张面孔。");},
+  "这些看起来是不同的任务，其实<b>结构完全一样</b>：有一组候选设置，要挑出泛化最好的那个。<i>它们都不能靠训练误差来选</i>（上一个知识点），也<s>都不能靠测试集来选</s>（下面会讲）。所以需要第三份数据。你课程 T4 Practical 里那个 <b>4×3 的 C×γ 网格搜索</b>，正是这个问题的一个实例。");
+});
+SUM(2516,5,{h:"模型选择：同一个问题的许多面孔",
+ k:"选多项式次数、选 λ、选 SVM 的 C 和 γ、选核函数——这些<b>结构完全相同</b>：给定一组候选设置，挑出泛化最好的那个。统称<em>模型选择</em>（也叫超参数调优）。",
+ m:"这些量的共同点是<b>不能由训练过程自己学出来</b>。参数 w、b 是训练学的；<i>超参数必须由外部搜索确定</i>——通常是穷举一个网格，逐个训练、逐个评估。",
+ w:"<s>两条都不能走</s>：不能用训练误差选（它单调下降），也不能用测试集选（会污染最终估计）。所以必须有<b>第三份数据</b>。",
+ e:"<b>T4 Practical Q4</b> 的 4×3 的 C×γ 网格搜索就是这个问题的实例。答题要点：<i>用验证集选、按准确率排序、平局时取支持向量更少的、绝不用测试集打破平局</i>。"});
+QUIZ(2516,5,{t:"下面哪一个<b>不是</b>模型选择（超参数）问题？",
+ o:["选 SVM 的 C 和 gamma","选多项式回归的次数","<b>求线性回归的系数 θ</b>","选用 linear 还是 RBF 核"],
+ a:2,
+ w:"<b>参数 vs 超参数</b>的区分：<br><br>· <em>参数</em>（θ、w、b）——由<i>训练过程本身</i>从数据中学出来，比如最小化 J 或解正规方程<br>· <s>超参数</s>（C、γ、λ、多项式次数、核类型）——<b>训练学不出来</b>，必须由外部搜索确定<br><br>选项 C 是标准的参数估计，用最小二乘或梯度下降就能求出，不需要网格搜索。"});
+
+/* ── 6 · 开发集 ── */
+KP("6 · 开发集",function(){
+S(2766,function(){clearScene();setEq(null);
+  bar(200,290,880,90,[[0.6,"tr","训练集 · 拟合参数","b"],
+                      [0.2,"dv","验证集 · 选设置","y"],
+                      [0.2,"te","测试集 · 报告一次","r"]]);
+  note("60%",380,420,"b");note("20%",790,420,"y");note("20%",970,420,"r");
+  setCap("解法是<b>把数据切成三份</b>，<br>每一份只做一件事，<em>职责绝不重叠</em>。");},
+  "三份数据的分工必须记死：<b>训练集</b>拟合参数（w、b）；<b>验证集</b>（dev set）比较候选设置、挑出最好的那个；<b>测试集</b>在一切都锁定之后<i>只用一次</i>，给出对新数据表现的无偏估计。<s>Ng 用的词是 dev set，你课程叫 validation set</s>，是同一个东西。这三份的职责一旦混用，评估就失去意义——下一个知识点专讲这件事。");
+S(3269,function(){clearScene();setEq(null);
+  matrix({rows:4,cols:3,cw:250,ch:56,y:230,
+    cell:function(i,j){var t=[["数据量","常见切法","说明"],
+      ["几百 ~ 几千","60 / 20 / 20","经典经验法则"],
+      ["同上（无需调参）","70 / 30","只切训练与测试"],
+      ["百万级","98 / 1 / 1","1% 已足够评估"]];return t[i][j];},
+    dim:function(i,j){return i===0;},
+    hl:function(i,j){return i===3&&j>0?"hl":"";}});
+  setCap("<b>切多少？</b>经验法则是给中小数据集的，<br><em>数据量极大时比例要重新想</em>。");},
+  "60/20/20 和 70/30 是<b>中小数据集</b>（几百到几千）的经验法则。但数据到了百万级，这些比例就不合理了——<i>验证集要多大，取决于「多少样本才够可靠地比较模型」，而不是占比多少</i>。一百万条数据里拿 1%（一万条）做验证，已经足够区分两个模型的优劣，没必要浪费二十万条。<s>你课程 T4 Practical 用的是 60/20/20</s>（216/72/72），正是中小数据集的标准切法。");
+});
+SUM(2766,6,{h:"三份数据，三种职责",
+ k:"<b>训练集</b>拟合参数；<b>验证集</b>（dev set）比较候选设置；<b>测试集</b>在一切锁定后<em>只用一次</em>，给出无偏估计。三者职责<i>绝不重叠</i>。Ng 说的 dev set 就是你课程的 validation set。",
+ m:"切分比例是<b>经验法则不是定律</b>：中小数据集（几百到几千）常用 60/20/20 或 70/30；<i>百万级数据用 98/1/1 更合理</i>——验证集大小取决于「多少样本够可靠比较模型」，不是占比。",
+ w:"<s>切分必须发生在任何预处理之前</s>。若先用全量数据 fit scaler 再切分，留出数据的统计量就参与了变换，这叫<b>预处理泄漏</b>。正确做法是把 scaler 装进 Pipeline。",
+ e:"你课程 <b>T4 Practical 用的正是 60/20/20</b>（216 训练 / 72 验证 / 72 测试）。T1 大题要求写出修正流程时，第一条就是<i>先切分、再预处理</i>。"});
+QUIZ(2766,6,{t:"数据量到了<b>一百万条</b>，还应该按 60/20/20 切吗？",
+ o:["应该，这是标准做法","<b>不必</b>——验证集大小取决于「多少样本够可靠比较模型」，1% 已足够，98/1/1 更合理",
+    "应该改成 20/40/40","数据量不影响切分比例"],
+ a:1,
+ w:"60/20/20 是<b>中小数据集的经验法则</b>，不是定律。<br><br>关键问题是：<em>需要多少验证样本，才能可靠地区分两个模型的优劣？</em>通常一万条就绰绰有余。<br><br>一百万条数据拿 20%（二十万条）做验证，<s>纯属浪费</s>——那二十万条放进训练集能让模型更好。<br><br>所以大数据时代常见 98/1/1 甚至 99.8/0.1/0.1。<b>比例服务于目的，不是反过来。</b>"});
+
+/* ── 7 · ★★ 不能报告验证集成绩 ── */
+KP("7 · ★★ 选择泄漏",function(){
+S(3017,function(){clearScene();setEq(null);
+  matrix({rows:6,cols:2,cw:280,ch:50,y:180,
+    cell:function(i,j){var t=[["候选设置","验证集误差"],
+      ["1 次多项式","6.2"],["2 次多项式","5.1"],["3 次多项式","4.9"],
+      ["4 次多项式","5.4"],["5 次多项式","5.8"]];return t[i][j];},
+    dim:function(i,j){return i===0;},
+    hl:function(i,j){return i===3?"hl":"";}});
+  note("挑出最小的 → 4.9",640,480,"y");
+  setCap("在验证集上试了 5 个候选，<b>最好的是 4.9</b>。<br>那能不能把 <em>4.9</em> 当作这个模型的性能报告出去？");},
+  "先想清楚问题在哪。<b>4.9 是「5 次尝试里的最小值」</b>，而每次评估都带有随机波动。即使这 5 个模型真实水平完全相同（比如都是 5.0），<i>其中运气最好的那个也会低于 5.0</i>。你挑出的正是那个最幸运的。<s>所以 4.9 系统性地低于真实水平</s>——这不是运气问题，是<b>选择过程本身引入的偏差</b>。");
+S(3017,function(){clearScene();setEq(null);
+  setBig("4.9","你报告的");
+  setCap("<b>真实水平可能是 5.0。</b><br>你挣到的是 5.0，报出去的是 4.9——<s>那 0.1 是运气，不是本事</s>。");},
+  "Ng 说这在学术论文里是<b>不可接受的做法</b>。道理和「在同一批数据上反复试假设直到找出显著结果」是一样的——<i>试的次数越多，最小值越偏低</i>。候选越多、验证集越小，这个偏差越严重。<s>解法不是不选，而是「选完之后换一份干净数据来报告」</s>——这就是测试集存在的唯一理由。");
+S(3269,function(){clearScene();setEq(null);
+  boxNode(120,180,340,74,"训练集","b");
+  boxNode(120,290,340,74,"验证集","y");
+  boxNode(120,400,340,74,"测试集","r");
+  note("拟合参数",640,225,"b","start");
+  note("比较候选、挑出最好的 → 这个成绩已被污染",640,335,"y","start");
+  note("锁定之后只用一次 → 干净的估计",640,445,"r","start");
+  setCap("<b>所以测试集的唯一职责</b>，是在选择全部结束后<br><em>提供一个未被选择过程污染的数字</em>。");},
+  "这就是三份数据的<b>逻辑闭环</b>：验证集的成绩因为参与了选择而<i>不可信</i>，所以需要一份从未参与任何决策的数据来做最终报告。<s>关键推论</s>：一旦你用测试集比较了几个设置，<b>测试集就变成了第二个验证集</b>，它的成绩同样被污染，你就再也没有干净的数据了。<b>这正是你课程 feedback PDF 里那句必背的话</b>。");
+});
+SUM(3017,7,{h:"★★ 为什么验证集成绩不能当作最终结果",
+ k:"在验证集上比较 N 个候选并取最优，得到的成绩是「<b>N 次尝试中的最小值</b>」。即使所有候选真实水平相同，<em>运气最好的那个也会偏低</em>。所以这个数字<i>系统性地乐观</i>，不能当作对新数据的预期。",
+ m:"这是<b>选择过程本身引入的偏差</b>，与运气无关。候选越多、验证集越小，偏差越严重。解法不是不选，而是——<em>选完之后换一份从未参与任何决策的数据来报告</em>，这就是测试集存在的唯一理由。",
+ w:"<s>致命推论</s>：一旦用测试集比较了几个设置，<b>测试集就变成了第二个验证集</b>，成绩同样被污染，你手上就再没有干净数据了。所以测试集必须<i>锁定设置之后只用一次</i>。",
+ e:"<b>这是 T1 大题「识别流程问题」的核心考点</b>。你课程 feedback PDF 的原句必背：<i>「重复查看测试结果并调整设置，会把测试集变成另一个验证集，产生过于乐观的估计。」</i>"});
+QUIZ(3017,7,{t:"某团队在<b>测试集</b>上比较了 8 组超参数，选出最好的一组，报告其测试准确率 0.971 作为「新数据上的预期表现」。问题是？",
+ o:["没有问题，测试集本来就是用来评估的","超参数试得不够多",
+    "<b>测试集被用于选择，0.971 是 8 次尝试的最大值，系统性乐观</b>；应改用验证集选、测试集只用一次",
+    "应该用更大的测试集"],
+ a:2,
+ w:"两层问题叠加：<br><br>① <b>测试集被用于选择</b> ⟹ 它已经变成第二个验证集，不再干净<br>② <b>0.971 是 8 次评估里的最大值</b> ⟹ 即使 8 组设置水平相同，最大值也会偏高<br><br>正确流程：切成 train/validation/test → 用<em>验证集</em>选超参 → 锁定设置 → 在 train+validation 上重拟合 → <s>测试集只用一次</s>。<br><br>这就是你课程模拟卷 Q23 和 T4 Practical Q3/Q5 的原型。"});
+
+/* ── 8 · hold-out 交叉验证 ── */
+KP("8 · hold-out",function(){
+S(3527,function(){clearScene();setEq(null);
+  boxNode(340,150,600,72,"① 在训练集上拟合每个候选","b");
+  boxNode(340,250,600,72,"② 在验证集上比较，挑出最好的","y");
+  boxNode(340,350,600,72,"③ 锁定设置","");
+  boxNode(340,450,600,72,"④ 在训练集 + 验证集上重新拟合","g");
+  boxNode(340,550,600,72,"⑤ 测试集上评估一次，报告","r");
+  [222,322,422,522].forEach(function(y){link(640,y,640,y+28);});
+  setCap("<b>简单留出交叉验证</b>（hold-out cross validation）。<br>五步，顺序不能乱。");},
+  "这套流程<b>就是你课程 T4 Practical 的工作流</b>。第 ④ 步值得特别注意：<i>锁定设置后要在 train + validation 上重新拟合</i>，因为验证集的数据也是有用的训练材料，选完之后没理由浪费。<s>但重拟合之后不能再回头调设置</s>——一旦回头，测试集就被污染了。第 ⑤ 步的「一次」是字面意思。");
+});
+SUM(3527,8,{h:"留出交叉验证的五步",
+ k:"<b>①</b> 在训练集上拟合每个候选 → <b>②</b> 在验证集上比较、挑出最好的 → <b>③</b> 锁定设置 → <b>④</b> 在<em>训练集+验证集</em>上重新拟合 → <b>⑤</b> 测试集评估<em>一次</em>并报告。",
+ m:"第 ④ 步常被忽略：<i>验证集的数据也是有用的训练材料</i>，选完之后没理由浪费，用全部非测试数据重拟合能得到更好的模型。但<b>重拟合后不能再回头调设置</b>。",
+ w:"<s>顺序不能乱</s>，尤其是「切分必须先于任何预处理」。若在切分前用全量数据 fit scaler，就是<b>预处理泄漏</b>；若用测试集调设置，就是<b>选择泄漏</b>。两者都让最终估计乐观偏高。",
+ e:"<b>这就是 T4 Practical 的完整工作流</b>（Q1 比较核 → Q3 调 C → Q4 搜 C×γ → Q5 最终评估）。T1 大题要求写「修正后的流程」时，照这五步写，并补上「用 Pipeline 防泄漏」。"});
+QUIZ(3527,8,{t:"选定超参数之后，为什么要在<b>训练集 + 验证集</b>上重新拟合？",
+ o:["为了让测试成绩更好看","<b>验证集的数据也是有用的训练材料</b>，选完之后没理由浪费",
+    "为了防止过拟合","这一步可以省略，没有区别"],
+ a:1,
+ w:"验证集在选择阶段的<em>使命已经完成</em>——它帮你挑出了最好的设置。<br><br>此后它就只是一批<b>带标签的、还没用于拟合参数的数据</b>，把它并入训练能让模型见到更多样本，通常表现更好。<br><br><s>但有个硬约束</s>：重拟合之后<b>不能再回头调设置</b>。一旦回头，你就是在用测试集的反馈做选择，测试集立刻被污染。<br><br>你课程 T4 Practical Q5 要求的正是这一步：<i>refit on the combined training and validation data</i>。"});
+
+/* ── 9 · k 折交叉验证 ── */
+KP("9 · k 折",function(){
+S(3854,function(){clearScene();setEq(null);
+  setBig("20","个样本");
+  setCap("<b>可如果数据非常少呢？</b><br>只有 20 个样本时，切出 4 个做验证——<s>这 4 个说明不了任何问题</s>。");},
+  "Ng 提到他的团队在<b>医疗数据</b>上常遇到这种情况：每个训练样本可能对应一位病人，收集极其昂贵，总共只有几十条。这时候简单留出法有两个问题：<i>验证集太小，评估噪声极大</i>；而且<i>为了留出验证集，训练集又被削掉一块</i>。<s>两头都吃亏</s>。解法是让每一条数据<b>轮流</b>当验证集。");
+S(3854,function(){clearScene();setEq(null);
+  for(var k=0;k<5;k++){
+    var y=140+k*92;
+    for(var j=0;j<5;j++){
+      var x=340+j*120;
+      gS.append("rect").attr("class","seg "+(j===k?"on":"tr"))
+        .attr("x",x).attr("y",y).attr("width",114).attr("height",64).attr("rx",5);}
+    note("第 "+(k+1)+" 轮",300,y+38,"","end");}
+  note("黄色 = 该轮的验证折",640,640,"y");
+  setCap("<b>k 折交叉验证</b>（这里 k = 5）。<br>把数据切成 5 份，<em>每份轮流当一次验证集</em>。");},
+  "做法是：切成 k 份，每轮拿其中 1 份当验证、其余 k−1 份训练，<b>重复 k 次</b>，最后把 k 次的成绩<i>取平均</i>。好处有两个：<b>每条数据都被用来训练过 k−1 次</b>（不浪费），而且<b>评估基于全部数据的平均</b>（更稳定）。代价是要训练 k 次，<s>计算量翻 k 倍</s>。常用 k = 5 或 10。");
+S(4201,function(){clearScene();setEq(null);
+  matrix({rows:4,cols:3,cw:240,ch:56,y:230,
+    cell:function(i,j){var t=[["方法","验证用量","训练次数"],
+      ["简单留出","一份固定","1"],["k 折（k=5 或 10）","每份轮流","k"],
+      ["留一法（LOOCV）","每次留 1 条","m"]];return t[i][j];},
+    dim:function(i,j){return i===0;},
+    hl:function(i,j){return i===3&&j>0?"hl":"";}});
+  note("样本 < 20 ~ 50 时才考虑留一法",640,470,"y");
+  setCap("<b>留一法</b>是 k 折的极端：<em>k = 样本数</em>。<br>每次只留一条做验证。");},
+  "留一法（leave-one-out）用满了每一条数据，评估几乎无偏，但要<b>训练 m 次</b>——m 是样本总数。<i>只有在数据极少时才划算</i>，Ng 给的经验是二十条左右可以用，五十条以上就该换 k 折了。<s>你课程的 practical 里，交叉验证被列为 optional extension</s>，说明考试不会深考，但要知道它是什么、什么时候用。");
+});
+SUM(3854,9,{h:"k 折：让每条数据都轮流当验证集",
+ k:"切成 k 份，每轮用 1 份验证、k−1 份训练，<b>重复 k 次取平均</b>。好处是<em>每条数据都被训练过 k−1 次</em>（不浪费）且评估更稳定。代价是<i>训练 k 次</i>，计算量翻 k 倍。常用 k = 5 或 10。",
+ m:"动机是<b>数据极少</b>时简单留出法两头吃亏：验证集太小则评估噪声大，留出验证集又削减了训练数据。轮流当验证集同时解决了这两个问题。<b>留一法</b>是极端情形：k = 样本数，每次只留一条。",
+ w:"<s>留一法不是「更好的 k 折」</s>——它要训练 m 次，样本上千就完全不可行。经验界限：二十条左右可用留一法，五十条以上换 k 折，数据充足时简单留出就够。",
+ e:"你课程的 practical 把<b>交叉验证列为 optional extension</b>，说明不会深考。要求是知道它是什么、解决什么问题、什么时候用——以及它<i>仍然不能代替测试集</i>。"});
+QUIZ(3854,9,{t:"用 5 折交叉验证选好超参数之后，还需要<b>独立的测试集</b>吗？",
+ o:["不需要，交叉验证的平均成绩就是最终结果","<b>仍然需要</b>——交叉验证的成绩参与了选择，同样被污染",
+    "只有数据少时才需要","取决于 k 的取值"],
+ a:1,
+ w:"这是最容易想当然的地方。<br><br>交叉验证<em>确实</em>给出了更稳定的估计，但它<b>被用来做选择了</b>——你比较了若干组超参数并挑出了交叉验证成绩最好的那个。<br><br>于是<s>同样的选择偏差依然存在</s>：那个平均成绩是「N 次尝试中的最优」。<br><br>k 折解决的是「<i>估计噪声大、数据浪费</i>」，<b>不解决「选择污染」</b>。要报告泛化性能，仍然需要一份从未参与任何决策的测试集。"});
+
+/* ── 10 · 特征选择 ── */
+KP("10 · 特征选择",function(){
+S(4627,function(){clearScene();setEq(null);
+  boxNode(200,180,880,64,"起点：空集合 { }","");
+  boxNode(200,270,880,64,"逐个试加 x₁ … x₅，看哪个最能提升验证集表现","y");
+  boxNode(200,360,880,64,"把最好的那个加进来，固定下来","g");
+  boxNode(200,450,880,64,"重复，直到加不动了","");
+  [244,334,424].forEach(function(y){link(640,y,640,y+26);});
+  setCap("<b>前向搜索</b>特征选择：<br>每一轮加入<em>最能改善验证表现</em>的那一个特征。");},
+  "这是一种<b>贪心</b>策略：每步只做局部最优的选择，不回头。好处是可行——穷举所有特征子集要试 2ⁿ 种组合，n=20 就超过一百万。<i>代价是可能错过最优组合</i>：两个特征单独都没用、合在一起却很强，前向搜索就发现不了。<s>特征选择在你的考纲里很边缘</s>，知道有这回事、知道它也要用验证集来评判即可。");
+});
+SUM(4627,10,{h:"前向搜索：贪心地加特征",
+ k:"从空集合开始，每轮试着加入一个特征，<b>保留最能提升验证集表现的那个</b>，重复到加不动为止。这是一种<em>贪心</em>策略——每步只做局部最优，不回头。",
+ m:"之所以要贪心，是因为穷举所有子集要试 <b>2ⁿ</b> 种组合，n = 20 就超过一百万次。贪心把复杂度降到 O(n²) 量级，代价是<i>可能错过最优组合</i>——两个特征单独没用、合起来很强的情形发现不了。",
+ w:"<s>关键点</s>：特征选择的每一步<b>都要用验证集评判</b>，不能用训练误差（加特征永远让训练误差下降），更不能用测试集（那是选择泄漏）。",
+ e:"特征选择<b>在你的考纲里很边缘</b>。知道它是什么、知道它同样受「不能用训练误差、不能用测试集」这两条约束即可。"});
+QUIZ(4627,10,{t:"前向特征选择的每一步，应该用哪份数据来判断「哪个特征最该加」？",
+ o:["训练集——加特征后训练误差降得最多的那个","<b>验证集</b>——只有留出数据能反映泛化改善",
+    "测试集，因为它最接近真实数据","全部数据，样本越多越准"],
+ a:1,
+ w:"<s>不能用训练集</s>：<b>加任何特征都会让训练误差下降或持平</b>（模型的表达能力只增不减），所以训练误差永远推荐「全都加上」——这个判据毫无区分力。<br><br><s>更不能用测试集</s>：那就是选择泄漏，测试集会被污染。<br><br>只有<em>验证集</em>能回答「这个特征真的改善了泛化吗」。<br><br>这和选超参数是<b>同一个道理</b>——所有的「选择」都归验证集管。"});
+
+/* ── 11 · 对照课程 ── */
+KP("11 · 对照你的课程",function(){
+S(4800,function(){clearScene();setEq(null);
+  matrix({rows:6,cols:2,cw:340,ch:52,y:180,
+    cell:function(i,j){var t=[["你的考点","本片知识点"],
+      ["T1  训练好测试差 → 诊断","1 · 2"],
+      ["T1  为什么需要验证集","4 · 7"],
+      ["T1  识别流程问题 ★★","6 · 7 · 8"],
+      ["T4  C 的方向与正则化","3"],
+      ["T4 Practical  Q3 / Q5","7 · 8"]];return t[i][j];},
+    dim:function(i,j){return i===0;},
+    hl:function(i,j){return j===1&&i>0?"hl2":"";}});
+  setCap("<b>这一讲和你考点的逐条对应。</b>");},
+  "T1 的分量在这一讲里几乎全覆盖。<b>最该反复看的是知识点 7</b>——「为什么验证集成绩不能当最终结果」，因为它是大题「识别流程问题」的核心，而且答案需要说清<i>机制</i>（N 次尝试的最小值系统性偏低），不能只说「会泄漏」。<s>你课程 feedback PDF 里那句话建议直接背下来</s>：重复查看测试结果并调整设置，会把测试集变成另一个验证集，产生过于乐观的估计。");
+S(4900,function(){clearScene();setEq(null);
+  boxNode(300,120,680,72,"① 先切分 train / validation / test（分类用 stratify）","g");
+  boxNode(300,214,680,72,"② 预处理装进 Pipeline，只在训练折上 fit","g");
+  boxNode(300,308,680,72,"③ 训练集拟合，验证集比较候选","");
+  boxNode(300,402,680,72,"④ 锁定设置，train + validation 上重拟合","");
+  boxNode(300,496,680,72,"⑤ 测试集评估一次并报告","r");
+  boxNode(300,590,680,72,"⑥ 部署后监控输入分布，必要时重训","b");
+  [192,286,380,474,568].forEach(function(y){link(640,y,640,y+22);});
+  setCap("<b>把整讲压成一张流程图。</b><br>大题要求写「修正后的流程」时，照这个写。");},
+  "这六步是 T1 大题的<b>标准答案骨架</b>。三条最常被违反、也最常被考的：<b>①</b> 切分必须<i>先于任何预处理</i>（否则预处理泄漏）；<b>③⑤</b> 验证集选超参、<i>测试集只用一次</i>（否则选择泄漏）；<b>⑥</b> 部署后要监控<i>输入分布</i>（否则 data shift 悄悄发生）。<s>答题时每一步都要给出理由</s>，不能只列步骤——你课程的评分口径是「报出结果 → 解释含义 → 说出局限」。");
+});
+SUM(4800,11,{h:"六步流程，三条铁律",
+ k:"<b>①</b> 先切分 → <b>②</b> 预处理进 Pipeline、只在训练折 fit → <b>③</b> 训练集拟合、验证集比较 → <b>④</b> 锁定后在 train+validation 重拟合 → <b>⑤</b> 测试集评估<em>一次</em> → <b>⑥</b> 部署后监控输入分布。",
+ m:"三条铁律对应三种典型错误：<i>切分晚于预处理</i> ⟹ <b>预处理泄漏</b>；<i>用测试集选设置</i> ⟹ <b>选择泄漏</b>；<i>部署后不监控</i> ⟹ <b>data shift 悄悄发生</b>。大题里的「问题」基本都是这三条之一。",
+ w:"<s>只列步骤不给理由会掉分</s>。你课程的评分口径是「报出结果 → 解释它说明什么 → 说出局限」，写流程时每一步都要附上<b>为什么</b>。",
+ e:"<b>T1 大题「识别流程问题」照这六步答</b>。必背句：<i>「重复查看测试结果并调整设置，会把测试集变成另一个验证集，产生过于乐观的估计。」</i>另外记住 <b>T4 Practical 的划分是 60/20/20（216/72/72）</b>。"});
+QUIZ(4900,11,{t:"某流程：① 用全部数据 fit StandardScaler ② 切分 80/20 ③ 在测试集上比较 8 组超参并选最优 ④ 报告该测试准确率。<b>有几处关键错误</b>？",
+ o:["没有错误","一处：超参数试得不够细",
+    "<b>至少两处</b>：预处理泄漏（切分前 fit scaler）+ 用测试集选超参（选择泄漏）",
+    "一处：测试集比例太小"],
+ a:2,
+ w:"两个独立的泄漏<b>同时发生</b>：<br><br>① <s>预处理泄漏</s>——scaler 的均值和标准差用到了测试数据，模型间接「见过」留出集。正确做法是<em>先切分</em>，再把 scaler 装进 Pipeline 只在训练折上 fit。<br><br>② <s>选择泄漏</s>——在测试集上比较 8 组设置取最优，测试集变成第二个验证集，而且 0.971 是 8 次评估的最大值，<b>系统性偏高</b>。<br><br>修正：切成 train/validation/test → 验证集选 → 锁定 → train+validation 重拟合 → 测试集<b>只用一次</b>。<br><br>这就是你课程模拟卷 Q23 的原题。"});
+
+/* ── 收尾 ── */
+KP("完",function(){
+S(4990,function(){clearScene();setEq(null);setBig(null);setCap(null);
+  setTitle("第八讲 · 完","诚实评估的全部规矩",
+    "L1 · L3 · L6+7 · L8 已完成 · T1 与 T4 的考点已覆盖");},null);
+});
+
+/* ── projector ── */
+var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+KPS.forEach(function(k){
+  var bar=document.createElement("div");bar.className="kpbar";
+  var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+  for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+    p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+  bar.addEventListener("click",function(){go(k.from,true);});
+  kpsEl.appendChild(bar);});
+function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+  return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+function go(n,force){
+  n=Math.max(0,Math.min(SHOTS.length-1,n));
+  if(n===cur)return;
+  if(locked&&n>cur&&!force)return;
+  FAST=true;clearScene();
+  for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+  FAST=false;
+  cur=n;clearQuiz();clearSum();
+  var sh=SHOTS[n];
+  if(sh.enter)sh.enter();
+  setNarr(sh.n);
+  if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+  if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+  pipEls.forEach(function(p,i){if(!p)return;
+    var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+    p.className=base+(i===n?" now":(i<n?" seen":""));});
+  var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+  [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+  document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+  var tc=document.getElementById("tc");
+  tc.textContent="▶ "+hhmmss(sh.t);tc.href=VID+Math.round(sh.t)+"s";}
+window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+window.addEventListener("keydown",function(e){
+  if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+  else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+  else if(e.key==="Home"){e.preventDefault();go(0,true);}
+  else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+    var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+    document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+go(0);
+
+/* ── caption placement ─────────────────────────────────────────────────── */
+var CAP_POS=["bottom","top","side"],CAP_LABEL={bottom:"字幕 · 底部",top:"字幕 · 顶部",side:"字幕 · 侧栏"};
+var capIdx=0;
+try{var _cp=localStorage.getItem("filmCapPos");if(_cp!==null)capIdx=Math.max(0,Math.min(2,+_cp));}catch(e){}
+var posHint=document.createElement("div");posHint.id="posHint";document.body.appendChild(posHint);
+var _hintT=null;
+function applyCapPos(announce){
+  var L=document.getElementById("capL"),p=CAP_POS[capIdx];
+  L.classList.remove("pos-top","pos-side");
+  if(p!=="bottom")L.classList.add("pos-"+p);
+  document.body.classList.toggle("scene-shift",p==="side");
+  try{localStorage.setItem("filmCapPos",String(capIdx));}catch(e){}
+  if(announce){
+    posHint.textContent=CAP_LABEL[p];posHint.classList.add("show");
+    if(_hintT)clearTimeout(_hintT);
+    _hintT=setTimeout(function(){posHint.classList.remove("show");},1400);
+  }
+}
+window.addEventListener("keydown",function(e){
+  if(e.key==="p"||e.key==="P"){e.preventDefault();capIdx=(capIdx+1)%CAP_POS.length;applyCapPos(true);}
+});
+applyCapPos(false);
+})();
+</script>

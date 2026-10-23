@@ -1,0 +1,914 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L9 · 决策树与集成方法</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L9 · 决策树与集成方法",
+  subtitle:"把空间切成方块 · 再把一堆模型平均起来 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=wr9gUr-eWdA&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 熵曲线 H(p) = -p log p - (1-p) log(1-p)，归一化到 [0,1] ── */
+function entropy(x0,x1,ybase,h,cls){
+  var p=[],i;
+  for(i=0;i<=80;i++){
+    var q=0.001+0.998*i/80,
+        v=-(q*Math.log2(q)+(1-q)*Math.log2(1-q));
+    p.push([x0+(x1-x0)*q, ybase-h*v]);}
+  curve(p,cls||"b");}
+
+/* ── 误分类损失曲线：min(p,1-p)，是两段直线 ── */
+function misclass(x0,x1,ybase,h,cls){
+  var mid=(x0+x1)/2;
+  curve([[x0,ybase],[mid,ybase-h],[x1,ybase]],cls||"r");}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L9","决策树与集成方法",
+      "一棵树不够稳，那就种一片森林");},
+    "这一讲分成两半，<b>前半讲一个算法，后半讲一个思想</b>。<br><b>前半是决策树</b>：它的做法和前面所有算法都不一样——<b>不找直线、不算概率，而是一路问是非题，把特征空间切成一块一块的方块。</b>它<b>特别好懂、画出来就能看明白它在想什么</b>，这是它最大的卖点。<br><b>⚠ 但它有个致命毛病：太不稳定。</b>训练数据动一点点，<b>整棵树可能长得完全不一样</b>。Ng 的说法是，<b>决策树是相当高方差的模型</b>。<br><b>⭐ 后半讲的「集成」就是来治这个毛病的，而且它的威力远不止于决策树</b>——<b>它是一个对任何模型都适用的通用思想：与其指望一个模型做好，不如训一堆再平均起来。</b><br><b>这一讲最值钱的是中间那个方差公式</b>，<b>它会非常精确地告诉你「平均一堆模型」到底能赚多少、以及什么时候赚不到</b>——<b>随机森林和 boosting 都是从这个公式里长出来的。</b>");
+});
+KP("1 · 先认识它：一串是非题",function(){
+  S(0,function(){clearScene();setEq(null);setCap("像医生问诊，也像二十问");
+   boxNode(500,165,280,56,"年收入 > 5 万？","y");
+   boxNode(230,255,250,56,"有房产？","b");
+   boxNode(790,255,250,56,"批准","g");
+   boxNode(90,345,210,52,"批准","g");
+   boxNode(350,345,210,52,"拒绝","r");
+   link(590,221,400,255); link(690,221,880,255);
+   link(300,311,195,345); link(400,311,455,345);
+   note("否 ←",470,243,"d"); note("→ 是",730,243,"d");},"<b>决策树就是一串是非题，一路问下去直到给出答案。</b><br>看图：要判断一笔贷款批不批，<b>先问「年收入超过 5 万吗」</b>。是 → 直接批准；否 → <b>再问「有房产吗」</b>；是 → 批准，否 → 拒绝。<br><b>⭐ 它和前面学的所有算法都不一样</b>：<b>没有权重、没有概率、没有要优化的函数</b>，<b>就是一串「如果…那么…」。</b><br><b>几个词先认一下</b>：图上每个方框叫<b>「节点」</b>；<b>最上面那个叫「根」</b>；<b>最底下不再分叉、直接给答案的叫「叶子」</b>。<br><b>⚠ 注意树是倒着画的</b>：根在上，叶子在下。<b>这是约定俗成，别被绕晕。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("三个要分清的零件");
+       boxNode(120,206,300,74,"内部节点","b");
+       boxNode(500,206,280,74,"分支","y");
+       boxNode(860,206,300,74,"叶子","g");
+       note("问一个问题",270,326,"d");
+       note("回答的两种去向",640,326,"d");
+       note("不再问了，直接给答案",1010,326,"d");
+       note("⭐ 一个样本从根走到某片叶子，走过的路径就是对它的全部解释",640,396,"y");},"树的零件只有三种，先对上号。<br><b>内部节点</b>：在这里问一个问题，比如「面积大于 100 吗」。<b>分支</b>：回答之后往哪边走。<b>叶子</b>：不再问了，<b>直接给出答案</b>——分类树给一个类别，回归树给一个数。<br><b>⭐ 一个样本从根走到某片叶子，它走过的那条路径，就是对这次预测的全部解释。</b><br><b>⚠ 注意一个容易忽略的点：每个内部节点只看一个特征。</b>所以树做的永远是<b>「一刀一刀轴对齐地切」</b>，<b>不会像逻辑回归那样一次性把所有特征加权组合起来</b>——<b>这个限制后面会有专门一节讲它的代价。</b>");
+  SUM(0,1,{h:"决策树 ＝ 一串是非题",k:"一路问是非题直到给出答案（收入>5万？→ 有房产？→ 批/拒）。",m:"⭐ <b>和前面所有算法都不一样</b>：<b>没有权重、没有概率、没有要优化的函数</b>，就是一串「如果…那么…」。",w:"术语：每个方框叫<b>节点</b>，<b>最上面的叫根</b>，<b>最底下给答案的叫叶子</b>。",e:"⚠ <b>树是倒着画的</b>：根在上、叶子在下。这是约定俗成。"});
+  QUIZ(0,1,{t:"决策树与前面学的线性模型最根本的不同是什么？",o:["它只能处理二分类","它不靠权重和概率，而是一串「如果…那么…」的是非题","它需要更多的训练数据","它用了更复杂的损失函数"],a:1,w:"术语：方框叫<b>节点</b>，最上面叫<b>根</b>，最下面给答案的叫<b>叶子</b>。⚠ <b>树是倒着画的</b>。"});
+});
+KP("2 · 换个角度看：它在把空间切成方块",function(){
+  S(165,function(){clearScene();setEq(null);setCap("每问一个问题，就切一刀");
+   axes({x0:300,x1:980,y0:385,y1:195});
+   curve([[640,385],[640,195]],"y");
+   curve([[640,290],[980,290]],"y");
+   dots([[380,340],[430,320],[400,295],[470,345],[350,310],[480,300]],"b",7);
+   dots([[720,250],[800,230],[760,215],[860,245],[900,225]],"r",7);
+   dots([[720,350],[800,330],[760,365],[880,340]],"b",7);
+   note("x₁ > 某个值？",640,175,"d");
+   note("左边一整块",470,210,"b");
+   note("右上",810,205,"r"); note("右下",810,375,"b");
+   note("⭐ 一刀只能是横平竖直的 —— 每次只看一个特征",640,400,"y");},"<b>同一件事换个角度看会更清楚：决策树是在把特征空间切成一块一块的方块。</b>Ng 说，<b>看这样一个数据集，你会看到一些分开的区域</b>。<br><b>每问一个问题，就相当于在图上切一刀。</b>「x₁ > 5 吗」就是竖着切一刀，「x₂ > 3 吗」就是横着切一刀。<br><b>切完之后，每一块区域里的点就判成同一类</b>——<b>通常取这块区域里占多数的那一类。</b><br><b>⚠ 请注意一个重要限制：每一刀都是横平竖直的</b>，因为<b>每个问题只能问一个特征</b>。<br><b>⭐ 所以决策树画不出斜线</b>。要表示一条斜的分界，它只能用很多级小台阶去逼近。<b>这是它和逻辑回归、SVM 的一个根本区别。</b>");
+  S(165,function(){clearScene();setEq(null);setCap("同一棵树的两种画法，说的是一回事");
+       boxNode(150,196,240,60,"树形图","b");
+       boxNode(890,196,240,60,"方块图","g");
+       link(390,226,890,226);
+       note("一个内部节点",270,296,"d");
+       note("＝ 一刀切",1010,296,"d");
+       note("一片叶子",270,344,"d");
+       note("＝ 一个方块",1010,344,"d");
+       note("⭐ 叶子的个数 ＝ 方块的个数 —— 两张图信息完全相同",640,398,"y");},"树形图和方块图是同一棵树的两种画法，<b>把对应关系钉死，后面就不会乱</b>。<br><b>一个内部节点 ＝ 一刀切</b>（在某个特征上划一道）；<b>一片叶子 ＝ 一个方块</b>（一块不再细分的区域）。<br><b>⭐ 所以叶子有几片，空间就被切成几个方块——两张图装的信息完全相同。</b><br><b>⚠ 为什么要同时掌握两种画法</b>：<b>树形图便于讲「怎么判」，方块图便于看「边界长什么样」</b>。<b>后面讲「决策树边界是轴对齐的台阶」，只有看方块图才说得清。</b>");
+  SUM(165,2,{h:"决策树 ＝ 把空间切成方块",k:"<b>每问一个问题就切一刀</b>：「x₁>5?」竖切，「x₂>3?」横切。<b>每块区域里的点判成同一类</b>（取多数）。",m:"⚠ <b>每一刀都是横平竖直的</b>，因为<b>每个问题只能问一个特征</b>。",w:"⭐ <b>所以决策树画不出斜线</b>——要表示斜的分界，只能用很多级小台阶逼近。",e:"⭐ <b>这是它和逻辑回归、SVM 的根本区别</b>：那两个天然就画斜线。"});
+  QUIZ(165,2,{t:"为什么决策树的决策边界总是横平竖直的台阶状？",o:["因为每个问题只能问一个特征，所以每一刀都平行于坐标轴","因为用了贪心算法","为了计算更快","因为数据本身是离散的"],a:0,w:"⭐ <b>所以决策树画不出斜线</b>，只能用很多级小台阶去逼近。<b>这是它和逻辑回归、SVM 的根本区别。</b>"});
+});
+KP("3 · ★ 怎么决定先切哪一刀：贪心、自顶向下、递归",function(){
+  S(197,function(){clearScene();setEq(null);setCap("Ng 原话里的三个词");
+   says("3:17","we do it in this basically greedy, top-down, recursive manner");
+   boxNode(170,200,980,56,"自顶向下：先切整个空间，再分别处理切出来的两块","b");
+   boxNode(170,268,980,56,"贪心：每一刀只挑「当下看起来最好」的，不考虑后面","y");
+   boxNode(170,336,980,56,"递归：对切出来的每一块，重复同样的过程","g");},"<b>问题来了：该先问哪个问题？该在哪里切这一刀？</b>Ng 用三个词概括了决策树的做法。<br><b>自顶向下</b>：<b>先对整个空间切一刀</b>，然后<b>分别处理切出来的两块</b>。<br><b>贪心</b>：<b>每一刀只挑「当下看起来最好」的那一刀</b>，<b>完全不考虑这一刀会给后面带来什么影响</b>。<br><b>递归</b>：<b>对切出来的每一块，重复一模一样的过程</b>——再挑一刀、再切、再对子块重复。<br><b>⭐ 「递归」就是「对小块用和大块完全相同的办法」。</b>所以整个算法其实只需要描述清楚「<b>怎么切一刀</b>」，<b>剩下的自动重复。</b>");
+  S(197,function(){clearScene();setEq(null);setCap("⚠ 「贪心」的代价");
+   boxNode(160,205,460,70,"贪心：每步选当下最好","y");
+   boxNode(690,205,460,70,"未必得到整体最好的树","r");
+   link(620,240,690,240);
+   note("打个比方：下山时每步都朝最陡的方向走",640,310,"d");
+   note("⚠ 可能走进一个小坑，而真正的谷底在别处",640,358,"r");
+   note("⭐ 但找「整体最优的树」是计算上做不到的 —— 所以用贪心",640,400,"y");},"<b>⚠ 「贪心」这个词要专门说一下，因为它是有代价的。</b><br><b>贪心的意思是：每一步都选当下看起来最好的，不回头、也不展望。</b><br><b>打个比方</b>：下山的时候<b>每一步都朝最陡的方向走</b>。<b>⚠ 这样可能走进一个小坑里出不来，而真正的谷底在另一边。</b><br>放到决策树上就是：<b>第一刀看起来最划算，但可能正是它挡住了后面更好的切法。</b><br><b>⭐ 那为什么还用贪心？因为「找出整体最优的那棵树」在计算上是做不到的</b>——<b>可能的树太多了，穷举不过来。</b><b>贪心是一个「做得到而且通常够好」的妥协。</b>");
+  SUM(197,3,{h:"★ 建树三原则：自顶向下、贪心、递归",k:"<b>自顶向下</b>：先切整个空间，再分别处理两块。<b>递归</b>：对子块用完全相同的办法。",m:"<b>贪心</b>：<b>每刀只挑当下最好的，不考虑对后面的影响</b>。",w:"⚠ <b>代价</b>：像下山时每步都走最陡——<b>可能走进小坑，真正的谷底在别处</b>。第一刀最划算，可能正好挡住后面更好的切法。",e:"⭐ <b>为什么仍用贪心</b>：找「整体最优的树」计算上做不到（树太多，穷举不过来），<b>贪心是做得到且通常够好的妥协</b>。"});
+  QUIZ(197,3,{t:"决策树用贪心法建树，主要的代价是什么？",o:["必然会过拟合","训练速度变慢","只能处理连续特征","每步只看当下最优，可能得不到整体最优的树"],a:3,w:"⭐ <b>仍然用贪心是因为</b>：找「整体最优的树」计算上做不到——<b>可能的树太多，穷举不过来</b>。"});
+});
+KP("4 · 怎么评价一刀切得好不好：先用最直觉的尺子",function(){
+  S(518,function(){clearScene();setEq(null);setCap("误分类损失：这块里有多少判错");
+       says("8:38","let's define our loss as something fairly obvious, is your misclassification loss");
+       boxNode(150,200,460,76,"切之前：50 正 50 负","d");
+       boxNode(690,200,200,76,"左：40 正 10 负","b");
+       boxNode(950,200,200,76,"右：10 正 40 负","r");
+       note("整块判「正」⇒ 错 50 个",380,320,"d");
+       note("各判多数 ⇒ 一共错 20 个",920,320,"g");
+       note("⭐ 这一刀让错误从 50 降到 20 —— 用「降了多少」评价它",640,398,"y");},"<b>要挑出「最好的一刀」，得先定义「好」是什么意思。Ng 先用了最直觉的那个定义：误分类损失。</b><br><b>它的意思就是：这块区域里，如果按多数那一类来判，会判错几个。</b><br>看图：<b>切之前</b>一块里 50 正 50 负，<b>不管判哪一类都要错 50 个</b>。<br><b>切之后</b>：左边 40 正 10 负（判正，错 10 个），右边 10 正 40 负（判负，错 10 个），<b>一共错 20 个</b>。<br><b>⭐ 所以这一刀把错误从 50 降到了 20。我们就用「降了多少」来给每一刀打分，挑降得最多的那一刀。</b><br><b>⚠ 这个定义很自然，但下一节会看到它有个真实的毛病。</b>");
+  S(518,function(){clearScene();setEq(null);setCap("算一遍：一刀切下去，损失降了多少");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","正类 / 负类","误分类损失"],
+           ["切之前","(30, 20)","20 / 50 = 0.40"],
+           ["左边","(25, 5)","5 / 30"],
+           ["右边","(5, 15)","5 / 20"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⭐ 切后的损失要按样本数加权：(30/50)(5/30) + (20/50)(5/20) = 0.20",640,396,"y");},"把尺子用一遍，概念就实了。<br><b>切之前</b>：50 个样本里 30 正 20 负，<b>少数派是 20 个，误分类损失 20/50 ＝ 0.40</b>。<br><b>切之后</b>：左边 (25,5)，右边 (5,15)。<b>⚠ 这里最容易错——两个子节点的损失不能直接相加或取平均，要按样本数加权</b>：(30/50)×(5/30) ＋ (20/50)×(5/20) ＝ <b>0.20</b>。<br><b>所以这一刀让损失从 0.40 降到 0.20，下降量 0.20。</b><br><b>⭐ 「哪一刀最好」的意思，就是「哪一刀的下降量最大」。</b>算法会把所有候选切法都这么算一遍，挑最大的那个。");
+  SUM(518,4,{h:"误分类损失：按多数判会错几个",k:"<b>一块区域按多数类来判，会判错几个</b>，这个数就是误分类损失。",m:"例：切前 50 正 50 负 ⇒ 错 50；切后 左(40/10)+右(10/40) ⇒ <b>共错 20</b>。",w:"⭐ <b>用「错误降了多少」给每一刀打分</b>，挑降得最多的那一刀。",e:"⚠ 定义很自然，<b>但它有个真实的毛病</b>——下一节就是。"});
+  QUIZ(518,4,{t:"误分类损失衡量的是什么？",o:["区域里正负样本的比例","切了多少刀","这块区域按多数类来判时会判错几个","区域的面积大小"],a:2,w:"⭐ 建树时<b>用「错误降了多少」给每一刀打分</b>。⚠ 但这把尺子有个毛病，下一节会看到。"});
+});
+KP("5 · ⚠ 这把尺子的毛病：它不够敏感",function(){
+  S(1498,function(){clearScene();setEq(null);setCap("两刀明明不一样好，分数却一样");
+       says("24:58","For the misclassification loss, since it's not very sensitive");
+       boxNode(120,190,500,60,"切前：400 正 100 负（错 100）","d");
+       boxNode(120,268,240,54,"A 刀 左 300/100","b");
+       boxNode(380,268,240,54,"A 刀 右 100/0","b");
+       boxNode(120,340,240,54,"B 刀 左 200/50","g");
+       boxNode(380,340,240,54,"B 刀 右 200/50","g");
+       note("A：错 100 + 0 = 100",880,230,"b");
+       note("B：错 50 + 50 = 100",880,283,"g");
+       note("⚠ 两刀分数一样，但 A 明明切出了一块「纯」的",880,340,"r");
+       note("⭐ 尺子太粗，看不出 A 更有价值",640,400,"y");},"<b>⚠ Ng 专门举了例子说明误分类损失「不够敏感」。看这两刀。</b><br><b>切之前</b>：400 正 100 负，按多数判<b>错 100 个</b>。<br><b>A 刀</b>：左边 300 正 100 负（错 100），右边 100 正 0 负（<b>错 0，完全纯净</b>）。<b>合计错 100。</b><br><b>B 刀</b>：两边各 200 正 50 负（各错 50）。<b>合计也是错 100。</b><br><b>⚠ 两刀得分完全一样，所以算法认为它们一样好。但它们显然不一样</b>——<b>A 刀切出了一块完全纯净的区域，这块以后再也不用管了</b>；<b>B 刀只是把混乱平均分成了两份。</b><br><b>⭐ 问题出在尺子太粗：它只数「错几个」，看不出「纯不纯」。我们需要一把能分辨纯度的尺子。</b>");
+  S(1498,function(){clearScene();setEq(null);setCap("把两刀摊开算，才看得清问题在哪");
+       matrix({rows:4,cols:4,cw:250,ch:46,x:160,y:190,
+         cell:function(i,j){var t=[
+           ["","左子节点","右子节点","加权误分类"],
+           ["切法 A","(30, 10)","(10, 30)","0.25"],
+           ["切法 B","(40, 0)","(0, 40)","0.00"],
+           ["切法 C","(20, 20)","(20, 20)","0.50"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⭐ B 完美、C 最差，这两档误分类损失分得出来；它分不出的是「都没分干净」的那些",640,396,"y");},"先说清楚这把尺子<b>不是</b>什么都分不出。<br><b>完美的一刀（B）和毫无作用的一刀（C），它分得清清楚楚</b>——0.00 对 0.50。<br><b>⚠ 它失灵的地方，是两刀都「没分干净」的时候。</b>比如一刀切出 (30,10) 和 (10,30)，另一刀切出 (40,20) 和 (0,20)：<b>两者加权误分类损失可能一模一样</b>，可第二刀明明已经把一边切得完全纯净了。<br><b>⭐ 根子在于它只数「少数派有几个」，完全不管「多数派占了多大优势」。</b><b>30:10 和 39:1 在它眼里差别很小，而直觉告诉我们后者好得多。</b>");
+  SUM(1498,5,{h:"⚠ 误分类损失不够敏感",k:"例：切前 400/100（错 100）。<b>A 刀</b> 左 300/100 + 右 100/0 ⇒ 错 100；<b>B 刀</b> 两边各 200/50 ⇒ 也错 100。",m:"⚠ <b>两刀得分相同，但 A 切出了一块完全纯净的区域</b>（以后再也不用管），<b>B 只是把混乱平均分成两份</b>。",w:"⭐ <b>问题在尺子太粗</b>：它只数「错几个」，<b>看不出「纯不纯」</b>。",e:"⇒ <b>需要一把能分辨纯度的尺子</b>——那就是熵。"});
+  QUIZ(1498,5,{t:"误分类损失的主要缺陷是什么？",o:["只能用于二分类","不够敏感——两刀可能得分相同，却看不出其中一刀切出了更纯的区域","计算太慢","对异常值太敏感"],a:1,w:"⭐ 它<b>只数「错几个」，看不出「纯不纯」</b>。切出一块完全纯净的区域是有额外价值的，<b>但这把尺子量不出来</b>。"});
+});
+KP("6 · 先铺词：熵 ＝ 「有多不确定」",function(){
+  S(904,function(){clearScene();setEq(null);setCap("混乱程度的一把尺子");
+       axes({x0:330,x1:950,y0:385,y1:200});
+       entropy(330,950,385,175,"g");
+       note("p = 0　全是负类",360,400,"d");
+       note("p = 0.5",640,400,"d");
+       note("p = 1　全是正类",910,400,"d");
+       note("⭐ 一半一半时最不确定（熵最大）",640,180,"y");
+       note("全是一类时完全确定（熵 = 0）",640,228,"b");},"<b>换尺子之前，先把「熵」这个词说清楚——它是整节的关键，而且听起来比实际难。</b><br><b>熵度量的是「有多不确定」，或者说「有多混乱」。</b><br>看图上这条曲线，横轴是<b>这块区域里正类所占的比例 p</b>：<br><b>p = 0 或 p = 1 时</b>（全是同一类），<b>你闭着眼都能猜对，完全不确定性 ⇒ 熵 = 0</b>，曲线落到底。<br><b>p = 0.5 时</b>（一半一半），<b>最难猜，最不确定 ⇒ 熵最大</b>，曲线在顶点。<br><b>⭐ 一句话记住：熵小＝纯净，熵大＝混乱。</b><br><b>⚠ 注意这条曲线是拱形的（向上凸），下一节会看到这个形状正是它比误分类损失好用的原因。</b>");
+  S(904,function(){clearScene();setEq(null);setCap("代三个数进去：熵长什么样");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["这个节点里","正类比例 p","熵（以 2 为底）"],
+           ["全是一类","1.0 或 0.0","0（完全确定）"],
+           ["九比一","0.9","0.47"],
+           ["一半一半","0.5","1（最乱）"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 记住两个端点就够：纯净 ⇒ 0，对半 ⇒ 最大",640,396,"y");},"熵这个词听着唬人，<b>代三个数进去就有感觉了</b>。<br><b>节点里全是一类</b>（p=1 或 0）：没有任何不确定，<b>熵 ＝ 0</b>。<b>九比一</b>（p=0.9）：<b>熵 ≈ 0.47</b>。<b>一半一半</b>（p=0.5）：最说不准，<b>熵 ＝ 1，取到最大值</b>。<br><b>⭐ 考试里记住两个端点就够用：纯净 ⇒ 0，对半 ⇒ 最大。</b><br><b>⚠ 注意熵是「越小越好」</b>——它量的是混乱程度，<b>和误分类损失一样，我们要的是切完之后它降得最多。</b><br>两类问题里以 2 为底时最大值恰好是 1，<b>这个巧合让数字很好记。</b>");
+  SUM(904,6,{h:"熵 ＝ 「有多不确定 / 有多混乱」",k:"<b>p = 0 或 1</b>（全是同一类）⇒ 闭眼都能猜对 ⇒ <b>熵 = 0</b>。",m:"<b>p = 0.5</b>（一半一半）⇒ 最难猜 ⇒ <b>熵最大</b>。",w:"⭐ <b>一句话：熵小＝纯净，熵大＝混乱。</b>",e:"⚠ <b>曲线是拱形（向上凸）的</b>——下一节会看到<b>这个形状正是它比误分类损失好用的原因</b>。"});
+  QUIZ(904,6,{t:"一块区域里正负样本各占一半时，熵处于什么状态？",o:["熵为负","熵无定义","熵等于 0","熵最大"],a:3,w:"⭐ <b>熵小＝纯净，熵大＝混乱。</b>全是同一类时熵 = 0（闭眼都能猜对）。⚠ <b>曲线是拱形的</b>，这是关键。"});
+});
+KP("7 · ★★ 换成熵之后，那两刀终于分得出高下了",function(){
+  S(904,function(){clearScene();setEq(null);setCap("拱形 vs 两段直线");
+       says("15:04","instead what we can do is we can define this cross-entropy loss");
+       axes({x0:330,x1:950,y0:385,y1:200});
+       entropy(330,950,385,175,"g");
+       misclass(330,950,385,175,"r");
+       note("熵：拱形（严格凸出来）",640,185,"g");
+       note("误分类损失：两段直线",640,232,"r");
+       note("⭐ 直线上取两点连线，中点仍在线上 ⇒ 分数不变",640,400,"y");},"<b>⭐ 现在把两把尺子画在一起，差别一目了然。</b><br><b>红的是误分类损失：它是两段直线拼成的尖顶。</b><br><b>绿的是熵：它是一条真正拱起来的曲线。</b><br><b>⚠ 关键就在「直线」这两个字。</b>在一条<b>直线</b>上取两个点，<b>它们的平均值仍然落在这条直线上</b>——<b>所以切一刀前后分数可能完全不变</b>，这正是上上节 A 刀 B 刀打成平手的原因。<br><b>⭐ 而熵是拱起来的</b>：<b>取两个点连成直线，这条线必定落在曲线下方</b>。<b>也就是说，只要这一刀真的把数据分开了一点，熵就一定会下降。</b><br><b>⇒ 用熵当尺子，A 刀（切出纯净块）就会明显胜过 B 刀。</b>");
+  S(904,function(){clearScene();setEq(null);setCap("这个下降量有个名字");
+       boxNode(230,200,820,70,"信息增益 ＝ 切之前的熵 − 切之后两块熵的加权平均","g");
+       note("「加权」= 按两块各自的样本数占比",640,300,"d");
+       note("⭐ 建树时就是：试遍所有可能的切法，挑信息增益最大的",640,352,"y");
+       note("⚠ 实践中还常用「基尼不纯度」，形状类似，结论相同",640,400,"d");},"<b>这个下降量有个名字，叫「信息增益」。</b><br><b>信息增益 ＝ 切之前的熵 −  切之后两块熵的加权平均。</b><br><b>「加权」的意思是按两块各自的样本数占比来算</b>——<b>100 个样本的块当然比 5 个样本的块更要紧。</b><br><b>⭐ 建树的完整过程就是：把所有特征、所有可能的切分点都试一遍，算出每一刀的信息增益，挑最大的那一刀切下去，然后对切出来的两块递归重复。</b><br><b>⚠ 补充一句实践情况：真实的实现里还常用另一把尺子叫「基尼不纯度」</b>，<b>它的形状和熵很像（也是拱形），结论基本一致</b>，<b>算起来略快一点。两者都比误分类损失好用，原因完全相同——都是拱形的。</b>");
+  S(1498,function(){clearScene();setEq(null);setCap("第三把尺子：基尼不纯度");
+       says("24:58","There's also the Gini loss");
+       setEq("$$G \\;=\\; \\sum_c \\hat{p}_c\\,(1-\\hat{p}_c)$$");
+       note("每一类：它的比例 × 不是它的比例，全部加起来",640,196,"b");
+       note("⭐ 两类时 = 2p(1−p)：p=0.5 取最大 0.5，p=0 或 1 时为 0",640,240,"y");},"Ng 顺口提到了第三把尺子，<b>叫基尼不纯度，实践里用得非常多</b>（sklearn 的默认值就是它）。<br><b>公式就是上面这一行</b>：对每一类，拿「它的比例」乘上「不是它的比例」，全部加起来。<br><b>两类时化简成 2p(1−p)</b>：<b>p=0.5 时取最大值 0.5，p=0 或 1 时为 0</b>——<b>和熵的两个端点行为完全一致</b>。<br><b>⭐ 所以它和熵基本可以换着用，结论通常不变</b>；<b>区别只是它不用算对数，算起来略快</b>。<br><b>⚠ 别把基尼不纯度和基尼系数（衡量收入不平等的那个）搞混，是两回事。</b>");
+  SUM(904,7,{h:"★★ 熵是拱形的，所以切一刀必定有收益",k:"<b>误分类损失是两段直线</b>：直线上取两点，<b>平均值仍在线上 ⇒ 分数可能完全不变</b>（A/B 刀打平的原因）。",m:"⭐ <b>熵是拱起来的</b>：两点连线必定落在曲线下方 ⇒ <b>只要这一刀真的分开了一点，熵就一定下降</b>。",w:"<b>信息增益 ＝ 切前的熵 − 切后两块熵的加权平均</b>（按样本数占比加权）。<b>建树就是试遍所有切法，挑信息增益最大的</b>。",e:"⚠ 实践中还常用<b>基尼不纯度</b>，形状类似（也是拱形）、结论相同、算得略快。"});
+  QUIZ(904,7,{t:"为什么熵比误分类损失更适合当切分准则？",o:["因为熵是拱形的，只要切开了一点熵就必定下降；而误分类损失是两段直线，切了可能分数不变","因为熵总是正数","因为熵计算更快","因为熵不受样本数影响"],a:0,w:"<b>信息增益 ＝ 切前的熵 − 切后加权熵</b>。⚠ <b>基尼不纯度</b>也是拱形的，结论相同、算得略快。"});
+});
+KP("8 · 同一棵树也能做回归：回归树",function(){
+  S(1817,function(){clearScene();setEq(null);setCap("输出从「哪一类」换成「一个数」");
+       says("30:58","so far I\'ve been talking about decision trees for classification");
+       matrix({rows:4,cols:3,cw:300,ch:48,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["","分类树","回归树"],
+           ["叶子输出","这块里占多数的那一类","这块里所有 y 的平均值"],
+           ["切分准则","熵 / 基尼不纯度","平方误差"],
+           ["切空间的方式","完全一样","完全一样"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 变的只有两行，第三行一个字没动",640,398,"y");},"<b>前面讲的都是分类——叶子给出「哪一类」。但同一套办法稍微改一下就能预测一个数，这叫「回归树」。</b>比如预测房价、预测气温。<br><b>⭐ 请看表格的最后一行：切空间的方式完全没变</b>，还是一路问是非题、把空间切成方块。<b>变的只有两件事。</b><br><b>第一，叶子输出什么</b>：分类树输出<b>这块里占多数的那一类</b>；<b>回归树输出这块里所有 y 的平均值</b>——Ng 说的就是，<b>到了叶子不再预测多数类，而是预测这些值的平均</b>。<br><b>第二，用什么尺子挑那一刀</b>：熵是为「纯不纯」设计的，<b>对连续值没有意义</b>。<b>⇒ 换成平方误差：每个点和本块平均值的差，平方后加起来。</b>");
+  S(1925,function(){clearScene();setEq(null);setCap("为什么回归树画出来是阶梯状");
+       axes({x0:300,x1:980,y0:385,y1:200});
+       dots([[340,350],[380,340],[420,345],[470,300],[510,290],[550,295],
+             [600,250],[650,240],[700,245],[760,310],[820,320],[880,305]],"b",7);
+       curve([[320,345],[450,345]],"y"); curve([[450,345],[450,293]],"y");
+       curve([[450,293],[575,293]],"y"); curve([[575,293],[575,245]],"y");
+       curve([[575,245],[725,245]],"y"); curve([[725,245],[725,312]],"y");
+       curve([[725,312],[900,312]],"y");
+       note("⚠ 每块区域只能输出一个常数 ⇒ 画出来是阶梯",640,398,"y");},"<b>⚠ 回归树有一个很显眼的特点值得单独说：它的预测画出来是阶梯状的。</b><br><b>原因很直接：每一块区域只能输出一个数</b>（这块里 y 的平均值）。<b>所以同一块里不管 x 怎么变，预测值纹丝不动，到了边界才突然跳一下。</b><br><b>⚠ 这意味着回归树画不出平滑的曲线，也不会「外推」</b>——<b>给它一个比训练集里所有 x 都大的新值，它只会输出最右边那块的平均值，不会继续往上涨。</b><br><b>⭐ 这是和线性回归的一个根本差别</b>：<b>线性回归会沿着直线一直外推（可能错得离谱），回归树则干脆拒绝外推（可能保守得没用）。两种毛病，各自要当心。</b>");
+  S(1925,function(){clearScene();setEq(null);setCap("回归树和分类树：只换了两个零件");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","分类树","回归树"],
+           ["叶子给什么","这片叶子里的多数类","这片叶子里的平均值"],
+           ["用什么尺子","熵 / 基尼","平方误差"],
+           ["其余部分","贪心、自顶向下、递归","一模一样"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 换汤不换药：切法、停法、剪枝全都照搬",640,396,"y");},"回归树不是一个新算法，<b>它只是把分类树的两个零件换掉</b>。<br><b>第一个零件：叶子输出什么。</b>分类树给多数类，<b>回归树给这片叶子里所有样本的平均值</b>。<br><b>第二个零件：拿什么当尺子。</b>分类树用熵或基尼，<b>回归树用平方误差</b>——切完之后两边各自离本组均值的偏差平方和。<br><b>⭐ 除此之外全都一样</b>：贪心、自顶向下、递归，停止条件、剪枝，<b>一条都不用改</b>。<br><b>⚠ 所以答题时别把回归树当成另一套东西</b>，<b>说清「换了输出和损失」这两点就够了。</b>");
+  SUM(1817,8,{h:"回归树：叶子输出平均值，尺子换成平方误差",k:"⭐ <b>切空间的方式完全没变</b>，变的只有两件事。",m:"<b>① 叶子输出</b>：分类树给「多数类」，<b>回归树给这块里所有 y 的平均值</b>。<b>② 尺子</b>：熵对连续值没意义 ⇒ <b>换成平方误差</b>。",w:"⚠ <b>预测画出来是阶梯状</b>：每块只能输出一个常数，到边界才突然跳。",e:"⭐ <b>和线性回归的根本差别</b>：<b>线性回归沿直线一直外推（可能错得离谱），回归树拒绝外推（可能保守得没用）</b>。"});
+  QUIZ(1817,8,{t:"回归树和分类树的区别是什么？",o:["回归树只能用一个特征","切分空间的方式完全不同","叶子输出改成该区域内 y 的平均值，切分准则改成平方误差；切空间的方式完全一样","回归树不需要停止准则"],a:2,w:"⚠ <b>回归树的预测是阶梯状的</b>（每块只能输出一个常数），<b>而且不会外推</b>——给它超出训练范围的 x，它只会输出最边上那块的平均值。"});
+});
+KP("9 · 什么时候该停下来",function(){
+  S(1142,function(){clearScene();setEq(null);setCap("不停下来会怎样");
+       boxNode(170,195,980,56,"一直切下去 ⇒ 每个叶子只剩一个样本 ⇒ 训练集 100% 正确","r");
+       boxNode(170,263,980,56,"⚠ 但它只是把训练集背下来了，新数据上会很差","r");
+       note("常用的停法：叶子样本数低于阈值 / 树深达到上限 / 信息增益太小",640,345,"b");
+       note("⭐ 更常见的做法：先长到底，再从下往上剪枝",640,398,"y");},"<b>有个很自然的问题：什么时候停？</b><br><b>⚠ 如果一直切下去，最后每个叶子里只剩一个样本，训练集上 100% 正确——但这毫无意义，它只是把训练集背下来了</b>，<b>新数据上会很差。这就是过拟合。</b><br><b>常用的停止办法有三种</b>：<b>叶子里样本数少于某个阈值就不再切</b>；<b>树的深度达到上限就停</b>；<b>最好的那一刀带来的信息增益也太小就停</b>。<br><b>⚠ 第三种单独用有风险</b>：<b>可能这一刀收益很小，但紧接着的下一刀收益很大</b>，提前停就错过了。<br><b>⭐ 所以更常见的做法是「先长到底，再剪枝」</b>——<b>让树充分长大，然后从下往上，把那些删掉之后验证集表现没变差的分支剪掉。</b>");
+  S(2407,function(){clearScene();setEq(null);setCap("为什么「看这一刀降得多不多」靠不住");
+       says("40:07","grow out your full tree");
+       boxNode(130,206,470,74,"✗ 这一刀降得少 ⇒ 立刻停","r");
+       boxNode(740,206,440,74,"✓ 先长满，再往回剪","g");
+       note("可能它下面那一刀降得很多",365,326,"d");
+       note("长出来之后再判断，信息全",960,326,"d");
+       note("⭐ 这是典型的「贪心短视」：当下不划算，不代表往下走不划算",640,396,"y");},"停止条件里有一种写法特别常见，<b>也特别容易出问题</b>：「如果这一刀带来的下降量小于某个阈值，就不切了」。<br><b>⚠ 它为什么靠不住</b>：<b>这一刀本身降得少，不代表它下面那一刀也降得少</b>。有些特征必须先切一刀「看起来没用」的，<b>下一刀才能把两类彻底分开</b>——提前停了就永远走不到那一步。<br><b>⭐ 所以 Ng 给的做法是反过来：先把整棵树长满，然后从下往上往回剪。</b>长出来之后再判断，<b>你手上的信息是完整的</b>。<br><b>⚠ 这是「贪心短视」的典型例子，整门课里会反复遇到。</b>");
+  SUM(1142,9,{h:"停止准则与剪枝",k:"⚠ <b>一直切到每叶一个样本 ⇒ 训练集 100% 正确，但只是把数据背下来了</b>（过拟合）。",m:"三种停法：<b>叶子样本数低于阈值</b> / <b>树深达上限</b> / <b>信息增益太小</b>。",w:"⚠ <b>第三种单独用有风险</b>：这一刀收益小，<b>但下一刀可能收益很大</b>，提前停就错过了。",e:"⭐ <b>更常见：先长到底再剪枝</b>——从下往上，<b>删掉后验证集没变差的分支就剪掉</b>。"});
+  QUIZ(1142,9,{t:"为什么「信息增益太小就停」这个准则单独用有风险？",o:["因为信息增益算不准","因为它会让树太深","因为这一刀收益可能很小，但紧接着的下一刀收益很大，提前停就错过了","因为它只适用于二分类"],a:2,w:"⭐ 所以更常见的做法是<b>先长到底再剪枝</b>：从下往上，<b>删掉后验证集没变差的分支就剪掉</b>。"});
+});
+KP("10 · 决策树的好处：你能看懂它在想什么",function(){
+  S(3008,function(){clearScene();setEq(null);setCap("这在很多场合是硬需求");
+       says("50:08","you can just draw out the tree");
+       boxNode(170,195,470,60,"画出来就知道它怎么判的","g");
+       boxNode(690,195,470,60,"不用标准化特征","g");
+       boxNode(170,268,470,60,"能直接处理类别型特征","g");
+       boxNode(690,268,470,60,"训练快","g");
+       note("⭐ 对比：逻辑回归给你一堆权重，神经网络连权重都看不懂",640,350,"y");
+       note("医疗、信贷这些要「给个说法」的场合，可解释性是硬需求",640,400,"d");},"<b>说完毛病，先讲它的好处——因为这些好处是真的，而且很实在。</b><br><b>⭐ 最大的好处是可解释。</b>Ng 说：<b>你可以把树画出来，看清楚它到底在做什么。</b><br><b>对比一下</b>：<b>逻辑回归给你的是一堆权重数字</b>，<b>神经网络连权重都看不出名堂</b>。<b>而决策树画出来就是人能读的问句。</b><br><b>⚠ 在医疗、信贷这类必须「给个说法」的场合，可解释性不是加分项，是硬需求</b>——<b>你不能跟被拒贷的人说「模型说的」。</b><br><b>还有几个实用好处</b>：<b>不用标准化特征</b>（它只比大小，不在乎单位）；<b>能直接处理类别型特征</b>（比如颜色是红/黄/蓝）；<b>训练也快。</b>");
+  S(2082,function(){clearScene();setEq(null);setCap("「能直接处理类别型特征」到底省了什么");
+       says("34:42","you can also deal with");
+       boxNode(130,206,470,74,"别的算法：先做独热编码","b");
+       boxNode(740,206,440,74,"决策树：直接按取值分组","g");
+       link(600,243,740,243);
+       note("颜色 → 三列 0/1，维度膨胀",365,326,"d");
+       note("直接问「是不是红色」就行",960,326,"d");
+       note("⭐ 这是别的学习算法大多没有的便利 —— Ng 特意点了这一句",640,396,"y");},"「能直接处理类别型特征」听起来平平无奇，<b>但它省掉的是一整道工序</b>。<br><b>别的算法</b>（线性回归、逻辑回归、SVM、神经网络）<b>只吃数字</b>，所以颜色这种特征必须先做独热编码——<b>一个特征变成三列，维度跟着膨胀</b>。<br><b>决策树不用</b>：它在节点上<b>直接按取值分组</b>，问「是不是红色」或者「属不属于 {红, 黄}」。<br><b>⭐ Ng 特意点了一句：这是别的学习算法大多没有的便利。</b><br><b>⚠ 但也有代价：取值种类很多时，可选的分组方式会爆炸式增长，实现上要做限制。</b>");
+  SUM(3008,10,{h:"决策树的好处：可解释",k:"⭐ Ng：<b>你可以把树画出来，看清楚它到底在做什么</b>。<b>画出来就是人能读的问句</b>。",m:"<b>对比</b>：逻辑回归给一堆权重数字，<b>神经网络连权重都看不出名堂</b>。",w:"⚠ <b>医疗、信贷这类必须「给说法」的场合，可解释性是硬需求</b>——不能跟被拒贷的人说「模型说的」。",e:"实用好处：<b>不用标准化特征</b>（只比大小）、<b>能直接处理类别型特征</b>、<b>训练快</b>。"});
+  QUIZ(3008,10,{t:"决策树最被看重的优点是什么？",o:["预测精度最高","可解释——把树画出来就能看懂它怎么判的","不会过拟合","训练数据需求最少"],a:1,w:"⚠ <b>医疗、信贷这类要「给说法」的场合，可解释性是硬需求</b>。另有：不用标准化、能直接处理类别特征、训练快。"});
+});
+KP("11 · ⚠ 决策树的致命伤：太不稳",function(){
+  S(2212,function(){clearScene();setEq(null);setCap("动一个点，整棵树换个样");
+       says("36:52","decision trees are fairly high variance models");
+       axes({x0:290,x1:1000,y0:385,y1:200});
+       curve([[560,385],[560,200]],"y");
+       dots([[380,330],[430,310],[400,285],[470,340],[350,300]],"b",7);
+       dots([[700,260],[790,240],[740,290],[860,250],[900,285]],"r",7);
+       dots([[600,330]],"g",10);
+       note("把这一个点挪一点点…",600,355,"g");
+       note("⚠ 第一刀就可能换个位置 ⇒ 下面整棵子树全变",640,398,"r");},"<b>⚠ 现在说那个致命伤。</b>Ng 的原话是：<b>决策树是相当高方差的模型。</b><br><b>「高方差」在这里的具体意思是：训练数据只变动一点点，学出来的模型就可能变得完全不一样。</b><br><b>为什么决策树特别严重？因为它是贪心加递归的。</b><br><b>挪动一个样本，可能让「最好的第一刀」从 x₁>5 变成 x₂>3</b>。<b>⚠ 而第一刀一变，下面所有的子树全部重新生长，整棵树面目全非。</b><br><b>⭐ 关键在于误差会沿着树往下放大</b>：<b>上层的一个微小改变，会被下层成倍地放大。</b><br><b>⚠ 这意味着你没法信任单棵树的具体结构</b>——<b>换一批数据重新训，它可能给你讲一个完全不同的故事。</b>");
+  S(2212,function(){clearScene();setEq(null);setCap("为什么一动就全变：误差会往下游传");
+       boxNode(540,196,200,58,"根节点换了","r");
+       boxNode(230,290,230,58,"左子树重来","y");
+       boxNode(820,290,230,58,"右子树重来","y");
+       link(600,254,345,290); link(680,254,935,290);
+       note("只要最上面那一刀挪了位置",640,372,"d");
+       note("⭐ 下面整棵子树都得重新长 —— 这就是「高方差」的来源",640,402,"y");},"「不稳」的机制值得画出来看一眼。<br><b>树是自顶向下长的，上面的决定会锁死下面的全部可能。</b>只要<b>根节点那一刀挪了位置</b>，<b>左右两棵子树面对的数据就完全变了，只能从头重新长</b>。<br><b>⭐ 所以训练数据里一点点扰动，就可能让整棵树面目全非——这正是「高方差」的来源。</b><br><b>⚠ 请把这一点和「贪心」联系起来</b>：<b>正因为每一步只看当下最优、而且做完不回头，上游的一点偏差才会被放大着传到下游。</b><b>下一节开始讲的全部办法，都是在对付这个高方差。</b>");
+  SUM(2212,11,{h:"⚠ 决策树高方差：训练数据微动，整棵树换样",k:"Ng：<b>决策树是相当高方差的模型</b>。「高方差」＝ <b>训练数据变一点点，学出的模型就完全不一样</b>。",m:"<b>为什么特别严重</b>：它是<b>贪心 + 递归</b>的。挪一个样本可能让最好的第一刀换个特征，<b>第一刀一变，下面整棵子树全部重长</b>。",w:"⭐ <b>误差沿着树往下放大</b>：上层的微小改变被下层成倍放大。",e:"⚠ <b>所以不能信任单棵树的具体结构</b>——换批数据重训，它会讲一个完全不同的故事。"});
+  QUIZ(2212,11,{t:"为什么决策树的方差特别高？",o:["因为它贪心且递归——第一刀一变，下面整棵子树全部重长，误差沿树向下放大","因为它用了熵作为准则","因为它的参数太多","因为它不能处理连续特征"],a:0,w:"⚠ <b>所以不能信任单棵树的具体结构</b>。⭐ 这正是下面「集成」要解决的问题。"});
+});
+KP("12 · ★ 集成的念头：与其赌一个，不如平均一堆",function(){
+  S(3455,function(){clearScene();setEq(null);setCap("一个通用到不像话的思想");
+       boxNode(120,200,220,66,"模型 1","b");
+       boxNode(360,200,220,66,"模型 2","b");
+       boxNode(600,200,220,66,"模型 3","b");
+       boxNode(840,200,220,66,"…","b");
+       boxNode(380,310,520,66,"平均 / 投票 ⇒ 最终预测","g");
+       link(230,266,520,310); link(470,266,580,310);
+       link(710,266,660,310); link(950,266,820,310);
+       note("⭐ 和决策树没关系 —— 对任何模型都适用",640,398,"y");},"<b>⭐ 集成的念头朴素得有点不像话：与其指望一个模型做得好，不如训一堆，然后把它们的预测平均起来（分类就投票）。</b><br><b>生活里这个道理你已经知道了</b>：<b>一个人估不准一头牛的重量，但一百个人估完取平均，往往惊人地接近真实值。</b>个人的偏差有高有低，<b>平均之后互相抵消。</b><br><b>⚠ 注意这个思想和决策树没有任何关系</b>——<b>它对任何模型都适用</b>，神经网络、逻辑回归都可以这么干。<b>只是决策树方差特别高，所以收益特别明显，两者才总是被一起讲。</b><br><b>⭐ 但「平均一堆」到底能赚多少？什么时候赚不到？下一节有一个公式会把这件事说得非常精确。</b>");
+  S(3455,function(){clearScene();setEq(null);setCap("为什么平均能赚到便宜");
+       boxNode(130,206,470,74,"每棵树都会犯错","b");
+       boxNode(740,206,440,74,"但它们犯的错不一样","g");
+       link(600,243,740,243);
+       note("有的偏高，有的偏低",365,326,"d");
+       note("一平均，正负互相抵消",960,326,"d");
+       note("⭐ 前提是「错得不一样」—— 要是都犯同一个错，平均一点忙也帮不上",640,396,"y");},"平均为什么能赚到便宜，用一句话就能说清：<b>每棵树都会犯错，但它们犯的错不一样。</b><br>有的这次猜高了，有的猜低了；<b>一平均，正负就互相抵消掉一部分</b>。<br><b>⭐ 请把重点放在那个前提上：「错得不一样」。</b><b>如果所有树都犯同一个错，平均完还是那个错，一点忙都帮不上。</b><br><b>⚠ 这就是下一节公式里 ρ 的意义</b>——<b>它量的正是「这些树的错有多像」</b>。<b>ρ 越小，平均越赚；ρ 等于 1 时，平均完全白做。</b>");
+  SUM(3455,12,{h:"★ 集成：训一堆模型，平均/投票",k:"<b>与其指望一个模型做好，不如训一堆再平均起来</b>（分类就投票）。",m:"直觉：<b>一个人估不准牛的重量，一百个人取平均却惊人地准</b>——<b>个人偏差互相抵消</b>。",w:"⚠ <b>这个思想和决策树没关系，对任何模型都适用</b>。只是决策树方差特别高，<b>收益特别明显</b>，才总被一起讲。",e:"⭐ <b>下一节的公式会精确说明：能赚多少、什么时候赚不到。</b>"});
+  QUIZ(3455,12,{t:"集成（ensemble）这个思想适用于什么模型？",o:["只适用于线性模型","只适用于决策树","只适用于神经网络","任何模型都适用；只是决策树方差高，收益特别明显，才常一起讲"],a:3,w:"直觉：<b>一百个人估牛的重量取平均，个人偏差互相抵消</b>。⭐ <b>下一节的公式会精确算出能赚多少。</b>"});
+});
+KP("13 · ★★ 核心公式（上）：完全独立时，方差除以 n",function(){
+  S(3216,function(){clearScene();
+       setEq("$$\\mathrm{Var}\\Big(\\frac{1}{n}\\sum X_i\\Big) = \\frac{\\sigma^2}{n}$$");
+       setCap("前提：n 个模型互相独立");
+       says("53:36","that are independent and identically distributed");
+       note("每个模型自己的方差是 σ²",640,170,"d");
+       note("平均起来之后，方差变成 σ²/n",640,205,"g");
+       note("⭐ n = 100 ⇒ 方差只剩百分之一　⚠ 偏差不变",640,265,"y");},"<b>⭐ 这是全讲最值钱的一段。</b><br><b>假设你有 n 个模型，每个的方差都是 σ²，而且它们互相独立</b>（Ng 的说法是「独立同分布」）。<b>把它们平均起来，这个平均值的方差是多少？</b><br><b>答案是 σ²/n。</b><br><b>n = 100 的话，方差只剩百分之一</b>——<b>这是极其巨大的收益</b>。<br><b>⚠ 但必须立刻说明一件事：减少的只有方差，偏差一点没变。</b><b>如果你的 100 个模型都系统性地偏高，平均之后还是偏高。</b><b>平均能消掉的是「random 的抖动」，消不掉「一致的偏」。</b><br><b>⚠ 而且这个漂亮结果有个很强的前提：互相独立。下一节就看前提不成立时会怎样——那才是真实情况。</b>");
+  S(3216,function(){clearScene();setEq(null);setCap("代数字看一眼：n 要翻多少倍才划算");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["树的棵数 n","方差 σ²/n","标准差降到"],
+           ["1","1.00 σ²","100%"],
+           ["4","0.25 σ²","50%"],
+           ["100","0.01 σ²","10%"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 方差按 1/n 降，标准差只按 1/√n 降 —— 收益递减得很快",640,396,"y");},"把数字代进去，就知道「多种几棵」的收益有多快递减。<br><b>方差是按 1/n 降的</b>：4 棵树降到 1/4，100 棵降到 1/100。<b>可我们实际感受到的误差尺度是标准差，它只按 1/√n 降</b>——<b>4 棵树只降到一半，要再降一半得种到 16 棵。</b><br><b>⭐ 所以从 1 棵加到 10 棵提升巨大，从 100 棵加到 1000 棵几乎看不出来。</b><br><b>⚠ 但请记住这整张表都建立在「完全独立」这个很强的前提上</b>——<b>下一节会看到，前提不成立时连这点收益都要打折。</b>");
+  SUM(3216,13,{h:"★★ n 个独立模型取平均 ⇒ 方差变 σ²/n",k:"n 个方差都是 σ² 的<b>独立</b>模型，<b>平均之后方差是 σ²/n</b>。n=100 ⇒ <b>方差只剩百分之一</b>。",m:"⚠ <b>减少的只有方差，偏差一点没变</b>：100 个模型都系统偏高，平均后还是偏高。",w:"⭐ <b>平均能消掉「随机的抖动」，消不掉「一致的偏」。</b>",e:"⚠ <b>这个漂亮结果的前提是「互相独立」</b>——下一节看前提不成立时会怎样（那才是真实情况）。"});
+  QUIZ(3216,13,{t:"把 n 个独立同分布、各自方差为 σ² 的模型平均起来，方差变成多少？",o:["仍然是 σ²","σ²/√n","σ²/n","n·σ²"],a:2,w:"⚠ <b>减少的只有方差，偏差一点没变</b>——100 个都系统偏高，平均后还是偏高。⚠ <b>前提是互相独立</b>。"});
+});
+KP("14 · ★★★ 核心公式（下）：不独立时，剩下一项抹不掉",function(){
+  S(3313,function(){clearScene();
+       setEq("$$\\mathrm{Var} = \\rho\\,\\sigma^2 + \\frac{1-\\rho}{n}\\,\\sigma^2$$");
+       setCap("ρ 是模型之间的相关性");
+       says("55:13","if they're fully correlated, then this term will drop to 0");
+       note("右边这项：n 一大就趋近 0 —— 多训几个就能压掉",640,170,"g");
+       note("⚠ 左边这项：和 n 完全无关 —— 训一万个也压不掉",640,202,"r");
+       note("⭐ ρ=1（完全相同）⇒ 方差 = σ²，白训了",640,234,"r");
+       note("⭐ ρ 越小收益越大 ⇒ 真正要做的是「让模型彼此不同」",640,265,"y");},"<b>⭐ 现在放宽到真实情况：模型之间通常是相关的。</b>用 <b>ρ 表示它们之间的相关性</b>（<b>ρ=0 完全独立，ρ=1 完全一样</b>），方差公式变成上面这个样子。<br><b>看右边那一项：分母有 n，所以 n 一大它就趋近 0。这一项靠「多训几个」就能压掉。</b><br><b>⚠ 但看左边那一项：ρσ²，它里面根本没有 n。训一万个模型也压不掉。</b><br><b>⭐ 极端情况：如果所有模型完全一样（ρ=1），右边那项按 Ng 的说法直接降为 0，方差就剩下 σ²——和单个模型一模一样，等于白训。</b><br><b>⭐⭐ 所以结论非常明确：集成真正的瓶颈不是「训了几个」，而是「它们彼此有多不同」。接下来三节讲的全部办法，目标都只有一个——把 ρ 降下来。</b>");
+  S(3313,function(){clearScene();setEq(null);setCap("代数字看一眼：ρ 卡死了下限");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["ρ","n = 100 时的方差","n → ∞ 时的下限"],
+           ["0","0.01 σ²","0"],
+           ["0.3","0.307 σ²","0.30 σ²"],
+           ["0.9","0.901 σ²","0.90 σ²"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 树种再多也只能逼近 ρσ² —— 这一项和 n 完全无关",640,396,"y");},"把 ρ 代成具体数字，这个公式的厉害之处就显出来了。<br><b>ρ = 0.9 时</b>：哪怕种 100 棵树，方差还有 0.901σ²——<b>几乎什么都没降下来</b>。<b>ρ = 0.3 时</b>：100 棵树降到 0.307σ²，<b>而再怎么加也到不了 0.30σ² 以下</b>。<br><b>⭐ 关键认识：ρσ² 这一项和 n 完全无关，树种再多也抹不掉它。</b><br><b>⚠ 所以集成的工程重点不在「种多少棵」，而在「让它们彼此不同」。</b><b>bootstrap、随机抽特征，这些花招存在的唯一理由就是把 ρ 压下去。</b>");
+  SUM(3313,14,{h:"★★★ 方差 = ρσ² + (1−ρ)σ²/n：ρ 才是瓶颈",k:"<b>ρ ＝ 模型之间的相关性</b>（0 完全独立，1 完全一样）。",m:"<b>右项 (1−ρ)σ²/n</b>：<b>n 一大就趋近 0</b>，多训几个就能压掉。<b>⚠ 左项 ρσ² 里没有 n，训一万个也压不掉</b>。",w:"⭐ <b>ρ=1（模型完全一样）⇒ 方差就剩 σ²，和单个模型一样，等于白训</b>。",e:"⭐⭐ <b>集成的瓶颈不是「训了几个」，而是「它们彼此有多不同」</b>——后面所有办法的目标都是<b>把 ρ 降下来</b>。"});
+  QUIZ(3313,14,{t:"集成方差公式 ρσ² + (1−ρ)σ²/n 中，哪一项靠增加模型个数压不掉？",o:["两项都压不掉","ρσ² 那一项——它里面没有 n，训再多模型也压不掉","(1−ρ)σ²/n 那一项","两项都能压掉"],a:1,w:"⭐⭐ <b>所以瓶颈是 ρ（模型彼此有多不同），不是模型个数。</b>ρ=1 时方差就剩 σ²，<b>等于白训</b>。"});
+});
+KP("15 · 先铺词：bootstrap（有放回地抽样）",function(){
+  S(3610,function(){clearScene();setEq(null);setCap("用一份数据造出很多份");
+       says("60:10","It's called bootstrap aggregation");
+       boxNode(150,195,250,62,"原始数据 100 个","d");
+       boxNode(500,165,250,54,"抽样本 1","b");
+       boxNode(500,232,250,54,"抽样本 2","b");
+       boxNode(500,299,250,54,"抽样本 3","b");
+       link(400,226,500,192); link(400,226,500,259); link(400,226,500,326);
+       note("每份都抽 100 个，但抽完放回去",900,230,"d");
+       note("⇒ 有的样本抽到好几次，有的一次没抽到",900,290,"y");
+       note("⭐ 于是每份都略有不同 —— 这正是我们要的",640,398,"y");},"<b>上一节说瓶颈是「模型彼此有多不同」。可问题是：我只有一份训练数据，怎么训出不同的模型？</b><br><b>办法叫 bootstrap，中文叫「自助采样」。</b><br><b>做法：从原始的 100 个样本里，有放回地抽 100 次。</b><br><b>⚠ 「有放回」是关键</b>——<b>抽出来看一眼再放回去</b>，所以<b>同一个样本可能被抽到好几次，也可能一次都没抽到</b>。<br><b>⭐ 结果就是：每一份抽出来的数据集都和原始数据略有不同，而且彼此之间也不同。</b><br><b>（顺带一个有意思的数字：每份大约会漏掉原始数据的三分之一。这些没被抽到的样本还能拿来当免费的验证集。）</b>");
+  S(3610,function(){clearScene();setEq(null);setCap("那个「三分之一」是怎么来的");
+       setEq("$$\\left(1-\\tfrac{1}{n}\\right)^{n} \\;\\longrightarrow\\; e^{-1} \\approx 0.368$$");
+       note("某个样本「一次都没被抽到」的概率",640,196,"b");
+       note("⭐ 所以每个 bootstrap 样本大约只含原数据的 63%，漏掉 37%",640,240,"y");},"「大约漏掉三分之一」不是估出来的，<b>它有个干净的来历</b>。<br><b>抽一次时，某个样本没被抽到的概率是 1 − 1/n</b>；<b>独立抽 n 次都没抽到，就是 (1−1/n)ⁿ</b>。<br><b>n 稍大一点，这个数就趋近 e⁻¹ ≈ 0.368。</b><br><b>⭐ 所以每个 bootstrap 样本大约只含原数据的 63%，漏掉 37%</b>——口头常说「三分之一」。<br><b>⚠ 这个数字后面还有两处要用到</b>：<b>漏掉的那部分可以当免费验证集（袋外估计）</b>；<b>而「每棵树只看到 63% 的数据」也意味着偏差会略微上升——那是两节之后的内容。</b>");
+  SUM(3610,15,{h:"bootstrap（自助采样）：有放回地抽",k:"<b>从 100 个样本里有放回地抽 100 次</b>，造出一份新的训练集。重复多次得到很多份。",m:"⚠ <b>「有放回」是关键</b>：<b>同一样本可能被抽到好几次，也可能一次没抽到</b>。",w:"⭐ <b>于是每份数据集都略有不同，彼此也不同</b>——这正是降低 ρ 需要的。",e:"<b>每份大约漏掉原始数据的三分之一</b>，<b>这些没抽到的样本可以当免费的验证集</b>。"});
+  QUIZ(3610,15,{t:"bootstrap 采样的关键特点是什么？",o:["抽完后要去重","每次抽一半数据","按类别均匀抽样","有放回地抽——同一个样本可能被抽到多次，也可能一次都没被抽到"],a:3,w:"⭐ <b>这样每份数据集都略有不同</b>，正是降低 ρ 需要的。<b>每份约漏掉三分之一的样本，可当免费验证集。</b>"});
+});
+KP("16 · ★ bagging：bootstrap + 平均",function(){
+  S(3610,function(){clearScene();setEq(null);setCap("名字就是这两个词拼的");
+       boxNode(170,195,980,56,"① bootstrap：抽出很多份略有不同的训练集","b");
+       boxNode(170,263,980,56,"② 每份各训一棵树（都长到底，不剪枝）","b");
+       boxNode(170,331,980,56,"③ 预测时全部投票 / 平均","g");
+       note("⭐ 效果：ρ 降下来了 ⇒ 公式右项真正发挥作用",640,398,"y");},"<b>把前面两件事拼起来就是 bagging。</b>Ng 说它的全名是 <b>bootstrap aggregation</b>——<b>「自助采样」加「汇总」，名字就是这两个词拼的。</b><br><b>三步</b>：<b>① 用 bootstrap 抽出很多份略有不同的训练集</b>；<b>② 每份各训一棵树</b>；<b>③ 预测时让所有树投票或取平均。</b><br><b>⚠ 这里有个常让人意外的细节：bagging 里的树通常让它长到底，不剪枝。</b><br><b>为什么？因为我们现在不怕单棵树过拟合了</b>——<b>过拟合体现为高方差，而平均这个动作专门对付方差。</b><b>⭐ 让每棵树尽量把偏差压低（长到底），方差交给平均去处理，分工很清楚。</b>");
+  S(3610,function(){clearScene();setEq(null);setCap("bagging 的四步，照着做就行");
+       boxNode(100,206,250,66,"① 抽 M 份","b");
+       boxNode(390,206,230,66,"② 各训一棵","b");
+       boxNode(660,206,250,66,"③ 收集预测","g");
+       boxNode(950,206,240,66,"④ 平均 / 投票","y");
+       link(350,239,390,239); link(620,239,660,239); link(910,239,950,239);
+       note("有放回地抽 n 条",225,314,"d");
+       note("树长到底，不剪",505,314,"d");
+       note("M 个结果",785,314,"d");
+       note("回归取平均，分类取多数",1070,314,"d");
+       note("⭐ 注意第 ② 步：树要长到底 —— 单棵过拟合这件事交给平均去收拾",640,396,"y");},"bagging 的流程就四步，<b>照着做即可</b>。<br><b>① 有放回地抽 M 份 bootstrap 样本</b>，每份都是 n 条。<b>② 在每份上各训一棵树。</b><b>③ 收集 M 个预测。</b><b>④ 回归取平均，分类取多数票。</b><br><b>⭐ 第 ② 步有个反直觉的细节：树要长到底，基本不剪枝。</b>因为<b>单棵树过拟合体现为高方差，而第 ④ 步的平均正是专门对付方差的</b>。<br><b>⚠ 分工要记清：每棵树负责把偏差压到最低，平均负责把方差压下来。</b><b>要是先把每棵树剪得很保守，偏差上去了，平均可救不回来。</b>");
+  SUM(3610,16,{h:"★ bagging ＝ bootstrap aggregation",k:"<b>① bootstrap 抽出很多份训练集 → ② 每份各训一棵树 → ③ 投票/平均。</b>",m:"⚠ <b>bagging 里的树通常长到底、不剪枝</b>。",w:"<b>为什么不怕过拟合</b>：<b>过拟合体现为高方差，而平均专门对付方差</b>。",e:"⭐ <b>分工清楚</b>：每棵树尽量压低偏差（长到底），<b>方差交给平均处理</b>。"});
+  QUIZ(3610,16,{t:"bagging 中的单棵决策树通常怎么处理？",o:["让它长到底、不剪枝——因为过拟合体现为高方差，而平均专门对付方差","只用一个特征","严格剪枝，保持树很浅","限制深度为 3"],a:0,w:"⭐ <b>分工清楚</b>：每棵树尽量压低偏差（长到底），<b>方差交给「平均」这个动作去处理</b>。"});
+});
+KP("17 · ⚠ bagging 的隐藏代价：方差降了，偏差其实升了",function(){
+  S(4035,function(){clearScene();setEq(null);setCap("每棵树只看到约 63% 的数据");
+       says("67:15","slightly increasing the bias of your models");
+       boxNode(130,206,470,74,"训练数据变少（约 2/3）","r");
+       boxNode(740,206,440,74,"⇒ 单棵树的偏差略升","r");
+       link(600,243,740,243);
+       note("bootstrap 必然漏掉约 37%",365,326,"d");
+       note("模型没那么「见多识广」了",960,326,"d");
+       note("⭐ 但方差降得多得多，所以总体还是划算 —— 这是笔交易，不是白捡",640,396,"y");},"前面一直在说 bagging 降方差，<b>这里要补上它的代价。</b><br><b>每个 bootstrap 样本只含原数据的约 63%</b>，所以<b>每棵树实际是在更少的数据上训出来的</b>——<b>数据少，模型就没那么「见多识广」，偏差会略微上升</b>。Ng 原话就是「<b>你其实轻微地抬高了模型的偏差</b>」。<br><b>⭐ 但他紧接着说：方差降下来的那部分，通常远大于偏差升上去的那部分，所以总体还是划算。</b><br><b>⚠ 请把它记成一笔交易，而不是白捡的便宜</b>——<b>答题时写出「用一点偏差换大量方差」比只说「降方差」完整得多。</b>");
+  S(4035,function(){clearScene();setEq(null);setCap("还有一条：ρ 压不到 0");
+       says("67:15","there's definitely a lower bound");
+       boxNode(130,206,470,74,"所有 Z 都抽自同一个 S","b");
+       boxNode(740,206,440,74,"⇒ 各棵树天然就相关","r");
+       link(600,243,740,243);
+       note("它们看的是同一批数据的不同子集",365,326,"d");
+       note("ρ 有个下界，降不到 0",960,326,"d");
+       note("⭐ 所以才需要随机森林那招「连特征也抽」，再往下压一截",640,396,"y");},"有学生问了个很好的问题：<b>ρ 到底能压到多低？</b><br><b>Ng 的回答是：有下界，而且压不到 0。</b>原因很实在——<b>所有 bootstrap 样本都抽自同一个训练集 S</b>，<b>每两份之间还有相当大的重叠</b>，<b>所以在它们上面训出来的树天然就相关</b>。<br><b>⭐ 这正好解释了下一节为什么还要加一招：光靠 bootstrap 把 ρ 压不够，随机森林于是连特征也随机抽，强行再压一截。</b><br><b>⚠ 他也坦白说不存在一个精确的公式能算出 ρ 的下界</b>，<b>这是直觉层面的理解，不是可以写成等式的结论。</b>");
+  SUM(4035,17,{h:"⚠ bagging 是「用一点偏差换大量方差」",k:"每个 bootstrap 样本只含原数据约 <b>63%</b> ⇒ 训练数据变少 ⇒ <b>单棵树偏差略升</b>。",m:"但<b>方差降得多得多</b>，所以总体划算 —— <b>这是一笔交易，不是白捡的便宜</b>。",w:"⚠ 另一条：所有 Z 都抽自同一个 S、彼此重叠 ⇒ <b>ρ 有下界，压不到 0</b>。",e:"⭐ 正因为 ρ 压不够，<b>随机森林才要再加「随机抽特征」这一招</b>。"});
+  QUIZ(4035,17,{t:"除了降低方差，bagging 还带来了什么副作用？",o:["每棵树只看到约 63% 的数据，偏差会略微上升","它会让训练时间变成指数级","它同时也降低了偏差","它使模型不再能处理类别型特征"],a:0,w:"⭐ 完整的说法是<b>「用一点偏差换大量方差」</b>。⚠ 另外 <b>ρ 有下界</b>，因为所有 bootstrap 样本都来自同一个 S。"});
+});
+KP("18 · ⭐ 树越多不会过拟合 —— 加到误差不降为止",function(){
+  S(3936,function(){clearScene();setEq(null);setCap("加树只动公式里的第二项");
+       says("65:36","doesn't actually cause you to overfit");
+       setEq("$$\\rho\\sigma^{2} \\;+\\; \\frac{1-\\rho}{n}\\,\\sigma^{2}$$");
+       note("第一项：和 n 无关，加树动不了它",640,196,"b");
+       note("⭐ 加树只让第二项变小 ⇒ 只会更好，不会更糟",640,240,"y");},"这是个和直觉打架、但考试很爱问的结论：<b>随机森林里树越多，不会过拟合。</b><br><b>看公式就明白了</b>：加树只影响第二项 (1−ρ)σ²/n，<b>让它单调变小</b>；<b>第一项 ρσ² 和 n 毫无关系，加树动不了它</b>。<br><b>⭐ 所以 n 变大只会让方差更小，不会让模型变差。</b>Ng 的原话是「<b>增加 bootstrap 模型的数量并不会让你过拟合</b>」。<br><b>⚠ 注意这里说的是「树的棵数」这个超参数</b>，<b>不是「单棵树的深度」</b>——<b>单棵树长太深当然会过拟合，那是另一回事。</b>");
+  S(3936,function(){clearScene();setEq(null);setCap("那实践中怎么定棵数");
+       says("65:36","until they see that their error stops going down");
+       boxNode(130,206,470,74,"一直加，直到误差不再降","g");
+       boxNode(740,206,440,74,"⚠ boosting 可不能这么干","r");
+       note("唯一的代价是算力和时间",365,326,"d");
+       note("轮数加多了真的会过拟合",960,326,"d");
+       note("⭐ 这一条对比是现成的考点：同样是集成，两者方向相反",640,396,"y");},"既然加树不会过拟合，<b>那棵数怎么定？</b>Ng 的回答很实际：<b>一直加，直到误差不再往下降为止</b>——<b>唯一的代价是算力和时间</b>。<br><b>⚠ 但千万别把这条规律套到 boosting 上。</b><b>boosting 的轮数加多了是真的会过拟合的</b>：它每一轮都在专门迎合上一轮做错的样本，<b>轮数一多就开始拟合噪声</b>。<br><b>⭐ 这组对比是现成的考点</b>：<b>同样是集成，随机森林的树数几乎可以无脑加，而 boosting 的轮数必须靠验证集来卡。</b><br>根子上的差别是<b>一个在降方差、一个在降偏差。</b>");
+  SUM(3936,18,{h:"⭐ 随机森林的树数加多不会过拟合",k:"加树只让 <b>(1−ρ)σ²/n</b> 变小；<b>ρσ² 和 n 无关</b> ⇒ <b>只会更好，不会更糟</b>。",m:"实践：<b>一直加到误差不再下降</b>，唯一代价是算力和时间。",w:"⚠ <b>boosting 不适用</b>：轮数多了会拟合噪声，必须靠验证集卡。",e:"⭐ 根子上的差别：<b>随机森林在降方差，boosting 在降偏差</b>。⚠ 别和「单棵树深度」混为一谈。"});
+  QUIZ(3936,18,{t:"随机森林里把树的棵数从 100 加到 1000，最可能的结果是？",o:["ρ 显著下降","偏差显著下降","开始过拟合，测试误差上升","测试误差不会变差，但提升很小，代价是算力和时间"],a:3,w:"⭐ 加树只动 (1−ρ)σ²/n 这一项，<b>ρσ² 抹不掉</b>，所以收益递减但不会变差。⚠ <b>boosting 的轮数则确实会过拟合</b>。"});
+});
+KP("19 · ★ 随机森林：连特征也随机抽",function(){
+  S(3455,function(){clearScene();setEq(null);setCap("专治「树长得太像」");
+       boxNode(150,195,460,66,"⚠ bagging 的问题","r");
+       boxNode(680,195,470,66,"随机森林的加法","g");
+       note("数据集只是略有不同",380,282,"r");
+       note("⇒ 若有一个超强特征，每棵树都先切它",380,330,"r");
+       note("每次切分只许从随机几个特征里挑",915,282,"g");
+       note("⇒ 强特征有时根本不在候选里",915,330,"g");
+       note("⭐ 强行让树长得不一样 ⇒ ρ 进一步降 ⇒ 方差进一步降",640,398,"y");},"<b>bagging 已经不错了，但还有个残留问题。</b><br><b>⚠ bootstrap 抽出来的数据集只是「略有不同」。如果数据里有一个特别强的特征</b>（比如判断贷款时的「信用分」），<b>那么几乎每一份数据上，最好的第一刀都会是它。结果每棵树的上半截长得几乎一样——ρ 还是很高。</b><br><b>⭐ 随机森林的办法简单而聪明：每次要切分的时候，不许看全部特征，只许从随机挑出的几个特征里选。</b><br><b>这样一来，那个超强特征有时候压根不在候选名单里</b>，<b>这棵树就被迫去用别的特征，长成另一个样子。</b><br><b>⭐ 用一句话概括：随机森林 ＝ bagging ＋ 随机抽特征，目的就是强行把 ρ 再压低一截。</b>");
+  S(3455,function(){clearScene();setEq(null);setCap("每次抽几个特征：常用的经验值");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["任务","每次候选的特征数","f = 100 时"],
+           ["分类","√f","10"],
+           ["回归","f / 3","33"],
+           ["抽得越少","ρ 越低，但单棵越弱","要折中"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 这是个超参数：抽太少，每棵树都变笨；抽太多，ρ 降不下来",640,396,"y");},"「每次只看一部分特征」里的「一部分」是多少？<b>有两个常用的经验值。</b><br><b>分类任务取 √f</b>，<b>回归任务取 f/3</b>。100 个特征时，分别是 10 个和 33 个。<br><b>⭐ 为什么这是个需要折中的超参数</b>：<b>抽得越少，各棵树被迫去看不同的特征，ρ 降得越狠</b>；<b>可抽太少，每棵树手上的好特征不够，单棵就变笨了，偏差上升</b>。<br><b>⚠ 这又回到那个公式</b>：<b>我们要的是整体方差最小，而不是 ρ 最小</b>——<b>把 ρ 压到最低却让每棵树都很差，总误差反而会变高。</b>");
+  SUM(3455,19,{h:"★ 随机森林 ＝ bagging + 每次切分随机抽特征",k:"⚠ <b>bagging 的残留问题</b>：数据集只是略有不同，<b>有一个超强特征时，每棵树的上半截长得几乎一样 ⇒ ρ 还是高</b>。",m:"⭐ <b>办法</b>：<b>每次切分只许从随机挑出的几个特征里选</b>。",w:"<b>于是超强特征有时根本不在候选里</b>，这棵树被迫用别的特征，<b>长成另一个样子</b>。",e:"⭐ <b>一句话：随机森林 ＝ bagging ＋ 随机抽特征，目的是强行把 ρ 再压低一截。</b>"});
+  QUIZ(3455,19,{t:"随机森林在 bagging 之上多做了什么？",o:["增加了树的数量","改用了基尼不纯度","每次切分时只从随机挑出的几个特征里选，强行让树彼此不同","对树做了更严格的剪枝"],a:2,w:"⚠ <b>要解决的问题</b>：有超强特征时每棵树上半截长得一样，<b>ρ 降不下来</b>。⭐ 目标始终是<b>把 ρ 压低</b>。"});
+});
+KP("20 · ⭐ boosting 用的是「决策桩」：深度为 1 的树",function(){
+  S(4587,function(){clearScene();setEq(null);setCap("一棵只问一个问题的树");
+       says("76:27","you're training a size one decision tree");
+       boxNode(490,196,300,60,"面积 > 100 ?","b");
+       boxNode(230,300,230,60,"判 ＋","g");
+       boxNode(820,300,230,60,"判 −","r");
+       link(560,256,345,300); link(720,256,935,300);
+       note("只问一个问题就给答案",640,398,"y");
+       note("错很多，但比瞎猜强一点",640,372,"d");},"boosting 里当基础模型的那棵树，<b>往往只有一层——只问一个问题就给答案</b>。这种树有个专门的名字叫<b>「决策桩」</b>，Ng 的说法是「<b>size one decision tree</b>」。<br><b>⚠ 它当然很弱</b>：一刀切下去错一大片，<b>但只要比瞎猜强一点点就够用了</b>。<br><b>⭐ 为什么故意把树限制得这么弱</b>：深度限制到 1，<b>等于人为地把它的偏差抬得很高、方差压得很低</b>。<br><b>而 boosting 这套机制，干的正是「一轮一轮地把偏差降下来」的活</b>——<b>所以它需要的恰恰是一个偏差高的起点。</b>");
+  S(4268,function(){clearScene();setEq(null);setCap("所以两种集成要的基础模型正好相反");
+       says("71:08","decision trees are high");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","bagging / 随机森林","boosting"],
+           ["要降的是","方差","偏差"],
+           ["所以基础模型要","又深又强（低偏差）","又浅又弱（决策桩）"],
+           ["能不能并行","能，各训各的","不能，必须一个接一个"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 先问「它在降方差还是降偏差」，基础模型该多强就自动有答案了",640,396,"y");},"把两种集成并排一放，<b>一条很整齐的对应关系就出来了</b>。<br><b>bagging 要降的是方差</b>，所以它需要<b>又深又强、偏差已经很低的树</b>——Ng 说决策树<b>高方差、低偏差</b>，正好是 bagging 的理想搭档。<br><b>boosting 要降的是偏差</b>，所以它需要<b>又浅又弱的决策桩</b>，留出降偏差的空间。<br><b>⭐ 记法很简单：先问「它在降方差还是降偏差」，基础模型该多强就自动有答案了。</b><br><b>⚠ 顺带还有一条差别：bagging 各训各的，可以并行；boosting 后一个要看前一个的错，只能串行。</b>");
+  SUM(4587,20,{h:"⭐ boosting 用决策桩（深度 1）；两种集成要的基础模型相反",k:"boosting 的基础模型是<b>「决策桩」——只问一个问题的树</b>，弱得只比瞎猜强一点。",m:"原因：<b>深度限到 1 ⇒ 偏差高、方差低</b>，而 <b>boosting 干的就是一轮轮降偏差的活</b>。",w:"对照：<b>bagging 降方差 ⇒ 要又深又强的树</b>（决策树高方差低偏差，正是理想搭档）。",e:"⭐ 记法：<b>先问「降方差还是降偏差」</b>，基础模型该多强就有答案了。⚠ bagging 可并行，boosting 只能串行。"});
+  QUIZ(4587,20,{t:"boosting 为什么常用深度只有 1 的「决策桩」当基础模型？",o:["因为决策桩不会过拟合","因为深度限到 1 使它偏差高、方差低，而 boosting 要做的正是降偏差","因为决策桩训练最快，省算力","因为只有决策桩能处理类别型特征"],a:1,w:"⭐ 对照着记：<b>bagging 降方差 ⇒ 要强模型；boosting 降偏差 ⇒ 要弱模型</b>。⚠ 另一条差别是 <b>bagging 可并行、boosting 只能串行</b>。"});
+});
+KP("21 · ⚠ 决策树的另一条硬伤：不擅长「可加结构」",function(){
+  S(3008,function(){clearScene();setEq(null);setCap("一条斜线，树要切很多刀才勉强像");
+       says("50:08","They're bad at additive structure");
+       axes({l:260,r:1040,t:190,b:390});
+       curve([[290,370],[1010,210]],"g");
+       curve([[290,370],[410,370],[410,330],[530,330],[530,290],[650,290],
+              [650,250],[770,250],[770,230],[890,230],[890,210],[1010,210]],"y");
+       note("真实边界：x₁ + x₂ > c（一条斜线）",640,172,"g");
+       note("决策树只能用轴对齐的台阶去凑",640,404,"y");},"决策树还有一条硬伤，Ng 讲得很直白：<b>它不擅长「可加结构」。</b><br><b>什么叫可加结构</b>：真实规律是「两个特征加起来超过某个数」，<b>比如 x₁ + x₂ > c——画出来是一条斜线</b>。<br><b>⚠ 可决策树每个节点只能看一个特征</b>，<b>所以它永远切不出斜线，只能用一级一级轴对齐的台阶去逼近</b>。<br><b>⭐ 代价是：本来一条线能说清的事，树要切很多刀，还是凑不准。</b><br>而<b>逻辑回归、线性回归天生就是把特征加权相加的，这种结构对它们反而最容易。</b>");
+  S(2706,function(){clearScene();setEq(null);setCap("顺带把运行时也交代了");
+       says("45:06","runtime is going through the data matrix");
+       boxNode(130,206,470,74,"数据矩阵 n × f","b");
+       boxNode(740,206,440,74,"最多遍历「深度」遍","b");
+       link(600,243,740,243);
+       note("n 条样本、f 个特征",365,326,"d");
+       note("所以大致是 n · f · 深度",960,326,"d");
+       note("⭐ 对 n 和 f 都是线性的 —— 这就是「训练快」的具体含义",640,396,"y");},"既然讲到优缺点，<b>把运行时也一并交代清楚。</b><br><b>数据矩阵是 n × f</b>（n 条样本、f 个特征），<b>而建树的过程最多把它从头扫「树的深度」那么多遍</b>——<b>所以训练开销大致是 n · f · 深度</b>。<br><b>⭐ 关键是它对 n 和 f 都是线性的</b>，<b>这就是前面说「决策树训练快」的具体含义</b>，比笼统说一句「快」有用得多。<br><b>⚠ 预测就更便宜了：一个样本只要从根走到叶子，开销只和深度有关，和数据量完全无关。</b><b>这也是决策树在要求低延迟的场合仍然受欢迎的原因。</b>");
+  SUM(2706,21,{h:"⚠ 树切不出斜线（不擅长可加结构）；运行时 ≈ n·f·深度",k:"每个节点<b>只看一个特征</b> ⇒ 边界永远<b>轴对齐</b> ⇒ 遇到 <b>x₁+x₂>c</b> 这种只能用台阶硬凑。",m:"而<b>线性/逻辑回归天生就是加权相加</b>，这种结构对它们最容易 —— 这是一组标准的对比。",w:"运行时：数据矩阵 <b>n×f</b>，最多扫「深度」遍 ⇒ <b>训练 ≈ n·f·深度，对 n 和 f 都线性</b>。",e:"⭐ 预测只走一条根到叶的路径，<b>开销只和深度有关、与数据量无关</b>。"});
+  QUIZ(2706,21,{t:"真实边界是 x₁ + x₂ > c 时，决策树表现为什么会吃亏？",o:["因为它必须先做独热编码","因为它的运行时是指数级的","因为每个节点只看一个特征，边界只能轴对齐，斜线只能用台阶硬凑","因为它无法处理连续特征"],a:2,w:"⭐ 这叫<b>不擅长可加结构</b>，是 Ng 点名的硬伤。⚠ 对照着记：<b>线性/逻辑回归天生做加权相加，这种结构对它们最容易</b>。"});
+});
+KP("22 · ★ boosting：换一个完全相反的思路",function(){
+  S(3550,function(){clearScene();setEq(null);setCap("不是并排，而是接力");
+       says("0:36","we're first gonna go over decision trees");
+       boxNode(110,205,230,62,"树 1","b");
+       boxNode(390,205,230,62,"树 2","b");
+       boxNode(670,205,230,62,"树 3","b");
+       boxNode(950,205,210,62,"…","b");
+       link(340,236,390,236); link(620,236,670,236); link(900,236,950,236);
+       note("每棵树专门去补上一棵树做错的地方",640,305,"y");
+       note("⚠ 必须一棵一棵顺着来 —— 不能并行",640,355,"r");
+       note("⭐ 而且每棵树都故意很浅（常常只有几层）",640,400,"g");},"<b>boosting 是集成里另一条路，思路和 bagging 几乎相反。</b><br><b>bagging 是「并排」</b>：所有树同时独立地训，互不知道对方存在，最后一起投票。<br><b>⭐ boosting 是「接力」</b>：<b>先训一棵树，看它哪里做错了；第二棵树专门去补这些错；第三棵再补前两棵合起来还错的地方……一棵接一棵。</b><br><b>⚠ 所以 boosting 必须顺着来，不能并行</b>——<b>第二棵树要等第一棵训完才知道该补哪里。这是它和 bagging 在工程上的一个实际差别。</b><br><b>⭐ 另一个反差：boosting 里每棵树都故意弄得很浅</b>（常常只有几层，甚至只切一刀）。<b>因为每棵只需要「比瞎猜好一点」，靠数量和接力累积出效果。</b>");
+  S(3550,function(){clearScene();setEq(null);setCap("⚠ 它治的是另一种病");
+       matrix({rows:4,cols:3,cw:300,ch:48,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["","bagging / 随机森林","boosting"],
+           ["怎么训","并排，互相独立","接力，一棵补一棵"],
+           ["单棵树","很深（长到底）","很浅（几层）"],
+           ["主要降低","方差","偏差"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 最该记的是最后一行 —— 它俩治的根本不是同一种病",640,398,"y");},"<b>⭐ 把两者并排看，最该记的是最后一行：它们治的根本不是同一种病。</b><br><b>bagging 和随机森林降的是方差</b>：每棵树都已经很准但不稳，<b>平均一下让它稳下来</b>。<br><b>boosting 降的是偏差</b>：每棵树都很弱、很浅、本身差得远，<b>靠一棵棵接力把误差一点点啃掉</b>。<br><b>⚠ 这个差别决定了实践中的选择</b>：<b>模型太不稳 ⇒ 用 bagging / 随机森林</b>；<b>模型太简单、拟合不够 ⇒ 用 boosting。</b><br><b>⭐ 补一句现实情况：在表格类数据上，boosting 的实现（XGBoost、LightGBM 这些）长期是竞赛里最强的一类方法</b>，<b>而随机森林胜在省心——几乎不用调参就能跑出不错的结果。</b>");
+  S(4653,function(){clearScene();setEq(null);setCap("AdaBoost：权重到底怎么定");
+       says("77:33","log of 1 minus the error of your nth model");
+       setEq("$$\\alpha_m \\;=\\; \\log\\frac{1-\\mathrm{err}_m}{\\mathrm{err}_m}\\qquad G(x)=\\sum_m \\alpha_m\\,G_m(x)$$");
+       note("err 小（表现好）⇒ α 大，这个模型说话更算数",640,196,"b");
+       note("⭐ err = 0.5（瞎猜）⇒ α = 0，等于这一票完全不计",640,240,"y");},"Ng 最后把 boosting 落到了具体公式上，<b>这就是 AdaBoost</b>。<br><b>每训完一个弱模型，就按它的错误率给它一个权重 α</b>：<b>err 越小，α 越大，它在最终投票里说话越算数</b>。<br><b>⭐ 代两个数就懂了</b>：<b>err = 0.5（相当于瞎猜）⇒ α = log 1 = 0，这一票完全不计</b>；<b>err 趋近 0 ⇒ α 趋近无穷大</b>。<br><b>最终分类器就是所有弱模型的加权和。</b><br><b>⚠ 和 bagging 的关键区别请记死</b>：<b>bagging 是「各训各的、权重相同、可以并行」</b>；<b>boosting 是「一个接一个、权重不同、只能串行」。</b><br>Ng 也说了：<b>XGBoost、梯度提升都是用同一套思路推出来的变体。</b>");
+  SUM(3550,22,{h:"★ boosting：接力式集成，降的是偏差",k:"<b>bagging 是并排</b>（同时独立训，最后投票）；<b>⭐ boosting 是接力</b>（<b>每棵树专门去补前面做错的地方</b>）。",m:"⚠ <b>boosting 不能并行</b>（第二棵要等第一棵训完）；<b>每棵树故意很浅</b>（只需比瞎猜好一点）。",w:"⭐⭐ <b>最该记的</b>：<b>bagging/随机森林降方差，boosting 降偏差</b>——<b>治的不是同一种病</b>。",e:"⇒ <b>模型太不稳用 bagging；太简单拟合不够用 boosting</b>。现实：表格数据上 <b>boosting 实现（XGBoost 等）长期最强</b>，<b>随机森林胜在省心</b>。"});
+  QUIZ(3550,22,{t:"bagging 和 boosting 最本质的区别是什么？",o:["bagging 用决策树，boosting 用线性模型","bagging 并排训练主要降方差；boosting 接力训练主要降偏差","bagging 用熵，boosting 用误分类损失","bagging 更快，boosting 更准"],a:1,w:"⚠ <b>boosting 不能并行</b>，且<b>每棵树故意很浅</b>。⇒ <b>太不稳用 bagging，拟合不够用 boosting</b>。"});
+});
+KP("完 · 一棵树不够稳，那就种一片森林",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L9 · 完","决策树与集成方法","前半是一个算法，后半是一个通用思想");},
+    "收一下。<b>这一讲前半给了一个算法，后半给了一个对任何模型都适用的思想。</b><br><b>决策树</b>：一串是非题，<b>没有权重、没有概率、没有要优化的函数</b>。换个角度看，它在<b>把空间切成方块</b>——⚠ <b>每一刀都横平竖直</b>（每个问题只能问一个特征），<b>所以它画不出斜线，只能用台阶逼近</b>。建树靠三件事：<b>自顶向下、贪心、递归</b>。⚠ <b>贪心是有代价的</b>（像下山每步走最陡，可能走进小坑），<b>但找整体最优的树计算上做不到</b>。<br><b>怎么挑那一刀</b>：最直觉的<b>误分类损失</b>（按多数判会错几个）<b>⚠ 不够敏感</b>——Ng 的例子里，切出一块纯净区域的 A 刀和平分混乱的 B 刀<b>得分一样</b>。<b>⭐ 换成熵就分得出了</b>：熵度量「有多不确定」（<b>全同一类⇒0，一半一半⇒最大</b>），<b>关键是它是拱形的</b>——<b>误分类损失是两段直线，直线上两点的平均还在线上，所以切了可能分数不变；熵拱起来，只要真分开了一点就必定下降</b>。这个下降量叫<b>信息增益</b>。（实践中也常用<b>基尼不纯度</b>，同样是拱形，结论相同。）<br><b>什么时候停</b>：⚠ 切到每叶一个样本就只是把训练集背下来了。<b>⭐ 常见做法是先长到底再剪枝</b>。<br><b>决策树的好处</b>是<b>可解释</b>——Ng 说你可以把树画出来看它在做什么，⚠ <b>医疗信贷这类要「给说法」的场合这是硬需求</b>；另有不用标准化、能直接吃类别特征、训练快。<b>⚠ 致命伤是高方差</b>：<b>贪心加递归，第一刀一变下面整棵子树全重长</b>，误差沿树放大。<br><b>⭐⭐ 全讲最值钱的是那个方差公式</b>：n 个<b>独立</b>模型取平均 ⇒ 方差 <b>σ²/n</b>（⚠ <b>只降方差，偏差一点没变</b>）；放宽到相关时 ⇒ <b>ρσ² + (1−ρ)σ²/n</b>。<b>右项 n 一大就没了，⚠ 但左项 ρσ² 里没有 n，训一万个也压不掉</b>；<b>ρ=1 时方差就剩 σ²，等于白训</b>。<b>⇒ 集成的瓶颈不是「训了几个」，而是「它们彼此有多不同」。</b><br><b>后面三招全是在压 ρ</b>：<b>bootstrap</b>（有放回地抽，每份略有不同，约漏掉三分之一可当免费验证集）→ <b>bagging ＝ bootstrap + 平均</b>（⚠ 树<b>长到底不剪枝</b>，因为过拟合是方差问题而平均专治方差）→ <b>⭐ 随机森林 ＝ bagging + 每次切分随机抽特征</b>（治「有超强特征时每棵树上半截都一样」）。<br><b>⭐ boosting 是另一条路</b>：<b>不并排而是接力</b>，每棵树专补前面的错，⚠ <b>不能并行</b>，<b>每棵故意很浅</b>。<b>⭐⭐ 最该记的一句：bagging/随机森林降方差，boosting 降偏差——治的根本不是同一种病。</b>模型太不稳用前者，拟合不够用后者。");
+});
+window.__startProjector(CFG);
+})();
+</script>

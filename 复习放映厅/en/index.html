@@ -1,0 +1,126 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ML Projector · English Edition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+<style>
+:root{
+  --bg:#080B11; --panel:#0E141F; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#556275; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;line-height:1.6}
+.wrap{max-width:1080px;margin:0 auto;padding:64px 26px 90px}
+
+header{border-bottom:1px solid var(--edge);padding-bottom:30px;margin-bottom:38px}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--blue);margin:0 0 14px}
+h1{font-size:clamp(30px,4.4vw,50px);font-weight:800;letter-spacing:-.025em;margin:0 0 12px;line-height:1.12}
+.lede{font-size:clamp(15px,1.5vw,18px);color:var(--dim);max-width:62ch;margin:0;font-weight:300}
+
+.keys{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0 0}
+.key{font-family:var(--mono);font-size:11px;color:var(--dim);border:1px solid var(--edge);
+  border-radius:7px;padding:5px 11px;background:#0B1119}
+.key b{color:var(--ink);font-weight:500}
+
+h2{font-size:12px;font-family:var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dimmer);font-weight:500;margin:46px 0 16px}
+
+.grid{display:grid;gap:16px}
+a.card{display:block;text-decoration:none;color:inherit;background:var(--panel);
+  border:1px solid var(--edge);border-left:3px solid var(--accent,var(--blue));
+  border-radius:14px;padding:22px 26px 20px;transition:border-color .22s,background .22s,transform .22s}
+a.card:hover{background:#131B28;border-color:#2C3A50;border-left-color:var(--accent,var(--blue));transform:translateX(3px)}
+.no{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--accent,var(--blue));margin:0 0 7px}
+.ttl{font-size:clamp(18px,2.1vw,23px);font-weight:600;margin:0 0 8px;letter-spacing:-.01em}
+.sub{color:var(--dim);font-size:14.5px;font-weight:300;margin:0 0 15px;max-width:70ch}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.chip{font-family:var(--mono);font-size:10.5px;color:var(--dim);background:#0A0F17;
+  border:1px solid #222C3C;border-radius:6px;padding:3px 9px}
+.meta{font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.06em;margin:0}
+
+.note{margin-top:44px;border:1px solid var(--edge);border-radius:14px;padding:20px 24px;
+  background:#0B1119;color:var(--dim);font-size:14px;font-weight:300}
+.note b{color:var(--ink);font-weight:500}
+.note code{font-family:var(--mono);font-size:12.5px;color:var(--yellow);background:#0A0F17;
+  border:1px solid #222C3C;border-radius:5px;padding:1px 6px}
+footer{margin-top:40px;padding-top:22px;border-top:1px solid var(--edge);
+  font-family:var(--mono);font-size:11px;color:var(--dimmer);letter-spacing:.06em}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="kicker">Machine Learning · Revision Projector</p>
+  <h1>The English Edition</h1>
+  <p class="lede">Four dark-room films on the mathematics behind linear models and margins.
+  Each concept runs the same way: a few narrated shots, then a four-part summary card,
+  then one question you have to answer before the film will move on.</p>
+  <div class="keys">
+    <span class="key"><b>SPACE</b> advance</span>
+    <span class="key"><b>&larr;</b> back</span>
+    <span class="key"><b>N</b> narration on / off</span>
+    <span class="key"><b>1&ndash;9</b> jump to a concept</span>
+    <span class="key"><b>Home</b> restart</span>
+  </div>
+</header>
+
+<h2>The films</h2>
+<div class="grid">
+
+  <a class="card" href="T1-Overview-and-Foundations.html" style="--accent:var(--blue)">
+    <p class="no">FILM 01</p>
+    <p class="ttl">Overview and Foundations</p>
+    <p class="sub">What machine learning is, the three learning paradigms, the mathematics you
+    actually need, and how a project runs end to end without leaking test data into training.</p>
+    <div class="chips"><span class="chip">AI vs ML</span><span class="chip">supervised · unsupervised · reinforcement</span><span class="chip">linear algebra &amp; calculus</span><span class="chip">loss and descent</span><span class="chip">the pipeline</span><span class="chip">data leakage</span></div>
+    <p class="meta">6 concepts · 26 shots</p>
+  </a>
+
+  <a class="card" href="F1-Fitting-a-Line.html" style="--accent:var(--yellow)">
+    <p class="no">FILM 02</p>
+    <p class="ttl">Fitting a Line</p>
+    <p class="sub">One question &mdash; which line is best? &mdash; taken all the way from the error at a
+    single point to a closed-form solution, passing through the cost surface and gradient descent.</p>
+    <div class="chips"><span class="chip">residuals</span><span class="chip">the cost function</span><span class="chip">convexity</span><span class="chip">the gradient</span><span class="chip">learning rate</span><span class="chip">normal equations</span></div>
+    <p class="meta">6 concepts · 33 shots</p>
+  </a>
+
+  <a class="card" href="F2-Maximum-Likelihood.html" style="--accent:var(--green)">
+    <p class="no">FILM 03</p>
+    <p class="ttl">Where Least Squares Comes From</p>
+    <p class="sub">We squared the residuals because it was convenient. Here is the actual derivation:
+    one assumption about the noise, and the sum of squares arrives on its own &mdash; along with ridge
+    regression, once a prior joins in.</p>
+    <div class="chips"><span class="chip">noise model</span><span class="chip">likelihood</span><span class="chip">log-likelihood</span><span class="chip">MLE = least squares</span><span class="chip">robust losses</span><span class="chip">MAP and ridge</span></div>
+    <p class="meta">6 concepts · 32 shots</p>
+  </a>
+
+  <a class="card" href="F3-Margin-and-Dual.html" style="--accent:var(--violet)">
+    <p class="no">FILM 04</p>
+    <p class="ttl">The Margin and the Dual</p>
+    <p class="sub">When every separating line is correct, the training error cannot choose. Following
+    the margin criterion honestly leads into Lagrangian duality, support vectors, and a feature space
+    the algorithm never visits.</p>
+    <div class="chips"><span class="chip">the margin</span><span class="chip">functional vs geometric</span><span class="chip">the primal</span><span class="chip">Lagrangian duality</span><span class="chip">support vectors</span><span class="chip">kernels</span><span class="chip">soft margin</span></div>
+    <p class="meta">7 concepts · 39 shots</p>
+  </a>
+
+</div>
+
+<div class="note">
+  <b>Reading order.</b> Film 01 sets the vocabulary. Film 02 does the mechanics of fitting.
+  Film 03 explains <em>why</em> those mechanics are the right ones, and Film 04 changes the
+  question from &ldquo;how close?&rdquo; to &ldquo;how far?&rdquo; &mdash; regression to classification.
+  Films 02&ndash;04 share a running example, so the same four data points reappear.
+  <br><br>
+  <b>Offline.</b> Each film is a single self-contained HTML file. Typesetting
+  (<code>MathJax</code>), drawing (<code>d3</code>) and the fonts load from a CDN, so the first open
+  needs a connection; everything else is in the file.
+</div>
+
+<footer>Machine Learning revision projector · English edition · built on the same engine as the Chinese films</footer>
+</div>

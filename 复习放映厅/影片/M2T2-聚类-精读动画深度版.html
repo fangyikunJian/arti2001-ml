@@ -1,0 +1,941 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M2 T2 聚类 · 精读动画版·深度</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"M2 T2 · 聚类（精读动画版 · 深度）",
+  subtitle:"目标函数 J → 坐标下降 → 收敛性 → silhouette → DBSCAN 密度可达 · 空格推进 · N 讲解",video:""};
+
+/* ── 二维等比映射（保证圆是圆、垂线是垂线），安全区 y∈[90,470] ── */
+function PX(x){return 640+45*x;}
+function PY(y){return 280-45*y;}
+function ax(){link(PX(-5),PY(0),PX(5),PY(0));link(PX(0),PY(-4.2),PX(0),PY(4.2));
+  note("x₁",PX(5)+16,PY(0)+5,"","start");note("x₂",PX(0)+20,PY(4.2)+4,"","start");}
+function P(pts,cls,r){dots(pts.map(function(p){return [PX(p[0]),PY(p[1])];}),cls,r||9);}
+/* 质心：画成一个小十字 + 空心点，和数据点区分开 */
+function cen(pts,cls){pts.forEach(function(p){
+  link(PX(p[0])-11,PY(p[1]),PX(p[0])+11,PY(p[1]));
+  link(PX(p[0]),PY(p[1])-11,PX(p[0]),PY(p[1])+11);});
+  dots(pts.map(function(p){return [PX(p[0]),PY(p[1])];}),cls||"c",7);}
+/* 分配连线：点 → 它归属的质心 */
+function assign(pts,cs,who){pts.forEach(function(p,i){var c=cs[who[i]];
+  link(PX(p[0]),PY(p[1]),PX(c[0]),PY(c[1]));});}
+
+/* ── 一维数轴：k-means 的 {1,2,8,9} 例子 ── */
+function KX(v){return 250+70*v;}
+var KY=300;
+function kline(){link(KX(-0.4),KY,KX(10.2),KY);
+  [0,2,4,6,8,10].forEach(function(v){link(KX(v),KY-5,KX(v),KY+5);
+    note(String(v),KX(v),KY+24,"");});}
+function kpts(vs,cls,r){dots(vs.map(function(v){return [KX(v),KY];}),cls,r||10);}
+function kcen(vs,cls){vs.forEach(function(v){
+  link(KX(v),KY-16,KX(v),KY+16);});
+  dots(vs.map(function(v){return [KX(v),KY];}),cls||"c",7);}
+
+/* ── 一维数轴：DBSCAN 的 A..E 例子，带 ε 邻域圆 ── */
+function DX(v){return 330+115*v;}
+var DY=270, EPSPX=115*0.6;
+var DPTS=[["A",0],["B",0.5],["C",1.0],["D",3.0],["E",3.4]];
+function dline(){link(DX(-0.35),DY,DX(3.8),DY);
+  [0,1,2,3].forEach(function(v){link(DX(v),DY-5,DX(v),DY+5);note(String(v),DX(v),DY+70,"");});}
+function dlabels(){DPTS.forEach(function(p){note(p[0],DX(p[1]),DY-26,"");});}
+function dpts(names,cls,r){dots(DPTS.filter(function(p){return names.indexOf(p[0])>=0;})
+  .map(function(p){return [DX(p[1]),DY];}),cls,r||11);}
+/* ε 邻域：用多边形近似的圆 */
+function circ(cx,cy,rpx,cls,n){var p=[];n=n||56;
+  for(var i=0;i<=n;i++){var t=2*Math.PI*i/n;p.push([cx+rpx*Math.cos(t),cy+rpx*Math.sin(t)]);}
+  curve(p,cls||"fit y");}
+function eps(names,cls){DPTS.filter(function(p){return names.indexOf(p[0])>=0;})
+  .forEach(function(p){circ(DX(p[1]),DY,EPSPX,cls||"fit y");});}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("M2 T2 · 聚类","精读动画版 · 深度",
+      "K-means 与 DBSCAN：两套完全不同的「组」的定义");},
+    "这是 <b>Module 2 Topic 2</b> 的深度精读。素材三层：① Canvas 的 <b>Key concepts 四页</b>加官方 17 页 PPT；② <b>Tutorial 原题</b>与讲义算例全程带着走；③ <b>CS229 Lecture 13 前 18 分钟与讲义第 10 章</b>——补上课件回避的部分：<b>失真函数 J 的显式定义、k-means 其实是坐标下降、为什么必然收敛的完整论证</b>。⚠️ 有一件事要先说明：<b>DBSCAN 完全不在 CS229 范围内</b>（Ng 的无监督只讲 k-means、GMM/EM、因子分析、PCA、ICA），所以后半部分的深度来自 <b>Canvas 讲义</b>，片中会标出来。空格推进，N 开关讲解。");
+});
+KP("1 · 聚类在问什么",function(){
+  S(0,function(){clearScene();setCap("同一批点，两种完全不同的问法");ax();
+   P([[-2.6,1.4],[-2.1,2.0],[-1.7,1.2],[1.8,-1.3],[2.4,-0.8],[1.9,-1.9],[2.7,-1.6]],"a",10);
+   note("给你一堆无标签的点……",PX(0),PY(-3.4),"");},"先把问题摆清楚。给定一批<b>没有类别标签</b>的观测，聚类问的是：<b>能不能把它们分成若干「有用的」组，使组内相对相似、组间相对不相似？</b> 注意「有用」两个字——它不是数据自带的性质，是你定义的。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,150,470,96,"PCA：换表示","b");note("造连续的新坐标轴 · <不产生任何簇标签>",375,262,"b");
+   boxNode(670,150,470,96,"聚类：给分组","g");note("造离散的组归属 · 需要解释",905,262,"g");
+   note("⚠ 同为无监督，输出的<类型>根本不同",640,390,"y");},"和上一讲对照一下：<b>PCA 换的是表示</b>——造出连续的新坐标轴，它<s>不产生任何簇标签</s>；<b>聚类给的是分组</b>——离散的组归属。两者都没有 ground truth、都需要解释，但<b>输出的类型根本不同</b>。「先 PCA 再聚类」是常见做法，但那是<em>两个各自需要论证的决定</em>。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(150,140,460,86,"K-means","b");note("到<质心>的距离",380,248,"b");
+   boxNode(670,140,460,86,"DBSCAN","g");note("<密度>连通",900,248,"g");
+   note("两套算法 = 两种「什么叫一个组」的定义",640,360,"y");
+   note("⇒ 它们在同一份数据上给出不同答案，是<必然>的",640,420,"r");},"本讲两个算法，<b>对「一个组」给出了两种完全不同的定义</b>：<b>K-means</b> 认距离——离哪个质心近就归谁；<b>DBSCAN</b> 认密度——在稠密区域里彼此连通的点算一组。所以它们在同一份数据上<b>给出不同答案是必然的</b>，不是谁错了。大题问「该选哪个」，答的就是「这份数据的结构更符合哪一种定义」。");
+  SUM(0,1,{h:"聚类：无标签地找有用的分组",k:"聚类给<b>离散的组归属</b>；PCA 给<b>连续的新坐标</b>，<s>不产生簇标签</s>。",m:"<b>K-means 认「到质心的距离」，DBSCAN 认「密度连通」</b>——两种「组」的定义，因此答案不同是必然的。",w:"<s>「PCA 降到二维就得到了两个簇」</s>是错的：那只是视觉印象，簇要另外用聚类算法算。",e:"选择题常考 PCA 与聚类的输出类型差异；大题 Q3 考「选哪个算法并论证」。"});
+  QUIZ(0,1,{t:"K-means 与 DBSCAN 最根本的差别是什么？",o:["一个需要标签一个不需要","一个只能处理二维数据","一个快一个慢","它们对「什么算一个组」给出了不同定义：到质心的距离 vs 密度连通"],a:3,w:"两者都是无监督、都不用标签。真正的差别是<b>组的定义</b>：K-means 用<em>到质心的距离</em>并强制每点有标签；DBSCAN 用<em>密度连通</em>，还允许把稀疏点标为噪声。这决定了它们各自适合什么形状的数据。"});
+});
+KP("2 · ★「相似」是你选的，不是数据自带的",function(){
+  S(0,function(){clearScene();setCap("两个特征，量程差了三个数量级");
+   boxNode(150,150,460,86,"年度消费额","r");note("0 – 80,000",380,258,"r");
+   boxNode(670,150,460,86,"到访次数","b");note("0 – 60",900,258,"b");
+   note("欧氏距离里，消费额的差值会压倒一切",640,380,"y");},"这一页看着像废话，其实是<b>几乎每道聚类评价题的第一个采分点</b>。设想两个特征：年度消费额 0–80,000，到访次数 0–60。算欧氏距离时，消费额的差值<em>动辄上万</em>，到访次数的差值<em>最多几十</em>——<b>后者等于没参与</b>。分组实际上只按消费额做出来的。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(120,140,1040,60,"换特征 · 换缩放 · 换距离 · 换算法与参数","v");
+   note("任何一项变了，「谁和谁相似」就可能变",640,270,"v");
+   note("⇒ 同一份数据，两个人可以得到完全不同的簇，而且都没算错",640,350,"y");
+   note("⚠ 所以聚类结果是「模型产出的摘要」，不是发现的真相",640,420,"r");},"更一般地：<b>相似是一个建模选择</b>。特征选哪些、要不要缩放、用什么距离、哪个算法配什么参数——<em>任何一项变了，「谁和谁相似」就可能变</em>。推论很重要：<b>同一份数据，两个人可以得到完全不同的簇，而且都没算错</b>。所以讲义反复强调，聚类结果是<b>模型产出的摘要</b>，需要解释和验证，<s>不是自动发现的真实类别</s>。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,150,1000,66,"标准化不是默认动作，是一个<要论证>的决定","g");
+   note("单位/量程不可比 → 考虑标准化",640,290,"g");
+   note("但如果方差差异本身有业务含义，标准化会把它抹掉",640,355,"r");
+   note("⚠ DBSCAN 还有一层：ε 的数值含义完全取决于缩放，必须<先缩放再选 ε>",640,425,"y");},"那是不是一律标准化？<b>不是</b>。讲义的立场是：<em>当单位或量程不可比时考虑标准化</em>，但如果方差差异<b>本身有业务含义</b>（比如消费额的悬殊确实是你要抓的东西），标准化反而把它抹掉了。这是<b>要论证的决定</b>。⚠️ 对 DBSCAN 还多一层：<b>ε 的数值含义完全取决于缩放</b>，所以顺序必须是<b>先缩放、再选 ε</b>。");
+  SUM(0,2,{h:"★ 相似是建模选择",k:"特征、缩放、距离、算法参数，<b>任何一项变了分组就可能变</b>。量程差几个数量级时，大数值特征会独占欧氏距离。",m:"因此聚类结果是<b>模型产出的摘要</b>，两个人得到不同结果都可能没算错。",w:"<s>无脑标准化</s>——若方差差异本身有含义就别抹。<s>先选 ε 再缩放</s>——顺序反了，ε 的含义会变。",e:"评价题的第一句几乎总是：「两个特征量程相差 N 个数量级，欧氏距离会被 X 主导，应考虑标准化」。"});
+  QUIZ(0,2,{t:"某数据的特征是「年度消费额（0–80,000）」与「到访次数（0–60）」，直接跑 K-means。最该先指出的问题是？",o:["消费额的数值量级压倒到访次数，分组实际只由消费额决定，应考虑标准化","应该改用曼哈顿距离","样本量太小","k 应该取 2"],a:0,w:"欧氏距离里，消费额的差值动辄上万而到访次数最多几十，<b>后者几乎不参与</b>。要让两个特征同等贡献就该标准化——但若量级差异本身有业务含义，则需论证为什么保留。这是几乎每道聚类评价题的第一个采分点。"});
+});
+KP("3 · K-means 的两步",function(){
+  S(0,function(){clearScene();setCap("① 分配：每个点去最近的质心");ax();
+   var A=[[-2.4,1.2],[-1.9,1.9],[-2.8,1.8],[1.9,-1.1],[2.5,-1.7],[2.0,-2.0]];
+   var Cs=[[-2.2,1.6],[2.2,-1.5]];
+   P(A,"a",9);cen(Cs,"c");
+   assign(A,Cs,[0,0,0,1,1,1]);
+   note("质心在这一步<保持不动>",PX(0),PY(-3.5),"y");},"K-means 只有两步，轮流做。<b>第一步：分配</b>——每个点去<em>最近</em>的质心。⚠️ 整个分配步里<b>质心保持不动</b>，要把所有点分完才更新。手算时边分边更新是最常见的错误做法，那已经是另一种算法了。");
+  S(0,function(){clearScene();setCap("② 更新：每个质心搬到自己那簇的<b>均值</b>");ax();
+   var A=[[-2.4,1.2],[-1.9,1.9],[-2.8,1.8],[1.9,-1.1],[2.5,-1.7],[2.0,-2.0]];
+   P(A,"a",9);
+   cen([[(-2.4-1.9-2.8)/3,(1.2+1.9+1.8)/3],[(1.9+2.5+2.0)/3,(-1.1-1.7-2.0)/3]],"c");
+   note("逐维求平均",PX(0),PY(-3.5),"g");},"<b>第二步：更新</b>——每个质心搬到它那一簇所有点的<b>均值</b>（逐维求平均）。然后回到第一步重新分配，如此往复。<b>停止条件</b>：分配不再变化、或质心稳定、或到达最大迭代次数。整个算法就这么简单——但「为什么这样做一定会停下来、停在哪」才是真正值得讲的部分，下面几个知识点都在回答它。");
+  S(0,function(){clearScene();setEq("$$\\text{给定 }k\\text{，交替：}\\quad c^{(i)}\\leftarrow \\arg\\min_j\\lVert x^{(i)}-\\mu_j\\rVert^2\\ ,\\qquad \\mu_j\\leftarrow \\frac{1}{|C_j|}\\sum_{i\\in C_j}x^{(i)}$$","top");
+   note("左：分配（固定 μ，动 c）　右：更新（固定 c，动 μ）",640,410,"b");
+   note("⚠ k 必须事先给定，算法自己不会告诉你有几类",640,455,"r");},"写成式子：<b>分配</b>是 c⁽ⁱ⁾ ← argminⱼ‖x⁽ⁱ⁾−μⱼ‖²（<em>固定 μ，动 c</em>）；<b>更新</b>是 μⱼ ← 该簇的均值（<em>固定 c，动 μ</em>）。注意这两步的「固定什么、动什么」正好互补——记住这个结构，下一个知识点会用它一击命中收敛性。⚠️ 还有：<b>k 必须事先给定</b>，K-means 自己不会告诉你有几类。");
+  SUM(0,3,{h:"分配 + 更新，轮流做",k:"<b>分配</b>：每点去最近质心（<b>质心在这一步不动</b>）。<b>更新</b>：质心搬到该簇的<b>均值</b>。重复至稳定。",m:"两步的结构互补：<b>分配固定 μ 动 c，更新固定 c 动 μ</b>。这正是下一节收敛性论证的入口。",w:"<s>边分配边更新质心</s>——那是序贯版本，会得到不同结果。<s>以为算法能自己定 k</s>。",e:"手算大题第一问就是走一轮。必写：用题目给的初始质心、每轮更新后的质心。"});
+  QUIZ(0,3,{t:"K-means 的分配步中，质心应当如何处理？",o:["按点的顺序轮流更新","整个分配步里保持不动，所有点分完后才统一更新","每分配一个点就立即更新该簇质心","随机扰动以避免局部极小"],a:1,w:"标准 K-means 是<b>批量</b>的：基于同一组固定质心把所有点分完，再统一取均值更新。边分边更新是<em>序贯/在线</em>版本，是另一种算法，手算题里这么做会得到与标准答案不同的结果。"});
+});
+KP("4 · ★★ 目标函数 J（失真函数）",function(){
+  S(0,function(){clearScene();setEq("$$J(c,\\mu)=\\sum_{i=1}^{n}\\big\\lVert x^{(i)}-\\mu_{c(i)}\\big\\rVert^{2}$$","top");
+   note("每个点到<自己那个>质心的平方距离，全部加起来",640,410,"b");
+   note("CS229 管它叫 distortion function（失真函数）",640,455,"v");},"把两步背后的东西写出来：<b>目标函数 J</b>——每个观测到<em>它自己被分到的那个</em>质心的平方距离，全部加起来。CS229 管它叫 <b>distortion function（失真函数）</b>；你们课件和 sklearn 里叫 <b>inertia</b> 或 <b>WCSS</b>（within-cluster sum of squares）。三个名字，同一个东西。");
+  S(0,function(){clearScene();setCap("J 衡量的是「簇内有多紧凑」");ax();
+   var A=[[-2.4,1.2],[-1.9,1.9],[-2.8,1.8],[1.9,-1.1],[2.5,-1.7],[2.0,-2.0]];
+   var Cs=[[-2.37,1.63],[2.13,-1.6]];
+   P(A,"a",9);cen(Cs,"c");assign(A,Cs,[0,0,0,1,1,1]);
+   note("J = 这些连线长度的<平方和>",PX(0),PY(-3.5),"g");},"几何上，<b>J 就是图上这些连线长度的平方和</b>。它直接鼓励的是<b>簇内紧凑</b>——每个点离自己的质心近。⚠️ 请注意它<s>没有</s>显式地要求簇与簇之间离得远，更没有任何一项在保证「这些簇对应真实类别」。低 J 只说明「在当前特征、缩放和 k 下，点离各自质心近」。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,150,1000,66,"⚠ J 是<求和>不是平均","r");
+   note("点越多 J 越大 ⇒ 只能在同一份数据、同一套特征与缩放下比较",640,290,"r");
+   note("跨数据集比 J、或比较标准化前后的 J，都是没有意义的",640,360,"y");
+   note("k 越大 J 越小（全局最优意义下）⇒ 不能用「J 最小」选 k",640,425,"g");},"三个关于 J 的坑：<b>① 它是求和不是平均</b>，点越多越大，所以<b>只能在同一份数据、同一套特征与缩放下比较</b>——拿标准化前后的 J 比大小是没有意义的，两者根本不在同一量纲上。<b>② k 越大 J 越小</b>（全局最优意义下；k=n 时 J=0），所以<s>不能用「J 最小」来选 k</s>。<b>③ 低 J ≠ 有意义的分组</b>。");
+  SUM(0,4,{h:"★★ 目标函数 J = 簇内平方和",k:"<b>J = Σᵢ‖xᵢ − μ_c(i)‖²</b>。CS229 叫 distortion function，课件/sklearn 叫 <b>inertia / WCSS</b>，同一个东西。",m:"几何上是「每个点到自己质心的连线」的平方和，直接鼓励<b>簇内紧凑</b>；<s>不显式要求簇间分离</s>。",w:"<s>J 是平均</s>（是求和）· <s>跨缩放比 J</s>（不同量纲）· <s>用 J 最小选 k</s>（k 越大 J 越小）。",e:"大题常问「分配与更新这两步在减小什么」——答 <b>J（inertia / WCSS）</b>，并补一句它只说明紧凑、不证明分组有意义。"});
+  QUIZ(0,4,{t:"两次聚类分别在原始数据和标准化后的数据上跑，比较 inertia 得出「标准化后更好」。问题在哪？",o:["inertia 越大越好","两者特征尺度不同，inertia 不在同一量纲上，根本不可比","应该改用 k=3","inertia 只适用于 DBSCAN"],a:1,w:"inertia 是<b>带量纲的平方距离之和</b>。标准化改变了距离的单位，两个数字不在同一尺度上。要比较必须<b>固定特征与缩放</b>，只变 k 或初始化。"});
+});
+KP("5 · ★★★ CS229：K-means 就是坐标下降",function(){
+  S(0,function(){clearScene();setEq("$$J(c,\\mu)\\quad\\text{有<b>两组</b>变量：分配 }c\\text{ 与质心 }\\mu$$","top");
+   note("同时对两组求最优很难；固定一组、优化另一组却很容易",640,410,"b");},"这是<b>课件完全没讲、但能把一切串起来</b>的一句话。看 J(c, μ)：它有<b>两组变量</b>——每个点的<em>分配 c</em>，和每个簇的<em>质心 μ</em>。同时对两组求最优是个困难的组合优化问题（实际上是 NP-难的）。但是——<b>固定其中一组、优化另一组，却都有闭式的最优解</b>。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(130,140,470,96,"固定 μ，优化 c","b");note("每点选最近的质心 = <分配步>",365,258,"b");
+   boxNode(670,140,470,96,"固定 c，优化 μ","g");note("每簇取均值 = <更新步>",905,258,"g");
+   note("⭐ 这两步<就是>K-means 的两步",640,380,"y");
+   note("所以：K-means = 对 J 做<坐标下降>",640,440,"v");},"<b>固定 μ 优化 c</b>：每个点应该选哪个质心才让自己那一项最小？<em>最近的那个</em>——<b>这就是分配步</b>。<b>固定 c 优化 μ</b>：一簇点固定了，哪个位置使平方距离和最小？<em>它们的均值</em>——<b>这就是更新步</b>。⭐ 所以 CS229 的原话是：<b>K-means 正是对 J 做坐标下降</b>（coordinate descent）——轮流固定一组变量、优化另一组。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,150,1000,66,"为什么「均值」正好是最优？","g");
+   note("对固定的一组点，使 Σ‖xᵢ − c‖² 最小的 c 就是它们的均值",640,290,"g");
+   note("（对 c 求导令零：Σ 2(c − xᵢ) = 0 ⇒ c = 均值）",640,355,"");
+   note("⇒ 更新步不是「经验做法」，是那一步的<严格最优解>",640,425,"y");},"为什么更新步取<b>均值</b>而不是中位数或别的？因为这是<b>最小二乘的基本性质</b>：对一组固定的点，使 <b>Σ‖xᵢ − c‖²</b> 最小的 c <em>就是它们的均值</em>（对 c 求导令零，立刻得到）。所以<b>更新步不是经验做法，而是「固定分配」这个子问题的严格最优解</b>。同理，分配步也是「固定质心」子问题的严格最优解。");
+  SUM(0,5,{h:"★★★ K-means = 对 J 做坐标下降",k:"J 有<b>两组变量</b>（分配 c、质心 μ）。<b>固定 μ 优化 c = 分配步</b>；<b>固定 c 优化 μ = 更新步</b>。两步各自都是子问题的<b>严格最优解</b>。",m:"更新取均值的依据是最小二乘：对固定一组点，使 Σ‖xᵢ−c‖² 最小的 c 就是均值。",w:"<s>以为两步只是「合理的启发式」</s>——它们是坐标下降的两个精确子问题解。这正是收敛性的来源。",e:"被问「为什么更新步取均值」时，答<b>「因为均值是使簇内平方和最小的点」</b>，比说「因为要取中心」高一个层次。"});
+  QUIZ(0,5,{t:"为什么 K-means 的更新步取「均值」而不是别的位置？",o:["因为均值一定落在簇的中心","因为均值计算最快","因为惯例如此","因为对一组固定的点，均值正是使平方距离之和最小的那个点"],a:3,w:"这是最小二乘的基本性质：<b>argmin_c Σ‖xᵢ − c‖² = 均值</b>（对 c 求导令零即得）。所以更新步是「固定分配」这个子问题的<b>严格最优解</b>，不是经验做法——这也是 J 在这一步不会增加的原因。"});
+});
+KP("6 · ★★★ 为什么必然收敛",function(){
+  S(0,function(){clearScene();setEq(null);
+   boxNode(130,145,470,86,"分配步","b");note("每点去最近质心 ⇒ J <不增>",365,253,"b");
+   boxNode(670,145,470,86,"更新步","g");note("取均值（子问题最优）⇒ J <不增>",905,253,"g");
+   note("⇒ J 单调不增",640,360,"y");
+   note("但「单调不增」还不足以保证会<停下来>",640,425,"r");},"收敛性论证分两半。<b>第一半</b>：由上一个知识点，两步都是各自子问题的最优解，所以<b>两步都不会让 J 增加</b> ⇒ <b>J 单调不增</b>。但请注意——<s>单调不增本身还不够</s>：一个单调下降的量完全可以无限下降下去、永不停止（比如每次减一半）。还差一个条件。");
+  S(0,function(){clearScene();setEq("$$\\text{把 }n\\text{ 个点分到 }k\\text{ 个簇的方式：至多 }k^{n}\\text{ 种（<b>有限</b>）}$$","top");
+   note("每个不同的分配，对应一个确定的 J 值",640,400,"b");
+   note("⇒ J 只能取<有限>多个值",640,455,"g");},"<b>第二半，也是关键的一半</b>：把 n 个点分到 k 个簇，可能的<b>分配方式只有有限多种</b>（至多 kⁿ）。而每一个确定的分配，配上它的最优质心（均值），就对应一个<em>确定的 J 值</em>。所以 <b>J 只能取有限多个值</b>。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"J 单调不增　＋　J 只能取有限多个值","g");
+   note("⇒ 不可能无限下降 ⇒ <必然在有限步内停下>",640,265,"g");
+   note("停下的标志：分配不再变化（此时质心也不再变）",640,335,"b");
+   note("⭐ 这就是完整论证。课件只说了前半句「不会增加」",640,420,"y");},"<b>两半合起来</b>：J 单调不增，而且只能取有限多个值 ⇒ <b>它不可能无限下降 ⇒ 算法必然在有限步内停下</b>。停下的标志是分配不再变化（此时质心也不再动）。⭐ 这就是完整论证。你们课件只写了「the objective cannot increase」——<b>那只是前半句</b>；缺了「取值有限」这一半，严格来说推不出收敛。答大题时把两句都写上。");
+  S(0,function(){clearScene();setEq(null);setCap("J 随迭代的典型轨迹");
+   var vs=[86,52,38,33,31,31,31];
+   var JX=function(i){return 300+112*i;},JY=function(v){return 440-(v/92)*272;};
+   link(JX(0)-26,JY(0),JX(6)+30,JY(0));link(JX(0)-26,JY(0),JX(0)-26,JY(95));
+   curve(vs.map(function(v,i){return [JX(i),JY(v)];}),"fit y");
+   dots(vs.map(function(v,i){return [JX(i),JY(v)];}),"a",8);
+   vs.forEach(function(v,i){note(String(i),JX(i),JY(0)+24,"");});
+   note("迭代轮次",JX(6)+72,JY(0)+5,"","start");note("J",JX(0)-26,JY(95)-18,"");
+   note("台阶只能往下走，而且台阶<总数有限> ⇒ 一定会踩到平台",640,492,"g");},"把两半画成一张图：J 的轨迹是<b>阶梯式下降</b>——每一轮要么降、要么持平，<s>永远不会往上跳</s>；而且因为可能的分配只有有限多种，<b>台阶的总数是有限的</b>，所以它不可能一直降下去，必然踩到某个平台停住。⚠️ 但请特别注意：<b>这个平台的高度不一定是最低的那个</b>——图上这条曲线停在 31，完全可能另一组初始质心会停在更低的地方。下一个知识点就讲这件事。");
+  SUM(0,6,{h:"★★★ 收敛性的完整论证",k:"<b>① 两步都不增加 J（各是子问题最优解）② 分配方式只有有限多种 ⇒ J 只能取有限多个值</b>。两者合起来 ⇒ <b>必然在有限步内停下</b>。",m:"单调不增<b>本身不足以</b>保证停止（可以无限下降）；必须配上「取值有限」。",w:"课件只说了「目标不会增加」，<s>那只是前半句</s>。答题时两句都要有。",e:"「为什么 K-means 一定收敛」是高频问答。标准答法就是上面两句，再补一句「但 J 非凸，停的地方只是局部极小」。"});
+  QUIZ(0,6,{t:"「K-means 每步都不增加目标函数，所以一定收敛」——这个论证缺了什么？",o:["缺了「可能的分配方式只有有限多种，所以 J 只能取有限多个值」","什么都不缺，论证已完整","缺了「k 必须大于 1」","缺了「目标函数非负」"],a:0,w:"单调不增的量<b>可以无限下降而不停止</b>。必须再加上：把 n 个点分到 k 个簇的方式<b>有限</b>，因此 J 的可能取值有限，才能推出在有限步内停下。非负性不足以保证停止（可以无限逼近下界）。"});
+});
+KP("7 · ★★ J 非凸：停下 ≠ 停对",function(){
+  S(0,function(){clearScene();setCap("同一份数据，两种都「稳定」的分法");ax();
+   var Q=[[-2,-1],[-2,1],[2,-1],[2,1]];
+   P(Q,"a",11);
+   note("A",PX(-2)-22,PY(-1)+5,"");note("B",PX(-2)-22,PY(1)+5,"");
+   note("C",PX(2)+22,PY(-1)+5,"","start");note("D",PX(2)+22,PY(1)+5,"","start");},"举讲义那个最小的例子：四个点 A(−2,−1)、B(−2,1)、C(2,−1)、D(2,1)，取 k=2。它有<b>两种都能「稳定下来」的分法</b>——都满足「再迭代也不变」，但质量差得远。");
+  S(0,function(){clearScene();setCap("分法一：左右分 {A,B} | {C,D}");ax();
+   var Q=[[-2,-1],[-2,1],[2,-1],[2,1]];
+   P(Q,"a",11);cen([[-2,0],[2,0]],"c");
+   assign(Q,[[-2,0],[2,0]],[0,0,1,1]);
+   note("每条连线长 1 ⇒ J = 4×1² = 4",PX(0),PY(-3),"g");},"<b>分法一</b>：左右分成 {A,B} 和 {C,D}。质心是 (−2,0) 和 (2,0)，每个点到自己质心的距离都是 1，所以 <b>J = 4×1² = 4</b>。");
+  S(0,function(){clearScene();setCap("分法二：上下分 {A,C} | {B,D}");ax();
+   var Q=[[-2,-1],[-2,1],[2,-1],[2,1]];
+   P(Q,"a",11);cen([[0,-1],[0,1]],"c");
+   assign(Q,[[0,-1],[0,1]],[0,1,0,1]);
+   note("每条连线长 2 ⇒ J = 4×2² = 16",PX(0),PY(-3),"r");},"<b>分法二</b>：上下分成 {A,C} 和 {B,D}。质心是 (0,−1) 和 (0,1)，每个点到自己质心的距离是 2，所以 <b>J = 4×2² = 16</b>。<b>四倍于分法一</b>——明显更差。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,470,86,"J = 4","g");note("{A,B} | {C,D}　更优",375,248,"g");
+   boxNode(670,140,470,86,"J = 16","r");note("{A,C} | {B,D}　更差但同样「稳定」",905,248,"r");
+   note("⚠ 两者都满足「再迭代也不变」⇒ 都是<局部极小>",640,370,"y");
+   note("落到哪一个，完全取决于<初始质心>",640,435,"v");},"关键在于：<b>分法二同样满足「再迭代也不变」</b>——它是一个<b>局部极小</b>，算法到那儿就停了，不会自己爬出来。落到哪一个<b>完全取决于初始质心</b>。这就是「J 非凸」的实际后果：<b>算法必然停下，但不保证停在全局最优</b>。所以下一页要讲怎么防。");
+  SUM(0,7,{h:"★★ J 非凸 ⇒ 局部极小",k:"四点例子：{A,B}|{C,D} 的 <b>J=4</b>，{A,C}|{B,D} 的 <b>J=16</b>——<b>两者都稳定</b>，后者是更差的局部极小。",m:"落到哪个解<b>完全取决于初始质心</b>。算法保证停下，<s>不保证停对</s>。",w:"<s>「收敛了就是找到最优解了」</s>。收敛只说明不再变化，不说明质量。",e:"大题问「同一份数据两次运行结果不同，说明什么」——答<b>J 非凸、存在多个局部极小、结果依赖初始化</b>，再给出应对（k-means++ 与多次重启）。"});
+  QUIZ(0,7,{t:"同一份数据、同一个 k，两次运行得到明显不同的分组。最合理的解读是？",o:["算法没有收敛","J 非凸，不同初始质心收敛到了不同的局部极小","k 一定选错了","数据有错误"],a:1,w:"K-means <b>必然收敛</b>，但收敛到的是<b>局部</b>极小，落点取决于初始质心。这是有用的诊断信息（说明存在多个竞争解），应对办法是 k-means++ 加多次重启并保留 inertia 最低的那次。"});
+});
+KP("8 · k-means++ 与多次重启",function(){
+  S(0,function(){clearScene();setCap("k-means++：让起始质心<b>互相远离</b>");ax();
+   var A=[[-2.6,1.4],[-2.1,2.0],[-1.7,1.2],[1.8,-1.3],[2.4,-0.8],[1.9,-1.9],[2.7,-1.6],[0.1,0.2]];
+   P(A,"a",9);cen([[-2.1,1.5],[2.2,-1.4]],"c");
+   note("第一个质心随机取自数据；之后偏好<离已选质心远>的点",PX(0),PY(-3.4),"g");},"<b>k-means++</b> 是默认的初始化策略：第一个质心<em>随机取自数据点</em>，之后每一个新质心都<b>偏好离已选质心远的点</b>（按距离平方加权抽样）。效果是起始质心<b>散开</b>，大幅降低落进坏局部极小的概率——比如上一页那个「上下分」的坏解，就是起始质心挤在一起才会出现。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"n_init = 10：做 <b>10 次完整拟合</b>，保留 inertia 最低的那次","g");
+   note("⚠ 不是迭代 10 轮 —— 是<独立重启>10 次",640,265,"r");
+   note("每次重启都用新的随机初始质心，各自跑到收敛",640,335,"b");
+   note("最后在 10 个结果里挑 J 最小的交出来",640,405,"y");},"<b>第二道防线是多次重启</b>。sklearn 的 <b>n_init=10</b> 表示：用 10 组不同的初始质心，<b>各做一次完整拟合</b>（每次都跑到收敛），最后<b>保留 inertia 最低的那一次</b>。⚠️ <b>这是高频混淆点</b>：n_init <s>不是</s>迭代次数，而是<b>独立重启的次数</b>。控制迭代次数的是 max_iter。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(150,150,470,86,"k-means++","b");note("让起点<散开>",385,258,"b");
+   boxNode(670,150,470,86,"n_init = 10","g");note("<多试几次>，取最好的",905,258,"g");
+   note("两者是互补的：一个改善单次起点，一个用重复来兜底",640,380,"y");
+   note("⚠ 都只是「降低风险」，<不保证>全局最优",640,440,"r");},"两道防线是<b>互补</b>的：k-means++ 改善<em>单次</em>的起点质量，n_init 用<em>重复</em>来兜底。⚠️ 但都要说清楚：它们<b>只是降低风险，不保证全局最优</b>。答题时如果只写「用 k-means++ 就解决了」是不够的——正确表述是<b>「用 k-means++ 并设 n_init 多次重启，比较各次的成员与 inertia」</b>。");
+  SUM(0,8,{h:"两道防线：k-means++ 与 n_init",k:"<b>k-means++</b>：第一个质心随机取自数据，之后偏好<b>离已选质心远</b>的点 ⇒ 起点散开。<b>n_init=10</b>：<b>独立重启 10 次</b>，保留 inertia 最低的。",m:"一个改善单次起点，一个用重复兜底，互补。",w:"<s>n_init 是迭代次数</s>——它是<b>重启次数</b>，迭代次数是 max_iter。<s>用了就保证全局最优</s>——只是降低风险。",e:"选择题几乎必考 n_init 的含义。大题写应对措施时要把两条都写上，并注明「不保证全局最优」。"});
+  QUIZ(0,8,{t:"sklearn 中 n_init=10 的含义是？",o:["保留 10 个候选簇","用 10 组不同初始质心各做一次完整拟合，保留 inertia 最低的那次","最多迭代 10 轮","最多允许 10 个簇"],a:1,w:"<b>n_init 是独立重启次数</b>，每次都跑到收敛，最后取 inertia 最低的结果。控制单次迭代上限的是 <b>max_iter</b>。这是高频混淆点。"});
+});
+KP("9 · 一轮手算：{1, 2, 8, 9}",function(){
+  S(0,function(){clearScene();setCap("四个一维观测，k=2，初始质心 <b>1</b> 和 <b>8</b>");
+   kline();kpts([1,2,8,9],"a",11);kcen([1,8],"c");
+   note("初始质心画成竖线",KX(5),KY-60,"y");},"把流程用讲义那个最小的例子走一遍。四个一维观测 <b>{1, 2, 8, 9}</b>，取 k=2，题目给定初始质心 <b>μ₁=1</b> 和 <b>μ₂=8</b>。一维的好处是所有距离用心算就能比，适合把流程记牢。");
+  S(0,function(){clearScene();setCap("① 分配：比较每个点到两个质心的距离");
+   kline();kpts([1,2],"a",11);kpts([8,9],"b",11);kcen([1,8],"c");
+   note("1→|1−1|=0 vs |1−8|=7 ⇒ 归 μ₁",KX(2.4),KY-58,"g","start");
+   note("2→1 vs 6 ⇒ 归 μ₁　8→7 vs 0 ⇒ 归 μ₂　9→8 vs 1 ⇒ 归 μ₂",KX(2.4),KY-30,"g","start");},"<b>分配步</b>：逐点比较。1 到两质心的距离是 0 与 7 ⇒ 归 μ₁；2 是 1 与 6 ⇒ 归 μ₁；8 是 7 与 0 ⇒ 归 μ₂；9 是 8 与 1 ⇒ 归 μ₂。得到 <b>C₁={1,2}</b>、<b>C₂={8,9}</b>。手算时可以只比<b>平方距离</b>不开根号（单调不改变大小关系），Tutorial 明确允许。");
+  S(0,function(){clearScene();setCap("② 更新：各簇取均值");
+   kline();kpts([1,2],"a",11);kpts([8,9],"b",11);kcen([1.5,8.5],"c");
+   note("μ₁ = (1+2)/2 = 1.5",KX(1.5),KY-56,"g");
+   note("μ₂ = (8+9)/2 = 8.5",KX(8.5),KY-56,"g");},"<b>更新步</b>：μ₁ = (1+2)/2 = <b>1.5</b>，μ₂ = (8+9)/2 = <b>8.5</b>。注意质心<b>移到了两点中间</b>，不再是原来的数据点——这很正常，质心不必是实际观测。");
+  S(0,function(){clearScene();setEq("$$J=(1-1.5)^2+(2-1.5)^2+(8-8.5)^2+(9-8.5)^2=4\\times 0.25=\\mathbf{1}$$","top");
+   note("再分配一次：分组不变 ⇒ <已收敛>",640,405,"g");
+   note("⚠ 但这不证明 k=2 对这份数据是「正确」的簇数",640,455,"r");},"<b>算 J</b>：四项各是 0.5² = 0.25，所以 <b>J = 1</b>。再做一次分配，分组不会变（1、2 仍离 1.5 近，8、9 仍离 8.5 近）⇒ <b>已收敛</b>。⚠️ 但请注意收尾那一句：<b>这个计算说明了两步为什么不会增加 J，它并不证明 k=2 对这份数据是「正确」的簇数</b>——那是另一个问题。");
+  SUM(0,9,{h:"一轮手算的标准流程",k:"{1,2,8,9}，k=2，初始 1 与 8 → 分配 {1,2},{8,9} → 更新 <b>1.5</b> 与 <b>8.5</b> → <b>J = 1</b> → 再分配不变，收敛。",m:"比较距离时<b>可以只比平方距离</b>；质心<b>不必是实际观测</b>。",w:"<s>边分边更新</s>；<s>把「收敛了」当成「k 选对了」</s>——两个不同的问题。",e:"大题第一问的原型。必写：题目给的初始质心、每点的距离比较、更新后的质心、以及这两步在减小 J。"});
+  QUIZ(0,9,{t:"观测 {1, 2, 8, 9}，k=2，初始质心 1 和 8。完成一轮后两个质心是？",o:["2 和 9","1 和 8","1.5 和 8.5","4.5 和 5.5"],a:2,w:"分配得 {1,2} 与 {8,9}；更新取均值：<b>(1+2)/2 = 1.5</b>，<b>(8+9)/2 = 8.5</b>。此时 J = 4×0.25 = 1，再分配一次分组不变即收敛。"});
+});
+KP("10 · ★★ 稳定性：比成员，不比标签号",function(){
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:4,cols:4,x:150,y:150,cw:225,ch:62,labelCls:"y",label:"三次运行的结果（讲义原表）",
+     hl:function(i,j){return (i===3)?"hl3":((i>0&&j===2)?"hl2":"");},
+     cell:function(i,j){return [["运行","A,B,C,D 的标签","成员分组","inertia"],
+       ["1","0, 0, 1, 1","{A,B} | {C,D}","4"],
+       ["2","1, 1, 0, 0","{A,B} | {C,D}","4"],
+       ["3","0, 1, 0, 1","{A,C} | {B,D}","16"]][i][j];}});},"回到四点例子，看三次运行的结果。<b>运行 1 和运行 2 的标签序列完全不同</b>（0,0,1,1 vs 1,1,0,0），但<b>成员分组一模一样</b>，inertia 都是 4。运行 3 才是真正不同的解。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"⚠ 簇的编号是<任意的> —— 0 和 1 互换不改变任何东西","r");
+   note("按标签逐个比对 ⇒ 会把运行 1 和运行 2 误判成「不同的结果」",640,265,"r");
+   note("正确做法：比较「哪些点被分在了一起」= <标签无关>的比较",640,340,"g");
+   note("运行 1 ≡ 运行 2（同一个解）　运行 3 = 另一个更差的解",640,410,"y");},"<b>这是评估稳定性时最容易犯的错</b>：簇的编号是<b>任意的</b>——算法给第一个簇编 0 还是 1 毫无意义。如果你逐个比对标签，就会把运行 1 和运行 2 <s>误判成「两个不同的结果」</s>，从而错误地断定「结果不稳定」。<b>正确做法是比较「哪些点被分在了一起」</b>，这是一个<b>标签无关（label-invariant）</b>的比较。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(150,145,470,86,"重复<随机种子>","b");note("探测<优化>的敏感性",385,253,"b");
+   boxNode(670,145,470,86,"重复<抽样>","g");note("探测<采样>的稳定性",905,253,"g");
+   note("两者问的是不同的问题，都要做",640,370,"y");
+   note("⚠ 但任何一个都<不能>单独证明这些簇在领域上有意义",640,435,"r");},"还要分清两种「重复」：<b>换随机种子</b>重跑，探测的是<b>优化过程</b>的敏感性（会不会落到不同局部极小）；<b>重采样</b>数据重跑，探测的是<b>采样</b>的稳定性（换一批样本结论还在不在）。两者问的问题不同，都该做。⚠️ 讲义还补了一句：<b>任何一个都不能单独证明这些簇在领域上有意义</b>——稳定只是必要条件。");
+  SUM(0,10,{h:"★★ 稳定性要做标签无关的比较",k:"标签 0/1 互换但<b>成员相同</b> ⇒ 同一个解。逐个比标签会<b>误判为不稳定</b>。要比<b>哪些点被分在一起</b>。",m:"<b>换种子</b>探测优化敏感性；<b>重采样</b>探测采样稳定性。两者问的不是同一件事。",w:"<s>用标签一致率衡量稳定性</s>。<s>稳定就等于有意义</s>——稳定只是必要条件。",e:"大题给出「两次运行标签不同」的情形时，先问一句<b>成员是否相同</b>，再下结论。"});
+  QUIZ(0,10,{t:"两次 K-means 运行给出标签 (0,0,1,1) 与 (1,1,0,0)。正确的判断是？",o:["结果不稳定，需要更多重启","两次是同一个解——成员分组完全相同，只是簇编号互换","说明 k 选大了","第二次运行失败了"],a:1,w:"簇编号是<b>任意的</b>。这两次都把 {A,B} 和 {C,D} 分在一起，<b>成员完全相同</b>，inertia 也相同，是<b>同一个解</b>。比较稳定性必须做<b>标签无关</b>的比较。"});
+});
+KP("11 · inertia、肘部，与它们的边界",function(){
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:4,cols:4,x:170,y:150,cw:240,ch:62,labelCls:"b",label:"讲义给的示例（同一份数据）",
+     hl:function(i,j){return (i===2)?"hl2":"";},
+     cell:function(i,j){return [["k","inertia","silhouette","解读"],
+       ["2","142","0.58","较粗的分组"],
+       ["3","76","0.64","有力的候选"],
+       ["4","55","0.52","更细但分离更差"]][i][j];}});},"看讲义给的这张表。从 k=2 到 k=3，<b>inertia 从 142 掉到 76</b>（降幅很大），silhouette 也从 0.58 升到 0.64；再到 k=4，inertia 只从 76 掉到 55，<b>silhouette 反而降到 0.52</b>。综合看 <b>k=3</b> 是有力的候选。");
+  S(0,function(){clearScene();setCap("肘部法：找「再加簇也不太划算」的转折");
+   var pts=[[2,142],[3,76],[4,55],[5,44],[6,38],[7,34]];
+   var MX=function(k){return 300+110*(k-2);},MY=function(v){return 440-(v/142)*270;};
+   link(MX(2)-20,MY(0),MX(7)+20,MY(0));link(MX(2)-20,MY(0),MX(2)-20,MY(152));
+   curve(pts.map(function(p){return [MX(p[0]),MY(p[1])];}),"fit y");
+   dots(pts.map(function(p){return [MX(p[0]),MY(p[1])];}),"a",8);
+   pts.forEach(function(p){note(String(p[0]),MX(p[0]),MY(0)+24,"");});
+   note("k",MX(7)+34,MY(0)+5,"","start");note("inertia",MX(2)-20,MY(152)-18,"");
+   dots([[MX(3),MY(76)]],"c",12);note("肘部",MX(3)+34,MY(76)-14,"g","start");},"<b>肘部法</b>就是在这条曲线上找「再加簇也不太划算」的转折点。⚠️ 但它是<b>一个判断，不是一条规则</b>：很多真实数据<em>根本没有明显的肘部</em>，曲线是平滑下滑的。这时候强行指认一个肘部是没有依据的。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"⚠ 全局最优的 inertia 随 k 增大<不会上升>（k=n 时为 0）","r");
+   note("所以「inertia 最小」永远指向 k=n，毫无信息",640,255,"r");
+   note("⚠ 另一条容易忽略：<实际拟合>的多次运行会落进不同局部极小",640,330,"y");
+   note("⇒ 你<观测到>的 inertia 未必随 k 单调下降 —— 那不是 bug",640,400,"v");
+   note("⇒ 用 n_init 多次重启后再比较，才是可比的",640,455,"g");},"两条边界要分清楚。<b>第一</b>：<em>全局最优</em>的 inertia 随 k 增大不会上升（k=n 时每点一簇、J=0），所以<s>「inertia 最小」永远指向 k=n</s>，毫无信息。<b>第二条更细致</b>：<em>实际拟合</em>时多次运行会落进不同局部极小，所以<b>你观测到的 inertia 未必随 k 单调下降</b>——看到 k 变大 inertia 反而上升，<s>那不是 bug</s>，是局部极小造成的。要比较就得<b>先用 n_init 多次重启</b>，让每个 k 都尽量接近它的最优。");
+  SUM(0,11,{h:"inertia 与肘部：能用，但有边界",k:"讲义示例：k=2(142, 0.58) → k=3(<b>76, 0.64</b>) → k=4(55, 0.52)。<b>k=3</b> 是有力候选。",m:"<b>全局最优</b>的 inertia 随 k 不上升 ⇒ 最小值永远在 k=n；<b>实际拟合</b>因局部极小，观测值未必单调。",w:"<s>用 inertia 最小选 k</s>；<s>硬指认肘部</s>——很多数据没有明显肘部，肘部是判断不是规则。",e:"给一张 k–inertia–silhouette 表让你选 k，是标准题型。答题要同时用<b>两个指标 + 稳定性 + 领域意义</b>。"});
+  QUIZ(0,11,{t:"某人发现 k 从 4 增到 5 时，实际跑出来的 inertia 反而上升了。最可能的原因是？",o:["不同 k 的拟合落进了不同的局部极小；应增加 n_init 后再比较","计算错误，inertia 必须单调下降","说明 k=4 是最优解","数据需要标准化"],a:0,w:"只有<b>全局最优</b>的 inertia 才保证随 k 不上升。<b>实际拟合</b>会落进局部极小，所以观测值可能不单调——这不是 bug。应对是<b>提高 n_init</b> 让每个 k 都接近其最优，再做比较。"});
+});
+KP("12 · ★★★ silhouette：完整定义与算例",function(){
+  S(0,function(){clearScene();setEq("$$a(i)=\\frac{1}{|C_r|-1}\\sum_{j\\in C_r,\\,j\\neq i} d(x_i,x_j)$$","top");
+   note("a(i)：到<同簇其他点>的平均距离 —— ⚠ 把自己排除在外",640,400,"b");
+   note("d 通常是欧氏距离，<不平方>",640,455,"y");},"silhouette 的定义分三步。<b>第一步 a(i)</b>：点 i 到<b>同簇其他点</b>的平均距离。⚠️ 两个细节：分母是 <b>|C_r| − 1</b>，因为<b>要把自己排除在外</b>；而且这里的 d 是普通欧氏距离，<b>不平方</b>（和 inertia 不同）。a(i) 小 = 它和自己人挨得近。");
+  S(0,function(){clearScene();setEq("$$b(i)=\\min_{t\\neq r}\\ \\Big[\\frac{1}{|C_t|}\\sum_{j\\in C_t} d(x_i,x_j)\\Big]$$","top");
+   note("对<每一个>其他簇算平均距离，取其中<最小>的那个",640,400,"g");
+   note("⚠ 是「最近的<簇>」，不是最近的<点>，也不是最近的<质心>",640,455,"r");},"<b>第二步 b(i)</b>：对<em>每一个</em>其他簇，算点 i 到<b>该簇全部点</b>的平均距离；然后取这些平均值里<b>最小</b>的那个。⚠️ 这里有个常见误解：b(i) 用的是<b>最近的「簇」（按平均点对点距离）</b>，<s>不是最近的单个点</s>，也<s>不是最近的质心</s>。b(i) 大 = 离最近的邻居簇也很远。");
+  S(0,function(){clearScene();setEq("$$s(i)=\\frac{b(i)-a(i)}{\\max\\{a(i),\\,b(i)\\}}\\ \\in[-1,1]\\ ,\\qquad S=\\frac{1}{n}\\sum_i s(i)$$","top");
+   note("a ≪ b ⇒ 接近 +1（匹配得好）",640,390,"g");
+   note("a ≈ b ⇒ 接近 0（边界 / 重叠）",640,430,"y");
+   note("a > b ⇒ <负值>：这个点也许更该属于另一个簇",640,465,"r");},"<b>第三步</b>：s(i) = (b−a)/max(a,b)，范围 <b>−1 到 1</b>。<b>a 远小于 b</b> ⇒ 接近 +1，匹配得好；<b>a 约等于 b</b> ⇒ 接近 0，在边界或重叠区；<b>a 大于 b</b> ⇒ <b>负值，说明这个点也许更该属于另一个簇</b>。整体分数 S 是所有 s(i) 的平均。<b>范围是 −1 到 1 不是 0 到 1</b>，这是选择题爱考的点。");
+  S(0,function(){clearScene();setCap("算例：一维簇 {1, 3} 与 {8, 10}，算点 1 的 s");
+   kline();kpts([1,3],"a",11);kpts([8,10],"b",11);
+   note("a(1) = |1−3| = 2",KX(2),KY-58,"g");
+   note("b(1) = (|1−8| + |1−10|)/2 = (7+9)/2 = 8",KX(6.5),KY-58,"b");
+   note("s(1) = (8 − 2) / max(2,8) = 6/8 = 0.75",KX(5),KY+66,"y");},"用讲义的算例走一遍。一维两个簇 {1,3} 与 {8,10}，算点 1 的 silhouette。<b>a(1)</b>：同簇只有 3 这一个「其他点」，所以 a = |1−3| = <b>2</b>。<b>b(1)</b>：到另一簇两个点的平均 = (|1−8| + |1−10|)/2 = (7+9)/2 = <b>8</b>。<b>s(1)</b> = (8−2)/max(2,8) = 6/8 = <b>0.75</b>。把四个点各算一遍再平均，就是整体分数。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"⚠ silhouette <偏爱紧凑的凸形簇>","r");
+   note("对弯曲的、密度型的、大小悬殊的组，它会给出<误导性的排序>",640,260,"r");
+   note("评估 DBSCAN 时：必须<先排除噪声点（−1）>，并报告排除比例",640,335,"y");
+   note("计算条件：簇数要在 2 到 n−1 之间；独点簇按约定记 0",640,405,"b");
+   note("⇒ 它是有用的证据，但<不能单独>作为裁判",640,458,"g");},"最后说边界。<b>silhouette 偏爱紧凑的凸形簇</b>——因为它的构造完全建立在「到簇内/簇外点的平均距离」上。对<b>弯曲的、密度型的、大小悬殊的</b>组，它会给出<b>误导性的排序</b>，甚至偏袒一个几何上明显更差的划分。还有两条实务规则：评估 DBSCAN 时<b>必须先排除噪声点（标签 −1）并报告排除比例</b>；整体分数要求簇数在 2 到 n−1 之间，独点簇按约定记 0。");
+  SUM(0,12,{h:"★★★ silhouette 的三步与边界",k:"<b>a(i)</b>=到同簇其他点的平均距离（<b>排除自己</b>，分母 |C|−1）· <b>b(i)</b>=到<b>最近的另一个簇</b>全部点的平均距离 · <b>s=(b−a)/max(a,b) ∈ [−1,1]</b>。",m:"算例：{1,3}|{8,10}，点 1 的 a=2、b=8、<b>s=0.75</b>。负值表示该点也许更该属于另一个簇。",w:"<s>范围是 0 到 1</s>（是 −1 到 1）· <s>b 用最近的点或最近的质心</s>（用最近的<b>簇</b>的平均）· <s>评 DBSCAN 时把噪声算进去</s>（要排除并报告比例）。",e:"⚠️ 评估框架页明说<b>不要求你推导 silhouette / AIC / BIC 的公式</b>，考的是<b>会不会解读</b>——所以 a、b 的含义要懂，公式本身不用背。<b>「silhouette 偏爱凸形簇」</b>才是每道评价大题的必写句，尤其题干出现弯曲结构时。"});
+  QUIZ(0,12,{t:"计算 b(i) 时，应该用到哪个量？",o:["到每个其他簇全部点的平均距离中，最小的那个","到最近质心的距离","到所有其他点的平均距离","到最近的单个点的距离"],a:0,w:"b(i) 是<b>按簇</b>算的：对每一个其他簇求「点 i 到该簇全部点的平均距离」，再取这些平均值的<b>最小值</b>。它用的是最近的<b>簇</b>，<s>不是最近的点，也不是质心</s>——这是定义里最容易记错的一处。"});
+});
+KP("13 · ★★ 选 k：多证据一起看",function(){
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:4,cols:4,x:150,y:145,cw:238,ch:66,labelCls:"y",label:"讲义的决策表（注意结论）",
+     hl:function(i,j){return (i===2)?"hl2":((i===3&&j===2)?"hl3":"");},
+     cell:function(i,j){return [["候选","内部证据","稳定性","应用证据"],
+       ["k=2","silhouette 0.58","稳定","合并了专家要区分的两组"],
+       ["k=3","silhouette 0.55","稳定","三组解释得通"],
+       ["k=4","silhouette 0.59（最高）","不稳定","有个小组每次都在变"]][i][j];}});},"这张表要记住它的<b>形状</b>。<b>silhouette 最高的是 k=4（0.59）</b>——但它<b>不稳定</b>，有个小组每次运行都在变；<b>k=2 稳定</b>，却把专家要区分的两组合并了；<b>k=3</b> 的 silhouette 只有 0.55，三项里不是任何一项的冠军。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,150,1000,66,"最终选 k = 3 —— 因为<多路证据一起支持它>","g");
+   note("不是因为它某个分数最高，而是因为它在三类证据上都站得住",640,300,"g");
+   note("⭐ 讲义的收尾原话：这是 a reasoned judgement, not proof",640,375,"y");
+   note("⇒ 答题时这一句必须写，它划出了结论的边界",640,435,"v");},"<b>最后选的是 k=3</b>，理由不是「某个分数最高」，而是<b>多路证据一起支持它</b>。⭐ 讲义的收尾原话值得背下来：这是 <b>a reasoned judgement, not proof</b>（有依据的判断，不是证明）。答大题时这一句<b>必须写</b>——它划出了你结论的边界，是「说出证据的局限」那一步的标准落点。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(120,140,500,60,"① 内部证据（inertia 肘部 / silhouette）","b");
+   boxNode(660,140,500,60,"② 稳定性（换种子 / 重采样 / 邻近 k）","g");
+   boxNode(120,215,500,60,"③ 几何与表示（看图 / 缩放 / 特征）","v");
+   boxNode(660,215,500,60,"④ 领域有用性（簇讲不讲得通）","y");
+   note("答「该选哪个 k」时，逐条给出证据再下结论",640,330,"");
+   note("⚠ 只报一个 silhouette 就下结论 = 最多拿一半分",640,400,"r");},"把它整理成答题骨架：<b>① 内部证据 ② 稳定性 ③ 几何与表示 ④ 领域有用性</b>。被问「该选哪个 k」或「这个聚类结论可信吗」，就逐条给出证据、最后下一个<b>带边界的</b>结论。⚠️ <b>只报一个 silhouette 就下结论，最多拿一半分</b>——这是评估文档反复强调的。");
+  SUM(0,13,{h:"★★ 选 k 的决策表",k:"讲义表：k=4 <b>silhouette 最高但不稳定</b> → 否；k=2 稳定但合并了要区分的组 → 否；<b>选 k=3</b>，因多路证据一致。",m:"四类证据：<b>内部指标 / 稳定性 / 几何与表示 / 领域有用性</b>。",w:"<s>挑分数最高的</s>。收尾必须写 <b>a reasoned judgement, not proof</b>。",e:"「评价某个聚类结论」的大题按这四条逐条扫，每条都能拿分；最后那句边界话是「局限」那一步。"});
+  QUIZ(0,13,{t:"某次比较中，k=4 的 silhouette 最高但结果不稳定，k=3 稍低但稳定且可解释。应该怎么选？",o:["两个都不选，改用 DBSCAN","选 k=4，分数最高","选 k=3，因为多路证据一起支持它；并说明这是有依据的判断而非证明","取平均，选 k=3.5"],a:2,w:"这正是讲义决策表的结论。<b>单一指标最高不足以取胜</b>——不稳定意味着那个划分可能只是某次初始化的偶然产物。选 k=3 并注明 <b>a reasoned judgement, not proof</b>。"});
+});
+KP("14 · K-means 的五个软肋",function(){
+  S(0,function(){clearScene();setEq(null);
+   boxNode(120,135,500,58,"① k 必须事先指定","y");
+   boxNode(660,135,500,58,"② 尺度：大量纲特征主导距离","r");
+   boxNode(120,205,500,58,"③ 初始化：不同起点 → 不同局部极小","v");
+   boxNode(660,205,500,58,"④ 形状：非球形/弯曲的组会被切开","b");
+   boxNode(120,275,500,58,"⑤ 离群点：把均值质心拽偏","r");
+   note("而且每个点<必须>有标签 —— 没有「噪声」这个选项",640,375,"y");
+   note("⇒ 这五条就是评价 K-means 结果的现成清单",640,435,"g");},"把 K-means 的适用边界整理成一张清单：<b>① k 要事先给 ② 尺度 ③ 初始化 ④ 形状 ⑤ 离群点</b>。还有一条常被忽略：<b>每个点必须有标签</b>——K-means 没有「噪声」这个选项，一个明显的离群点也会被硬塞进某个簇，还会把那个簇的均值质心<b>拽偏</b>。大题问「这个 K-means 结果可靠吗」，逐条点名即可。");
+  S(0,function(){clearScene();setCap("形状：K-means 会把弯曲结构<b>横切</b>");ax();
+   var arc1=[],arc2=[];
+   for(var i=0;i<=14;i++){var t=Math.PI*i/14;
+     arc1.push([-0.6+2.6*Math.cos(t),-0.5+2.0*Math.sin(t)]);
+     arc2.push([0.6+2.6*Math.cos(t+Math.PI),0.5+2.0*Math.sin(t+Math.PI)]);}
+   P(arc1,"a",8);P(arc2,"b",8);
+   curve([[PX(-3.6),PY(-2.6)],[PX(3.6),PY(2.6)]],"fit y");
+   note("K-means 的边界大致是这样一刀 —— 两条弧都被切断",PX(0),PY(-3.4),"r");},"把「形状」这一条画出来：两条互相缠绕的弧（这是聚类里的经典反例）。K-means 假设簇是<b>紧凑、以质心为中心</b>的，两条弧各自<b>没有有意义的「中心」</b>，于是它给出的边界大致就是图上那一刀——<b>把两条弧都切断</b>，得到的两个簇与真实结构完全无关。这正是下半场 DBSCAN 要解决的问题。");
+  S(0,function(){clearScene();setCap("离群点：把均值质心<b>拽偏</b>");ax();
+   var G=[[-2.6,0.8],[-2.2,1.4],[-1.8,0.6],[-2.4,0.2],[-1.6,1.2]];
+   P(G,"a",9);
+   cen([[-2.12,0.84]],"c");note("原本的质心",PX(-2.12),PY(-0.7),"g");
+   P([[3.4,2.6]],"r",12);note("一个离群点",PX(3.4),PY(3.4),"r");
+   cen([[-1.2,1.133]],"y");note("加进来之后的质心",PX(-1.2),PY(2.4),"y");
+   link(PX(-2.12),PY(0.84),PX(-1.2),PY(1.133));
+   note("⚠ 均值不稳健，而且这个离群点<还是>被硬分进了某个簇",PX(0),PY(-3.4),"r");},"把「离群点」那一条也画出来。五个点原本的质心在左边；加进<b>一个</b>离群点之后，均值被<b>拽向它</b>（x 从 −2.12 移到 −1.2）。⚠️ 双重伤害在于：<b>质心被带偏</b>是一层，<b>这个离群点还是被硬分进了某个簇</b>是第二层——K-means 没有「不归任何簇」这个选项。所以它既<s>不能识别</s>离群点，还会<b>被离群点影响</b>。DBSCAN 在这一点上正好相反。");
+  SUM(0,14,{h:"K-means 的适用边界",k:"五条：<b>k 要事先给 / 尺度 / 初始化 / 形状 / 离群点</b>，外加<b>每点必须有标签</b>（没有噪声选项）。",m:"它假设簇是<b>紧凑、以质心为中心（偏凸形）</b>的。弯曲结构没有有意义的中心，会被<b>横切</b>。",w:"<s>用 K-means 处理弯曲/密度型结构</s>；<s>指望它自动识别离群点</s>。",e:"「这个 K-means 结果可靠吗」的大题，这五条是现成清单，逐条点名逐条得分。"});
+  QUIZ(0,14,{t:"数据由两条互相缠绕的弯曲带状结构组成，用 K-means（k=2）最可能出现什么？",o:["把两条带子横切开，得到与真实结构无关的两个簇","自动把簇数增加到 4","完美分开两条带子","报错无法收敛"],a:0,w:"K-means 假设簇<b>紧凑、以质心为中心</b>。弯曲带状结构没有有意义的中心，算法会沿某个方向<b>横切</b>。这是 DBSCAN 的密度连通更合适的典型情形。"});
+});
+KP("15 · DBSCAN：从「距离」转向「密度」",function(){
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,145,1000,66,"⚠ DBSCAN <不在 CS229 范围内>","v");
+   note("Ng 的无监督部分只讲 k-means、GMM/EM、因子分析、PCA、ICA",640,285,"v");
+   note("所以下半场的深度来自 <Canvas 讲义>，不是 CS229",640,350,"");
+   note("（这也意味着：想补 DBSCAN 的基础，只能看课程自己的材料）",640,420,"y");},"进入下半场前先说清楚一件事：<b>DBSCAN 完全不在 CS229 的范围内</b>。Andrew Ng 的无监督部分只覆盖 k-means、混合高斯与 EM、因子分析、PCA、ICA——<s>没有 DBSCAN</s>。所以接下来这几个知识点的深度<b>来自 Canvas 讲义</b>而不是 CS229。如果你想补 DBSCAN 的基础，只能看课程自己的材料（讲义那页写得比 PPT 细很多）。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(150,145,470,86,"K-means 问","b");note("离<哪个质心>最近？",385,253,"b");
+   boxNode(670,145,470,86,"DBSCAN 问","g");note("你周围<够不够挤>？",905,253,"g");
+   note("换了问题，就换了能表达的形状",640,370,"y");
+   note("密度连通可以沿着弯曲的形状一路长过去",640,435,"v");},"DBSCAN 的出发点是换一个问题。K-means 问的是「你离<b>哪个质心</b>最近」；DBSCAN 问的是「<b>你周围够不够挤</b>」。换了问题，能表达的形状就变了——<b>密度连通可以沿着弯曲的形状一路长过去</b>，因为它从不需要一个「中心」。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(120,140,500,58,"① 不需要预先指定簇数","g");
+   boxNode(660,140,500,58,"② 能找到非质心形状的簇","g");
+   boxNode(120,210,500,58,"③ 允许点不属于任何簇（噪声）","g");
+   boxNode(660,210,500,58,"④ 但要指定 ε 与 MinPts","y");
+   note("⚠ 簇数不用给，<不等于>没有超参数 —— 只是换了两个",640,320,"r");
+   note("⚠ 而且它们比 k 更难凭直觉设定",640,385,"r");
+   note("⚠ 「噪声」是算法标签，<不是>「这是异常值」的证据",640,445,"y");},"三个能力加一个代价：<b>①不用预先指定簇数 ②能找非质心形状的簇 ③允许点不属于任何簇</b>；代价是<b>④必须指定 ε 与 MinPts</b>。⚠️ 常见的误解是「DBSCAN 不用调参」——<b>簇数不用给，不等于没有超参数</b>，只是把 k 换成了 ε 和 MinPts，<em>而且这两个比 k 更难凭直觉设定</em>。还有一条：<b>「噪声」是算法在当前设置下的标签，不是「这是异常值」的证据</b>。");
+  SUM(0,15,{h:"DBSCAN：换成问「周围挤不挤」",k:"K-means 问「离哪个质心近」；DBSCAN 问「<b>周围够不够挤</b>」。密度连通能沿弯曲形状生长。",m:"能力：<b>不用给簇数、能找非凸形状、允许噪声</b>；代价：<b>要给 ε 与 MinPts</b>，而且更难凭直觉设。",w:"<s>「DBSCAN 不用调参」</s>——只是换了两个更难设的参数。<s>把 −1 当成「异常值」的结论</s>。",e:"⚠️ <b>DBSCAN 不在 CS229 范围</b>，补基础只能看 Canvas 讲义。Q3 型大题要能说清两者的假设差异。"});
+  QUIZ(0,15,{t:"关于 DBSCAN 不需要预先指定簇数，最准确的理解是？",o:["它只适用于低维数据","簇数由密度结构决定，但必须指定 ε 与 MinPts，而这两个比 k 更难凭直觉设定","它完全没有超参数","它会自动搜索最优簇数"],a:1,w:"簇的个数<b>从拟合出的密度结构中产生</b>，不用你给。但这不等于没有超参数——<b>ε 和 MinPts 必须指定</b>，而且它们的合适取值依赖特征尺度，通常比 k 更难设。"});
+});
+KP("16 · ★★★ 邻域与三类点",function(){
+  S(0,function(){clearScene();setEq("$$N_\\varepsilon(x)=\\{\\,z:\\ \\lVert z-x\\rVert\\le\\varepsilon\\,\\}$$","top");
+   note("以 x 为心、ε 为半径的球 —— ⚠ <包含 x 自己>",640,395,"r");
+   note("⚠ 距离<等于> ε 也算在内（取等号）",640,450,"y");},"先把定义写准。<b>ε 邻域</b> Nε(x) 就是以 x 为心、ε 为半径的球里的所有点。两个必须记死的约定：<b>① 包含 x 自己</b>；<b>② 距离等于 ε 也算在内</b>（取等号）。这两条是本课和 sklearn 一致的约定，手算题里错一个，整题的角色判定就全错。");
+  S(0,function(){clearScene();setCap("core：自己的邻域里<b>至少</b>有 MinPts 个点");
+   dline();dlabels();
+   eps(["B"],"fit g");
+   dpts(["A","C"],"a",10);dpts(["B"],"c",13);dpts(["D","E"],"a",10);
+   note("ε = 0.6，MinPts = 3",DX(1.7),DY+110,"y","start");
+   note("B 的邻域 = {A, B, C} ⇒ 3 个 ⇒ <core>",DX(0.5),DY-100,"g");},"<b>core（核心点）</b>：自己的邻域里<b>至少有 MinPts 个点</b>（含自己）。图上取 ε=0.6、MinPts=3，画出 B 的邻域——里面有 A、B、C 三个点，<b>达到 3</b>，所以 <b>B 是核心点</b>。核心点是簇的「骨架」，只有它们能让簇继续长大。");
+  S(0,function(){clearScene();setCap("border：自己不够 core，但<b>落在某个 core 点的邻域里</b>");
+   dline();dlabels();
+   eps(["B"],"fit g");
+   dpts(["A","C"],"b",13);dpts(["B"],"c",11);dpts(["D","E"],"a",10);
+   note("A 的邻域 = {A,B} 只有 2 个 ⇒ 不够 core",DX(0.2),DY-100,"y","start");
+   note("但 A 落在 core 点 B 的邻域内 ⇒ <border>",DX(0.2),DY+110,"b","start");},"<b>border（边界点）</b>：自己的邻域不够 MinPts，<b>但落在某个核心点的邻域里</b>。A 的邻域是 {A,B} 只有 2 个，不够；但它落在核心点 B 的邻域内，<b>所以 A 是边界点</b>。C 同理。边界点<b>属于</b>簇——但请记住下一页的关键：<b>它不能再往外扩张</b>。");
+  S(0,function(){clearScene();setCap("noise：既不是 core，也不在任何 core 点的邻域里");
+   dline();dlabels();
+   eps(["D","E"],"fit r");
+   dpts(["A","C"],"b",10);dpts(["B"],"c",10);dpts(["D","E"],"a",13);
+   note("D 的邻域 = {D,E} 只有 2 个 ⇒ 不够 core",DX(2.6),DY-100,"r","start");
+   note("而且 D、E 附近没有任何 core 点 ⇒ 两个都是 <noise>",DX(2.2),DY+110,"r","start");},"<b>noise（噪声）</b>：既不是核心点，也不落在任何核心点的邻域里。D 和 E 的邻域都只有 {D,E} 两个点，不够 MinPts；而且它们附近没有任何核心点，所以<b>两个都是噪声</b>。在 sklearn 里它们的标签是 <b>−1</b>。");
+  SUM(0,16,{h:"★★★ core / border / noise",k:"<b>Nε(x) 含 x 自己，且距离 ≤ ε 取等也算</b>。<b>core</b>：|Nε| ≥ MinPts；<b>border</b>：自己不够但落在某 core 的邻域内；<b>noise</b>：两者都不是（sklearn 标 −1）。",m:"核心点是簇的骨架；边界点<b>属于</b>簇但不是骨架；噪声在当前设置下没进任何稠密区。",w:"<s>邻域不含自己</s>是最常见的错，会让所有角色判定偏一位。<s>距离等于 ε 不算</s>也错。",e:"判角色是最可能出现的手算题之一。答题<b>列成表</b>：点 → 邻域集合 → 个数 → 角色。"});
+  QUIZ(0,16,{t:"ε=1、MinPts=4（含自身）。已知 |Nε(q)| = 3，且 q 落在某核心点 p 的 ε 邻域内。q 的角色是？",o:["边界点","无法判断","核心点","噪声点"],a:0,w:"q 自己的邻域只有 3 个点，<b>不够 MinPts=4</b>，所以不是 core；但它<b>落在核心点 p 的邻域内</b>，因此是 <b>border</b>。边界点属于簇，但不能继续扩张。"});
+});
+KP("17 · ★★★ 密度可达与密度连通",function(){
+  S(0,function(){clearScene();setEq("$$q\\ \\text{直接密度可达于}\\ p\\quad\\Longleftrightarrow\\quad q\\in N_\\varepsilon(p)\\ \\ \\textbf{且}\\ \\ p\\ \\text{是核心点}$$","top");
+   note("⚠ 注意那个「且」：<起点必须是核心点>",640,400,"r");
+   note("这一条就是「只有 core 能扩张」的形式化",640,455,"g");},"现在把「扩张」讲成定义。<b>直接密度可达</b>：q 直接密度可达于 p，当且仅当 <b>q 在 p 的邻域里，并且 p 是核心点</b>。⚠️ 注意那个<b>「且」</b>——<b>起点必须是核心点</b>。这一条就是「只有核心点能扩张簇」的形式化表述，后面所有性质都从它推出来。");
+  S(0,function(){clearScene();setCap("密度可达：沿着<b>一串核心点</b>接力传过去");
+   var xs=[-2.6,-1.7,-0.8,0.1,1.0,1.9];
+   var pts=xs.map(function(x){return [x,0.4*Math.sin(x)];});
+   ax();P(pts.slice(0,5),"c",11);P([pts[5]],"b",11);
+   for(var i=0;i<5;i++){link(PX(pts[i][0]),PY(pts[i][1]),PX(pts[i+1][0]),PY(pts[i+1][1]));}
+   note("绿=核心点，接力传递",PX(-1.2),PY(-1.9),"g");
+   note("蓝=终点，可以不是核心点（那它就是 border）",PX(1.4),PY(1.6),"b","start");},"<b>密度可达</b>是它的传递闭包：存在一串点 p₁, p₂, …, p_n，每一个都<em>直接</em>密度可达于前一个。图上就是<b>沿着一串核心点接力传过去</b>。⚠️ 注意<b>链条中间的点必须都是核心点</b>（否则传不下去），但<b>终点可以不是</b>——终点若不是核心点，它就是这个簇的<b>边界点</b>。");
+  S(0,function(){clearScene();setEq("$$p\\ \\text{与}\\ q\\ \\text{密度<b>连通</b>}\\quad\\Longleftrightarrow\\quad \\exists\\, o:\\ p\\ \\text{与}\\ q\\ \\text{都密度可达于}\\ o$$","top");
+   note("为什么还要这一步？因为「可达」不对称：",640,395,"y");
+   note("从 core 能到 border，但从 border 回不去（它扩张不了）",640,450,"r");},"还差一步。<b>密度连通</b>：p 与 q 密度连通，当且仅当<b>存在某个点 o，使 p 和 q 都密度可达于 o</b>。<b>为什么需要这一层？</b> 因为「可达」是<b>不对称</b>的——从核心点能到边界点，但<b>从边界点回不去</b>（它不是核心点，扩张不了）。要把「同属一个簇」定义成一个对称关系，就得绕经一个共同的核心点 o。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"簇 = 满足两个条件的非空点集","g");
+   note("<最大性>：p 在簇里、q 密度可达于 p ⇒ q 也在簇里",640,265,"g");
+   note("<连通性>：簇里任意两点都密度连通",640,335,"b");
+   note("噪声 = 在当前 (特征, 缩放, 距离, ε, MinPts) 下不属于任何簇的点",640,410,"y");
+   note("⚠ 这是<算法标签>，不是「测量错误 / 真实异常」的判定",640,460,"r");},"于是<b>簇</b>的正式定义是同时满足两条的非空点集：<b>最大性</b>——如果 p 在簇里、q 密度可达于 p，那么 q 也必须在簇里（不能漏掉够得着的点）；<b>连通性</b>——簇里任意两点都密度连通（不能把两团硬拼在一起）。而<b>噪声</b>就是在<em>当前这一组设置下</em>不属于任何簇的点。⚠️ 讲义特意强调：<b>这是算法标签，不是「测量错误」或「真实异常」的判定</b>。");
+  SUM(0,17,{h:"★★★ 可达、连通与簇的定义",k:"<b>直接密度可达</b>：q∈Nε(p) <b>且 p 是核心点</b>。<b>密度可达</b>：沿一串核心点接力。<b>密度连通</b>：存在 o 使两点都可达于它。",m:"「可达」<b>不对称</b>（core→border 可以，反过来不行），所以要绕经共同的 o 才能定义对称的「同簇」。<b>簇 = 最大性 + 连通性</b>。",w:"<s>以为 border 也能继续传递</s>——链条中间必须都是核心点。<s>把噪声当成真实异常的证据</s>。",e:"大题若问「为什么只有核心点能扩张簇」，答案就在「直接密度可达」定义里的那个<b>「且 p 是核心点」</b>。"});
+  QUIZ(0,17,{t:"为什么需要「密度连通」这个概念，光有「密度可达」不够？",o:["因为可达的计算太慢","因为可达需要指定簇数","因为可达只适用于二维","因为可达是不对称的（core 能到 border，border 回不去），要定义对称的「同属一簇」必须绕经一个共同的核心点"],a:3,w:"直接密度可达要求<b>起点是核心点</b>，所以关系<b>不对称</b>：从核心点可以到达边界点，但边界点无法反向到达。要把「属于同一个簇」定义成对称关系，就需要「<b>存在某个 o，两点都密度可达于它</b>」这一层。"});
+});
+KP("18 · ★★ 算例：五个点逐一判定",function(){
+  S(0,function(){clearScene();setCap("A=0, B=0.5, C=1.0, D=3.0, E=3.4　ε=0.6, MinPts=3");
+   dline();dlabels();dpts(["A","B","C","D","E"],"a",11);
+   note("先把每个点的邻域列出来 —— 这是答题的第一步",DX(1.7),DY+110,"y");},"把讲义的算例完整走一遍，这组数字建议直接背下来。五个一维点 <b>A=0, B=0.5, C=1.0, D=3.0, E=3.4</b>，取 <b>ε=0.6, MinPts=3</b>。答题的第一步永远是<b>把每个点的邻域列出来</b>——列成表，后面所有判定都从这张表读。");
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:6,cols:4,x:230,y:135,cw:200,ch:54,labelCls:"y",label:"邻域表（含自身，距离 ≤ 0.6）",
+     hl:function(i,j){return (i===2)?"hl2":((i>=4)?"hl3":"");},
+     cell:function(i,j){return [["点","ε 邻域","个数","角色"],
+       ["A = 0","{A, B}","2","border"],
+       ["B = 0.5","{A, B, C}","3","core"],
+       ["C = 1.0","{B, C}","2","border"],
+       ["D = 3.0","{D, E}","2","noise"],
+       ["E = 3.4","{D, E}","2","noise"]][i][j];}});},"逐个算。<b>A</b>：到 B 是 0.5 ≤ 0.6 ✓，到 C 是 1.0 ✗，所以邻域 {A,B}，<b>2 个</b>。<b>B</b>：到 A 0.5 ✓、到 C 0.5 ✓，邻域 {A,B,C}，<b>3 个 ⇒ 达标 ⇒ core</b>。<b>C</b>：到 B 0.5 ✓、到 A 1.0 ✗，邻域 {B,C}，2 个。<b>D、E</b>：彼此距离 0.4 ✓，但离 C 有 2.0，所以邻域都是 {D,E}，各 2 个。<b>只有 B 达到 MinPts=3</b>。");
+  S(0,function(){clearScene();setCap("结论：簇 {A, B, C}，噪声 {D, E}");
+   dline();dlabels();
+   eps(["B"],"fit g");
+   dpts(["A","C"],"b",12);dpts(["B"],"c",13);dpts(["D","E"],"a",12);
+   note("B 是唯一的 core，它把 A、C 收进来",DX(0.5),DY-100,"g");
+   note("D、E 够不着任何 core ⇒ noise（sklearn 标 −1）",DX(2.5),DY+110,"r","start");},"<b>结论</b>：B 是唯一的核心点，它的邻域把 A 和 C 收进来，形成簇 <b>{A, B, C}</b>；D 和 E 既不是核心点、也够不着任何核心点，所以是<b>噪声</b>（sklearn 里标签 −1）。注意 D、E 之间虽然很近（0.4），但<b>两个点凑不够 MinPts=3</b>，所以它们形不成自己的簇。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"如果 ε 从 0.6 放大到 1.1 会怎样？","y");
+   note("A 的邻域变成 {A,B,C} = 3 ⇒ A 也成了 core",640,255,"g");
+   note("C 同理 ⇒ A、B、C 三个都是 core，簇仍是 {A,B,C}",640,325,"g");
+   note("D、E 的邻域仍只有 {D,E} = 2 ⇒ 仍是 noise",640,395,"r");
+   note("⇒ 角色变了，但<最终分组没变> —— 这就是参数敏感性分析",640,455,"v");},"讲义的 Study check 问：<b>如果 ε 放大到 1.1、MinPts 仍是 3 会怎样？</b> 算一下：A 的邻域变成 {A,B,C} 共 3 个，<b>A 也成了核心点</b>；C 同理。于是三个点都是 core。但 D、E 的邻域仍只有 {D,E}=2，<b>仍是噪声</b>。<b>结果：角色变了，但最终分组没变。</b> 这就是一次<b>参数敏感性分析</b>——正是大题要你做的那种检查。");
+  SUM(0,18,{h:"★★ 五点算例（建议背下来）",k:"A=0,B=0.5,C=1.0,D=3.0,E=3.4，ε=0.6,MinPts=3 ⇒ 邻域 A{A,B}=2 · B{A,B,C}=<b>3</b> · C{B,C}=2 · D{D,E}=2 · E{D,E}=2 ⇒ <b>B core，A/C border，D/E noise</b>，簇 = {A,B,C}。",m:"D、E 虽然互相很近，但<b>两个点凑不够 MinPts=3</b>，形不成自己的簇。",w:"漏掉「邻域含自身」会让每个计数少 1，角色判定全错。",e:"ε 放大到 1.1 时：<b>A、C 也变成 core，但最终分组不变</b>。这种「改一个参数看什么变」就是敏感性分析的标准答法。"});
+  QUIZ(0,18,{t:"A=0, B=0.5, C=1.0, D=3.0, E=3.4，ε=0.6、MinPts=3（含自身）。各点角色是？",o:["全部是 core","没有 core 点","A、B、C 都是 core；D、E 是 border","B 是 core；A、C 是 border；D、E 是 noise"],a:3,w:"邻域（含自身）：A=2, B=<b>3</b>, C=2, D=2, E=2。只有 B 达到 MinPts=3 ⇒ core；A、C 不够但挨着 core 点 B ⇒ border；D、E 既不够也够不着任何 core ⇒ noise。最终簇 = {A,B,C}。"});
+});
+KP("19 · ★★ 边界点的顺序依赖，噪声只是临时标签",function(){
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"场景：先访问 A（那时还没发现 B 是核心点）","y");
+   note("此刻 A 的邻域只有 2 个，够不上 core ⇒ 暂时标成 <noise>",640,265,"r");
+   note("继续遍历，访问到 B，发现它是 core，开始扩张",640,335,"g");
+   note("B 的邻域里有 A ⇒ A 被吸收，改判为 <border>",640,405,"b");
+   note("⭐ 所以：噪声标签在遍历过程中<不是终局>",640,458,"v");},"这是 DBSCAN 一个容易被问到的细节。设想遍历时<b>先访问 A</b>：那时候还没发现 B 是核心点，A 自己的邻域只有 2 个点，够不上 core，于是<b>暂时被标成噪声</b>。继续遍历，访问到 B，发现它是核心点、开始扩张，而 B 的邻域里正好有 A——<b>于是 A 被吸收，改判为边界点</b>。⭐ 结论：<b>噪声标签在遍历过程中不是终局</b>。");
+  S(0,function(){clearScene();setCap("边界点可能<b>同时</b>够得着两个簇");ax();
+   var g1=[[-2.4,0.6],[-2.0,-0.3],[-1.6,0.9],[-1.3,0.0]];
+   var g2=[[1.4,0.5],[1.8,-0.4],[2.2,0.8],[2.5,0.1]];
+   P(g1,"c",10);P(g2,"c",10);P([[0.05,0.2]],"b",13);
+   link(PX(-1.3),PY(0.0),PX(0.05),PY(0.2));
+   link(PX(1.4),PY(0.5),PX(0.05),PY(0.2));
+   note("这个 border 点两边都够得着",PX(0.05),PY(-1.4),"b");
+   note("最终归谁 ⇒ 取决于<遍历顺序>",PX(0.05),PY(-2.2),"r");},"另一个后果：<b>一个边界点可能同时落在两个簇的可达范围内</b>。图上那个蓝点两边都够得着——它最终归到哪一簇，<b>取决于遍历顺序</b>（谁先扩张到它，它就归谁）。⚠️ 所以讲义提醒：<b>解读孤立边界点的归属要谨慎</b>；相比之下，<b>核心点组成的连通块是稳定的</b>，不受遍历顺序影响。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,150,1000,66,"sklearn 里 labels_ == −1 的含义","r");
+   note("= 「在<当前这组设置下>没被分进任何稠密区」",640,300,"r");
+   note("≠ 「这是测量错误」　≠ 「这是真实的异常值」　≠ 「该删掉」",640,370,"y");
+   note("要下异常的结论，得另外检查特征/缩放/ε/MinPts/稳定性/领域含义",640,435,"g");},"最后把「噪声」这个词的含义钉死。<b>labels_ == −1 只表示「在当前这组设置下没被分进任何稠密区」</b>。它<s>不等于</s>「这是测量错误」，<s>不等于</s>「这是真实的异常值」，更<s>不等于</s>「应该删掉」。换一组 ε 和 MinPts，同一个点可能就进簇了。要真的下异常的结论，必须<b>另外</b>检查特征、缩放、参数、稳定性和领域含义。");
+  SUM(0,19,{h:"★★ 顺序依赖与噪声的真正含义",k:"<b>噪声标签在遍历中只是临时的</b>——被后来发现的核心点吸收即成 border。<b>边界点若同时够得着两簇，归属取决于遍历顺序</b>。",m:"核心点组成的<b>连通块是稳定的</b>，不受遍历顺序影响；不稳定的只是孤立边界点的归属。",w:"<s>把 −1 当成「异常值 / 该删掉」</s>。它只说「当前设置下没进任何稠密区」。",e:"大题常问「为什么先标为噪声的点后来变成边界点」——答<b>后来访问到的某点被认出是核心点，而它的邻域包含这个点</b>。"});
+  QUIZ(0,19,{t:"DBSCAN 中一个点先被标为噪声、后来变成边界点，原因是？",o:["ε 被自动调整了","算法有随机性","后来访问到的某点被认出是核心点，而这个点落在它的 ε 邻域内","它的邻域点数增加了"],a:2,w:"噪声标签在遍历过程中<b>只是临时的</b>。当某个后访问的点满足核心条件并开始扩张时，落在它邻域里的非核心点就被<b>吸收为边界点</b>。点的坐标和 ε 都没变，变的只是「是否已经发现了旁边的核心点」。"});
+});
+KP("20 · ★★ 参数敏感性与缩放",function(){
+  S(0,function(){clearScene();setEq(null);
+   boxNode(120,140,500,58,"ε 太小","r");note("稠密区<碎裂>，大量点未分配",370,228,"r");
+   boxNode(660,140,500,58,"ε 太大","r");note("不同稠密区被<合并>成一个",910,228,"r");
+   boxNode(120,255,500,58,"MinPts 太小","y");note("弱的局部模式被当成簇",370,343,"y");
+   boxNode(660,255,500,58,"MinPts 太大","y");note("小的/低密度的真实组被丢成噪声",910,343,"y");
+   note("⇒ 两个参数都是<双向>的，过大过小各有各的坏",640,430,"g");},"两个参数的影响是<b>双向</b>的，过大过小各有各的坏。<b>ε 太小</b>：稠密区被<em>碎裂</em>成很多小块，大量点变成未分配；<b>ε 太大</b>：本来分开的稠密区被<em>合并</em>成一个。<b>MinPts 太小</b>：弱的局部巧合也被当成簇；<b>MinPts 太大</b>：小的或密度较低的<em>真实</em>组被整个丢成噪声。所以必须做敏感性检查。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,145,1000,66,"选 ε 的常规做法：k-距离图","b");
+   note("对每个点算它到第 MinPts 个最近邻的距离，排序后画出来",640,290,"b");
+   note("曲线的<拐点>可以作为 ε 的<起点>",640,355,"g");
+   note("⚠ 是<起点>不是答案 —— 还要在邻近取值上做敏感性检查",640,425,"r");},"ε 该怎么选？常规做法是画 <b>k-距离图</b>：对每个点算它到<b>第 MinPts 个最近邻</b>的距离，把这些距离排序画出来，<b>曲线的拐点</b>可以作为 ε 的<b>起点</b>。⚠️ 讲义的措辞很克制——是 <b>a starting value, not an automatic answer</b>：拿到这个值之后，还要在<b>邻近取值</b>上重跑，看核心结构、噪声标签和解释是否稳定。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"⚠ 密度差异大的数据，是 DBSCAN 的主要软肋","r");
+   note("一组<全局>的 (ε, MinPts) 无法同时描述稀疏区和稠密区的「稠密」",640,265,"r");
+   note("要么把稀疏簇整个判成噪声，要么把稠密簇连成一片",640,335,"y");
+   note("这是<方法的内在限制>，不是参数没调好",640,405,"v");
+   note("⇒ 答题时这句能直接拿分",640,458,"g");},"最后是 DBSCAN 的<b>主要软肋</b>：<b>当不同的真实簇密度差异很大时，一组全局的 (ε, MinPts) 无法同时描述两边的「稠密」</b>——把参数往稀疏那边调，稠密的几个簇就连成一片；往稠密那边调，稀疏的那个簇就整个被判成噪声。⚠️ 关键是要说清楚：<b>这是方法的内在限制，不是参数没调好</b>。这句话在 Q3 型大题里能直接拿分。");
+  SUM(0,20,{h:"★★ 参数敏感性与密度差异",k:"<b>ε 小→碎裂，ε 大→合并；MinPts 小→假簇，MinPts 大→真组被丢成噪声</b>。选 ε 用 <b>k-距离图的拐点作起点</b>，再做邻近取值检查。",m:"<b>密度差异大是 DBSCAN 的内在限制</b>：一组全局参数描述不了两种「稠密」。",w:"<s>把 k-距离图的拐点当成答案</s>——它只是起点。<s>把密度差异问题归咎于调参不够</s>。",e:"Q3 型大题要求从「参数含义与敏感性」角度论证，这一页就是现成答案。"});
+  QUIZ(0,20,{t:"DBSCAN 在密度差异很大的数据上表现不好，根本原因是？",o:["它需要预先指定簇数","它不能处理高维数据","它只能用欧氏距离","一组全局的 (ε, MinPts) 无法同时描述稀疏区与稠密区的「稠密」"],a:3,w:"DBSCAN 用<b>一组全局参数</b>定义什么叫稠密。若一处簇很密、另一处很疏，同一个 ε 要么把稀疏簇整个判成噪声，要么把稠密簇连成一片。这是<b>方法的内在限制</b>。<s>它不需要预先指定簇数</s>，那是 K-means 的限制。"});
+});
+KP("21 · 两个算法对比（Q3 型大题现成答案）",function(){
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:6,cols:3,x:180,y:130,cw:300,ch:56,labelCls:"y",label:"对比表",
+     hl:function(i,j){return i===0?"":(j===0?"hl":"");},
+     cell:function(i,j){return [["问题","K-means","DBSCAN"],
+       ["必须指定的参数","簇数 k","ε 与 min_samples"],
+       ["典型几何","紧凑、凸形、绕质心","连通稠密区，可弯曲"],
+       ["未分配观测","没有，每点必有标签","有，稀疏点记 −1"],
+       ["主要敏感性","初始化、k、离群点、尺度","邻域参数、密度差异、尺度"],
+       ["优化目标","最小化 WCSS","<没有全局目标函数>"]][i][j];}});},"把两个算法并排放。最后一行特别值得注意：<b>DBSCAN 没有全局目标函数</b>——它不是在优化某个数值，而是按「密度连通」这个<em>定义</em>直接把簇构造出来。这解释了一个常见错误：<b>拿 inertia 去比较 K-means 和 DBSCAN 是没有意义的</b>，因为 DBSCAN 根本不优化它。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"答 Q3 的三段式结构","g");
+   note("① 这份数据的什么特征决定了选择？（形状 / 噪声 / 密度 / 尺度）",640,260,"b");
+   note("② 因此选谁，为什么它的假设更匹配",640,330,"g");
+   note("③ 这个选择的<代价>是什么，还需要<检查>什么",640,400,"y");
+   note("⚠ 别只写「DBSCAN 更好」—— 没有说理由就没有分",640,458,"r");},"Q3 型大题的<b>三段式</b>：<b>①</b> 先说这份数据的什么特征决定了选择（形状？有没有噪声？密度均不均匀？尺度可不可比？）；<b>②</b> 因此选谁，以及<b>为什么它的假设更匹配</b>；<b>③</b> 这个选择的<b>代价</b>是什么、还需要<b>检查</b>什么。⚠️ 只写「DBSCAN 更好」是拿不到分的——<b>分在理由里</b>。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,150,1000,66,"⚠ 别用 silhouette 在两个算法之间做唯一裁判","r");
+   note("它<偏爱凸形簇> ⇒ 在弯曲结构上可能反而偏袒 K-means",640,300,"r");
+   note("要补：把标签画回散点图看<形状>、看<噪声比例>、看<邻近参数下的稳定性>",640,370,"g");
+   note("⚠ 也别跨算法比 inertia —— DBSCAN 不优化它",640,435,"y");},"最后两个陷阱，都在「怎么比较」上。<b>①</b> <s>别用 silhouette 做唯一裁判</s>——它偏爱凸形簇，<b>在弯曲结构上可能反而偏袒 K-means</b>，得出与几何事实相反的结论。要补上：把标签<b>画回散点图看形状</b>、看<b>噪声比例</b>（DBSCAN 是不是把大量有效点丢成了 −1）、看<b>邻近参数下的稳定性</b>。<b>②</b> <s>别跨算法比 inertia</s>——DBSCAN 根本不优化它。");
+  SUM(0,21,{h:"两个算法的并排对比",k:"参数：<b>k</b> vs <b>ε 与 min_samples</b>；几何：<b>凸形绕质心</b> vs <b>连通稠密区</b>；未分配：<b>无</b> vs <b>有(−1)</b>；目标：<b>最小化 WCSS</b> vs <b>没有全局目标函数</b>。",m:"Q3 三段式：<b>数据的什么特征决定选择 → 选谁及为什么假设匹配 → 代价与还需检查什么</b>。",w:"<s>用 silhouette 做跨算法唯一裁判</s>（偏袒凸形）· <s>跨算法比 inertia</s>（DBSCAN 不优化它）。",e:"Q3 原题就是这个。三段式写全，再补上比较方法的两个陷阱，基本满分。"});
+  QUIZ(0,21,{t:"在弯曲簇上比较 K-means 与 DBSCAN，下列哪组判据最合理？",o:["只看 silhouette","看哪个运行更快","比较两者的 inertia","把标签画回散点图看形状 + 看噪声点比例 + 看邻近参数下的稳定性"],a:3,w:"silhouette <b>偏爱凸形簇</b>，在弯曲结构上可能反而偏袒 K-means。必须补上<b>几何检视</b>与<b>噪声比例</b>。<s>inertia 不能跨算法比</s>——DBSCAN 根本不优化它。"});
+});
+KP("22 · 答题四步与考务",function(){
+  S(0,function(){clearScene();setEq(null);
+   boxNode(120,140,1040,58,"① 报出结果：分组 / 角色 / 质心 / 数值","b");
+   boxNode(120,212,1040,58,"② 解释它说明什么：在当前表示下代表什么","g");
+   boxNode(120,284,1040,58,"③ 用可见证据支撑：距离表 / silhouette / 稳定性 / 图","v");
+   boxNode(120,356,1040,58,"④ 说出证据的局限：它<不能>证明什么","r");},"收尾讲怎么答。评估框架页把无监督工作流的<b>第 6 步</b>写成 <em>Interpret the result using domain evidence and report limitations</em>——再配上那张<b>四类证据表</b>，等于把评分公式摆在明面上了。四步：<b>① 报结果 → ② 解释它说明什么 → ③ 用可见证据支撑 → ④ 说出证据的局限</b>。<s>大多数人停在第一步</s>，那最多拿一半分。");
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:5,cols:2,x:200,y:140,cw:440,ch:58,labelCls:"y",label:"聚类题的「局限句」备选",
+     cell:function(i,j){return [["场景","可以写的局限"],
+       ["报了 silhouette","只描述所选表示下的内聚与分离；偏爱凸形簇"],
+       ["报了一次 k-means 的分组","单次运行；J 非凸，可能是局部极小"],
+       ["报了 DBSCAN 的噪声点","只表示当前设置下未进稠密区，非异常值判定"],
+       ["报了某个 k 最优","支持在候选中的选择，不证明存在那么多自然类"]][i][j];}});},"把常用的<b>局限句</b>备好，考场上直接套。报 silhouette → 补「只描述所选表示下的内聚与分离，且偏爱凸形簇」；报一次 k-means 的分组 → 补「单次运行，J 非凸，可能是局部极小」；报 DBSCAN 的噪声 → 补「只表示当前设置下未进稠密区，不是异常值判定」；报某个 k 最优 → 补「支持在候选中的选择，不证明存在那么多自然类」。");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,140,1000,60,"110 分钟 · 20 选择 ×3 分 + 4 大题 ×10 分","y");
+   note("选择题 ≈ 1.5 分钟/题（30 分钟）· 大题 ≈ 15 分钟/题（60 分钟）· 检查 20 分钟",640,265,"b");
+   note("⚠ 每一页都要写全名（不只第一页）· 交卷出示学生证并签到",640,340,"r");
+   note("开卷：速查表按 T1/T2/T3 分栏贴标签，<能翻到>才有用",640,410,"g");
+   note("聚类手算优先练：K-means 一轮、DBSCAN 判角色",640,458,"v");},"<b>考务提醒</b>：110 分钟、20 选择 + 4 大题。建议<b>选择题 30 分钟、大题 60 分钟、检查 20 分钟</b>。⚠️ <b>每一页都要写全名</b>（不只第一页），交卷时出示学生证并签到。开卷意味着<b>能不能快速翻到</b>才是关键——速查表按 T1/T2/T3 分栏贴标签。聚类部分优先练两样手算：<b>K-means 走一轮</b>和 <b>DBSCAN 判角色</b>。");
+  SUM(0,22,{h:"答题四步 + 考务",k:"<b>① 报结果 ② 解释说明什么 ③ 用证据支撑 ④ 说出局限</b>。只报数字最多一半分。",m:"依据：评估框架页工作流第 6 步 <em>Interpret the result using domain evidence and report limitations</em> + 四类证据表。",w:"<s>把局限写成「可能有误差」这种空话</s>——要具体到这个方法的假设（凸形偏好 / 局部极小 / 噪声标签的含义）。",e:"110 分钟：选择 30 · 大题 60 · 检查 20。<b>每页写全名</b>。手算优先练 K-means 一轮与 DBSCAN 判角色。"});
+  QUIZ(0,22,{t:"大题算出「簇 = {A,B,C}，噪声 = {D,E}」之后，最该补上的是？",o:["把计算器型号写上","再算一遍确认","说明这在当前 ε 与 MinPts 下意味着什么，以及噪声标签不能证明这两点是异常值","画一张彩色的图"],a:2,w:"评分公式是<b>报结果→解释→证据→局限</b>四步。判定结果只完成第一步；必须补上「在当前设置下的含义」和「它不能确立什么」——尤其是<b>噪声 ≠ 异常值</b>这一句。"});
+});
+KP("完 · 一条线收束",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("M2 T2 · 聚类 · 完","J → 坐标下降 → 收敛性 → silhouette → 密度可达 → 算法对比","下一部：T3 高斯混合模型与 EM");},
+    "聚类的完整主线：<b>「相似」是你选的，换个缩放分组就可能变；K-means 的两步各自是「固定一组变量优化另一组」的严格最优解，所以它其实是对失真函数 J 做坐标下降——J 单调不增，加上分配方式有限、J 只能取有限多个值，于是必然收敛；但 J 非凸，四点例子里 J=4 与 J=16 两个解都「稳定」，所以要 k-means++ 加多次重启，并且比较稳定性时要比成员不比标签号；inertia 随 k 必降所以不能用来选 k，silhouette 的 a 排除自己、b 取最近的簇的平均、范围 −1 到 1 且偏爱凸形簇；转到 DBSCAN，邻域含自身、距离取等也算，core 靠 MinPts、border 属于簇但不扩张、noise 只是当前设置下的标签，直接密度可达那个「且 p 是核心点」是一切的源头，因为可达不对称才需要密度连通，簇 = 最大性 + 连通性；ε 与 MinPts 双向敏感，密度差异大是方法的内在限制。</b> 答题记住四步：<b>报结果 → 解释 → 证据 → 局限</b>。接下来做 T3 GMM。");
+});
+window.__startProjector(CFG);
+})();
+</script>

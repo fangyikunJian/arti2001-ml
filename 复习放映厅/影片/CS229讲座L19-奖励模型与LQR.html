@@ -1,0 +1,872 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L19 · 奖励模型与线性动态系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L19 · 奖励模型与线性动态系统",
+  subtitle:"state-action 奖励 · 有限时域 · LQR · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=0rt2CsEQv6U&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 网格世界 ── */
+function grid(x0,y0,cw,ch,cols,rows,cb){
+  var i,j;
+  for(j=0;j<rows;j++)for(i=0;i<cols;i++){
+    var v=cb(i,j); if(v===null) continue;
+    boxNode(x0+i*cw, y0+j*ch, cw-6, ch-6, v[0], v[1]||"");}}
+
+/* ── 时间轴：n 个刻度，cb(i) 返回标签 ── */
+function timeline(x0,x1,y,n,cb){
+  curve([[x0,y],[x1,y]],"d");
+  var i;
+  for(i=0;i<n;i++){
+    var x=x0+(x1-x0)*i/(n-1);
+    curve([[x,y-9],[x,y+9]],"d");
+    var lb=cb(i); if(lb) note(lb,x,y-20,"y");}}
+
+/* ── 抛物线（画二次型代价）── */
+function parab(cx,cy,w,h,cls,up){
+  return fn(function(x){var t=(x-cx)/(w/2);
+    return up ? cy-h*t*t : cy+h*t*t;}, cx-w/2, cx+w/2, 70);}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L19","奖励模型与线性动态系统",
+      "一个漂亮的特例");},
+    "L18 给出了拟合值迭代——<b>它很通用，不管模型什么形状、奖励什么样都能用。</b><b>⚠ 但代价也实在：要采样估期望、要拟合、而且不保证收敛。</b><br><b>这一讲分两段。</b><br><b>前半段给 MDP 框架做两个推广，都是很实用的小改动。</b><b>第一个是让奖励依赖于动作</b>——<b>写成 R(s, a) 而不是 R(s)</b>，<b>这样才能表达「不同动作代价不同」</b>（机器人原地不动比移动省电，直升机猛拉操纵杆该罚）。<b>第二个是有限时域</b>：<b>用一个固定的步数 T 代替折扣因子 γ</b>。<b>⭐ 它会带来一个意外的后果——最优动作开始依赖「现在几点」。</b><br><b>后半段是这一讲的主角：线性二次型调节，简称 LQR。</b><b>Ng 一上来就把分寸说清楚了：LQR 只适用于相当小的一类问题。</b><br><b>⭐ 但在它适用的地方，它好得惊人：如果模型是线性的、奖励是二次型的，那么最优价值函数恰好是一个二次函数，而最优动作恰好是状态的线性函数——都有精确的闭式解。</b><br><b>⚠ 不用采样、不用拟合、不用迭代到收敛。</b><b>这就是为什么值得为它单开一讲。</b>");
+});
+KP("1 · ★ 推广一：让奖励依赖动作 R(s, a)",function(){
+  S(31,function(){clearScene();setEq("$$R(s) \\;\\longrightarrow\\; R(s,a)$$","top");
+       setCap("一个很小的改动，表达力差很多");
+       says("0:31","two slight generalizations of this framework to state-action rewards",214);
+       note("之前：奖励只看「你站在哪儿」",640,266,"d");
+       note("★ 现在：奖励还要看「你做了什么」",640,318,"y");
+       note("⭐ 这样才能表达「不同动作的代价不同」",640,370,"g");
+       note("⚠ 这是 Ng 说的两个「小推广」里的第一个",640,402,"b");},"<b>这一讲开头给 MDP 框架做两个推广。第一个是让奖励依赖动作。</b><br><b>之前我们一直写 R(s)——奖励只取决于你站在哪个状态。</b><br><b>★ 现在改成 R(s, a)：奖励同时取决于你站在哪儿，以及你做了什么。</b><br><b>⭐ 这个改动看起来很小，但它让模型能表达一件之前表达不了的事：不同的动作有不同的代价。</b><br><b>⚠ 在 R(s) 的框架里，无论你怎么动，只要走到同一格，拿到的奖励就一样</b>——<b>这意味着「省力地走过去」和「拼命折腾着走过去」被当成了同一回事。</b><br><b>⇒ 下一节看几个具体例子，就知道这件事有多常见。</b>");
+  S(31,function(){clearScene();setEq(null);setCap("它改变了「最优」的含义");
+   boxNode(130,196,470,58,"R(s) 下","d");
+   boxNode(130,264,470,58,"只要到达好状态，怎么去的无所谓","d");
+   boxNode(690,196,470,58,"★ R(s,a) 下","y");
+   boxNode(690,264,470,58,"「怎么去的」本身也进入了优化目标","y");
+   note("⭐ 于是最优策略会在「走到好位置」和「少花代价」之间权衡",640,348,"y");
+   note("⚠ 这是 LQR 那个二次型代价的雏形 —— 它同时罚状态和动作",640,398,"r");},"<b>R(s, a) 这个改动不只是写法上的，它改变了「最优」的含义。</b><br><b>在 R(s) 下，只要到达好的状态就行，怎么去的无所谓</b>——<b>算法唯一关心的是「最后落在哪儿」。</b><br><b>★ 而在 R(s, a) 下，「怎么去的」本身也进入了优化目标。</b><br><b>⭐ 于是最优策略必须在两件事之间权衡：走到好位置，以及少花代价。</b><br><b>⚠ 记住这个结构，因为它正是这一讲后半段 LQR 那个二次型代价的雏形</b>——<b>那个式子里 sᵀU s 罚状态、aᵀV a 罚动作，正是「位置」和「代价」这两项。</b><br><b>⇒ 所以这个看似很小的推广，其实是在为 LQR 铺路。</b>");
+  SUM(31,1,{h:"★ R(s) → R(s, a)：奖励也看动作",k:"<b>之前</b>：R(s)，奖励只取决于<b>你站在哪个状态</b>。<b>现在</b>：R(s, a)，<b>同时取决于你做了什么</b>。",m:"⭐ <b>这个小改动让模型能表达「不同动作有不同代价」。</b>",w:"⚠ <b>在 R(s) 的框架里</b>，无论怎么动，走到同一格奖励就一样 ⇒ <b>「省力地走过去」和「拼命折腾着走过去」被当成同一回事</b>。",e:"⇒ 这是 Ng 说的<b>两个「小推广」里的第一个</b>。"});
+  QUIZ(31,1,{t:"把奖励从 R(s) 改成 R(s, a) 是为了表达什么？",o:["为了让状态空间可以连续","为了表达「不同动作有不同的代价」——R(s) 里只要走到同一格奖励就一样，分不出省力和费力","为了去掉折扣因子","为了让奖励可以是负数"],a:1,w:"⭐ 这是 Ng 说的两个「<b>小推广</b>」里的第一个，改动很小但表达力差很多。"});
+});
+KP("2 · ⭐ 为什么需要它：四个例子",function(){
+  S(337,function(){clearScene();setEq(null);setCap("Ng 举的都是很实在的场景");
+       says("5:37","maybe it is more costly for the robot to move than to stay still");
+       matrix({rows:5,cols:2,cw:420,ch:40,x:220,y:196,
+         cell:function(i,j){var t=[
+           ["场景","不同动作的代价"],
+           ["网格机器人","原地不动给 0，移动给一点负奖励（耗电）"],
+           ["开直升机","★ 猛拉操纵杆 ⇒ 罚更高的代价"],
+           ["导航","不同路段因限速和拥堵而代价不同"],
+           ["工厂维护","派人检修 / 什么都不做 / 机器坏掉，各有代价"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 共同点：代价来自「你做了什么」，而不是「你在哪儿」",640,398,"y");},"<b>Ng 举了四个例子，都很实在。</b><br><b>网格机器人：原地不动的奖励可以给 0，移动给一点负奖励</b>——<b>因为移动要耗电。</b><br><b>开直升机：Ng 说常见的做法是给「猛拉操纵杆」分配更高的代价</b>，<b>因为那样会让机身猛地颠簸一下。</b><br><b>导航：不同路段因为限速和拥堵情况不同，通过的代价也不同。</b><br><b>工厂维护：派一队人去检修有一个代价，什么都不做有另一个代价，而机器因此坏掉又是第三个代价</b>——<b>全都取决于你选了哪个动作。</b><br><b>⭐ 四个例子的共同点很清楚：代价来自「你做了什么」，而不是「你在哪儿」。</b><b>R(s) 写不出这件事，R(s, a) 可以。</b>");
+  S(337,function(){clearScene();setEq(null);setCap("直升机那个例子最值得琢磨");
+   says("8:27","yanking aggressive on the control stick should be assigned a higher cost");
+   boxNode(130,200,470,58,"为什么要罚「猛拉操纵杆」","b");
+   boxNode(130,268,470,58,"它会让机身猛地颠簸一下","b");
+   boxNode(690,200,470,58,"★ 这是在表达什么","y");
+   boxNode(690,268,470,58,"不只要飞到位，还要飞得平稳","y");
+   note("⭐ 没有这一项的话，算法会学出一种「到位但很暴躁」的飞法",640,352,"y");
+   note("⚠ 回想 L16：奖励写漏了，算法就会在没写到的地方放飞自我",640,398,"r");},"<b>直升机那个例子最值得琢磨一下。</b><br><b>为什么要给「猛拉操纵杆」分配更高的代价？Ng 的理由很具体：那样会让机身猛地颠簸一下。</b><br><b>★ 它表达的其实是一个更高层的要求：不只要飞到位，还要飞得平稳。</b><br><b>⭐ 想一下没有这一项会怎样：算法只被奖励「到达目标姿态」，那它完全可能学出一种疯狂抽动操纵杆、虽然平均位置对但乘客想吐的飞法。</b><br><b>⚠ 这正是 L16 那条教训的又一次现身——奖励函数没写到的地方，算法就会放飞自我。</b><br><b>⇒ 而 R(s, a) 给了你一个表达「动作本身也有代价」的位置，这是 R(s) 做不到的。</b>");
+  SUM(337,2,{h:"⭐ 四个需要 R(s, a) 的场景",k:"<b>网格机器人</b>：原地不动给 0，<b>移动给负奖励（耗电）</b>。<b>直升机</b>：⭐ <b>猛拉操纵杆罚更高代价</b>，因为那会让机身猛地颠簸。",m:"<b>导航</b>：不同路段因限速和拥堵而代价不同。<b>工厂维护</b>：派人检修 / 什么都不做 / 机器坏掉，各有各的代价。",w:"⭐ <b>共同点</b>：代价来自<b>「你做了什么」</b>，而不是「你在哪儿」。",e:"⇒ <b>R(s) 写不出这件事，R(s, a) 可以。</b>"});
+  QUIZ(337,2,{t:"下面哪个是 Ng 举的、必须用 R(s, a) 的例子？",o:["开直升机时「猛拉操纵杆」应被罚更高代价，因为会让机身颠簸","折扣因子让远处奖励变小","网格世界里 +1 和 −1 两格的奖励不同","离目标越近价值越高"],a:0,w:"⭐ 其他例子：<b>机器人移动耗电</b>、<b>不同路段限速拥堵不同</b>、<b>工厂维护的三种选择各有代价</b>。共同点是<b>代价来自「做了什么」</b>。"});
+});
+KP("3 · ★ 算法几乎不用改",function(){
+  S(558,function(){clearScene();setEq("$$V^{*}(s) \\;=\\; \\max_{a}\\Big[\\,R(s,a) \\;+\\; \\gamma \\textstyle\\sum_{s'} P_{sa}(s')\\,V^{*}(s')\\Big]$$","top");
+       setCap("R 搬进了 max 里面");
+       says("9:18","value iteration works just fine for the state-action reward formulation as well",214);
+       note("⚠ 唯一的变化：R 从 max 外面搬进了里面",640,274,"r");
+       note("因为 R 现在跟着 a 变 ⇒ 它必须参与「挑哪个动作」的比较",640,326,"b");
+       note("⭐ 值迭代照样能用；收敛后最优动作仍然是那个 argmax",640,378,"y");},"<b>换成 R(s, a) 之后，算法要改多少？Ng 的回答是：值迭代照样能用。</b><br><b>⚠ 式子里唯一的变化是：R 从 max 外面搬进了里面。</b><br><b>回想 L17 的式子：V*(s) = R(s) + max_a γΣ…，R(s) 在 max 外面</b>，<b>因为它跟动作无关，比较不同动作时它是个共同的常数。</b><br><b>⭐ 而现在 R(s, a) 跟着 a 变，所以它必须参与「挑哪个动作」这个比较——于是进了 max 里面。</b><br><b>⇒ 其余一切照旧：跑值迭代直到 V 收敛到 V*，然后最优动作还是那个 argmax。</b><br><b>⚠ 注意一个推论：L17 里我们说过「argmax 时 R(s) 可以省掉，因为对所有动作都一样」</b>——<b>这个简化在 R(s, a) 下不再成立了。</b>");
+  S(558,function(){clearScene();setEq(null);setCap("哪些结论要跟着改");
+   matrix({rows:4,cols:3,cw:350,ch:44,x:130,y:198,
+     cell:function(i,j){var t=[
+       ["L17 的结论","R(s,a) 下还成立吗",""],
+       ["值迭代可用","✓ 照样可用",""],
+       ["最优动作 = argmax","✓ 仍然是",""],
+       ["argmax 时可省掉 R","⚠ 不再成立",""]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 第三条是唯一要改的 —— 因为 R 现在跟着动作变",640,398,"y");},"<b>把 L17 的几条结论挨个检查一遍，看哪些还成立。</b><br><b>「值迭代可用」：✓ 照样可用，Ng 明确说了。</b><br><b>「最优动作是 argmax」：✓ 仍然是，形式都没变。</b><br><b>⚠ 「argmax 时可以省掉 R」：这一条不再成立。</b><br><b>⭐ 回想 L17 为什么能省：R(s) 对所有动作都是同一个数，比较大小时会一起抵消。</b><b>而现在 R(s, a) 跟着动作变，不同动作的 R 不一样，当然不能省。</b><br><b>⇒ 这是整个推广里唯一需要改的地方。</b><br><b>⚠ 实现时这是个容易出错的点：从 R(s) 的代码改过来，很容易忘了把 R 挪进 max 里面。</b>");
+  SUM(558,3,{h:"★ 值迭代照用，只是 R 搬进了 max 里",k:"Ng：<b>值迭代对 state-action 奖励照样能用</b>。",m:"⚠ <b>唯一的变化</b>：<b>R 从 max 外面搬进了里面</b>。L17 里 R(s) 跟动作无关，比较时是共同常数；⭐ <b>现在 R(s,a) 跟着 a 变，必须参与比较</b>。",w:"⇒ 其余照旧：<b>跑值迭代到收敛，最优动作仍是那个 argmax</b>。",e:"⚠ <b>一个推论</b>：L17 里「argmax 时 R(s) 可以省掉」的简化，<b>在 R(s,a) 下不再成立</b>。"});
+  QUIZ(558,3,{t:"改用 R(s, a) 后，值迭代的式子有什么变化？",o:["需要对动作也求和","要去掉折扣因子 γ","max 要换成 min","R 从 max 外面搬进了里面——因为它现在跟着动作变，必须参与「挑哪个动作」的比较"],a:3,w:"⚠ 推论：L17 里「<b>argmax 时 R(s) 可以省掉</b>」的简化，<b>在 R(s,a) 下不再成立</b>了。"});
+});
+KP("4 · ★★ 推广二：有限时域 MDP",function(){
+  S(674,function(){clearScene();setEq(null);setCap("用固定步数 T 代替折扣因子 γ");
+       says("11:14","we are going to replace the discount factor, Gamma, with a horizon time, T");
+       timeline(260,1020,250,6,function(i){return i===0?"t=0":(i===5?"t=T 结束":"");});
+       boxNode(130,286,470,54,"L17/L18：无限时域","d");
+       boxNode(130,348,470,54,"靠 γ 保证总回报不发散","d");
+       boxNode(690,286,470,54,"★ 有限时域","y");
+       boxNode(690,348,470,54,"只跑 T 步，天然不会发散","y");},"<b>第二个推广：有限时域 MDP。</b><br><b>做法是用一个固定的步数 T 代替折扣因子 γ。</b><b>这个 MDP 只跑 T 步就结束。</b><br><b>⭐ 回想 L16 讲 γ 时说过它承担两件事：一是反映「早拿到更值钱」，二是保证无限长的过程里总回报不发散。</b><br><b>⚠ 而有限时域天然就不会发散——总共就 T 项，加起来一定是有限的。</b><b>所以 Ng 说：有限时域 MDP 通常就不必再做折扣了。</b><br><b>（当然你想折扣也可以，两者不冲突。）</b><br><b>⇒ 这个改动听起来平淡，但它会带来一个相当有意思的后果，下一节讲。</b>");
+  S(674,function(){clearScene();setEq(null);setCap("什么时候该用有限时域");
+   matrix({rows:4,cols:2,cw:430,ch:44,x:210,y:198,
+     cell:function(i,j){var t=[
+       ["场景","为什么是有限时域"],
+       ["开车从 A 到 B","到了就结束，不是永远开下去"],
+       ["一局棋","分出胜负就终止"],
+       ["★ 一班生产线","一个班次结束就收工"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 共同点：任务本身就有一个自然的终点",640,398,"y");},"<b>什么时候该用有限时域而不是折扣？看几个场景就清楚了。</b><br><b>开车从 A 到 B：到了目的地就结束，不是永远开下去。</b><br><b>下一局棋：分出胜负就终止。</b><br><b>★ 一个班次的生产线：班次结束就收工。</b><br><b>⭐ 共同点很明确：任务本身就有一个自然的终点。</b><br><b>⚠ 而折扣因子那套框架，本来是为「永远运行下去」的问题设计的</b>——<b>比如一台 24 小时运转的服务器、一个持续调节室温的空调。</b><br><b>⇒ 所以选哪个不是技术偏好，而是看你的问题有没有终点。</b><b>有终点就用 T，没终点就用 γ。</b>");
+  SUM(674,4,{h:"★★ 有限时域：用步数 T 代替 γ",k:"<b>做法</b>：用一个<b>固定的步数 T 代替折扣因子 γ</b>，这个 MDP <b>只跑 T 步就结束</b>。",m:"⭐ <b>回想 γ 的两个作用</b>：反映「早拿到更值钱」＋ <b>保证无限过程不发散</b>。",w:"⚠ <b>有限时域天然不会发散</b>——总共就 T 项，加起来一定有限 ⇒ Ng 说<b>通常就不必再折扣了</b>（想折扣也可以，不冲突）。",e:"⇒ 这个改动听起来平淡，<b>但它会带来一个相当有意思的后果</b>。"});
+  QUIZ(674,4,{t:"有限时域 MDP 是怎么改的？为什么通常不再需要 γ？",o:["把状态数限制为有限；因为无限状态算不动","把奖励限制在 [0,1]；因为要归一化","用固定步数 T 代替 γ，MDP 只跑 T 步；因为总共就 T 项，总回报天然有限、不会发散","把动作数限制为有限；因为要枚举"],a:2,w:"⭐ γ 本来承担两件事：<b>反映「早拿到更值钱」</b> ＋ <b>保证无限过程不发散</b>。有限时域自动解决了第二件。"});
+});
+KP("5 · ★★★ 非平稳策略：最优动作要看「现在几点」",function(){
+  S(800,function(){clearScene();setEq(null);setCap("有限时域带来的意外后果");
+       says("13:20","the action you take may depend on what time it is on the clock");
+       boxNode(120,200,470,58,"还剩 100 步","g");
+       boxNode(120,268,470,58,"值得花几步绕远路，去拿那个大奖励","g");
+       boxNode(690,200,470,58,"只剩 2 步","r");
+       boxNode(690,268,470,58,"⚠ 来不及了，只能抓眼前够得着的","r");
+       note("⭐ 同一个状态，剩余步数不同 ⇒ 最优动作不同",640,352,"y");
+       note("这叫「非平稳策略」：策略随时间变化",640,398,"g");},"<b>★★★ 有限时域带来一个意外的后果：最优动作会依赖「现在是第几步」。</b><br><b>Ng 说，你采取的动作可能取决于时钟上现在是几点。</b><br><b>直觉非常好理解。</b><b>假设你站在某一格，远处有个大奖励，但要走十几步才到。</b><br><b>还剩 100 步时：完全值得花几步绕过去拿它。</b><br><b>⚠ 只剩 2 步时：来不及了，再怎么走也到不了，这时最优的做法是抓眼前够得着的小收益。</b><br><b>⭐ 关键点：这是同一个状态，但因为剩余步数不同，最优动作完全不同。</b><br><b>⇒ 所以策略不再是「状态 → 动作」的固定映射，而是会随时间变化。这种策略叫非平稳策略。</b>");
+  S(901,function(){clearScene();setEq(null);setCap("平稳 vs 非平稳");
+       says("15:01","the technical term for this is that this is a non-stationary policy");
+       matrix({rows:4,cols:3,cw:350,ch:42,x:130,y:200,
+         cell:function(i,j){var t=[
+           ["","平稳策略（L17）","★ 非平稳策略（有限时域）"],
+           ["写法","π(s)","π_t(s)"],
+           ["看什么","只看状态","状态 ＋ 现在第几步"],
+           ["要存多少","一张表","⚠ T 张表"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===3&&j===2)?"hl":"";}});
+       note("⭐ Ng：平稳与非平稳的区别就是「随时间变不变」这么简单",640,398,"y");},"<b>把两种策略并排看。</b>Ng 说这个区别其实很简单：<b>平稳和非平稳，就是问「它随时间变不变」。</b><br><b>平稳策略写作 π(s)，只看状态</b>——<b>这就是 L17 和 L18 里一直用的那种。</b><br><b>★ 非平稳策略写作 π_t(s)，同时看状态和「现在是第几步」。</b><br><b>⚠ 注意最后一行那个代价：平稳策略只要存一张「状态 → 动作」的表；而非平稳策略每个时刻一张，一共要存 T 张。</b><br><b>⇒ 这是有限时域付出的实际代价。</b><br><b>⭐ 但它也带来一个好处：因为策略已经是按时刻分开存的了，那顺手还能让别的东西也随时间变——下一节讲。</b>");
+  SUM(800,5,{h:"★★★ 非平稳策略：最优动作依赖剩余步数",k:"Ng：<b>你采取的动作可能取决于时钟上现在是几点</b>。",m:"⭐ <b>直觉</b>：远处有个大奖励要走十几步。<b>还剩 100 步 ⇒ 值得绕过去拿</b>；<b>只剩 2 步 ⇒ 来不及，只能抓眼前的</b>。<b>同一个状态，剩余步数不同，最优动作不同。</b>",w:"<b>平稳 π(s)</b> 只看状态（L17/L18 用的）；<b>非平稳 π_t(s)</b> 还看第几步。Ng：区别就是「<b>随时间变不变</b>」这么简单。",e:"⚠ <b>代价</b>：平稳只存一张表，<b>非平稳要存 T 张</b>。"});
+  QUIZ(800,5,{t:"为什么有限时域 MDP 的最优策略是非平稳的？",o:["因为奖励函数是随机的","因为剩余步数不同，同一个状态的最优动作也不同——还剩很多步时值得绕远路拿大奖励，只剩两步时就只能抓眼前的","因为状态转移概率会变","因为去掉了折扣因子后价值会发散"],a:1,w:"⭐ Ng 说平稳与非平稳的区别就是「<b>随时间变不变</b>」。⚠ 代价：平稳只存一张表，<b>非平稳要存 T 张</b>。"});
+});
+KP("6 · ⭐ 顺手推广：转移概率和奖励也可以随时间变",function(){
+  S(1202,function(){clearScene();setEq(null);setCap("既然已经非平稳了");
+       says("20:02","if you run a factory 24 hours a day, then the cost of labor");
+       boxNode(130,200,470,58,"非平稳转移概率 P_t","y");
+       boxNode(130,268,470,58,"同一个动作，不同时段结果分布不同","y");
+       boxNode(690,200,470,58,"非平稳奖励 R_t","y");
+       boxNode(690,268,470,58,"同一个动作，不同时段代价不同","y");
+       note("⭐ Ng 的例子：工厂 24 小时运转，夜班人力成本更高",640,352,"y");
+       note("而且不同时段机器故障的概率也不一样",640,398,"d");},"<b>既然策略已经是按时刻分开存的了，那顺手还能让别的东西也随时间变。</b><br><b>非平稳转移概率 P_t：同一个动作，在不同时段结果的分布不同。</b><br><b>非平稳奖励 R_t：同一个动作，在不同时段的代价不同。</b><br><b>⭐ Ng 举的例子是工厂自动化：如果工厂 24 小时运转，那么不同时段的人力成本是不一样的</b>（夜班更贵），<b>而且不同时段机器出故障的概率也不同。</b><br><b>⇒ 把这些写进 P_t 和 R_t，模型就能反映真实的昼夜差异。</b><br><b>⚠ 要点在于：这个推广是「免费」的。</b><b>因为有限时域的解法本来就是逐时刻倒着算的，每个时刻用的 P 和 R 本来就可以不一样，算法一个字都不用改。</b>");
+  S(1202,function(){clearScene();setEq(null);setCap("非平稳的三个层次");
+   boxNode(170,186,980,50,"① 非平稳策略 π_t —— 有限时域下自动就是","b");
+   boxNode(170,244,980,50,"② 非平稳转移 P_t —— 环境本身随时间变","y");
+   boxNode(170,302,980,50,"③ 非平稳奖励 R_t —— 代价随时间变","y");
+   note("⚠ ① 是「被迫的」，②③ 是「可选的」",640,366,"r");
+   note("⭐ 但正因为有了 ①，②③ 才变得不花额外代价",640,402,"y");},"<b>「非平稳」这个词在这一讲里出现了三次，指的是三个不同层次的事，值得分清楚。</b><br><b>① 非平稳策略 π_t：有限时域下自动就是这样，你没得选。</b><br><b>② 非平稳转移概率 P_t：环境本身随时间变化。</b><br><b>③ 非平稳奖励 R_t：代价随时间变化。</b><br><b>⚠ 注意性质不同：① 是被迫的——有限时域必然导致最优策略随时间变；而 ②③ 是可选的，取决于你的问题需不需要。</b><br><b>⭐ 但两者有联系：正因为有了 ①，算法本来就逐时刻分开算，所以 ②③ 才不花额外代价。</b><br><b>⇒ 如果策略是平稳的，想让 P 和 R 随时间变就麻烦多了。</b>");
+  SUM(1202,6,{h:"⭐ P 和 R 也可以随时间变",k:"<b>非平稳转移概率 P_t</b>：同一动作在不同时段<b>结果分布不同</b>。<b>非平稳奖励 R_t</b>：同一动作在不同时段<b>代价不同</b>。",m:"⭐ <b>Ng 的例子</b>：工厂 24 小时运转 ⇒ <b>夜班人力成本更高</b>，而且<b>不同时段机器故障概率也不一样</b>。",w:"⇒ 写进 P_t 和 R_t，模型就能反映<b>真实的昼夜差异</b>。",e:"⚠ <b>这个推广是「免费」的</b>：有限时域本来就逐时刻倒着算，每个时刻用的 P 和 R 本来就可以不同，<b>算法一个字都不用改</b>。"});
+  QUIZ(1202,6,{t:"为什么说「非平稳的 P 和 R」这个推广几乎是免费的？",o:["因为可以用平均值代替","因为 γ 会自动抵消时间差异","因为它们变化很小，可以忽略","因为有限时域本来就逐时刻倒着算，每个时刻用的 P 和 R 本来就可以不同，算法不用改"],a:3,w:"⭐ Ng 的例子是<b>工厂 24 小时运转</b>：夜班人力成本更高，不同时段故障概率也不同。"});
+});
+KP("7 · ★★ 解法：倒着算的动态规划",function(){
+  S(1390,function(){clearScene();setEq(null);setCap("从最后一步往回推");
+       says("23:10","it actually becomes a dynamic programming algorithm");
+       timeline(260,1020,230,6,function(i){
+         return i===0?"t=0":(i===5?"t=T":"");});
+       boxNode(820,270,330,56,"① 先算最后一步 V*_T","g");
+       boxNode(500,340,330,56,"② 用它算 V*_{T−1}","y");
+       note("③ 一路倒推回 t=0",330,398,"b");
+       note("⭐ 为什么能倒着算：最后一步没有未来",640,172,"y");},"<b>有限时域 MDP 怎么解？Ng 说它变成了一个动态规划算法，而且是倒着算的。</b><br><b>第一步：先算最后一个时刻 T 的最优价值 V*_T。</b><br><b>第二步：用 V*_T 算出 V*_{T−1}。</b><br><b>第三步：一路倒推回 t = 0。</b><br><b>⭐ 为什么能倒着算？关键在于最后一步没有未来。</b><b>站在时刻 T，游戏马上就结束了，不存在「后续还能拿多少」这回事。</b><b>⇒ 所以 V*_T 直接就是「这一步能拿到的即时奖励的最大值」，不依赖任何别的东西。</b><br><b>⭐ 这就给了递推一个确定的起点。</b><b>有了起点，后面每一步都能用「这一步的奖励 ＋ 下一步的最优价值」算出来。</b><br><b>⚠ 对照 L17 的值迭代：那里是反复迭代直到收敛，不知道要多少轮；这里是精确的 T 轮，算完就完事。</b>");
+  S(1390,function(){clearScene();setEq(null);setCap("为什么不能正着算");
+   boxNode(130,196,470,58,"⚠ 正着算","r");
+   boxNode(130,264,470,58,"算 V*_0 需要先知道 V*_1，而 V*_1 还没算","r");
+   boxNode(690,196,470,58,"★ 倒着算","g");
+   boxNode(690,264,470,58,"V*_T 不需要任何别的东西 ⇒ 有起点","g");
+   note("⭐ 一般规律：递推要从「不依赖别人的那一端」开始",640,348,"y");
+   note("⚠ 这和 L17 值迭代的「反复刷到收敛」是两种不同的机制",640,398,"r");},"<b>为什么必须倒着算？正着算会卡在哪里？</b><br><b>⚠ 正着算的话：你想算 V*_0，但 Bellman 方程告诉你 V*_0 要用到 V*_1；而 V*_1 又要用到 V*_2……一直推到 V*_T，你才有第一个能真正算出来的值。</b><b>⇒ 所以正着算根本没有起点。</b><br><b>★ 倒着算就不一样了：V*_T 不依赖任何别的东西（因为没有未来），它是现成的。</b><br><b>⭐ 这其实是递推问题的一般规律：要从「不依赖别人的那一端」开始。</b><br><b>⚠ 顺带对比一下 L17 的值迭代：那里也是反复算，但机制完全不同——那里是靠反复刷新让估计逐渐逼近真值，而这里是一次性精确算出每个时刻的值。</b><br><b>⇒ 一个是迭代逼近，一个是精确递推。</b>");
+  SUM(1390,7,{h:"★★ 有限时域的解法：倒着算的动态规划",k:"Ng：<b>它变成一个动态规划算法</b>。<b>① 先算 V*_T ② 用它算 V*_{T−1} ③ 一路倒推回 t=0</b>。",m:"⭐ <b>为什么能倒着算</b>：<b>最后一步没有未来</b>——站在时刻 T 游戏马上结束，不存在「后续还能拿多少」。",w:"⇒ <b>V*_T 直接就是即时奖励的最大值</b>，不依赖任何别的东西 ⇒ <b>这给了递推一个确定的起点</b>。",e:"⚠ <b>对照 L17 的值迭代</b>：那里反复迭代到收敛、不知要多少轮；<b>这里是精确的 T 轮，算完就完事</b>。"});
+  QUIZ(1390,7,{t:"有限时域 MDP 为什么能用「倒着算」的动态规划求解？",o:["因为最后一步没有未来，V*_T 直接就是即时奖励的最大值、不依赖别的东西，这给了递推一个确定的起点","因为折扣因子让远处可以忽略","因为状态数有限","因为转移概率是平稳的"],a:0,w:"⚠ 对照 L17：那里<b>反复迭代到收敛、不知要多少轮</b>；这里是<b>精确的 T 轮</b>，算完就完事。"});
+});
+KP("8 · ★ LQR 登场，先把分寸立住",function(){
+  S(1951,function(){clearScene();setEq(null);setCap("Ng 一上来就说了它的局限");
+       says("32:31","LQR applies only in a relatively small set of problems");
+       boxNode(130,200,470,58,"⚠ 适用面","r");
+       boxNode(130,268,470,58,"只适用于相当小的一类问题","r");
+       boxNode(690,200,470,58,"★ 换来的好处","g");
+       boxNode(690,268,470,58,"连续状态下也有精确闭式解","g");
+       note("⭐ 它的思想很多来自传统控制论，不是机器学习原生的",640,352,"y");
+       note("⚠ 但正因为假设强，它能做到通用方法做不到的事",640,398,"r");},"<b>这一讲的主角叫「线性二次型调节」，简称 LQR。Ng 一上来就把分寸立住了：它只适用于相当小的一类问题。</b><br><b>⚠ 这句话要认真对待——LQR 不是一个万能方法，它对问题的形状有很硬的要求。</b><br><b>⭐ 但它换来的东西很值：在连续状态空间上，它给出精确的闭式解。</b><b>不用离散化，不用采样，不用拟合，不用迭代到收敛。</b><br><b>Ng 还提了一句出身：LQR 的很多想法来自传统的控制论，不是机器学习原生的东西。</b><br><b>⇒ 这解释了它的风格为什么和前面几讲不太一样——它更像一个数学推导，而不是一个学习算法。</b><br><b>下面三节讲它要求问题长成什么样。</b>");
+  S(1951,function(){clearScene();setEq(null);setCap("名字拆开看");
+   matrix({rows:4,cols:2,cw:430,ch:44,x:210,y:198,
+     cell:function(i,j){var t=[
+       ["名字里的词","指什么"],
+       ["Linear（线性）","★ 动力学假设：s′ = A·s + B·a + w"],
+       ["Quadratic（二次）","★ 奖励假设：R = −(sᵀUs + aᵀVa)"],
+       ["Regulation（调节）","把系统稳定在目标点附近"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===1||i===2?"hl":"";}});
+   note("⭐ 名字本身就是两个假设 ＋ 一个目标 —— 记住名字就记住了全部前提",640,398,"y");},"<b>把 LQR 这个名字拆开看，它本身就是一份说明书。</b><br><b>Linear（线性）：指动力学假设——下一个状态是当前状态和动作的线性函数。</b><br><b>Quadratic（二次）：指奖励假设——代价是状态和动作的二次型。</b><br><b>Regulation（调节）：指目标——把系统稳定在某个目标点附近。</b><b>「调节」在控制论里就是这个意思：不是让系统去追一条轨迹，而是把它按在一个点上不动。</b><br><b>⭐ 所以记住这个名字，就记住了 LQR 的全部前提：两个假设加一个目标。</b><br><b>⚠ 反过来，看到一个问题时也可以用名字来判断：它的动力学线性吗？代价二次吗？目标是「稳住」吗？三个都是，LQR 就能用。</b>");
+  SUM(1951,8,{h:"★ LQR：适用面窄，但有精确解",k:"Ng 开门见山：<b>LQR 只适用于相当小的一类问题</b>。⚠ 这句话要认真对待。",m:"⭐ <b>换来的好处</b>：在<b>连续状态空间上给出精确的闭式解</b>——不用离散化、不用采样、不用拟合、不用迭代到收敛。",w:"<b>出身</b>：Ng 说它<b>很多想法来自传统控制论</b>，不是机器学习原生的。",e:"⇒ 这解释了它的风格<b>更像数学推导而不是学习算法</b>。"});
+  QUIZ(1951,8,{t:"Ng 介绍 LQR 时首先强调了什么？",o:["它不需要知道奖励函数","它是最强大的强化学习算法","它只适用于相当小的一类问题——但在适用处能给出精确闭式解，不用离散化/采样/拟合/迭代","它只能用于离散状态"],a:2,w:"⭐ Ng 还提了它的出身：<b>很多想法来自传统控制论</b>，所以风格更像数学推导而非学习算法。"});
+});
+KP("9 · ★★ 假设一：动力学是线性的",function(){
+  S(2017,function(){clearScene();setEq("$$s_{t+1} \\;=\\; A\\,s_t \\;+\\; B\\,a_t \\;+\\; w_t$$","top");
+       setCap("和 L18 学模型时那个式子一模一样");
+       says("33:37","this set of states is an RN",214);
+       note("状态 s ∈ ℝⁿ，动作 a ∈ ℝᵈ ⇒ A 是 n×n，B 是 n×d",640,274,"b");
+       note("⭐ w_t 是高斯噪声 —— 呼应 L18「模拟器要带随机性」那条教训",640,326,"y");
+       note("⚠ 注意：对 s 和 a 都必须是线性的，不能有 s² 或 s·a 这样的项",640,378,"r");},"<b>LQR 的第一个关键假设：状态怎么变，必须是前一个状态和动作的线性函数。</b><br><b>设定是：状态是 n 维实向量，动作是 d 维实向量</b>，<b>于是 A 是 n×n 矩阵，B 是 n×d 矩阵。</b><br><b>⭐ 式子最后那个 w_t 是高斯噪声，这正呼应了 L18 那条实战教训——模型要带随机性，否则学出的策略很脆弱。</b><br><b>⚠ 要注意这个假设有多强：对 s 和 a 都必须是线性的。</b><b>不能出现 s 的平方、也不能出现 s 乘 a 这样的交叉项。</b><br><b>⚠ 而真实系统几乎都不是线性的</b>——<b>直升机的空气动力学、车辆的轮胎力学，全是非线性的。</b><br><b>⇒ 所以必须有办法把非线性问题变成这个形状，下一节讲两条路。</b>");
+  S(2017,function(){clearScene();setEq(null);setCap("A 和 B 各自在说什么");
+   boxNode(130,200,470,58,"A（n×n）","b");
+   boxNode(130,268,470,58,"系统自己会怎么演化（不施加任何动作时）","b");
+   boxNode(690,200,470,58,"B（n×d）","y");
+   boxNode(690,268,470,58,"你的动作会怎样改变这个演化","y");
+   note("⭐ 例：直升机不操纵时会往下掉（A），拉杆能抵消一部分（B）",640,352,"y");
+   note("⚠ B 若有一行全是 0，说明那个状态分量你根本控制不了",640,398,"r");},"<b>A 和 B 各自代表什么？分开看就很有意义了。</b><br><b>A 描述的是：如果你什么动作都不做，系统自己会怎么演化。</b><br><b>B 描述的是：你的动作会怎样改变这个演化。</b><br><b>⭐ 用直升机举例：不操纵时它会往下掉、会被风推着飘——这是 A 的部分；而拉操纵杆能抵消一部分下坠——这是 B 的部分。</b><br><b>⚠ 这个分解带来一个很实用的诊断：如果 B 有一行全是 0，就说明那个状态分量你根本控制不了</b>——<b>无论做什么动作，它都只按 A 自己演化。</b><br><b>⇒ 控制论里管这叫「不可控」，而一个不可控的系统，再好的算法也救不了。</b>");
+  SUM(2017,9,{h:"★★ 假设一：s_{t+1} = A·s_t + B·a_t + w_t",k:"<b>设定</b>：状态 <b>s ∈ ℝⁿ</b>、动作 <b>a ∈ ℝᵈ</b> ⇒ <b>A 是 n×n，B 是 n×d</b>。",m:"⭐ <b>w_t 是高斯噪声</b>——正呼应 L18 那条教训：<b>模型要带随机性，否则学出的策略很脆弱</b>。",w:"⚠ <b>这个假设很强</b>：对 s 和 a <b>都必须线性</b>，<b>不能有 s² 或 s·a 这样的项</b>。",e:"⚠ <b>真实系统几乎都不线性</b>（直升机的空气动力学、车辆的轮胎力学）⇒ <b>必须有办法把它变成这个形状</b>。"});
+  QUIZ(2017,9,{t:"LQR 对动力学的假设是什么？",o:["状态转移必须是确定性的","状态必须是离散的","s_{t+1} = A·s_t + B·a_t + w_t：对状态和动作都是线性的，再加一个高斯噪声项","转移概率必须是平稳的"],a:2,w:"⭐ 那个 <b>w_t 噪声项</b>正呼应 L18 的教训。⚠ 假设很强：<b>不能有 s² 或 s·a 这类项</b>，而真实系统几乎都不线性。"});
+});
+KP("10 · ★ A 和 B 从哪来：两条路",function(){
+  S(2593,function(){clearScene();setEq(null);setCap("一条是学，一条是线性化");
+       boxNode(130,200,470,58,"路一：从数据里学","b");
+       boxNode(130,268,470,58,"就是 L18 讲的那个线性回归","b");
+       boxNode(690,200,470,58,"★ 路二：线性化非线性模型","y");
+       boxNode(690,268,470,58,"在一个典型工作点附近做泰勒展开","y");
+       note("⭐ 路一要有真实数据；路二要有一个（非线性的）物理模型",640,352,"y");
+       note("⚠ 两条路都只在「工作点附近」可靠",640,398,"r");},"<b>那 A 和 B 从哪来？Ng 给了两条路。</b><br><b>路一：从数据里学。</b><b>这就是 L18 讲过的那个做法——让系统动一阵，记下每一刻的状态和动作，然后做线性回归拟合 A 和 B。</b><br><b>★ 路二：如果你已经有一个非线性的物理模型，那就把它线性化。</b><b>做法是在一个典型的工作点附近做泰勒展开，只取一阶项。</b><br><b>⭐ 两条路的前提不同：路一需要真实数据，路二需要一个现成的（非线性）模型。</b><br><b>⚠ 但它们有一个共同的局限：都只在「工作点附近」可靠。</b><b>离得越远，线性近似就越不准。</b><br><b>⇒ 下一节把线性化讲清楚，顺便说明这个局限有多实在。</b>");
+  S(2593,function(){clearScene();setEq(null);setCap("两条路可以合起来用");
+   boxNode(170,196,980,56,"常见做法：先用物理模型线性化，得到初步的 A、B","b");
+   boxNode(170,264,980,56,"再用真实数据做修正，把建模误差补回来","g");
+   note("⭐ 物理模型给结构，数据给精度",640,348,"y");
+   note("⚠ 纯靠数据要大量样本；纯靠物理会漏掉没建模的东西",640,398,"r");},"<b>实践中这两条路常常合起来用。</b><br><b>做法是：先用物理模型做线性化，得到一组初步的 A 和 B；然后用真实采集的数据去修正它们，把建模误差补回来。</b><br><b>⭐ 这样分工很合理：物理模型提供结构（哪些量影响哪些量），数据提供精度（具体的系数该是多少）。</b><br><b>⚠ 反过来看两个极端的毛病就清楚了。</b><b>纯靠数据：需要大量样本，而且在没采样到的区域完全不可靠。</b><b>纯靠物理：会漏掉所有没建模进去的东西——空气扰动、零件磨损、安装误差。</b><br><b>⇒ 合起来用，两边的短板互相补。</b>");
+  SUM(2593,10,{h:"★ A、B 的两条来源：学 或 线性化",k:"<b>路一：从数据里学</b>——L18 讲过的做法，让系统动一阵、记下 (s, a)、做线性回归拟合 A 和 B。",m:"★ <b>路二：线性化非线性模型</b>——在一个<b>典型工作点附近做泰勒展开，只取一阶项</b>。",w:"⭐ <b>前提不同</b>：路一要真实数据，路二要一个现成的非线性模型。",e:"⚠ <b>共同局限</b>：<b>都只在「工作点附近」可靠</b>，离得越远线性近似越不准。"});
+  QUIZ(2593,10,{t:"LQR 里的矩阵 A 和 B 可以怎么得到？",o:["只能由物理定律精确推导","两条路：从数据做线性回归学出来（L18 的做法），或把已有的非线性模型在典型工作点附近泰勒展开线性化","随机初始化后用梯度下降学","用值迭代反推"],a:1,w:"⚠ 两条路有<b>共同局限</b>：都<b>只在工作点附近可靠</b>，离得越远线性近似越不准。"});
+});
+KP("11 · ★★ 线性化：在工作点附近取一阶",function(){
+  S(2593,function(){clearScene();setEq(null);setCap("泰勒展开的几何含义");
+       says("43:13","a second method is to linearize a non-linear model");
+       axes({x0:300,x1:980,y0:380,y1:190});
+       curve(fn(function(x){var t=(x-300)/680;return 370-180*Math.pow(t,0.55);},305,975,80),"g");
+       curve([[480,318],[820,214]],"y");
+       dots([[640,268]],"r",8);
+       note("绿：真实的非线性关系",880,230,"g");
+       note("黄：在红点附近的线性近似",470,208,"y");
+       note("⭐ 红点 = 你选的典型工作点（s̄, ā）",640,398,"y");},"<b>线性化的几何含义很直观：在你关心的那个点上，给曲线贴一条切线，然后用这条直线代替曲线。</b><br><b>图上绿色是真实的非线性关系，红点是你选的典型工作点，黄色直线就是在那一点的线性近似。</b><br><b>⭐ 注意红点的选法：Ng 说要选一个「典型的状态和动作」——也就是系统平常大致会待在的那个地方。</b><br><b>对直升机来说，就是低速平稳悬停时的姿态。</b><br><b>⚠ 现在看图就明白那个局限了：在红点附近，黄线和绿线几乎重合，近似很好；而越往两边走，两条线差得越远。</b><br><b>⇒ 所以线性化出来的模型，只在工作点附近可信。</b><b>下一节讲这在实践中意味着什么。</b>");
+  S(2593,function(){clearScene();setEq("$$f(s,a) \\;\\approx\\; f(\\bar{s},\\bar{a}) \\;+\\; \\nabla_{s} f\\cdot(s-\\bar{s}) \\;+\\; \\nabla_{a} f\\cdot(a-\\bar{a})$$","top");
+   setCap("泰勒展开写出来");
+   note("① 在工作点 (s̄, ā) 处取函数值",640,266,"b");
+   note("② 加上对 s 的偏导 × 偏离量",640,318,"b");
+   note("③ 加上对 a 的偏导 × 偏离量",640,370,"b");
+   note("⭐ 整理一下，偏导矩阵就成了 A 和 B",640,402,"y");},"<b>把线性化的式子写出来，就知道 A 和 B 具体是什么了。</b><br><b>这是标准的多元泰勒展开取一阶：① 先在工作点 (s̄, ā) 处取函数值；② 加上「对 s 的偏导乘以 s 偏离工作点的量」；③ 再加上「对 a 的偏导乘以 a 的偏离量」。</b><br><b>⭐ 整理一下就会发现：对 s 的那个偏导矩阵正是 A，对 a 的那个正是 B。</b><br><b>⚠ 注意第一项 f(s̄, ā)——它是一个常数，不含 s 和 a。</b><b>严格来说有了它式子就不是纯线性的了（是仿射的），实践中通常通过平移坐标把它吸收掉</b>，<b>这也正是前面说「把原点设在目标状态上」的另一个理由。</b>");
+  SUM(2593,11,{h:"★★ 线性化：给曲线在工作点贴一条切线",k:"<b>几何含义</b>：在你关心的那一点上<b>给曲线贴一条切线</b>，然后<b>用这条直线代替曲线</b>（泰勒展开取一阶）。",m:"⭐ <b>工作点怎么选</b>：Ng 说选一个「<b>典型的状态和动作</b>」——系统平常大致会待在的地方。对直升机就是<b>低速平稳悬停时的姿态</b>。",w:"⚠ <b>局限看图就明白</b>：工作点附近两条线几乎重合，<b>越往两边走差得越远</b>。",e:"⇒ <b>线性化出来的模型只在工作点附近可信。</b>"});
+  QUIZ(2593,11,{t:"线性化一个非线性模型是怎么做的？它的局限是什么？",o:["在一个典型工作点附近做泰勒展开取一阶（相当于贴切线）；局限是只在工作点附近可信，离得越远越不准","把所有非线性项直接删掉；局限是精度低","用神经网络拟合；局限是需要大量数据","把状态归一化；局限是改变了量纲"],a:0,w:"⭐ 工作点要选「<b>系统平常大致会待在的地方</b>」——对直升机就是<b>低速平稳悬停</b>的姿态。"});
+});
+KP("12 · ⚠ 低速悬停可以，翻跟头不行",function(){
+  S(227,function(){clearScene();setEq(null);setCap("课上有人问：这能用来开直升机吗");
+       says("3:47","for flying a helicopter at low speed");
+       boxNode(130,200,470,58,"★ 低速、平稳飞行","g");
+       boxNode(130,268,470,58,"状态一直在工作点附近 ⇒ 线性近似够用","g");
+       boxNode(690,200,470,58,"⚠ 高速、剧烈机动、翻转","r");
+       boxNode(690,268,470,58,"状态远离工作点 ⇒ 需要比这更多的东西","r");
+       note("⭐ 这就是上一节那个「只在工作点附近可信」的实际后果",640,352,"y");
+       note("⚠ 判断一个方法能不能用，先问「我的系统会离工作点多远」",640,398,"r");},"<b>课上有同学问 Ng：这套算法能用来开直升机吗？他的回答把适用边界说得很具体。</b><br><b>★ 低速、平稳地飞，这套东西够用。</b><b>因为直升机的状态一直在那个典型工作点附近打转，线性近似很准。</b><br><b>⚠ 但如果你要高速飞行、做剧烈机动、翻转倒飞，Ng 说那就需要比这更多的东西了。</b><br><b>⭐ 原因正是上一节那张图：剧烈机动时状态会远离工作点，而线性近似在那里已经不可信了。</b><br><b>⚠ 这一问一答给了一个很实用的判断方法：评估一个线性方法能不能用，先问「我的系统运行时会离工作点多远」。</b><br><b>⇒ 答案是「不远」，线性化就够；答案是「很远」，就得另想办法。</b>");
+  S(227,function(){clearScene();setEq(null);setCap("一个更一般的提问方式");
+   boxNode(170,196,980,56,"问题不是「这个方法好不好」","d");
+   boxNode(170,264,980,56,"★ 而是「我的系统会不会离开它的假设成立的区域」","y");
+   note("⭐ 低速悬停 ⇒ 不离开 ⇒ 能用",640,348,"g");
+   note("⚠ 翻转倒飞 ⇒ 远远离开 ⇒ 不能用",640,398,"r");},"<b>把这个问答提炼成一个更一般的提问方式，它在很多地方都用得上。</b><br><b>评估一个方法时，问题往往不是「这个方法好不好」，而是「我的系统在运行中，会不会离开这个方法的假设成立的那片区域」。</b><br><b>⭐ 低速悬停时，直升机的状态始终在工作点附近打转，没离开线性近似成立的区域 ⇒ LQR 能用。</b><br><b>⚠ 翻转倒飞时，状态远远跑出了那片区域 ⇒ 不能用。</b><br><b>⇒ 这个提问方式的好处是它可操作：你可以真的去估计「系统运行时状态的范围有多大」，然后和「线性近似在多大范围内还准」比一比。</b><br><b>⭐ 而「这个方法好不好」这种问法，是没法回答的。</b>");
+  SUM(227,12,{h:"⚠ 适用边界：低速悬停可以，剧烈机动不行",k:"<b>★ 低速平稳飞行</b>：够用——<b>状态一直在典型工作点附近打转，线性近似很准</b>。",m:"⚠ <b>高速飞行、剧烈机动、翻转倒飞</b>：Ng 说<b>需要比这更多的东西</b>。",w:"⭐ <b>原因</b>：剧烈机动时<b>状态远离工作点</b>，而线性近似在那里<b>已经不可信</b>。",e:"⚠ <b>实用的判断方法</b>：评估线性方法能否用，<b>先问「我的系统运行时会离工作点多远」</b>。"});
+  QUIZ(227,12,{t:"LQR 能用来控制直升机吗？Ng 怎么回答？",o:["可以，任何飞行状态都没问题","完全不能，直升机太复杂","只有加上离散化才能用","低速平稳飞行可以（状态一直在工作点附近）；高速剧烈机动、翻转就需要更多东西，因为状态远离了线性化的工作点"],a:3,w:"⚠ 实用判断法：评估一个线性方法能不能用，<b>先问「我的系统运行时会离工作点多远」</b>。"});
+});
+KP("13 · ★★ 假设二：奖励是二次型的",function(){
+  S(2205,function(){clearScene();setEq("$$R(s,a) \\;=\\; -\\big(s^{\\top} U s \\;+\\; a^{\\top} V a\\big), \\qquad U,\\,V \\text{ 半正定}$$","top");
+       setCap("注意前面那个负号");
+       says("36:45","the reward is negative of s transpose U s plus a transpose V a",214);
+       note("U 是 n×n，V 是 d×d，两者都必须是半正定矩阵",640,274,"b");
+       note("⭐ 取 U、V 为单位阵时，它就是 −(‖s‖² + ‖a‖²)",640,326,"y");
+       note("⚠ 半正定 ⇒ 括号里永远非负 ⇒ 奖励永远 ≤ 0（是「代价」）",640,378,"r");},"<b>LQR 的第二个关键假设：奖励必须是二次型的。</b><br><b>式子是 R(s, a) = −(sᵀU s + aᵀV a)，其中 U 是 n×n、V 是 d×d，而且两者都必须是半正定矩阵。</b><br><b>⭐ 最好懂的特例是取 U 和 V 都是单位阵：这时它就变成 −(‖s‖² + ‖a‖²)</b>——<b>状态的长度平方加上动作的长度平方，再取负。</b><br><b>⚠ 注意「半正定」这个条件的后果：它保证括号里那一坨永远是非负的，于是加上负号之后，奖励永远小于等于 0。</b><br><b>⇒ 所以 LQR 里的「奖励」其实都是代价，最好的情况是 0（一分钱不花）。</b><br><b>⭐ 下一节讲这个形式到底在表达什么目标。</b>");
+  S(2205,function(){clearScene();setEq(null);setCap("U 和 V 的对角元在调什么");
+   matrix({rows:4,cols:3,cw:350,ch:44,x:130,y:198,
+     cell:function(i,j){var t=[
+       ["调大谁","后果",""],
+       ["U 的某个对角元","更不容忍那个状态分量偏离 0",""],
+       ["V 的某个对角元","★ 更不容忍那个动作用力",""],
+       ["U 相对 V 都调大","策略更激进（宁可费劲也要稳住）",""]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===2?"hl":"";}});
+   note("⭐ 所以 U、V 是你表达「什么更重要」的旋钮",640,398,"y");},"<b>U 和 V 不只是抽象的矩阵，它们是你真正会去调的旋钮。</b><br><b>把 U 的某个对角元调大：意味着你更不容忍那个状态分量偏离 0。</b>比如<b>直升机的高度偏差比水平偏差更要命，那就把高度对应的那一项调大。</b><br><b>★ 把 V 的某个对角元调大：意味着你更不容忍那个方向的动作用力。</b>比如<b>某个舵面不宜大幅动作，就加重它的惩罚。</b><br><b>⭐ 把 U 整体相对 V 调大：策略会变得更激进——宁可多费劲，也要把状态压住。</b>反过来则更省力但更松弛。<br><b>⇒ 所以设计 LQR 控制器的实际工作，很大一部分就是调 U 和 V。</b><b>⚠ 它们是你表达「什么更重要」的地方，而不是什么需要「估计出来」的参数。</b>");
+  SUM(2205,13,{h:"★★ 假设二：R(s,a) = −(sᵀUs + aᵀVa)",k:"<b>U 是 n×n，V 是 d×d，两者都必须半正定</b>。",m:"⭐ <b>最好懂的特例</b>：U、V 都取单位阵 ⇒ <b>R = −(‖s‖² + ‖a‖²)</b>，状态长度平方加动作长度平方，再取负。",w:"⚠ <b>「半正定」的后果</b>：括号里<b>永远非负</b> ⇒ 加负号后<b>奖励永远 ≤ 0</b>。",e:"⇒ 所以 LQR 里的「奖励」<b>其实都是代价</b>，最好的情况是 0（一分钱不花）。"});
+  QUIZ(2205,13,{t:"LQR 对奖励函数的假设是什么？「半正定」带来什么后果？",o:["奖励必须是线性的；半正定保证解唯一","奖励必须有界；半正定保证可逆","R(s,a) = −(sᵀUs + aᵀVa)，U、V 半正定；后果是括号里永远非负，奖励永远 ≤ 0，本质上是代价","奖励必须非负；半正定保证收敛"],a:2,w:"⭐ 最好懂的特例是 U、V 取单位阵 ⇒ <b>R = −(‖s‖² + ‖a‖²)</b>。"});
+});
+KP("14 · ⭐ 二次型代价在表达什么目标",function(){
+  S(2205,function(){clearScene();setEq(null);setCap("把系统稳在原点，而且别太费劲");
+       axes({x0:300,x1:980,y0:360,y1:190});
+       curve(parab(640,206,620,150,"y",false),"y");
+       dots([[640,206]],"g",9);
+       note("最低代价点：s = 0",640,180,"g");
+       note("⭐ 偏离 0 越远，代价按平方增长",640,310,"y");
+       note("⚠ 「0」是你自己定的目标点 —— 把坐标原点设在你想去的地方",640,398,"r");},"<b>二次型代价到底在表达什么？拆成两项看。</b><br><b>第一项 sᵀU s 惩罚「状态偏离 0」</b>：<b>s 离原点越远，代价按平方增长</b>——图上那条抛物线就是它。<br><b>第二项 aᵀV a 惩罚「动作太用力」</b>：动作幅度越大，代价也按平方增长。<br><b>⭐ 合起来，这个奖励在说：把系统稳在原点，而且别太费劲。</b><b>这正是控制问题最常见的目标。</b><br><b>⚠ 这里有个容易卡住的地方：凭什么目标是 0？</b><b>答案是——0 是你自己定的。</b><b>你把坐标原点设在你想让系统去的那个状态上，于是「回到原点」就等于「达成目标」。</b><br><b>⇒ 想让直升机悬停在某个高度，就把那个高度定义成 s = 0。</b>");
+  S(2205,function(){clearScene();setEq(null);setCap("为什么用平方而不是绝对值");
+   axes({x0:300,x1:980,y0:360,y1:200});
+   curve(fn(function(x){var t=(x-640)/300;return 212+140*t*t;},345,935,70),"y");
+   curve(fn(function(x){return 212+140*Math.abs((x-640)/300);},345,935,40),"d");
+   note("黄：平方 —— 偏得越远，惩罚涨得越快",640,186,"y");
+   note("灰：绝对值 —— 惩罚是匀速涨的",870,330,"d");
+   note("⭐ 平方意味着「小偏差可以容忍，大偏差绝不接受」",640,398,"y");},"<b>为什么代价用平方，而不是用绝对值？两条曲线一比就清楚了。</b><br><b>灰色是绝对值：偏离多一倍，惩罚就多一倍，是匀速增长的。</b><br><b>★ 黄色是平方：偏离多一倍，惩罚就多三倍，涨得越来越快。</b><br><b>⭐ 这个差别表达的态度是：小偏差可以容忍，但大偏差绝不接受。</b><b>直升机高度偏了 10 厘米无所谓，偏了 10 米就是灾难——而这个「无所谓」和「灾难」之间的落差，平方刚好能表达，线性表达不了。</b><br><b>⚠ 当然也有很现实的数学原因：二次型求导之后是线性的，这正是整个 LQR 推导能走得通、最优策略恰好是线性的根本原因。</b><br><b>⇒ 换成绝对值，这套漂亮的闭式解就全没了。</b>");
+  SUM(2205,14,{h:"⭐ 二次型代价 = 「稳在原点 ＋ 别太费劲」",k:"<b>第一项 sᵀUs</b> 惩罚<b>状态偏离 0</b>（离原点越远代价按平方增长）；<b>第二项 aᵀVa</b> 惩罚<b>动作太用力</b>。",m:"⭐ <b>合起来的含义</b>：<b>把系统稳在原点，而且别太费劲</b>——这正是控制问题最常见的目标。",w:"⚠ <b>凭什么目标是 0</b>：<b>0 是你自己定的</b>。把坐标原点设在你想让系统去的那个状态上。",e:"⇒ <b>想让直升机悬停在某个高度，就把那个高度定义成 s = 0。</b>"});
+  QUIZ(2205,14,{t:"二次型代价 −(sᵀUs + aᵀVa) 表达的目标是什么？",o:["让动作尽可能多样","把系统稳在原点、而且别太费劲：第一项罚状态偏离 0，第二项罚动作太用力","让系统尽快到达任意状态","最大化状态的方差"],a:1,w:"⚠ <b>「0」是你自己定的</b>——把坐标原点设在你想让系统去的状态上。想让直升机悬停在某高度，就把那个高度定义成 s=0。"});
+});
+KP("15 · ★★★ 关键性质：V* 恰好是二次函数",function(){
+  S(3409,function(){clearScene();setEq(null);setCap("Ng 说这是 LQR 的 remarkable property");
+       says("56:49","V star is a quadratic function");
+       boxNode(130,200,470,58,"输入：线性动力学 ＋ 二次型代价","b");
+       boxNode(690,200,470,58,"★ 输出：V* 是二次函数","y");
+       link(600,229,690,229);
+       note("⭐ 不是「用二次函数去近似」，而是「它本来就精确地是二次的」",640,300,"y");
+       note("⚠ 这和 L18 完全不同 —— 那里 V 只是被拟合出来的近似",640,352,"r");
+       note("⇒ 于是只要记住几个系数，就等于记住了整个价值函数",640,398,"g");},"<b>★★★ 现在到了这一讲最精彩的地方。Ng 称之为 LQR 的 remarkable property。</b><br><b>结论是：在前面那两个假设下，最优价值函数 V* 恰好是一个二次函数。</b><br><b>⭐ 注意这句话的分量：不是「我们用二次函数去近似 V*」，而是「V* 本来就精确地是二次的」。</b>这是推导出来的事实。<br><b>⚠ 这和 L18 完全不同。</b><b>那里的 V 是用 θᵀφ(s) 拟合出来的近似，带着拟合误差；</b><b>而这里 V* 的形式是精确已知的。</b><br><b>⇒ 后果非常实在：既然 V* 一定是二次函数，那只要记住它的几个系数矩阵，就等于记住了整个价值函数——而不需要为每个状态存一个数，也不需要拟合。</b><br><b>下面两节讲怎么把这些系数算出来。</b>");
+  S(3409,function(){clearScene();setEq(null);setCap("二次函数要存多少个数");
+   matrix({rows:4,cols:3,cw:350,ch:44,x:130,y:198,
+     cell:function(i,j){var t=[
+       ["表示方式","要存什么","状态连续时"],
+       ["查找表","每个状态一个数","⚠ 存不下"],
+       ["拟合（L18）","一组 θ","近似，有误差"],
+       ["★ 二次函数","一个矩阵 ＋ 一个常数","⭐ 精确"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 关键不在「存得少」，而在「这么存没有丢任何信息」",640,398,"y");},"<b>「V* 是二次函数」这件事的实际价值，看存储就明白了。</b><br><b>查找表：每个状态一个数，连续状态下存不下。</b><br><b>拟合（L18 的做法）：存一组 θ，省空间，但那是近似，有误差。</b><br><b>★ 二次函数：存一个矩阵加一个常数（就是 Φ 和 Ψ），同样很省。</b><br><b>⭐ 但关键区别不在于「存得少」——L18 存得也不多。关键在于这么存没有丢任何信息。</b><br><b>L18 的 θ 是硬挤出来的近似，真实的 V* 可能根本不是 θᵀφ(s) 那个形状；</b><b>而 LQR 的 Φ、Ψ 是精确的——真实的 V* 恰好就是那个二次函数，一分不差。</b><br><b>⇒ 这就是「推导出来的结论」和「假设的近似」之间的全部差别。</b>");
+  SUM(3409,15,{h:"★★★ V* 恰好是二次函数（不是近似）",k:"Ng 称之为 LQR 的 <b>remarkable property</b>：在那两个假设下，<b>V* 恰好是一个二次函数</b>。",m:"⭐ <b>注意分量</b>：不是「用二次函数去近似 V*」，而是「<b>V* 本来就精确地是二次的</b>」——这是推导出来的事实。",w:"⚠ <b>和 L18 完全不同</b>：那里 V 是 θᵀφ(s) 拟合出来的近似、带拟合误差；<b>这里 V* 的形式是精确已知的</b>。",e:"⇒ ⭐ <b>只要记住几个系数矩阵，就等于记住了整个价值函数</b>——不用为每个状态存数，也不用拟合。"});
+  QUIZ(3409,15,{t:"LQR 的「remarkable property」是什么？",o:["V* 与状态无关","V* 可以用二次函数很好地近似","V* 一定是线性的","在线性动力学＋二次型代价下，V* 恰好精确地是一个二次函数——不是近似，是推导出的事实"],a:3,w:"⚠ 这和 L18 完全不同：那里 V 是<b>拟合出来的近似、带误差</b>。⭐ 后果：<b>记住几个系数矩阵就等于记住了整个价值函数</b>。"});
+});
+KP("16 · ★ 基准情形：最后一步什么都别做",function(){
+  S(3475,function(){clearScene();setEq("$$V^{*}_{T}(s_T) \\;=\\; \\max_{a_T}\\;-\\big(s_T^{\\top}U s_T + a_T^{\\top}V a_T\\big) \\;=\\; -\\,s_T^{\\top} U s_T$$","top");
+       setCap("倒推的起点");
+       says("57:55","the optimal action is actually to just choose the action 0",214);
+       note("① aᵀVa 永远 ≥ 0（因为 V 半正定）",640,274,"b");
+       note("② 前面有负号 ⇒ 这一项只会让奖励变小",640,326,"b");
+       note("⭐ ⇒ 最优做法是让它等于 0，也就是 a = 0：什么都别做",640,378,"y");},"<b>推导是倒着做的动态规划，起点是最后一个时刻 T。</b><br><b>站在时刻 T，没有未来了，所以 V*_T 就是「这一步能拿到的奖励的最大值」。</b><br><b>把二次型代价代进去，推理只有两步。</b><b>① 因为 V 是半正定的，aᵀV a 永远大于等于 0。</b><b>② 而式子前面有个负号，所以这一项只会让奖励变小。</b><br><b>⭐ ⇒ 要让奖励最大，就得让这一项等于 0，也就是取 a = 0——最后一步什么都别做。</b><br><b>于是 V*_T(s) = −sᵀU s。</b><br><b>⭐ 注意这个结果本身就是一个二次函数！这正是整个归纳的起点。</b><br><b>⚠ 直觉上也说得通：最后一步做任何动作都已经来不及影响未来了，而动作本身是要花代价的，所以干脆别动。</b>");
+  S(3475,function(){clearScene();setEq(null);setCap("半正定在这里起了什么作用");
+   boxNode(170,196,980,56,"V 半正定 ⇒ 对任何 a，都有 aᵀVa ≥ 0","b");
+   boxNode(170,264,980,56,"⇒ −aᵀVa ≤ 0，最大值在 a = 0 处取到","g");
+   note("⚠ 如果 V 不是半正定的，这一步就不成立",640,348,"r");
+   note("⭐ 这就是为什么 LQR 要求 U、V 半正定 —— 不是为了好看",640,398,"y");},"<b>「半正定」这个条件在基准情形里起了决定性作用，值得单独看一下。</b><br><b>V 半正定的定义就是：对任何向量 a，都有 aᵀV a ≥ 0。</b><br><b>⇒ 于是 −aᵀV a ≤ 0，这一项的最大值 0 在 a = 0 处取到。</b><br><b>⚠ 如果 V 不是半正定的会怎样？那就可能存在某个 a 让 aᵀV a 变成负数，于是 −aᵀV a 变成正数——动作越大奖励越高。</b><b>算法会把动作推向无穷大，整个问题没有有限的最优解。</b><br><b>⭐ 所以 LQR 要求 U、V 半正定，不是为了数学上好看，而是为了保证问题有解。</b><br><b>⇒ 实现时如果你的代价矩阵不半正定，报错是对的，不是算法的毛病。</b>");
+  SUM(3475,16,{h:"★ 基准情形：最后一步取 a = 0",k:"站在时刻 T <b>没有未来了</b>，所以 V*_T 就是「这一步奖励的最大值」。",m:"<b>推理两步</b>：① <b>V 半正定 ⇒ aᵀVa 永远 ≥ 0</b> ② <b>前面有负号 ⇒ 这一项只会让奖励变小</b>。",w:"⭐ ⇒ <b>取 a = 0</b>，于是 <b>V*_T(s) = −sᵀUs</b>。<b>注意这本身就是一个二次函数</b>——整个归纳的起点。",e:"⚠ <b>直觉上也说得通</b>：最后一步做什么都来不及影响未来了，<b>而动作本身要花代价，所以干脆别动</b>。"});
+  QUIZ(3475,16,{t:"LQR 倒推的基准情形（最后一步）最优动作是什么？为什么？",o:["取 a = 0（什么都别做）：V 半正定使 aᵀVa ≥ 0，而前面有负号，所以这一项只会让奖励变小","随机取一个动作；因为最后一步无所谓","取使状态归零的那个动作；因为目标是原点","取最大的动作；因为要尽快到达"],a:0,w:"⭐ 结果 <b>V*_T(s) = −sᵀUs</b> <b>本身就是二次函数</b>——这正是归纳的起点。⚠ 直觉：<b>最后一步做什么都来不及了，而动作要花代价</b>。"});
+});
+KP("17 · ★★ 归纳步骤与 Φ、Ψ 的递推",function(){
+  S(3564,function(){clearScene();setEq(null);setCap("假设下一步是二次的，证明这一步也是");
+       says("59:24","suppose that V star t plus 1 S_t plus 1 is equal to a quadratic function");
+       boxNode(170,186,980,50,"① 假设 V*_{t+1} 是二次的，由 Φ_{t+1}、Ψ_{t+1} 决定","b");
+       boxNode(170,244,980,50,"② 代入 Bellman 方程，做一堆代数","y");
+       boxNode(170,302,980,50,"③ 结果：V*_t 仍然是二次的，由 Φ_t、Ψ_t 决定","g");
+       boxNode(170,360,980,44,"④ 而 Φ_t、Ψ_t 可以从 Φ_{t+1}、Ψ_{t+1} 算出来","g");
+       note("⭐ 有了基准情形 ＋ 归纳步骤，就能从 t=T 一路倒推到 t=0",640,178,"y");},"<b>归纳步骤是整个推导的核心，形状很标准。</b><br><b>① 假设下一个时刻的 V*_{t+1} 是二次函数，它的形状由两个量决定，记作 Φ_{t+1} 和 Ψ_{t+1}。</b><br><b>② 把它代进 Bellman 方程，然后做一大堆代数。</b><b>⚠ Ng 自己也说了这一步「代数量相当大」，课上没有逐步展开。</b><br><b>③ 化简完的结果是：V*_t 仍然是二次函数，由 Φ_t 和 Ψ_t 决定。</b><br><b>④ 而且关键是——Φ_t 和 Ψ_t 可以从 Φ_{t+1} 和 Ψ_{t+1} 直接算出来。</b><br><b>⭐ 于是整件事就齐了：基准情形给了 t = T 时的 Φ 和 Ψ，归纳步骤让你一路倒推到 t = 0。</b><br><b>⇒ 这就是 LQR 的全部计算——倒着递推两串矩阵，没有任何迭代到收敛的过程。</b>");
+  S(3564,function(){clearScene();setEq(null);setCap("这类证明的标准形状");
+   boxNode(130,196,470,58,"数学归纳法","b");
+   boxNode(130,264,470,58,"基准情形 ＋ 「若 n 成立则 n+1 成立」","b");
+   boxNode(690,196,470,58,"★ 这里","y");
+   boxNode(690,264,470,58,"基准是 t=T ＋ 「若 t+1 是二次则 t 也是」","y");
+   note("⭐ 唯一的不同：这里是倒着归纳的（从 T 往 0）",640,348,"y");
+   note("⚠ 代数很长，但结构就这么简单 —— 别被代数量吓住",640,398,"r");},"<b>如果你觉得这个推导很绕，那是被代数量吓住了——它的结构其实非常标准。</b><br><b>这就是数学归纳法：有一个基准情形，再有一条「如果某一步成立，那么下一步也成立」的规则。</b><br><b>★ 对应到这里：基准情形是 t = T（我们算出了 V*_T 是二次的）；归纳步骤是「如果 V*_{t+1} 是二次的，那么 V*_t 也是」。</b><br><b>⭐ 唯一和中学课本不同的地方是方向：这里是倒着归纳的，从 T 往 0 推，而不是从 0 往上推。</b><br><b>⚠ Ng 自己也说中间「代数量相当大」，课上没有逐步展开。</b><b>⇒ 所以理解这一节不需要你能复现那些代数，只需要看清这个「基准 + 归纳」的骨架。</b>");
+  SUM(3564,17,{h:"★★ 归纳：V* 的二次形式在倒推中保持",k:"<b>① 假设 V*_{t+1} 是二次的</b>（由 Φ_{t+1}、Ψ_{t+1} 决定）<b>② 代入 Bellman 方程做代数</b>（⚠ Ng 说代数量相当大，课上没逐步展开）。",m:"<b>③ 结果 V*_t 仍是二次的</b>，由 Φ_t、Ψ_t 决定；<b>④ 而 Φ_t、Ψ_t 可从 Φ_{t+1}、Ψ_{t+1} 直接算出来</b>。",w:"⭐ <b>于是整件事齐了</b>：基准情形给 t=T 的 Φ、Ψ，归纳步骤让你<b>一路倒推到 t=0</b>。",e:"⇒ <b>这就是 LQR 的全部计算</b>——倒着递推两串矩阵，<b>没有任何「迭代到收敛」的过程</b>。"});
+  QUIZ(3564,17,{t:"LQR 的归纳步骤说明了什么？",o:["假设 V*_{t+1} 是二次的，代入 Bellman 方程后 V*_t 仍是二次的，且其系数 Φ_t、Ψ_t 可由 Φ_{t+1}、Ψ_{t+1} 递推出来","V* 与时间无关","V* 会随 t 变成更高次的多项式","必须用梯度下降求 Φ 和 Ψ"],a:0,w:"⭐ 配上基准情形（t=T 时取 a=0），就能<b>一路倒推到 t=0</b>。⇒ 没有任何「迭代到收敛」的过程。"});
+});
+KP("18 · ★★★ 最优动作是状态的线性函数",function(){
+  S(4111,function(){clearScene();setEq("$$\\pi^{*}_{t}(s_t) \\;=\\; L_t \\, s_t$$","top");
+       setCap("LQR 最漂亮的结论");
+       says("68:31","the optimal action is a linear function of the state S_t",214);
+       note("L_t 是一个矩阵，由倒推过程算出来",640,274,"b");
+       note("⭐ 运行时每一步只要做一次矩阵乘法 —— 没有采样，没有 argmax 搜索",640,326,"y");
+       note("⚠ Ng 特意澄清：这不是「拟合一条直线去近似」",640,378,"r");},"<b>★★★ 这是 LQR 最漂亮的结论：最优动作是状态的线性函数，写作 π*_t(s_t) = L_t · s_t。</b><br><b>L_t 是一个矩阵，它由前面那个倒推过程算出来。</b><br><b>⭐ 后果有多实在？运行时每一步只需要做一次矩阵乘法。</b><b>不用采样估期望（L18 要），不用对每个动作搜一遍 argmax（L17 和 L18 都要）。</b><br><b>⚠ 而这里有一句话必须讲清楚，Ng 在课上专门澄清过：这不是说「你拟合一条直线去近似最优动作」。</b><br><b>⭐ 而是说——最优动作本身，精确地就是状态的线性函数。</b><b>这是从假设里推导出来的结果，不是一个近似。</b><br><b>⇒ 把这一点和上一节连起来：V* 精确是二次的，π* 精确是线性的。两个都是推出来的，不是凑出来的。</b>");
+  S(4111,function(){clearScene();setEq(null);setCap("运行时的代价对比");
+   matrix({rows:4,cols:3,cw:350,ch:44,x:130,y:198,
+     cell:function(i,j){var t=[
+       ["","每一步要做什么","代价"],
+       ["L17","查一下策略表","很小"],
+       ["L18","对每个动作采样估 q(a) 再 argmax","⚠ 不小"],
+       ["★ L19","一次矩阵乘法 L_t · s_t","⭐ 极小"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 对实时控制系统来说，这个差别是决定性的",640,398,"y");},"<b>「最优动作是线性函数」在工程上意味着什么？看运行时的代价。</b><br><b>L17：状态有限，可以事先把策略表算好，运行时查表，代价很小。</b><br><b>⚠ L18：状态连续，存不下表，所以每一步都要对每个动作采样估 q(a)，再取 argmax——代价不小。</b><br><b>★ L19：每一步只做一次矩阵乘法 L_t 乘 s_t，代价极小。</b><br><b>⭐ 对实时控制系统来说，这个差别往往是决定性的。</b><b>直升机的控制回路可能每秒要跑几十次，每一次都得在几毫秒内给出动作</b>——<b>这种预算下，L18 那种「每步采样几十次」的做法根本来不及。</b><br><b>⇒ 所以 LQR 在真实控制系统里用得那么广，不只是因为它精确，也因为它够快。</b>");
+  SUM(4111,18,{h:"★★★ π*_t(s) = L_t · s_t：最优动作精确线性",k:"<b>L_t 是一个矩阵</b>，由倒推过程算出来。",m:"⭐ <b>运行时每一步只要做一次矩阵乘法</b>——不用采样估期望（L18 要），不用对每个动作搜 argmax（L17、L18 都要）。",w:"⚠ <b>Ng 专门澄清</b>：这<b>不是</b>「拟合一条直线去近似最优动作」，<b>而是最优动作本身精确地就是线性的</b>。",e:"⇒ ⭐ <b>V* 精确是二次的，π* 精确是线性的</b>——两个都是推出来的，不是凑出来的。"});
+  QUIZ(4111,18,{t:"LQR 的最优策略长什么样？Ng 特意澄清了什么？",o:["需要用 argmax 现场搜索；澄清搜索很快","是一张查找表；澄清表很大","是状态的二次函数；澄清它需要归一化","π*_t(s) = L_t·s_t，是状态的线性函数；澄清这不是「拟合一条直线去近似」，而是最优动作本身精确就是线性的"],a:3,w:"⭐ 实际好处：<b>运行时每步只要一次矩阵乘法</b>，不用采样、不用 argmax 搜索。⇒ <b>V* 精确二次，π* 精确线性，都是推出来的</b>。"});
+});
+KP("19 · ★★ 完整算法：倒着递推两串矩阵",function(){
+  S(4344,function(){clearScene();setEq(null);setCap("Ng 课上总结的那几行");
+       says("72:24","you initialize Phi T to be equal to negative u and Psi T equals 0");
+       boxNode(170,186,980,50,"① 初始化：Φ_T = −U，Ψ_T = 0","b");
+       boxNode(170,244,980,50,"② 从 t = T−1 往下数到 0：用 Φ_{t+1}、Ψ_{t+1} 算 Φ_t、Ψ_t","y");
+       boxNode(170,302,980,50,"③ 由 A、B、Φ 算出 L_t","y");
+       boxNode(170,360,980,44,"④ 运行时：π*(s_t) = L_t · s_t","g");
+       note("⭐ 整个算法就这四行 —— 没有循环到收敛，步数是确定的 T 步",640,178,"y");},"<b>Ng 在课上把整个 LQR 算法总结成几行，抄下来看一遍。</b><br><b>① 初始化：Φ_T 等于 −U，Ψ_T 等于 0。</b><b>⭐ 这正是上一节那个基准情形——V*_T(s) = −sᵀU s 翻译成系数就是这两个值。</b><br><b>② 从 t = T−1 开始往下数到 0，每一步用 Φ_{t+1} 和 Ψ_{t+1} 算出 Φ_t 和 Ψ_t。</b><br><b>③ 用 A、B 和 Φ 算出矩阵 L_t。</b><br><b>④ 运行时，每一步的最优动作就是 L_t 乘以当前状态。</b><br><b>⭐ 注意整个算法的形状：步数是确定的 T 步，没有「迭代到收敛」这回事。</b><br><b>⚠ 对照 L17 的值迭代和 L18 的拟合值迭代——那两个都要反复跑到数值不再变化，而且 L18 还不保证会停。</b>");
+  S(4344,function(){clearScene();setEq(null);setCap("离线算 vs 在线用");
+   boxNode(130,196,470,58,"离线（事先算好）","b");
+   boxNode(130,264,470,58,"倒推出 L_0, L_1, …, L_{T−1} 存起来","b");
+   boxNode(690,196,470,58,"★ 在线（运行时）","g");
+   boxNode(690,264,470,58,"第 t 步取出 L_t，乘上当前状态","g");
+   note("⭐ 所有繁重的计算都在离线阶段，机器人身上的计算极轻",640,348,"y");
+   note("⚠ 代价：要存 T 个矩阵（T 很大时这也是一笔开销）",640,398,"r");},"<b>LQR 的计算分成两个阶段，分清楚会很有帮助。</b><br><b>离线阶段：倒着递推，把 L_0 到 L_{T−1} 这一串矩阵全部算好存起来。</b><b>这一步可以在地面上、在电脑里慢慢做。</b><br><b>★ 在线阶段：机器人运行时，第 t 步取出对应的 L_t，乘上当前状态，得到动作。</b><br><b>⭐ 这个分工很理想：所有繁重的计算都在离线阶段完成，而机器人身上实时要做的计算极轻。</b><br><b>⚠ 代价是存储：你要存 T 个矩阵。</b><b>T 很大时这也是一笔开销。</b><br><b>⇒ 顺带一提，当 T 趋于无穷时，这一串 L_t 会收敛到一个不变的矩阵，那时只要存一个——这就是控制论里常说的「稳态 LQR」，不过 CS229 这一讲没有展开。</b>");
+  SUM(4344,19,{h:"★★ LQR 的四行算法",k:"<b>① 初始化 Φ_T = −U，Ψ_T = 0</b>（⭐ 正是基准情形 V*_T = −sᵀUs 翻译成系数）。",m:"<b>② 从 t = T−1 数到 0，用 Φ_{t+1}、Ψ_{t+1} 算 Φ_t、Ψ_t ③ 由 A、B、Φ 算出 L_t ④ 运行时 π*(s_t) = L_t·s_t</b>。",w:"⭐ <b>步数是确定的 T 步</b>，没有「迭代到收敛」这回事。",e:"⚠ <b>对照</b>：L17 的值迭代和 L18 的拟合值迭代<b>都要反复跑到数值不再变化</b>，而且 <b>L18 还不保证会停</b>。"});
+  QUIZ(4344,19,{t:"LQR 算法的初始化是什么？整个算法要跑多少步？",o:["Φ、Ψ 随机初始化；跑到收敛为止","由数据估计初值；跑到误差小于阈值","Φ_T = −U、Ψ_T = 0（来自基准情形 V*_T = −sᵀUs）；确定的 T 步，没有「迭代到收敛」","Φ = 单位阵、Ψ = 单位阵；跑 n 步"],a:2,w:"⚠ 对照 L17 的值迭代和 L18 的拟合值迭代——<b>那两个都要反复跑到数值不再变化</b>，L18 还不保证会停。"});
+});
+KP("20 · ★★ 「这里没有任何近似」",function(){
+  S(4482,function(){clearScene();setEq(null);setCap("近似发生在哪一步，要分清楚");
+       says("74:42","once you have made those assumptions, none of this is approximate, everything is exact");
+       boxNode(130,196,470,58,"⚠ 这一步是近似的","r");
+       boxNode(130,264,470,58,"把真实系统化成「线性＋二次型」的形状","r");
+       boxNode(690,196,470,58,"★ 这之后全是精确的","g");
+       boxNode(690,264,470,58,"V* 的计算、L_t 的计算，一步近似都没有","g");
+       note("⭐ Ng：我们不是用二次函数去近似价值函数 —— 它本来就是二次函数",640,352,"y");
+       note("⚠ 所以 LQR 出问题时，该怀疑的是建模那一步，不是求解那一步",640,398,"r");},"<b>Ng 特意强调了 LQR 一个很酷的地方：整个算法里没有任何近似。但他同时把话说得很准——近似发生在前面。</b><br><b>⚠ 近似的那一步是：把你的真实系统化成「线性动力学 ＋ 二次型奖励」这个形状。</b><b>拟合 A 和 B、做线性化、把代价写成二次型——这些都是近似。</b><br><b>★ 但一旦你接受了这个形式，之后的一切都是精确的。</b>Ng 的原话是：<b>我们不是在用二次函数去近似价值函数，而是价值函数本来就是二次函数，你在精确地计算它；最优策略本来就是线性函数，你也在精确地计算它。</b><br><b>⭐ 这个区分有很实在的用处：如果 LQR 的结果不好，该怀疑的是建模那一步（线性化够不够准、代价写得对不对），而不是求解那一步。</b><br><b>⚠ 求解那一步没有可调的东西，它是确定的代数。</b>");
+  SUM(4482,20,{h:"★★ 近似只发生在建模，求解完全精确",k:"⚠ <b>近似的那一步</b>：把真实系统<b>化成「线性动力学 ＋ 二次型奖励」的形状</b>（拟合 A、B，线性化，把代价写成二次型）。",m:"★ <b>一旦接受这个形式，之后全是精确的</b>。Ng：<b>不是用二次函数去近似价值函数，而是它本来就是二次函数，你在精确计算它</b>。",w:"⭐ <b>很实在的用处</b>：LQR 结果不好时，<b>该怀疑建模那一步</b>（线性化够不够准、代价写得对不对），<b>而不是求解那一步</b>。",e:"⚠ <b>求解那一步没有可调的东西</b>，它是确定的代数。"});
+  QUIZ(4482,20,{t:"LQR 里「没有任何近似」这句话该怎么理解？",o:["只有在噪声为零时才精确","近似只发生在「把真实系统化成线性＋二次型」这一步；一旦接受这个形式，V* 和 L_t 的计算完全精确","整个过程包括建模都是精确的","只有离散状态下才精确"],a:1,w:"⭐ 实用含义：<b>LQR 结果不好时该怀疑建模那一步</b>（线性化准不准、代价写得对不对），<b>而不是求解那一步</b>——后者没有可调的东西。"});
+});
+KP("21 · ★★★ 奇特事实：最优策略不依赖噪声大小",function(){
+  S(4701,function(){clearScene();setEq(null);setCap("Ng 说这是 LQR 特有的，别乱推广");
+       says("78:21","the optimal policy does not depend on Sigma w");
+       boxNode(130,196,470,58,"V*（价值函数）","b");
+       boxNode(130,264,470,58,"★ 依赖 Σ_w —— 风大时期望回报确实更差","b");
+       boxNode(690,196,470,58,"π* 和 L_t（最优策略）","y");
+       boxNode(690,264,470,58,"⭐ 完全不依赖 Σ_w","y");
+       note("机理：Σ_w 只出现在 Ψ 里，而 L_t 只用到 Φ",640,348,"g");
+       note("⚠⚠ Ng：这是 LQR 特有的性质，千万别推广到别的 RL 算法",640,398,"r");},"<b>★★★ Ng 在收尾前讲了一个他称为「奇特而有趣」的事实。</b><br><b>最优策略完全不依赖噪声的协方差 Σ_w。</b><b>也就是说，不管风有多大，算出来的 L_t 一模一样。</b><br><b>⚠ 但价值函数 V* 是依赖 Σ_w 的</b>——<b>Ng 说得很直白：如果有一阵狂风把直升机吹得到处乱跑，你的期望回报当然会更差。</b><br><b>⭐ 机理在递推的结构里：Σ_w 只出现在 Ψ 的更新式里，而 L_t 只用到 Φ。</b><b>⇒ 所以你甚至可以把计算 Ψ 的那几行代码整个删掉，照样算出最优策略——而删掉之后，整个算法根本用不到 Σ_w。</b><br><b>⚠⚠ Ng 特意警告：这是 LQR 特有的性质，千万别把它推广到别的强化学习算法上。</b><b>下一镜讲他从这里提炼的两条实践建议。</b>");
+  S(4777,function(){clearScene();setEq(null);setCap("Ng 从这里提炼的两条建议");
+       says("79:37","remember to add some noise");
+       boxNode(170,196,980,56,"① 用 LQR 时：别费劲去精确估计噪声的大小","g");
+       boxNode(170,264,980,56,"② 更有用的一条：建机器人模型时，记得加噪声","y");
+       note("⭐ 第②条呼应 L18：带噪声训练出的策略才扛得住真实世界",640,348,"y");
+       note("⚠ 但 Ng 也补了一句：噪声的「形式」是有影响的，只是在 LQR 里恰好没有",640,398,"r");},"<b>Ng 从这个事实里提炼了两条建议。</b><br><b>第一条，针对 LQR 本身：既然最优策略不依赖噪声大小，那就别费劲去精确估计它。</b><b>在 LQR 的框架里，这件事在数学意义上真的不影响结果。</b><br><b>⭐ 第二条他说更有用：给机器人建模时，记得往系统里加一些噪声，并确保你的学习算法对噪声是鲁棒的。</b><br><b>⚠ 这正呼应了 L18 那条实战教训——用确定性模拟器学出来的策略很脆弱，上真机就废。</b><br><b>⇒ 两讲从不同角度说了同一件事：带噪声训练出来的策略，才扛得住真实世界。</b><br><b>⚠ 最后 Ng 补了一句很严谨的话：噪声的具体形式一般是有影响的，他不是说它完全不重要——只是在 LQR 这个特定框架里，它恰好不影响最优策略。</b>");
+  SUM(4701,21,{h:"★★★ π* 不依赖 Σ_w，但 V* 依赖",k:"<b>最优策略完全不依赖噪声协方差 Σ_w</b>——不管风多大，算出的 L_t 一模一样。",m:"⚠ <b>但 V* 依赖它</b>：Ng 说「<b>一阵狂风把直升机吹得到处乱跑，期望回报当然更差</b>」。",w:"⭐ <b>机理</b>：<b>Σ_w 只出现在 Ψ 的更新式里，而 L_t 只用到 Φ</b> ⇒ 把算 Ψ 的代码整个删掉照样能算最优策略，<b>而删掉后算法根本用不到 Σ_w</b>。",e:"⚠⚠ Ng 警告<b>这是 LQR 特有的，别推广到别的 RL 算法</b>。⭐ 他的两条建议：① 用 LQR 时别费劲精确估噪声 ② <b>建机器人模型时记得加噪声</b>（呼应 L18）。"});
+  QUIZ(4701,21,{t:"关于 LQR 与噪声协方差 Σ_w，哪种说法正确？",o:["只有噪声为零时 LQR 才成立","V* 和 π* 都依赖 Σ_w","π*（和 L_t）完全不依赖 Σ_w，但 V* 依赖——因为 Σ_w 只出现在 Ψ 里，而 L_t 只用到 Φ","V* 和 π* 都不依赖 Σ_w"],a:2,w:"⚠⚠ Ng 特意警告<b>这是 LQR 特有的性质，别推广到别的 RL 算法</b>。⭐ 他更有用的那条建议是：<b>建机器人模型时记得加噪声</b>——呼应 L18。"});
+});
+KP("22 · ⭐ 递推的结构：Φ 自成一条链",function(){
+  S(4305,function(){clearScene();setEq(null);setCap("谁依赖谁");
+       boxNode(150,200,250,60,"Φ_{t+1}","b");
+       boxNode(150,290,250,60,"Ψ_{t+1}","d");
+       boxNode(620,200,250,60,"Φ_t","b");
+       boxNode(620,290,250,60,"Ψ_t","d");
+       link(400,230,620,230); link(400,230,620,320); link(400,320,620,320);
+       boxNode(980,245,200,60,"★ L_t","y");
+       note("⭐ Φ 只依赖 Φ —— 自成一条独立的链",640,172,"y");
+       note("⚠ 而 Ψ 依赖 Φ 和 Ψ 两者，却没人依赖 Ψ（除了 V* 本身）",640,398,"r");},"<b>把递推的依赖关系画出来，上一节那个事实就一目了然了。</b><br><b>Φ_t 只依赖 Φ_{t+1}。</b><b>⭐ 所以 Φ 这一串自成一条独立的链，可以单独往回算，完全不需要 Ψ。</b><br><b>而 Ψ_t 同时依赖 Φ_{t+1} 和 Ψ_{t+1}</b>——<b>它是「被喂」的那一方。</b><br><b>⚠ 关键在于：除了 V* 本身，没有任何东西依赖 Ψ。</b><b>L_t 由 A、B 和 Φ 算出来，Ψ 不参与。</b><br><b>⇒ 这就是为什么你可以把 Ψ 整条链删掉：它是一个「只有输出没有被使用」的量。</b><br><b>⭐ 顺带说，这也解释了 Ψ 到底是什么：它承载的是价值函数里那个与状态无关的常数项，而常数项不影响「哪个动作最好」。</b>");
+  SUM(4305,22,{h:"⭐ Φ 自成一条链，Ψ 没人依赖",k:"<b>Φ_t 只依赖 Φ_{t+1}</b> ⇒ ⭐ <b>Φ 这一串自成独立的链，可以单独往回算</b>。",m:"<b>Ψ_t 同时依赖 Φ_{t+1} 和 Ψ_{t+1}</b>——它是「被喂」的那一方。",w:"⚠ <b>除了 V* 本身，没有任何东西依赖 Ψ</b>：<b>L_t 由 A、B、Φ 算出，Ψ 不参与</b>。",e:"⇒ <b>所以 Ψ 整条链可以删掉</b>。⭐ 这也解释了 Ψ 是什么：<b>价值函数里那个与状态无关的常数项</b>，而<b>常数项不影响「哪个动作最好」</b>。"});
+  QUIZ(4305,22,{t:"为什么计算最优策略时可以完全不算 Ψ？",o:["因为 Ψ 恒等于 0","因为 Φ_t 只依赖 Φ_{t+1}、自成独立的链，而 L_t 只由 A、B、Φ 算出；Ψ 承载的是价值函数里与状态无关的常数项，不影响哪个动作最好","因为 Ψ 只在最后一步才用到","因为 Ψ 可以用 Φ 直接算出"],a:1,w:"⭐ 这正是「<b>π* 不依赖 Σ_w</b>」的机理：<b>Σ_w 只出现在 Ψ 的更新式里</b>，而 Ψ 又没人依赖。"});
+});
+KP("23 · ★ 三讲对照：L17 / L18 / L19",function(){
+  S(4482,function(){clearScene();setEq(null);setCap("把三种解法摆在一起");
+       matrix({rows:5,cols:4,cw:280,ch:40,x:110,y:196,
+         cell:function(i,j){var t=[
+           ["","L17 值迭代","L18 拟合值迭代","★ L19 LQR"],
+           ["状态","有限","连续","连续"],
+           ["价值函数","一张表","拟合出来的近似","★ 精确的二次函数"],
+           ["要迭代到收敛吗","要","要，且不保证","⭐ 不要，确定 T 步"],
+           ["对问题的要求","无","无","⚠ 线性 ＋ 二次型"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===3&&i>0?"hl":"";}});
+       note("⭐ 一条很清楚的规律：对问题的要求越强，解法就越好",640,398,"y");},"<b>把三讲的解法摆在一张表里，整个强化学习这条线的逻辑就清楚了。</b><br><b>状态那一行：L17 要求有限，L18 和 L19 都能处理连续。</b><br><b>价值函数那一行：L17 存一张表；L18 是拟合出来的近似，带误差；★ L19 是精确的二次函数。</b><br><b>迭代那一行：L17 要迭代到收敛；L18 也要，而且不保证会停；⭐ L19 不用迭代，确定的 T 步。</b><br><b>⚠ 但看最后一行：L17 和 L18 对问题的形状没有要求，而 L19 要求线性动力学加二次型代价。</b><br><b>⭐ 规律非常清楚：对问题的要求越强，解法就越好。</b><br><b>⇒ 这也给了实践中的顺序：先看看能不能把问题化成 LQR 能吃的形状；化不成，再退回通用方法。</b>");
+  SUM(4482,23,{h:"★ 三讲对照：要求越强，解法越好",k:"<b>状态</b>：L17 有限；L18、L19 连续。<b>价值函数</b>：L17 一张表；L18 <b>拟合的近似、带误差</b>；★ L19 <b>精确的二次函数</b>。",m:"<b>迭代</b>：L17 要到收敛；<b>L18 要且不保证会停</b>；⭐ <b>L19 不用迭代，确定的 T 步</b>。",w:"⚠ <b>但代价在最后一行</b>：L17、L18 <b>对问题形状无要求</b>，L19 <b>要求线性动力学 ＋ 二次型代价</b>。",e:"⭐ <b>规律</b>：<b>对问题的要求越强，解法就越好</b>。⇒ <b>实践顺序</b>：先看能否化成 LQR 的形状，化不成再退回通用方法。"});
+  QUIZ(4482,23,{t:"L17、L18、L19 三种解法之间是什么规律？",o:["对问题形状的要求越强，解法就越好：LQR 要求线性＋二次型，换来精确解和确定步数；通用方法没要求但只能给近似","三者都只能用于离散状态","三者精度相同，只是速度不同","越新的方法越通用"],a:0,w:"⭐ 实践顺序由此而来：<b>先看能不能把问题化成 LQR 能吃的形状</b>（线性化 + 二次型代价），<b>化不成再退回通用方法</b>。"});
+});
+KP("完 · 两个推广与一个特例",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L19 · 完","奖励模型与 LQR",
+      "适用面换来了精确解");},
+    "收一下。这一讲是两个推广加一个特例。<br><b>推广一：把奖励从 R(s) 换成 R(s, a)。</b><b>⭐ 动机是「不同动作的代价不同」</b>，Ng 举了好几个例子：<b>网格机器人原地不动可以给 0，移动给一点负奖励，因为移动要耗电</b>；<b>开直升机时，猛拉操纵杆应该被罚更高的代价，因为那会让机身颠簸</b>；<b>导航时不同路段因为限速和拥堵而代价不同</b>；<b>工厂维护时「派人检修」和「什么都不做」的代价也不一样</b>。<b>⚠ 算法几乎不用改：值迭代照样能用，最优动作仍然是那个 argmax，只是 R 现在跟着 a 一起进了括号。</b><br><b>推广二：有限时域 MDP。</b><b>用一个固定的步数 T 代替折扣因子 γ</b>——<b>这个 MDP 只跑 T 步就结束</b>。<b>⚠ Ng 说这时通常就不必再折扣了</b>（γ 的作用之一本来就是保证无限过程不发散，而有限时域天然不会发散）。<br><b>★★★ 它带来一个意外后果：最优动作会依赖「现在是第几步」。</b>直觉很好理解——<b>还剩 100 步时，值得花几步绕远路去拿那个大奖励；而只剩 2 步时，就只能抓眼前够得着的</b>。<b>这种随时间变化的策略有个专门名字：非平稳策略。</b><b>⭐ 对照 L17：那里的策略是平稳的，π(s) 只看状态不看时钟。</b><b>⚠ 既然已经非平稳了，顺手还能让转移概率和奖励也随时间变</b>（写成 P_t 和 R_t）——Ng 举的例子是<b>工厂 24 小时运转时，不同时段的人力成本和故障概率都不一样</b>。<br><b>解有限时域 MDP 的办法是动态规划，而且是倒着算的</b>：<b>先算最后一步的 V*_T，再用它算 V*_{T−1}，一路倒推回第 0 步</b>。<b>⭐ 为什么能倒着算：最后一步没有未来，它的最优值直接就是即时奖励的最大值，不依赖任何别的东西——这就是递推的起点。</b><br><b>然后是 LQR。⚠ Ng 开门见山地说它只适用于相当小的一类问题，这个分寸要先立住。</b><b>它的设定是：状态是 n 维实向量、动作是 d 维实向量</b>，再加两个关键假设。<br><b>假设一，动力学是线性的</b>：<b>s_{t+1} = A·s_t + B·a_t + w_t</b>，<b>w_t 是高斯噪声</b>（⭐ 呼应 L18 那条教训——模拟器要带随机性）。<b>A 和 B 怎么来？两条路：从数据里做线性回归学出来（就是 L18 讲的那个），或者把一个非线性模型在某个工作点附近线性化</b>（⭐ <b>就是泰勒展开取一阶</b>）。<br><b>假设二，奖励是二次型的</b>：<b>R(s, a) = −(sᵀU s + aᵀV a)</b>，<b>其中 U、V 都是半正定矩阵</b>。<b>⭐ 取 U、V 为单位阵时它就变成 −(‖s‖² + ‖a‖²)</b>——<b>含义是「同时惩罚状态偏离 0 和动作用力过大」</b>，这正是「把系统稳在原点、而且别太费劲」这个目标的数学写法。<br><b>★★★ 然后是那个 remarkable 的性质：在这两个假设下，V* 恰好是一个二次函数。</b><b>推导是倒着做的动态规划。</b><b>基准情形很漂亮：最后一步因为 V 半正定，aᵀV a 总是非负的，而奖励前面有负号，所以最优动作就是「什么都不做」——取 a = 0</b>，于是 <b>V*_T(s) = −sᵀU s</b>，正是二次型。<b>归纳步骤：假设 V*_{t+1} 是二次的，代进去做一堆代数之后，V*_t 仍然是二次的</b>——<b>形式由两个量 Φ_t 和 Ψ_t 决定，而它们可以从 Φ_{t+1}、Ψ_{t+1} 递推出来。</b><br><b>★★★ 最精彩的结论是：最优动作是状态的线性函数，π*_t(s_t) = L_t · s_t。</b><b>⚠ Ng 特意澄清了一句：这不是说「你拟合一条直线去近似最优动作」，而是说最优动作本身精确地就是线性的</b>——<b>这是推导出来的结果，不是近似。</b><br><b>⇒ 所以实现 LQR 时，你只要倒着递推出那一串矩阵 L_t，运行时每一步做一次矩阵乘法就行了。</b><b>没有采样、没有拟合、没有收敛判据。</b><br><b>⭐ 把这一讲和 L18 放在一起看，是一个很典型的权衡：拟合值迭代什么都能做但什么都做得粗；LQR 只能做一小类问题，但做得精确又高效。</b><b>工程上的常见套路正是——先把问题尽量化成 LQR 能吃的形状（线性化 + 二次型代价），实在不行再上通用方法。</b><br><b>下一讲 L20 转向一个完全不同的话题：强化学习做不出效果时，怎么诊断到底是哪一环出了问题。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

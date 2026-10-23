@@ -1,0 +1,503 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Margin and Dual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   Reusable "Projector" teaching template  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  A reusable frame for turning any topic into a shot-by-shot animated lesson.
+  Everything below the content script -- projector loop, caption layer, summary
+  card, mandatory quiz, SVG drawing toolbox, caption-collision handling -- is
+  already built. You only ever edit one place:
+
+     the LAST <script> in the file, between the "content starts / ends" markers
+
+  ── How to use it ─────────────────────────────────────────────────────────
+  1. Edit CFG: title, subtitle, optional video link.
+  2. Build each concept out of four calls, always in this order:
+        KP("concept name", function(){
+          S(seconds, sceneFn, "narration paragraph (optional, toggled with N)");
+          SUM(seconds, conceptNo, {h:heading, k:result, m:mechanism,
+                                   w:misreading, e:relevance to assessment});
+          QUIZ(seconds, conceptNo, {t:question, o:[options...], a:correctIndex,
+                                    w:explanation});
+        });
+     A concept may have many S() shots; it ends with exactly one SUM and one QUIZ.
+  3. Drawing toolbox available inside a scene function:
+        clearScene()                     clear the canvas
+        setTitle(eyebrow, h1, sub)       title card
+        setBig(big, small)               centred display text (a number, a verdict)
+        setCap(html)                     one line at the top (<b><i><em><s> allowed)
+        setEq("$$...$$", "top")          MathJax formula ("top" = align to top)
+        flip("...<span data-id=x>..")    term-level morph animation between formulas
+        T(id, text, "hl/res/ded")        a token for flip() to track
+        note(text, x, y, "g/y/b/r/v", anchor)   label on the canvas
+        dots([[x,y]...], "a/b/c", r)     scatter points
+        curve(points, "fit/fit g/...")   polyline or curve (draws itself on)
+        boxNode(x, y, w, h, label, cls)  a labelled box
+        link(x1, y1, x2, y2)             a connector
+        matrix({rows,cols,cw,ch,x,y,cell,dim,hl,label,labelCls})  table or matrix
+        The canvas is 1280x720 (16:9), origin at the top left.
+        Layout rule: keep every drawn element within y = 90..470. Below that is
+        where the caption band sits, and a long narration grows upward into it.
+  4. Colour semantics (keep them consistent -- learners come to rely on them):
+        blue   = model / input        yellow = attention / conclusion
+        green  = correct / answer     coral  = error / failure
+        violet = emphasis
+  5. Interaction (built in, nothing to change): SPACE or arrow-right advances,
+     arrow-left goes back, number keys jump to a concept, N toggles the narration.
+     A quiz must be answered before the film continues. Summary cards and quizzes
+     deliberately carry no narration -- the card is the message.
+
+  ── Three worked concepts are included below as a live example of the format.
+     Replace that whole block with your own.
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+/* lifted out of the caption band: the layer centres it, 9% puts it in the upper middle */
+#big{margin-bottom:9%}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:34%;overflow-y:auto;margin-bottom:44px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12px,1.02vw,14.5px);font-weight:400;line-height:1.6;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1180px,94%);width:100%;max-height:96%;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:16px 26px 16px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(16.5px,1.7vw,22px);font-weight:800;margin:0 0 9px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:6px}
+#sum .row{border-left:3px solid #3C4A61;padding:7px 15px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#9EABBE;margin:0 0 2px;line-height:1.3}
+#sum .rv{font-size:clamp(13px,1.05vw,15.5px);font-weight:400;line-height:1.5;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;min-width:0;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;right:6px;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .3s,background .3s}
+.kpbar:hover .kplbl{right:auto;overflow:visible;z-index:3;color:var(--ink);background:var(--bg);padding-right:6px}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.link.r{stroke:var(--coral);stroke-width:2.2} .link.g{stroke:var(--green);stroke-width:2.2}
+.link.y{stroke:var(--yellow);stroke-width:2.2} .link.b{stroke:var(--blue);stroke-width:2.2}
+.link.d{stroke-dasharray:7 6}
+.link.q{stroke:#4A5A75;stroke-width:2}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: an .off panel must become invisible immediately */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="Previous shot"></button>
+<button class="navbtn" id="next" aria-label="Next shot"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">SPACE advance · ← back · N narration</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ ENGINE (no need to edit) ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2,cls){gS.append("path").attr("class","link "+(cls||"")).attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","The result"],["m","Why it works"],["w","Common misreading"],["e","In your exam"]];
+  sumEl.innerHTML='<p class="sh">Concept '+kp+' · Summary</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">Concept '+kp+' · Check yourself</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  SPACE to continue";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* expose the engine to the content script */
+function axes(P){gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ PROJECTOR (no need to edit) ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  answer first":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="SPACE advance · ← back · N "+(narrOn?"narration":"show narration");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"The margin and the dual · support vector machines",
+  subtitle:"margin → primal → Lagrangian → support vectors → kernels · SPACE to advance",video:""};
+
+/* two interleaved classes that only a sloped line can separate.
+   B(x) is the boundary; the two support-vector margins sit 44 units either side. */
+function B(x){return 300-0.12*(x-320);}
+var NEG=[[360,365],[470,326],[590,346],[830,283],[910,309]];   /* class -1 */
+var POS=[[350,224],[460,217],[690,212],[820,178],[900,182]];   /* class +1 */
+var SV=[[470,326],[830,283],[690,212]];
+function cloud(){ dots(NEG,"b",7); dots(POS,"a",7); }
+function boundary(cls){ curve([[310,B(310)],[970,B(970)]],cls||"fit y"); }
+/* margin rails are quiet dashed guides, not a second boundary */
+function margins(){ [44,-44].forEach(function(d){
+  link(310,B(310)+d,970,B(970)+d,"q d"); }); }
+/* a hollow green halo, so the point keeps its own class colour */
+function ring(){ SV.forEach(function(q){ var c=[];
+  for(var a=0;a<=40;a++){var t=a/40*6.2832; c.push([q[0]+14*Math.cos(t),q[1]+14*Math.sin(t)]);}
+  curve(c,"fit g"); }); }
+
+KP("Opening",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("The margin and the dual","Support vector machines",
+      "When many answers are correct, which one should you want?");},
+    "Regression had one obvious target: get close to the points. <b>Classification does not.</b> Once a line separates two classes, moving it a little leaves it still separating them -- so infinitely many answers score a perfect zero on the training data, and the training error cannot choose between them. The support vector machine picks one by adding a second requirement: <b>stay as far as possible from the nearest point of either class</b>. Following that idea honestly leads through a constrained optimisation problem, into its dual, and out the other side with two surprises: <em>most of the training data turns out to be irrelevant</em>, and the algorithm can work in a space it never actually visits. Press N to toggle this narration.");
+});
+KP("1 · Which separating line?",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);cloud();setCap("<b>Two classes, cleanly separable. Now: where exactly should the boundary go?</b>");},"Two classes, and they can be separated by a straight line. The question is <em>which</em> straight line. This is a genuinely different situation from regression, where the cost function picked out a single best answer. Here, <b>every line that gets all the training points right scores identically -- zero errors</b>. If we only look at training accuracy, the problem is underdetermined and we have no grounds for choosing. Something outside the training error has to break the tie.");
+  S(0,function(){clearScene();setEq(null);setBig(null);cloud();curve([[310,B(310)+30],[970,B(970)+30]],"fit y");curve([[310,B(310)-30],[970,B(970)-30]],"fit y");boundary("fit y");note("all three are perfect on the training data -- and they disagree about new points",640,392,"");},"Here are three of them. All three classify every training point correctly, so no amount of staring at the training set will separate them. <b>They differ only in what they predict for points we have not seen</b>, and that is exactly what we care about. A boundary that skims past a training point will call a slightly-shifted version of that point the other class; a boundary running down the middle of the gap will not. <em>Generalisation, not training accuracy, is the thing being decided here.</em>");
+  S(0,function(){clearScene();setEq(null);setBig("Many lines, one best line","the one furthest from the nearest point");note("the margin is the distance from the boundary to the closest point of either class",640,392,"g");},"So we add a criterion. <b>Among all the lines that separate the classes, prefer the one whose distance to the nearest point is largest.</b> That distance is called the <b>margin</b>, and maximising it is a commitment to caution: it leaves the most room for the next point to land somewhere slightly unexpected without being misclassified. It also makes the answer <em>unique</em>, which the training error alone never did. The whole of the SVM is the consequence of taking this one sentence seriously.");
+  SUM(0,1,{h:"Which separating line?",k:"When the classes are separable, <b>infinitely many lines score zero training errors</b>. Training accuracy cannot choose between them; something else must.",m:"The SVM's tie-breaker is the <b>margin</b> -- the distance from the boundary to the nearest point of either class -- and it prefers the boundary that makes it largest. This is a bet on generalisation, and it also makes the answer unique.",w:"<s>This is not the same situation as regression.</s> There the cost picked one answer; here the training error is flat across a whole family of boundaries.",e:"A boundary that skims a training point misclassifies a slightly shifted version of it. A wide margin leaves room for that shift."});
+  QUIZ(0,1,{t:"Why does the training error fail to pick out a single boundary for separable classes?",o:["Because the training error is not differentiable","<b>Because every separating line scores zero, so a whole family of boundaries ties</b>","Because the classes overlap","Because the boundary is not unique unless the data is normalised"],a:1,w:"With separable classes, any line in the gap gets everything right, so <b>the training error is exactly zero across an infinite family</b> and provides no gradient of preference. The candidates differ only in how they treat unseen points -- so the SVM adds a criterion about that: maximise the distance to the closest training point."});
+});
+KP("2 · ★ Two margins: functional and geometric",function(){
+  S(0,function(){clearScene();setEq("$$\\hat{\\gamma}^{(i)}=y^{(i)}\\big(w^{\\top}x^{(i)}+b\\big)$$","top");setCap("<b>Positive when the prediction is right, and larger when it is more confident.</b>");note("y is coded as +1 or −1, which is what makes this one expression work for both classes",640,300,"");note("this is the functional margin",640,352,"y");},"Start with the natural measure of confidence. The quantity w&#7488;x + b is positive on one side of the boundary and negative on the other, and grows as you move away from it. <b>Multiplying by the label -- coded as +1 and &minus;1 rather than 1 and 0 -- makes the product positive exactly when the prediction is correct</b>, for both classes at once. That is the <b>functional margin</b>, and the label coding is the small trick that makes a single formula cover both sides.");
+  S(0,function(){clearScene();setEq(null);setBig("Scaling w is free","double w and b: same line, twice the margin");note("so a large functional margin can mean confidence, or just large numbers",640,392,"r");},"But the functional margin has a defect that sinks it as an objective. <b>Replacing w and b by 2w and 2b leaves the boundary in exactly the same place</b> -- the set of points where w&#7488;x + b = 0 is unchanged -- yet doubles every functional margin. <s>So \"make the functional margin large\" is not a real goal</s>: it can be satisfied without moving the boundary at all, simply by writing bigger numbers. Any measure of confidence worth optimising has to be immune to this rescaling.");
+  S(0,function(){clearScene();setEq("$$\\gamma^{(i)}=\\frac{y^{(i)}\\big(w^{\\top}x^{(i)}+b\\big)}{\\lVert w\\rVert}$$","top");setCap("<b>Divide by the length of w and you get an actual distance.</b>");note("scale w by any constant and this quantity does not move",640,300,"g");note("it is the perpendicular distance from the point to the boundary",640,352,"");},"Dividing by the length of w fixes it. <b>The geometric margin is the genuine perpendicular distance from the point to the boundary</b>, measured in the units of the data, and scaling w and b together changes nothing -- numerator and denominator scale identically. Note that this is <em>perpendicular</em> distance, unlike the vertical residual in regression, and rightly so: here there is no special output variable to measure error in, only a boundary in the input space.");
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(110,150,470,100,"functional margin","y");boxNode(700,150,470,100,"geometric margin","g");note("grows if you just scale w",345,286,"y");note("a real distance, scale-free",935,286,"g");note("fix the closest point at functional margin 1 -- then geometric margin = 1/‖w‖",640,356,"");},"The two are related by a single division, and there is one more convenience to extract. Because scaling is free, <b>we may as well use it up: fix the scale so that the closest point has functional margin exactly 1</b>. This choice costs nothing -- it selects one representative from each family of equivalent (w, b) -- and it turns the geometric margin of the closest point into 1/&Vert;w&Vert;. <em>The margin is now a simple function of the length of w</em>, which is what makes the next step possible.");
+  SUM(0,2,{h:"★ Functional and geometric margin",k:"The <b>functional margin</b> y(w&#7488;x + b) is positive when the prediction is right, but doubling w and b doubles it while leaving the boundary untouched -- so it cannot be the objective.",m:"Dividing by &Vert;w&Vert; gives the <b>geometric margin</b>, the true perpendicular distance to the boundary, unchanged by rescaling. Spending the free scaling to set the closest point's functional margin to 1 makes the geometric margin exactly <b>1/&Vert;w&Vert;</b>.",w:"<s>Labels are coded +1 and &minus;1, not 1 and 0.</s> That coding is what lets one expression handle both classes.",e:"Perpendicular distance here, not vertical: there is no output variable to measure error in, only a boundary in input space."});
+  QUIZ(0,2,{t:"Why is the functional margin unsuitable as the quantity to maximise?",o:["It can be negative","<b>Scaling w and b leaves the boundary unchanged but multiplies it, so it can be inflated for free</b>","It is not differentiable at the boundary","It only works for one of the two classes"],a:1,w:"Multiplying w and b by 10 gives <b>the same decision boundary and ten times the functional margin</b> -- the objective would be unbounded without moving the line at all. Dividing by &Vert;w&Vert; removes the degree of freedom. It <em>can</em> be negative, but usefully so: negative means misclassified."});
+});
+KP("3 · ★★ The primal problem",function(){
+  S(0,function(){clearScene();setEq(null);setBig("Wide margin = small ‖w‖","maximise 1/‖w‖ by minimising ‖w‖");note("and minimising ‖w‖ is the same as minimising ½‖w‖², which is smooth",640,392,"y");},"With the closest point pinned at functional margin 1, the margin is 1/&Vert;w&Vert;, so <b>making the margin wide means making w short</b>. That inversion is worth pausing on, because it is where the SVM stops looking geometric and starts looking like an optimisation problem you can hand to a solver. Minimising &Vert;w&Vert; is awkward -- a square root, not differentiable at zero -- so we minimise <b>&frac12;&Vert;w&Vert;&sup2;</b> instead. Same minimiser, and the square and the half are bookkeeping, exactly as in least squares.");
+  S(0,function(){clearScene();setEq("$$\\min_{w,b}\\ \\tfrac{1}{2}\\lVert w\\rVert^{2}\\quad\\text{s.t.}\\quad y^{(i)}\\big(w^{\\top}x^{(i)}+b\\big)\\ge 1\\ \\ \\forall i$$","top");setCap("<b>The whole SVM, in one line: shrink w, but keep every point outside the margin.</b>");note("one constraint per training point -- m of them",640,300,"");note("convex objective, linear constraints: one global optimum, no local traps",640,352,"g");},"Here is the entire method as an optimisation problem. <b>Minimise &frac12;&Vert;w&Vert;&sup2; subject to every point having functional margin at least 1.</b> The objective pushes w down; the constraints -- one per training point -- stop it collapsing, because a shorter w widens the margin until some point is about to be swallowed by it. The structure is as good as it gets: <b>a convex quadratic objective with linear constraints</b>, which means a single global optimum, no local minima, and reliable solvers.");
+  S(0,function(){clearScene();setEq(null);setBig(null);cloud();boundary("fit y");margins();note("the margin band is empty by construction -- that is what the constraints say",640,392,"y");},"Geometrically the constraints carve out an empty corridor. <b>The two dashed lines are where the functional margin equals exactly 1</b>, and every training point is required to sit on or beyond them, never inside. The solution is the boundary for which this corridor is as wide as possible. <em>The optimiser is not really choosing a line; it is inflating a band until it cannot grow any further</em> -- and what stops it is the small number of points pressed against its edges.");
+  SUM(0,3,{h:"★★ The primal problem",k:"With the closest point fixed at functional margin 1, a wide margin means a short w. So: <b>minimise &frac12;&Vert;w&Vert;&sup2; subject to y(w&#7488;x + b) &ge; 1 for every point</b>.",m:"The objective shrinks w, which widens the margin; the m constraints stop it collapsing. It is a <b>convex quadratic objective with linear constraints</b>, so there is one global optimum and no local traps.",w:"<s>The square and the &frac12; are not modelling choices.</s> &Vert;w&Vert; has a square root and is not differentiable at zero; &frac12;&Vert;w&Vert;&sup2; is smooth and has the same minimiser.",e:"Picture it as inflating an empty corridor until points on both edges stop it -- not as choosing a line."});
+  QUIZ(0,3,{t:"In min &frac12;&Vert;w&Vert;&sup2; subject to y(w&#7488;x + b) &ge; 1, what stops w from shrinking to zero?",o:["A regularisation term","<b>The constraints: a shorter w widens the margin until some point would fall inside it</b>","The requirement that &Vert;w&Vert; = 1","Nothing; w = 0 is the solution and b does the work"],a:1,w:"Shrinking w widens the margin, and the constraints require every point to stay outside it, so <b>the points themselves set the floor</b>. With w = 0 the expression is the constant b, which cannot be &ge; 1 for one class and &le; &minus;1 for the other, so it violates the constraints outright."});
+});
+KP("4 · ★★ Duality: a price for every constraint",function(){
+  S(0,function(){clearScene();setEq(null);setBig("A price for each constraint","α ≥ 0, charged when it is violated");note("hard constraints become a cost, and the problem loses its walls",640,392,"v");},"Constrained problems are harder than unconstrained ones, and duality is the standard way to trade one for the other. <b>Attach a multiplier &alpha;&#7522; &ge; 0 to each constraint and add a charge to the objective whenever that constraint is violated.</b> The walls become prices. If a price is set high enough, no solution will want to cross that wall, so the constrained problem and the priced problem end up with the same answer -- and the priced one has no constraints on w and b at all.");
+  S(0,function(){clearScene();setEq("$$\\mathcal{L}(w,b,\\alpha)=\\tfrac{1}{2}\\lVert w\\rVert^{2}-\\sum_{i=1}^{m}\\alpha_i\\Big[y^{(i)}\\big(w^{\\top}x^{(i)}+b\\big)-1\\Big]$$","top");setCap("<b>The Lagrangian: the objective, minus a multiple of each constraint.</b>");note("the bracket is ≥ 0 exactly when the constraint holds",640,300,"");note("so a satisfied constraint can only ever reduce ℒ",640,352,"g");},"This is the Lagrangian. Read the bracket carefully: <b>it is non-negative precisely when the constraint is satisfied</b>, and negative when the point strays inside the margin. Since &alpha;&#7522; &ge; 0 and the term is subtracted, a violated constraint <em>increases</em> &#8466; -- the penalty -- while a satisfied one can only decrease it. Maximising over &alpha; therefore drives the violated cases to infinity, which is how an unconstrained expression reproduces a hard constraint.");
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(105,150,470,100,"primal: min over w,b","b");boxNode(700,150,470,100,"dual: max over α","v");link(575,200,700,200);note("min then max",640,186,"");note("swapping the order never helps: dual value ≤ primal value",640,290,"y");note("but here the problem is convex with linear constraints, so they are equal",640,352,"g");},"Now the exchange. The primal is a minimisation over w and b; the dual swaps the order and maximises over &alpha; instead. <b>Swapping is never free in general -- the dual value is always less than or equal to the primal value</b>, a gap called weak duality. Here, though, the objective is convex, the constraints are linear, and a strictly feasible point exists, which is enough for <b>strong duality</b>: the gap closes and the two problems have the same value. Solving the dual is therefore not an approximation.");
+  S(0,function(){clearScene();setEq("$$w=\\sum_{i=1}^{m}\\alpha_i y^{(i)}x^{(i)},\\qquad \\sum_{i=1}^{m}\\alpha_i y^{(i)}=0$$","top");setCap("<b>Differentiate ℒ with respect to w and b, set to zero, and read off the structure.</b>");note("w is a weighted combination of the training points themselves",640,300,"g");note("the b equation becomes a constraint in the dual problem",640,352,"");},"Minimising over w and b is done the usual way: set the partial derivatives to zero. The result is more informative than a mere step in a calculation. <b>The optimal w is a weighted sum of the training points</b>, each weighted by its multiplier and its label -- the boundary is literally built out of the data, not merely fitted to it. And the derivative in b contributes no formula for b at all, only the condition that the signed multipliers sum to zero, which reappears as a constraint on the dual problem.");
+  SUM(0,4,{h:"★★ Duality: constraints become prices",k:"Attach a multiplier &alpha;&#7522; &ge; 0 to each constraint and subtract it from the objective: the <b>Lagrangian</b>. Hard walls become charges, and w and b become unconstrained.",m:"Swapping min and max gives the dual, whose value is always &le; the primal's. Here the objective is convex, the constraints linear, and a feasible point exists, so <b>strong duality holds and the two values are equal</b> -- solving the dual is exact, not approximate.",w:"<s>Setting &part;&#8466;/&part;b = 0 does not give a formula for b.</s> It gives &Sigma;&alpha;&#7522;y&#7522; = 0, which becomes a constraint in the dual; b is recovered afterwards from a support vector.",e:"The key structural fact: <b>w = &Sigma;&alpha;&#7522;y&#7522;x&#7522;</b> -- the boundary is built out of the training points themselves."});
+  QUIZ(0,4,{t:"What does strong duality give us here that weak duality would not?",o:["A faster algorithm","<b>That the dual optimum equals the primal optimum, so solving the dual solves the original problem exactly</b>","That the multipliers are non-negative","That the solution is sparse in the training points"],a:1,w:"Weak duality only bounds: the dual value never exceeds the primal value. <b>Strong duality closes the gap</b>, which is what makes the dual a legitimate substitute rather than a lower bound -- and it holds here because the objective is convex and the constraints are affine. Non-negative multipliers are part of the setup; sparsity comes from the KKT conditions, next."});
+});
+KP("5 · ★★ Support vectors",function(){
+  S(0,function(){clearScene();setEq("$$\\alpha_i\\Big[y^{(i)}\\big(w^{\\top}x^{(i)}+b\\big)-1\\Big]=0$$","top");setCap("<b>Complementary slackness: for every point, one of the two factors must be zero.</b>");note("either the multiplier is zero, or the point sits exactly on the margin",640,300,"y");note("a point strictly outside the margin must have α = 0",640,352,"g");},"Among the conditions that hold at the optimum of a problem like this -- the KKT conditions -- one is unusually revealing. <b>For each point, the product of its multiplier and its constraint slack is zero</b>, so at least one factor must vanish. If the point sits strictly outside the margin the bracket is positive, forcing &alpha;&#7522; = 0. Only points sitting <em>exactly on</em> the margin, where the bracket is zero, are permitted a non-zero multiplier.");
+  S(0,function(){clearScene();setEq(null);setBig(null);cloud();boundary("fit y");margins();ring();note("only the circled points have α > 0 -- these are the support vectors",640,392,"g");},"So the picture divides sharply in two. <b>The circled points touch the margin and carry non-zero multipliers; every other point has &alpha; = 0 and contributes nothing to w.</b> Since w = &Sigma;&alpha;&#7522;y&#7522;x&#7522;, the boundary is determined entirely by this handful of points -- the <b>support vectors</b>. The name is apt: they hold the margin apart, and the rest of the dataset merely sits behind them. This is a strikingly sparse solution, and nobody asked for it -- it fell out of the optimality conditions.");
+  S(0,function(){clearScene();setEq(null);setBig("Most α are exactly zero","delete those points, get the same boundary");note("but move a support vector, or push a point inside, and everything changes",640,392,"r");},"The consequence is worth stating in both directions, because only one half is usually remembered. <b>Deleting every non-support vector leaves the solution completely unchanged</b> -- they are genuinely irrelevant, once you know they are far from the boundary. But that is not a statement about robustness to editing the data. <s>Move a single support vector and the boundary moves with it</s>; drag any ordinary point into the margin and it becomes a support vector, changing everything. The sparsity says the answer <em>depends on few points</em>, not that it is stable.");
+  SUM(0,5,{h:"★★ Support vectors and sparsity",k:"Complementary slackness forces <b>&alpha;&#7522; &times; (constraint slack) = 0</b> for every point. A point strictly outside the margin has positive slack, so its &alpha; must be zero.",m:"Only points sitting exactly on the margin can carry &alpha; > 0, and since <b>w = &Sigma;&alpha;&#7522;y&#7522;x&#7522;</b>, the boundary is built from those few <b>support vectors</b> alone. The sparsity was never designed in -- it follows from the optimality conditions.",w:"<s>Sparsity is not stability.</s> Deleting non-support vectors changes nothing, but moving one support vector -- or pushing any point into the margin -- moves the boundary.",e:"Say it precisely: &alpha;&#7522; > 0 only for points on the margin; all other multipliers are exactly zero, not merely small."});
+  QUIZ(0,5,{t:"A training point sits well outside the margin. What does complementary slackness say about it?",o:["Its &alpha; is small but non-zero","<b>Its &alpha; is exactly zero, so it contributes nothing to w</b>","Its &alpha; is large, since it is confidently classified","Nothing; complementary slackness constrains only support vectors"],a:1,w:"The condition &alpha;&#7522;[y&#7522;(w&#7488;x&#7522; + b) &minus; 1] = 0 applies to <b>every</b> point. Outside the margin the bracket is strictly positive, so &alpha;&#7522; must be <b>exactly zero</b> -- not approximately. That is why deleting such points leaves w = &Sigma;&alpha;&#7522;y&#7522;x&#7522; untouched."});
+});
+KP("6 · ★★ The dual form, and why it matters",function(){
+  S(0,function(){clearScene();setEq("$$\\max_{\\alpha}\\ \\sum_i \\alpha_i-\\tfrac{1}{2}\\sum_{i,j}y^{(i)}y^{(j)}\\alpha_i\\alpha_j\\langle x^{(i)},x^{(j)}\\rangle$$","top");setCap("<b>Subject to &alpha;&#7522; &ge; 0 and &Sigma;&alpha;&#7522;y&#7522; = 0. Look at where the data appears.</b>");note("the training points enter only through pairwise inner products",640,300,"y");note("w itself has vanished from the problem",640,352,"g");},"Substituting w back into the Lagrangian produces the dual problem, and one feature of it changes everything that follows. <b>The training points appear only inside inner products &lang;x&#7522;, x&#8309;&rang;</b> -- never on their own. The individual coordinates of a data point are no longer needed; only how each pair of points relates. w has disappeared from the statement of the problem entirely, recoverable at the end from the multipliers if you want it.");
+  S(0,function(){clearScene();setEq(null);setBig("Kernels replace a dot product","and the mapping is never performed");note("K(x,z) computes ⟨φ(x),φ(z)⟩ directly, even when φ maps to a huge space",640,392,"v");},"Now the payoff. Suppose we wanted to work in a richer feature space -- all the products of pairs of features, say -- to separate classes no line can separate. Mapping every point into that space and computing there would be expensive or, for some maps, impossible. But <b>the algorithm never asks for a point; it only ever asks for an inner product between two of them</b>. If some function K computes that inner product directly from the original points, we can substitute it in and the method runs in the richer space <em>without ever visiting it</em>.");
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(105,150,470,100,"map, then dot product","r");boxNode(700,150,470,100,"kernel: dot product only","g");link(575,200,700,200);note("expensive or impossible",345,286,"r");note("cheap, and the same number",935,286,"g");note("the prediction is also just a weighted sum of kernels with the support vectors",640,356,"");},"The distinction is the one people most often blur. <b>The kernel trick is not \"map the points and then take the dot product\" -- it is obtaining the dot product without the mapping.</b> That is what makes an infinite-dimensional feature space, as the Gaussian kernel provides, computationally ordinary. Prediction inherits the same structure: since w = &Sigma;&alpha;&#7522;y&#7522;x&#7522;, the score for a new point is a weighted sum of kernel values against the support vectors -- <em>a handful of terms, not a pass over the whole dataset</em>.");
+  SUM(0,6,{h:"★★ The dual form and the kernel trick",k:"In the dual, the data appears <b>only inside inner products</b> &lang;x&#7522;, x&#8309;&rang;, subject to &alpha;&#7522; &ge; 0 and &Sigma;&alpha;&#7522;y&#7522; = 0. Individual coordinates are never needed.",m:"So any function K that returns &lang;&phi;(x), &phi;(z)&rang; can be dropped in, and the method runs in the feature space &phi; defines <b>without ever computing &phi;</b>. A Gaussian kernel corresponds to an infinite-dimensional space and still costs one exponential.",w:"<s>The trick is not \"map, then take the dot product\".</s> It is getting the dot product <em>without</em> the mapping -- that is the whole saving.",e:"Prediction is a weighted sum of kernels against the support vectors only, so it stays cheap however large the training set was."});
+  QUIZ(0,6,{t:"What property of the dual problem makes the kernel trick possible?",o:["That the multipliers are non-negative","<b>That the training points appear only through inner products between pairs of them</b>","That the objective is quadratic","That most multipliers are zero"],a:1,w:"Because no step ever needs a point's coordinates -- only &lang;x&#7522;, x&#8309;&rang; -- <b>any function that returns the right inner product can be substituted</b> and the algorithm runs unchanged in the corresponding feature space. Sparsity and the quadratic form are both genuine properties of the dual, but neither is what enables kernels."});
+});
+KP("7 · ★ When the data is not separable",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);cloud();dots([[600,230]],"b",7);dots([[760,290]],"a",7);boundary("fit y");margins();note("two points on the wrong side -- now no separating line exists at all",640,392,"r");},"Everything so far assumed a line exists that separates the classes perfectly. Add two points on the wrong side and <b>the constraint set becomes empty -- there is no feasible solution, and the problem as stated has no answer</b>. This is not an exotic edge case; it is the normal situation with real data. Worse, insisting on perfect separation is undesirable even when it is possible: a single mislabelled point can drag the boundary a long way for the sake of one observation.");
+  S(0,function(){clearScene();setEq("$$\\min\\ \\tfrac{1}{2}\\lVert w\\rVert^{2}+C\\sum_i \\xi_i\\quad\\text{s.t.}\\quad y^{(i)}\\big(w^{\\top}x^{(i)}+b\\big)\\ge 1-\\xi_i,\\ \\xi_i\\ge 0$$","top");setCap("<b>Let each point buy its way inside the margin, and charge C for the privilege.</b>");note("ξ measures how far into the margin, or past the boundary, a point sits",640,300,"");note("in the dual this changes exactly one thing: 0 ≤ α ≤ C",640,352,"g");},"The repair is to give each constraint some slack and charge for using it. <b>&xi;&#7522; measures how far point i intrudes into the margin, or past the boundary, and C&Sigma;&xi;&#7522; adds the total intrusion to the objective.</b> The problem is always feasible now: set the &xi; large enough and any w works, at a price. What is elegant is how little the dual changes -- the multipliers acquire an upper bound, <b>0 &le; &alpha;&#7522; &le; C</b>, and the objective is untouched. Everything about support vectors and kernels survives intact.");
+  S(0,function(){clearScene();setEq(null);setBig("C trades margin for errors","large C: few errors, narrow margin");note("C is a hyper-parameter -- choose it by cross-validation, not by staring at it",640,392,"y");},"C is the dial between the two goals. <b>Large C makes intrusions expensive, so the optimiser will narrow the margin, even contort the boundary, to keep points out</b> -- the hard-margin behaviour, and with it the sensitivity to outliers. Small C tolerates intrusions and buys a wider, calmer margin at the cost of some training errors. There is no correct value to be derived: it is a hyper-parameter, chosen by cross-validation. <em>Notice that C plays the same role &lambda; played in ridge regression -- the trade between fitting the data and keeping the model tame.</em>");
+  SUM(0,7,{h:"★ The soft margin and C",k:"Real data is rarely separable, so give each constraint slack &xi;&#7522; &ge; 0 and add <b>C&Sigma;&xi;&#7522;</b> to the objective. The problem is then always feasible.",m:"In the dual this changes exactly one thing: the multipliers gain an upper bound, <b>0 &le; &alpha;&#7522; &le; C</b>. The objective, the support-vector structure and the kernel trick all survive unchanged.",w:"<s>Large C is not \"better\".</s> It makes intrusions expensive, narrowing the margin and restoring the hard-margin sensitivity to outliers; small C buys a wider margin at the cost of some training errors.",e:"C is a hyper-parameter chosen by cross-validation, and plays the same balancing role that &lambda; plays in ridge regression."});
+  QUIZ(0,7,{t:"How does the soft-margin formulation change the dual problem?",o:["It adds the slack variables &xi;&#7522; as new dual variables","<b>It leaves the objective alone and only caps the multipliers: 0 &le; &alpha;&#7522; &le; C</b>","It makes the dual non-convex","It removes the constraint &Sigma;&alpha;&#7522;y&#7522; = 0"],a:1,w:"The slack variables are eliminated in forming the dual and leave behind a single trace: <b>an upper bound C on every multiplier</b>. The dual objective is identical to the hard-margin one, it stays convex, and &Sigma;&alpha;&#7522;y&#7522; = 0 remains -- which is why kernels and support vectors carry over untouched."});
+});
+KP("End · the chain",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("Margin and dual · complete","One criterion, followed all the way down",
+      "margin → primal → Lagrangian → support vectors → kernels → soft margin");},
+    "The chain, end to end. <b>(1)</b> Separable classes leave the training error flat across infinitely many boundaries, so the SVM adds a criterion: <b>maximise the distance to the nearest point</b>. <b>(2)</b> The functional margin can be inflated by rescaling w, so we divide by &Vert;w&Vert; to get a real distance, and spend the free scaling to fix the closest point at 1. <b>(3)</b> The margin is then 1/&Vert;w&Vert;, giving a clean convex programme: <b>minimise &frac12;&Vert;w&Vert;&sup2; subject to y(w&#7488;x + b) &ge; 1</b>. <b>(4)</b> Turning the constraints into priced multipliers gives the Lagrangian; convexity and linear constraints deliver <em>strong duality</em>, so the dual is exact, and stationarity gives <b>w = &Sigma;&alpha;&#7522;y&#7522;x&#7522;</b>. <b>(5)</b> Complementary slackness forces &alpha;&#7522; = 0 for every point off the margin, so only the <b>support vectors</b> matter -- sparsity nobody designed. <b>(6)</b> In the dual the data appears only through inner products, so a <b>kernel</b> can replace them and the method runs in a space it never visits. <b>(7)</b> Slack variables and a price C make it work on data that is not separable, at the cost of one bound: 0 &le; &alpha;&#7522; &le; C.");
+});
+window.__startProjector(CFG);
+})();
+</script>

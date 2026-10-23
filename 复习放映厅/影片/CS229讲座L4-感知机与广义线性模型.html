@@ -1,0 +1,884 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L4 · 感知机与广义线性模型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L4 · 感知机与广义线性模型",
+  subtitle:"sigmoid 到底从哪来 · 每个术语先解释再用 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=iZTeva0WSTQ&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── S 形 / 阶跃曲线 ── */
+function sig(cx,cy,w,h,hard,cls){
+  var p=[],i;
+  for(i=0;i<=80;i++){
+    var t=-6+12*i/80, v=hard?(t>=0?1:0):1/(1+Math.exp(-t));
+    p.push([cx+w*t/12, cy-h*(v-0.5)]);}
+  curve(p,cls||"b");}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L4","感知机与广义线性模型",
+      "sigmoid 不是挑出来的，是推出来的");},
+    "这一讲会回答一个你多半没细想过的问题：<b>逻辑回归为什么偏偏用 sigmoid 这个函数？</b><br>常见的说法是「因为它取值在 0 到 1 之间，适合当概率」或者「因为它求导方便」。<b>⭐ 这两条都对，但都不是原因——它们是结果带来的好处。</b><br><b>真正的答案是：sigmoid 是推出来的。</b>只要你假设 y 服从伯努利分布，<b>再把伯努利写成一种叫「指数族」的标准形式，sigmoid 就会自己掉出来</b>，一个字都不用猜。<br>而且同一条推导链还能推出<b>线性回归</b>和 <b>softmax</b>；更漂亮的是——<b>不管你选哪个分布，最后的参数更新规则长得一模一样</b>。<br><b>这一版是重做的</b>：旧版只有 9 个知识点，而且「指数族」「自然参数」「充分统计量」这些词都是直接拿来用。<b>这一版每个词先讲清楚再用。</b>");
+});
+KP("1 · 先认识两个词：概率分布、参数",function(){
+  S(1351,function(){clearScene();setEq(null);setCap("「分布」说的是：各种结果各有多大机会");
+   axes({x0:280,x1:1000,y0:385,y1:190});
+   var xs=[380,480,580,680,780,880],hs=[40,95,150,140,85,35];
+   xs.forEach(function(x,i){boxNode(x-32,385-hs[i],64,hs[i],"","b");});
+   note("每根柱子的高度 = 这个结果出现的机会",640,395,"d");
+   note("⭐ 所有柱子加起来必然是 1",640,170,"y");},"整讲都在跟「分布」打交道，<b>先把这个词说清楚</b>。<br><b>「概率分布」说的就是：各种可能的结果，各自有多大机会出现。</b>图上每根柱子的高度，就是那个结果出现的机会。<br><b>⭐ 有一条铁律：所有机会加起来必然等于 1。</b>因为「总得发生点什么」。<br><b>⚠ 别把「分布」想成什么高深的东西</b>——<b>它就是一张「谁有多大机会」的清单</b>。抛硬币的分布是「正面 50%、反面 50%」；一枚作弊硬币的分布可能是「正面 70%、反面 30%」。<b>两者是不同的分布，但都是分布。</b><br><b>⭐ 那条「加起来等于 1」的性质，看起来很废话，但这一讲会用到它两次</b>：<b>一次是伯努利只需要一个参数（因为另一个机会被它定死了）</b>，<b>一次是 softmax 末尾那个「除以总和」的动作——那一步存在的唯一理由就是满足这条铁律。</b>");
+  S(1351,function(){clearScene();setEq(null);setCap("再顺手认一个词：期望");
+   axes({l:280,r:1000,t:190,b:385});
+   var xs=[380,480,580,680,780],hs=[50,110,150,95,40];
+   xs.forEach(function(x,i){boxNode(x-30,385-hs[i],60,hs[i],"","b");});
+   link(572,200,572,385);
+   note("期望 ＝ 每个结果乘上它的机会，再全部加起来",640,172,"y");
+   note("↑ 这堆柱子的重心",572,404,"g");
+   note("⚠ 掷骰子的期望是 3.5 —— 它不一定是能出现的值",960,300,"d");},"这一讲从头到尾都在说「均值」「平均」，<b>这个词的正式名字叫期望，顺手认一下。</b><br><b>期望就是：把每个可能的结果乘上它出现的机会，再全部加起来。</b>图上那条竖线就是它——<b>你可以把它理解成这堆柱子的重心</b>。<br><b>⚠ 有一点容易想岔：期望不一定是能真正出现的值。</b>掷一枚公平骰子，<b>期望是 3.5，可你永远掷不出 3.5</b>。<br><b>⭐ 为什么现在就要铺这个词</b>：下一镜讲「参数」时要说的方差，<b>定义里就要用到期望</b>（方差 ＝ 偏离期望多远的平方的期望）；<b>再往后 GLM 的第三条假设，整条就是「我们要预测的是 E[y|x]」。</b>");
+  S(1351,function(){clearScene();setEq(null);setCap("「参数」＝ 调节分布形状的旋钮");
+   axes({x0:280,x1:1000,y0:385,y1:190});
+   var i,p=[],q=[];
+   for(i=0;i<=60;i++){var x=300+i*12;
+     p.push([x,375-150*Math.exp(-Math.pow((x-520)/90,2))]);}
+   curve(p,"b");
+   for(i=0;i<=60;i++){var x=300+i*12;
+     q.push([x,375-150*Math.exp(-Math.pow((x-800)/150,2))]);}
+   curve(q,"g");
+   note("换一组参数 ⇒ 换一个形状",640,395,"y");
+   note("⭐ 「学习」就是：从数据里找出那组最合适的旋钮位置",640,170,"g");},"<b>「参数」是什么？你可以把它想成调节分布形状的旋钮。</b><br>比如高斯分布有两个旋钮：<b>中心在哪（均值）、胖瘦如何（方差）</b>。旋钮一拧，形状就变了。<br><b>⭐ 于是「机器学习」这件事可以这么理解：你先选定一类分布（选好有哪些旋钮），然后从数据里找出那组最合适的旋钮位置。</b><br><b>⚠ 这一讲要讲的「指数族」，就是一种给所有这些旋钮做统一编号的方式。</b>听起来抽象，<b>但它带来的好处后面会非常具体。</b>");
+  SUM(1351,1,{h:"分布 ＝ 各结果的机会；参数 ＝ 调形状的旋钮",k:"<b>概率分布</b>：各种可能结果各有多大机会。<b>铁律：所有机会加起来等于 1。</b>",m:"<b>参数</b>＝调节分布形状的旋钮（高斯有「中心」和「胖瘦」两个）。<b>学习 ＝ 从数据里找出最合适的旋钮位置。</b>",w:"⭐ 「和为 1」这条看似废话的性质，<b>讲 softmax 时会突然变得很关键</b>。",e:"⚠ 这一讲的「指数族」就是<b>给所有这些旋钮做统一编号的方式</b>。"});
+  QUIZ(1351,1,{t:"概率分布的「参数」是什么？",o:["分布的最大值","调节分布形状的旋钮（如高斯的中心和胖瘦）；学习就是从数据里找出最合适的旋钮位置","样本的标签","数据的个数"],a:1,w:"⭐ 「机器学习」可以这么理解：<b>先选定一类分布（有哪些旋钮），再从数据里找出旋钮该拧到哪</b>。"});
+});
+KP("2 · 感知机：把 sigmoid 换成「一刀切」",function(){
+  S(95,function(){clearScene();setEq(null);setCap("同一个位置，换一个 g");
+   says("1:35","So, uh, perceptron");
+   axes({x0:200,x1:620,y0:385,y1:195});
+   sig(410,295,180,170,false,"b");
+   note("逻辑回归：g 是 sigmoid",410,398,"b");
+   axes({x0:720,x1:1140,y0:385,y1:195});
+   sig(930,295,180,170,true,"y");
+   note("感知机：g 是硬阶跃",930,398,"y");
+   note("⭐ 结构完全一样 h(x)=g(θᵀx)，只有 g 不同",640,168,"g");},"先看感知机。<b>⭐ 它和逻辑回归的结构完全一样</b>：都是 <b>h(x) = g(θᵀx)</b>——先算一个加权和 θᵀx，再过一个函数 g。<b>区别只在 g 是什么。</b><br><b>逻辑回归的 g 是 sigmoid</b>：光滑地从 0 爬到 1，<b>输出可以当概率读</b>（0.7 就是「七成可能是正类」）。<br><b>感知机的 g 是硬阶跃</b>：<b>大于等于 0 就输出 1，小于 0 就输出 0</b>，<b>非黑即白，中间没有过渡</b>。<br><b>⚠ 这个差别不只是「形状不同」，后面会看到它有个很实质的后果。</b>");
+  S(452,function(){clearScene();
+   setEq("$$\\theta := \\theta + \\alpha\\,(y - h_\\theta(x))\\,x$$");
+   setCap("分错了才动，而且朝那个点转过去");
+   says("3:12","it's useful to see this picture");
+   dots([[400,245],[460,210],[360,290]],"g",9);
+   dots([[800,350],[860,385],[760,320]],"r",9);
+   curve([[300,400],[950,215]],"d");
+   curve([[300,365],[950,250]],"b");
+   dots([[640,300]],"y",11);
+   note("新来的点被分错了",640,170,"y");
+   note("旧边界",330,265,"d");
+   note("新边界：朝它转过去一点",900,179,"b");},"<b>感知机的更新规则很朴素。</b>注意 h(x) 只能取 0 或 1，<b>所以 (y − h) 只有三种值</b>：<b>分对了是 0——什么都不做</b>；分错了是 +1 或 −1，<b>于是 θ 加上或减去这个 x</b>。<br><b>⭐ 几何上在干什么？</b>θ 是决策边界的<b>法向量</b>（垂直于边界的方向）。<b>把 x 加到 θ 上，就是让边界朝着那个被分错的点「转过去」一点</b>，下次再遇到它就更可能分对。<br>Ng 在课上专门画了这张图，<b>而讲义里反而没有</b>——所以这是看视频才有的收获。");
+  SUM(95,2,{h:"感知机 ＝ 把 sigmoid 换成硬阶跃",k:"结构<b>完全一样</b> h(x)=g(θᵀx)，<b>只有 g 不同</b>：sigmoid（光滑、可当概率）换成硬阶跃（非黑即白）。",m:"更新 θ := θ + α(y−h)x。<b>分对了 (y−h)=0 什么都不做；分错了朝那个点转</b>。θ 是决策边界的<b>法向量</b>。",w:"⭐ Ng 在课上画了这张几何图，<b>讲义里没有</b>——看视频才有的收获。",e:"⚠ 「只有 g 不同」这个视角很有用：<b>同一个框架换个 g 就是另一个算法</b>。"});
+  QUIZ(95,2,{t:"感知机和逻辑回归的区别在哪？",o:["两者结构都是 h(x)=g(θᵀx)，只有 g 不同：感知机用硬阶跃（非黑即白），逻辑回归用 sigmoid（可当概率）","感知机只能处理二维数据","感知机不需要训练数据","感知机用平方损失"],a:0,w:"⭐ <b>只有 g 不同。</b>更新式里 (y−h) 只有 0/+1/−1 三种值 ⇒ <b>分对了不动，分错了朝那个点转</b>。"});
+});
+KP("3 · ⚠ 但感知机不在后面要讲的框架里",function(){
+  S(95,function(){clearScene();setEq(null);setCap("硬阶跃输出的不是概率");
+   boxNode(170,215,440,84,"sigmoid 输出 0.7","b");
+   boxNode(700,215,440,84,"硬阶跃输出 1","y");
+   note("「七成可能是正类」—— 是个概率",390,335,"d");
+   note("「就是正类」—— 没有可能性可言",920,335,"d");
+   note("⚠ 没有概率 ⇒ 谈不上「似然」⇒ 不在 GLM 框架内",640,392,"r");},"<b>⚠ 现在说那个实质性的后果。</b><br><b>sigmoid 输出 0.7，意思是「七成可能是正类」——这是一个概率。</b>有了概率，就能谈<b>「似然」</b>（这组参数解释数据的能力有多强），就能用极大似然去推导。<br><b>硬阶跃输出 1，意思就是「是正类」——没有任何可能性的余地。</b><b>没有概率，就谈不上似然。</b><br><b>⭐ 所以感知机不在这一讲后面要搭的那个框架（广义线性模型）里。</b>Ng 讲它，<b>主要是作为历史和对照</b>，不是因为实际会用它。<br><b>⚠ 这个「有没有概率」的分界，值得记一下——它决定了一个模型能不能用极大似然那一套工具。</b>");
+  S(95,function(){clearScene();setEq(null);setCap("那这一讲为什么还要先讲感知机");
+       boxNode(130,206,470,74,"感知机：历史上第一个","b");
+       boxNode(740,206,440,74,"后面的框架：GLM","g");
+       note("最早想「模拟神经元」的尝试",365,326,"d");
+       note("这一讲真正的主角",960,326,"d");
+       note("⭐ 它的价值在于当对照组：看清「硬判 0/1」和「给概率」差在哪",640,396,"y");},"既然感知机进不了后面的框架，<b>这一讲为什么还要花时间讲它？</b><br><b>第一，它是历史上的起点</b>：最早想要「模拟一个神经元」的尝试就是它，<b>后面讲神经网络时还会碰上这个形状</b>。<br><b>⭐ 第二，也是更要紧的——它是个极好的对照组。</b>把感知机和逻辑回归摆在一起，<b>你会很清楚地看见「硬判 0/1」和「给出概率」这两条路差在哪</b>。<br><b>⚠ 差别不在准不准，而在能不能求导、能不能写出似然。</b><b>这一讲剩下的全部内容，都建立在「模型要能给出一个概率」这个前提上。</b>");
+  SUM(95,3,{h:"⚠ 感知机没有概率 ⇒ 不在 GLM 框架内",k:"<b>sigmoid 输出 0.7 ＝ 一个概率</b>（能谈似然）；<b>硬阶跃输出 1 ＝ 没有可能性余地</b>（谈不上似然）。",m:"<b>没有概率 ⇒ 没有似然 ⇒ 用不了极大似然那一套工具。</b>",w:"⭐ Ng 讲感知机<b>主要是作为历史和对照</b>，不是因为实际会用。",e:"⚠ 「有没有概率输出」这个分界值得记——<b>它决定了一个模型能不能用极大似然</b>。"});
+  QUIZ(95,3,{t:"为什么感知机不属于广义线性模型（GLM）框架？",o:["因为它没有参数","因为它太简单","因为它不收敛","因为硬阶跃输出的不是概率，没有概率就谈不上似然，也就用不了极大似然那一套推导"],a:3,w:"⭐ 对比：<b>sigmoid 输出 0.7 是个概率，能谈似然；硬阶跃输出 1 没有可能性余地</b>。Ng 讲它主要是<b>历史和对照</b>。"});
+});
+KP("4 · 动机：一个一个推，太累了",function(){
+  S(64,function(){clearScene();setEq(null);setCap("假如每种分布都要单独推一遍");
+       says("1:04","a good chunk of today is gonna be exponential family");
+       boxNode(150,205,230,72,"高斯","b");
+       boxNode(420,205,230,72,"伯努利","b");
+       boxNode(690,205,230,72,"多项式","b");
+       boxNode(960,205,230,72,"泊松","b");
+       note("每个都单独推一遍似然、求一遍导、解一遍",640,320,"r");
+       note("⚠ 四个分布 ⇒ 四套推导；再来一个新分布 ⇒ 再推一遍",640,392,"r");},"<b>先说清楚为什么要费劲搞一个「统一写法」。</b><br>现实里要建模的东西五花八门：<b>实数值（房价）用高斯；0/1（是不是垃圾邮件）用伯努利；多选一（猫狗鸟）用多项式；计数（一小时来几个顾客）用泊松</b>……<br><b>⚠ 如果每种分布都要单独推一遍似然、求一遍导、解一遍方程</b>——四个分布就是四套推导，<b>而且每来一个新分布就得从头再来一次</b>。<br><b>⭐ 这一讲要做的，就是找出它们共同的骨架，只推一次。</b>");
+  S(64,function(){clearScene();setEq(null);setCap("「只推一次」具体能省掉什么");
+       boxNode(120,206,250,70,"换个分布","b");
+       boxNode(430,206,290,70,"重新推一遍梯度","r");
+       boxNode(790,206,380,70,"✗ 这一步可以彻底省掉","g");
+       link(370,241,430,241); link(720,241,790,241);
+       note("线性回归、逻辑回归、softmax…",245,326,"d");
+       note("每换一个就从头算一次",575,326,"d");
+       note("GLM 给的是一个统一的更新式",980,326,"d");
+       note("⭐ 这一讲最后会兑现这句话：不管选哪个分布，更新规则一模一样",640,396,"y");},"「太累了」具体累在哪，值得说清楚，<b>不然体会不到后面那个结论有多漂亮</b>。<br><b>按老办法</b>：你选一个分布 → 写出似然 → 取对数 → 求导 → 得到一条更新规则。<b>换一个分布，这一整套从头再来一遍。</b><br><b>⭐ 而这一讲要证明的是：这个「从头再来」可以彻底省掉。</b>不管你选高斯、伯努利还是泊松，<b>最后得到的更新规则长得一模一样</b>，<b>区别只在把 h(x) 换成对应的那一个</b>。<br><b>⚠ 请带着怀疑听下去</b>——<b>这个结论第一次听会觉得不可能，而它确实成立。</b>");
+  SUM(64,4,{h:"为什么要统一的写法",k:"要建模的东西五花八门：<b>实数值用高斯、0/1 用伯努利、多选一用多项式、计数用泊松</b>。",m:"⚠ <b>每种都单独推一遍，四个分布就是四套推导</b>，来个新分布还得从头再来。",w:"⭐ <b>这一讲要找出它们共同的骨架，只推一次。</b>",e:"⭐ 带着这个动机往下看，「指数族」就不会显得是凭空造出来的抽象。"});
+  QUIZ(64,4,{t:"这一讲为什么要引入「指数族」这个统一写法？",o:["为了压缩存储","为了让分布都变成高斯","因为各种分布若各推一遍太累；找出共同骨架后只推一次，结论对所有成员都成立","因为只有指数族能用梯度下降"],a:2,w:"⭐ 带着这个动机看，<b>「指数族」就不是凭空造出来的抽象</b>——它是为了「只推一次」。"});
+});
+KP("5 · ★ 指数族：四个零件拼出来的模板",function(){
+  S(700,function(){clearScene();
+       setEq("$$p(y;\\eta) = b(y)\\,\\exp\\!\\big(\\eta\\,T(y) - a(\\eta)\\big)$$","top");
+       setCap("换一组零件，就换一个分布");
+       matrix({rows:5,cols:2,cw:420,ch:48,x:220,y:162,
+         cell:function(i,j){var t=[
+           ["零件","它是什么"],
+           ["η","自然参数 —— 整个框架的核心"],
+           ["T(y)","充分统计量 —— 绝大多数情况就是 y 本身"],
+           ["a(η)","对数配分函数 —— 负责让概率加起来等于 1"],
+           ["b(y)","基测度 —— 和参数无关的那部分"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1?"hl":"";}});},"<b>指数族就是这么一个模板。</b>看起来有点吓人，<b>但它只有四个零件，而且其中两个你基本可以先不管</b>：<br><b>T(y)「充分统计量」</b>——<b>绝大多数情况下它就是 y 本身</b>。所以先当它不存在。<br><b>b(y)「基测度」</b>——和参数无关的那部分，<b>它不影响参数怎么解</b>。也先不管。<br><b>a(η)「对数配分函数」</b>——<b>它的职责就是让概率加起来等于 1</b>（还记得第 1 节那条铁律吗）。<b>⭐ 后面会发现它其实藏着很有用的信息。</b><br><b>⭐ 真正的核心是 η，叫「自然参数」。下一节单讲它。</b>");
+  S(858,function(){clearScene();setEq(null);setCap("成员名单很长");
+       matrix({rows:5,cols:3,cw:290,ch:44,x:190,y:156,
+         cell:function(i,j){var t=[
+           ["分布","用来建模","对应的回归"],
+           ["高斯","实数值","线性回归"],
+           ["伯努利","0 / 1","逻辑回归"],
+           ["多项式","K 选一","softmax 回归"],
+           ["泊松 / 伽马 …","计数 / 正的连续量","—"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2&&i>0&&i<4?"hl":"";}});
+       note("⭐ 它们不是「碰巧长得像」，是同一个模板的不同零件组合",640,395,"y");},"<b>成员名单很长</b>：高斯、伯努利、多项式、泊松、伽马、贝塔、狄利克雷……<br><b>⭐ 关键是要意识到：它们不是「几个碰巧长得有点像的分布」，而是同一个模板换了零件。</b><br><b>于是接下来会发生一件很好的事</b>：我们<b>只对这个模板推导一次</b>，然后<b>线性回归、逻辑回归、softmax 回归就全都自动得到了</b>——<b>不用一个一个去想。</b><br><b>⭐ 打个比方</b>：这就像发现「正方形、长方形、菱形」其实都是平行四边形——<b>一旦证明了平行四边形的性质，那三个就一起有了，不用各证一遍</b>。<br><b>⚠ 要注意的是：「指数族」和「指数分布」是两个不同的东西</b>，名字像而已。<b>Ng 在课上专门提醒过这一点</b>——指数分布只是指数族里的一个成员。");
+  SUM(700,5,{h:"★ 指数族模板：p(y;η) = b(y)exp(ηT(y) − a(η))",k:"四个零件：<b>η 自然参数（核心）</b>、<b>T(y) 充分统计量（多数就是 y）</b>、<b>a(η) 让概率加到 1</b>、<b>b(y) 与参数无关</b>。",m:"⭐ <b>T(y) 和 b(y) 可以先不管</b>：前者多数就是 y，后者不影响参数怎么解。",w:"<b>高斯 / 伯努利 / 多项式 / 泊松 / 伽马</b> 都是它的成员——<b>不是碰巧相似，是同一模板的不同零件组合</b>。",e:"⭐ 好处：<b>只对模板推一次，三种回归全都自动得到</b>。"});
+  QUIZ(700,5,{t:"指数族模板里，哪一个零件是「整个框架的核心」？",o:["T(y) 充分统计量","η 自然参数","b(y) 基测度","a(η) 对数配分函数"],a:1,w:"⭐ <b>T(y) 多数就是 y 本身、b(y) 不影响参数解</b>，都可以先不管。<b>a(η) 负责让概率加到 1</b>（后面会发现它藏着有用信息）。"});
+});
+KP("6 · 「自然参数」η 到底是什么",function(){
+  S(1721,function(){clearScene();setEq(null);setCap("同一个分布，两套参数坐标");
+       says("28:41","we set up a link between the canonical parameters and the natural parameters");
+       boxNode(170,215,440,84,"你熟悉的参数","b");
+       boxNode(700,215,440,84,"自然参数 η","g");
+       note("高斯：µ　伯努利：φ",390,335,"d");
+       note("写成指数族模板后冒出来的那个",920,335,"d");
+       note("⭐ 两者一一对应，只是换了个「坐标系」",640,392,"y");},"<b>「自然参数」听起来玄，其实很好理解：它是同一个分布的另一套参数写法。</b><br>你熟悉的参数是<b>高斯的 µ、伯努利的 φ</b>——Ng 说这些叫<b>「常用参数」</b>。而当你把分布硬塞进指数族那个模板时，<b>指数里面乘在 T(y) 前面的那一坨，就是 η</b>。<br><b>⭐ 两者是一一对应的，只是换了个「坐标系」来描述同一个分布。</b><br><b>⚠ 而这一讲最精彩的地方恰恰在于：「你熟悉的参数」和「自然参数」之间的换算关系，本身就是一个有意义的函数。</b><b>伯努利那边，这个换算关系就是 sigmoid。</b>");
+  S(1721,function(){clearScene();setEq(null);setCap("为什么要多设一个 η，不直接用原来的参数");
+       boxNode(130,206,470,74,"各分布原来的参数：φ、µ、λ…","r");
+       boxNode(740,206,440,74,"统一改写成 η","g");
+       link(600,243,740,243);
+       note("每个分布各叫各的名字",365,326,"d");
+       note("换完之后，模板的形状完全一致",960,326,"d");
+       note("⭐ η 就是给这些五花八门的旋钮做的「统一编号」",640,396,"y");},"这里有个很自然的抵触：<b>伯努利本来就有 φ，高斯本来就有 µ，为什么非要再换一套记号？</b><br><b>因为不换就统一不了。</b>φ、µ、λ 各叫各的名字，<b>写出来的式子也各长各的样</b>；<b>统一改写成 η 之后，所有分布的式子就落进同一个模板</b>。<br><b>⭐ 可以把 η 理解成给这些五花八门的旋钮做的统一编号。</b><br><b>⚠ 注意换记号不改变分布本身</b>——<b>伯努利还是那个伯努利，只是换了一种写法</b>。<b>而正因为是统一的写法，后面才能「只推一次」。</b>");
+  SUM(1721,6,{h:"★ 自然参数 η ＝ 同一分布的另一套参数坐标",k:"<b>你熟悉的参数</b>（高斯的 µ、伯努利的 φ，Ng 叫「常用参数」）与 <b>η</b> <b>一一对应</b>，只是换了个坐标系。",m:"<b>η 就是把分布塞进模板后，指数里乘在 T(y) 前面的那一坨。</b>",w:"⭐⭐ <b>这一讲最精彩的地方</b>：两套参数之间的<b>换算关系本身就是一个有意义的函数</b>——<b>伯努利那边，它就是 sigmoid</b>。",e:"⚠ 带着这句话看下面两节，推导就不会显得突然。"});
+  QUIZ(1721,6,{t:"「自然参数 η」和我们熟悉的参数（如 µ、φ）是什么关系？",o:["η 一定等于 µ","η 是参数的个数","η 是参数的平均值","两者一一对应，只是描述同一个分布的两套不同「坐标」；它们之间的换算关系本身就是一个有意义的函数"],a:3,w:"⭐ <b>换算关系本身就是关键</b>：伯努利那边它就是 <b>sigmoid</b>，高斯那边它就是<b>恒等</b>（η=µ）。"});
+});
+KP("7 · 先铺词：伯努利分布",function(){
+  S(1351,function(){clearScene();setEq(null);setCap("最简单的分布：只有两种结果");
+       says("22:31","a Bernoulli distribution is one you use to model binary data");
+       boxNode(300,215,220,84,"y = 1","g");
+       boxNode(760,215,220,84,"y = 0","r");
+       note("机会 φ",410,335,"g");
+       note("机会 1 − φ",870,335,"r");
+       note("⭐ 只有一个旋钮 φ —— 定了它，整个分布就定了",640,392,"y");},"<b>伯努利分布是最简单的一种分布：只有两种可能的结果。</b>Ng 的说法是——<b>你用它来建模二值数据</b>。<br>抛一枚（可能不公平的）硬币：<b>正面的机会是 φ，反面就是 1 − φ</b>。<br><b>⭐ 注意它只有一个旋钮 φ</b>。定了 φ，整个分布就完全定了（因为另一个机会必须是 1−φ，不然加起来不等于 1）。<br><b>在分类问题里</b>：<b>y=1 表示「是垃圾邮件」，y=0 表示「不是」，φ 就是「这封邮件是垃圾邮件的概率」。</b>");
+  S(1351,function(){clearScene();setEq(null);setCap("一个参数就够了，为什么");
+       boxNode(130,206,470,74,"P(y=1) = φ","b");
+       boxNode(740,206,440,74,"P(y=0) = 1 − φ","b");
+       note("你定下 φ",365,326,"d");
+       note("另一个就被定死了",960,326,"d");
+       note("⭐ 这正是「所有机会加起来等于 1」那条铁律的第一次兑现",640,396,"y");},"伯努利只有一个参数，<b>这件事值得停一下</b>。<br><b>它有两个结果，却只要一个数</b>：你定下 P(y=1)=φ，<b>P(y=0) 就只能是 1−φ，没得选</b>。<br><b>⭐ 这正是开头那条「所有机会加起来等于 1」的铁律第一次派上用场。</b><br><b>⚠ 把这个思路记住，softmax 那里还要再用一次</b>：<b>k 个类别看起来要 k 个参数，其实只有 k−1 个是自由的</b>。<br><b>所以「参数个数」不是数有几个结果，而是数<b>有几个能自由选的数</b>。");
+  SUM(1351,7,{h:"伯努利：只有两种结果，一个旋钮 φ",k:"Ng：<b>用它来建模二值数据</b>。y=1 的机会是 φ，y=0 的机会是 1−φ。",m:"⭐ <b>只有一个旋钮</b>：定了 φ 整个分布就定了（另一个必须是 1−φ，否则加起来不等于 1）。",w:"在分类里：<b>y=1 ＝「是垃圾邮件」，φ ＝「它是垃圾邮件的概率」</b>。",e:"⚠ 下一节就把它塞进指数族模板——<b>那是这一讲的高潮</b>。"});
+  QUIZ(1351,7,{t:"伯努利分布有几个参数？",o:["一个（φ）——定了它整个分布就定了，因为另一个机会必须是 1−φ","零个","两个（φ 和 1−φ）","取决于样本量"],a:0,w:"⭐ 「所有机会加起来等于 1」这条铁律，<b>让第二个数不再自由</b>。"});
+});
+KP("8 · ★ 把伯努利塞进模板：只是代数变形",function(){
+  S(1351,function(){clearScene();
+       setEq("$$\\phi^y(1-\\phi)^{1-y}$$");
+       setCap("先看伯努利原本长什么样");
+       note("y=1 时：代进去得到 φ",640,170,"g");
+       note("y=0 时：代进去得到 1−φ",640,214,"r");
+       note("⭐ 一个式子同时表达了两种情况 —— 指数在当「开关」",640,265,"y");},"<b>伯努利的密度写出来是这个样子，先确认它是对的。</b><br><b>y=1 时</b>：代进去是 φ¹ × (1−φ)⁰ = <b>φ</b>。✓<br><b>y=0 时</b>：代进去是 φ⁰ × (1−φ)¹ = <b>1−φ</b>。✓<br><b>⭐ 这个写法的巧妙之处：用指数当「开关」，一个式子同时表达了两种情况。</b>y 是 1 就激活前一项（另一项被 0 次方变成 1，等于消失），y 是 0 就反过来。<br><b>⚠ 为什么非要挤成一个式子？</b>因为<b>下一步要把它塞进指数族那个模板，而模板只有一个式子的位置</b>。<b>如果还分成「y=1 时…、y=0 时…」两种情况写，就没法做变形。</b><br><b>⭐ 这是数学里很常见的一个小手段：先把分情况讨论改写成一个统一表达式，后面才好继续算。</b>");
+  S(1351,function(){clearScene();
+       setEq("$$=\\exp\\!\\Big(y\\log\\tfrac{\\phi}{1-\\phi} + \\log(1-\\phi)\\Big)$$");
+       setCap("两步代数变形，没有任何技巧");
+       note("第一步：取 log 再放回 exp 里（exp 和 log 互相抵消）",640,170,"d");
+       note("⇒ y·log φ + (1−y)·log(1−φ)",640,201,"b");
+       note("第二步：把含 y 的项合并到一起",640,232,"d");
+       note("⭐ 对照模板：乘在 y 前面的那一坨，就是 η",640,265,"y");},"<b>现在做变形，两步，全是代数，没有任何技巧。</b><br><b>第一步</b>：取 log 再放回 exp 里（<b>exp 和 log 互相抵消，所以等式成立</b>），把乘法变成加法：<b>y·log φ + (1−y)·log(1−φ)</b>。<br><b>第二步</b>：把含 y 的项合并到一起，得到 <b>y·log(φ/(1−φ)) + log(1−φ)</b>。<br><b>⚠ 请注意这里没有做任何额外假设，也没有近似——就是把同一个式子换了个写法。</b><br><b>⭐ 现在对照模板 exp(η·T(y) − a(η))：T(y) 就是 y，而乘在 y 前面的那一坨——log(φ/(1−φ))——就是 η。</b>");
+  SUM(1351,8,{h:"★ 伯努利塞进模板：纯代数变形",k:"<b>第一步</b>取 log 再放回 exp（exp 与 log 抵消，等式成立）；<b>第二步</b>把含 y 的项合并。",m:"结果：<b>exp( y·log(φ/(1−φ)) + log(1−φ) )</b>。对照模板 ⇒ <b>T(y)=y，η = log(φ/(1−φ))</b>。",w:"⚠ <b>全程没有任何额外假设，也没有近似</b>——就是同一个式子换了个写法。",e:"⭐ 下一节把这个关系<b>倒过来解</b>，sigmoid 就出来了。"});
+  QUIZ(1351,8,{t:"把伯努利写成指数族形式，用到了什么特殊技巧？",o:["用了中心极限定理","用了泰勒展开近似","没有任何技巧——只是取 log 再放回 exp、然后合并含 y 的项，纯代数变形","假设了 φ 很小"],a:2,w:"⚠ <b>没有额外假设，也没有近似。</b>⭐ 正因为如此，下一节推出的 sigmoid 才是<b>必然的</b>，而不是「挑」出来的。"});
+});
+KP("9 · ★★★ 倒过来解：sigmoid 自己掉出来了",function(){
+  S(1419,function(){clearScene();
+       setEq("$$\\eta = \\log\\frac{\\phi}{1-\\phi}$$");
+       setCap("现在把它倒过来，解出 φ");
+       note("两边取指数：e^η = φ/(1−φ)",640,170,"d");
+       note("交叉相乘：e^η(1−φ) = φ",640,201,"d");
+       note("整理：e^η = φ(1 + e^η)",640,232,"d");
+       note("⭐ 解出来：φ = e^η / (1 + e^η) = 1 / (1 + e^⁻η)",640,265,"y");},"<b>⭐ 现在做这一讲最关键的一步：把 η 和 φ 的关系倒过来，解出 φ。</b><br><b>两边取指数</b>：e^η = φ/(1−φ)。<br><b>交叉相乘</b>：e^η(1−φ) = φ。<br><b>展开整理</b>：e^η = φ + φ·e^η = φ(1 + e^η)。<br><b>解出来</b>：<b>φ = e^η / (1 + e^η)</b>，上下同除以 e^η 就得到 <b>φ = 1 / (1 + e^(−η))</b>。");
+  S(1419,function(){clearScene();setEq(null);setCap("这就是 sigmoid");
+       axes({x0:400,x1:900,y0:385,y1:195});
+       sig(650,290,220,170,false,"g");
+       note("φ = 1 / (1 + e^⁻η)",650,170,"g");
+       note("⭐ 我们从头到尾没有「挑选」过任何函数",640,335,"y");
+       note("只做了两件事：① 假设 y 服从伯努利　② 写成指数族标准形式",640,392,"d");},"<b>⭐ 这就是 sigmoid。</b><br><b>请体会这件事的分量：我们从头到尾没有「挑选」过任何函数。</b>我们只做了两件事：<br><b>① 假设 y 服从伯努利分布</b>（这是对问题的建模判断——二分类，当然用伯努利）；<br><b>② 把伯努利写成指数族的标准形式</b>（纯代数变形）。<br><b>sigmoid 是解一个方程解出来的，不是设计出来的。</b><br><b>⭐ 所以「逻辑回归为什么用 sigmoid」这个问题的真正答案是：因为伯努利分布的自然参数和它的均值之间的换算关系，就是 sigmoid。</b>");
+  SUM(1419,9,{h:"★★★ sigmoid 是推出来的，不是挑出来的",k:"由 η = log(φ/(1−φ)) <b>倒过来解</b>：两边取指数 → 交叉相乘 → 整理 ⇒ <b>φ = 1/(1+e^(−η))</b>，<b>这就是 sigmoid</b>。",m:"全程只做了两件事：<b>① 假设 y 服从伯努利；② 写成指数族标准形式。</b><b>没有「挑选」任何函数。</b>",w:"⭐ 所以「逻辑回归为什么用 sigmoid」的答案是：<b>因为伯努利的自然参数与均值之间的换算关系就是 sigmoid</b>。",e:"⭐⭐ <b>这是 L4 最该记的一条。</b>课件通常直接给 sigmoid 不解释来路；能说出这条推导，就从「知道公式」变成了「知道为什么」。"});
+  QUIZ(1419,9,{t:"逻辑回归为什么用 sigmoid？",o:["因为它取值在 0 到 1 之间，适合当概率","因为它求导方便","因为把伯努利写成指数族后，自然参数 η 与均值 φ 的换算关系倒解出来恰好是 sigmoid","因为它是唯一光滑的 S 形函数"],a:2,w:"⭐ 前三个说法都「对」但<b>都不是原因</b>——它们是结果带来的好处。<b>真正的原因是推导出来的。</b>"});
+});
+KP("10 · 再把高斯塞进去：η 就等于 µ",function(){
+  S(1721,function(){clearScene();setEq(null);setCap("同样的手续，不同的结果");
+       matrix({rows:4,cols:3,cw:300,ch:56,x:185,y:205,
+         cell:function(i,j){var t=[
+           ["零件","伯努利","高斯（σ²=1）"],
+           ["T(y)","y","y"],
+           ["η","log(φ/(1−φ))","µ"],
+           ["η 与均值的关系","隔着一个 sigmoid","直接相等"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 这一行的差别，就是「线性回归 vs 逻辑回归」的全部根源",640,386,"y");},"<b>同样的手续做在高斯上。</b>（取 σ²=1 是为了简单，<b>而且 σ² 不影响 θ 的解</b>，Ng 在课上专门说明过。）<br>把高斯密度展开配方，<b>就能读出 T(y) = y，而 η = µ——自然参数直接就等于均值</b>。<br><b>⭐ 现在把两边对照着看，最后一行是关键</b>：<b>伯努利那边，η 和均值之间隔着一个 sigmoid；高斯这边，η 和均值是同一个东西。</b><br><b>⭐ 这一行的差别，就是「为什么高斯得到线性回归、伯努利得到逻辑回归」的全部根源。</b>后面两节会把它兑现。");
+  S(1721,function(){clearScene();setEq(null);setCap("为什么高斯这里可以把 σ² 扔掉");
+       boxNode(130,206,470,74,"σ² 不影响 θ 的最优解","b");
+       boxNode(740,206,440,74,"所以直接设成 1","g");
+       link(600,243,740,243);
+       note("它在求导时被约掉了",365,326,"d");
+       note("推导干净，结论不变",960,326,"d");
+       note("⭐ 这是「为了推导方便」的简化，不是高斯真的只有一个参数",640,396,"y");},"推高斯这一段时有个动作容易被忽略：<b>把 σ² 直接设成了 1。</b>这合法吗？<br><b>合法，因为我们要学的只有 θ，而 σ² 不影响 θ 的最优解</b>——<b>对 θ 求导时它作为一个常数被约掉了</b>。<br><b>⭐ 所以设成 1 纯粹是让推导干净，结论一点不变。</b><br><b>⚠ 但别把它记成「高斯只有一个参数」</b>：高斯当然有两个参数，<b>只是在这个推导里第二个不参与</b>。<br><b>也正因为扔掉了 σ²，高斯的 η 才会恰好等于 µ，后面那条「线性回归」的路才这么直。</b>");
+  SUM(1721,10,{h:"高斯：η ＝ µ（直接相等）",k:"同样的手续塞进模板，读出 <b>T(y)=y，η = µ</b>——<b>自然参数直接就等于均值</b>。",m:"⭐ <b>对照伯努利</b>：那边 η 与均值之间隔着一个 sigmoid；<b>这边两者是同一个东西</b>。",w:"⭐ <b>这一行的差别，就是「高斯→线性回归、伯努利→逻辑回归」的全部根源。</b>",e:"⚠ 「σ² 不影响 θ 的解」是 Ng 课上强调的，<b>写进答案能显示理解</b>。"});
+  QUIZ(1721,10,{t:"高斯分布写成指数族后，自然参数 η 等于什么？",o:["η = σ²","η = µ（直接等于均值）","η = 1/µ","η = log µ"],a:1,w:"⭐ <b>对照伯努利</b>：那边 η 与均值隔着一个 sigmoid。<b>这一行的差别就是两种回归的全部根源。</b>"});
+});
+KP("11 · a(η) 不只是个归一化常数",function(){
+  S(1721,function(){clearScene();
+       setEq("$$a'(\\eta) = E[T(y)],\\qquad a''(\\eta) = \\mathrm{Var}(T(y))$$");
+       setCap("对它求导，会掉出均值和方差");
+       note("一阶导 ⇒ 均值",430,170,"b");
+       note("二阶导 ⇒ 方差",430,204,"g");
+       note("⚠ 方差一定非负 ⇒ a″(η) ≥ 0",940,170,"y");
+       note("⇒ a(η) 是凸函数",940,204,"y");
+       note("⭐ ⇒ 对数似然是凹的 ⇒ 只有一个峰，没有局部最优的烦恼",640,265,"g");},"<b>前面说 a(η) 的职责是「让概率加起来等于 1」，听起来像个无聊的常数。其实它藏着信息。</b><br><b>对 η 求一阶导，得到的是均值；求二阶导，得到的是方差。</b><br><b>⭐ 这条推论很值钱</b>：<b>方差一定非负</b> ⇒ a″(η) ≥ 0 ⇒ <b>a(η) 是凸函数</b>（开口向上的碗形）⇒ <b>整个指数族的对数似然关于 η 是凹的</b>（山丘形）。<br><b>⭐ 凹函数只有一个峰。</b>所以<b>用梯度上升</b>（沿着当前位置最陡的上坡方向，一小步一小步往上爬）<b>去最大化似然，就不会陷在局部最优里</b>——<b>只要一直往上走，到的那个顶就是唯一的顶</b>——<b>这就是为什么线性回归、逻辑回归、softmax 都没有「初始化不好就卡住」的问题，而神经网络有。</b>");
+  S(1721,function(){clearScene();setEq(null);setCap("a(η) 这个名字：对数配分函数");
+       boxNode(130,206,470,74,"配分 ＝ 把总量分配到各结果","b");
+       boxNode(740,206,440,74,"取对数之后就是 a(η)","g");
+       link(600,243,740,243);
+       note("它保证所有概率加起来是 1",365,326,"d");
+       note("所以它由 η 完全决定",960,326,"d");
+       note("⭐ 它不是你能自由选的——写定了分布，它就定了",640,396,"y");},"顺带把 a(η) 的正式名字交代一下：<b>它叫「对数配分函数」。</b><br><b>「配分」这个词来自物理</b>，意思是把总量分配到各个结果上；<b>而它在这里的职责只有一个：保证所有概率加起来等于 1</b>。<br><b>⭐ 关键认识：a(η) 不是你能自由选的东西。</b>你写定了 b(y) 和 T(y)，<b>a(η) 就被「必须归一化」这条要求唯一地定死了</b>。<br><b>⚠ 所以它看起来像个配角，实际上信息量很大</b>——<b>下一个知识点会证明：把它求一次导得到均值，求两次导得到方差。</b>");
+  SUM(1721,11,{h:"★ a(η) 的两条导数：均值与方差",k:"<b>a′(η) = 均值，a″(η) = 方差。</b>",m:"⭐ <b>方差非负 ⇒ a 是凸函数 ⇒ 对数似然关于 η 是凹的 ⇒ 只有一个峰。</b>",w:"⇒ <b>梯度上升不会陷在局部最优</b>。这解释了一个常被当成理所当然的事实。",e:"⭐⭐ <b>这正是 GLM 和神经网络的一个本质差别</b>：前者没有局部最优的烦恼，后者有。"});
+  QUIZ(1721,11,{t:"由 a″(η) = Var(T(y)) 能推出什么重要结论？",o:["方差非负 ⇒ a(η) 是凸函数 ⇒ 指数族的对数似然是凹的 ⇒ 只有一个峰，梯度上升不会陷入局部最优","方差一定等于均值","a(η) 必须是二次函数","η 一定等于 µ"],a:0,w:"⭐ 这解释了<b>为什么线性/逻辑/softmax 回归没有「初始化看运气」的问题，而神经网络有</b>。"});
+});
+KP("12 · ★ 指数族为什么好用：三条数学性质",function(){
+  S(1978,function(){clearScene();setEq(null);setCap("性质一：对 η 做极大似然，是凹的");
+       says("32:58","MLE with respect to eta is concave");
+       boxNode(130,206,470,74,"对数似然对 η 是凹函数","g");
+       boxNode(740,206,440,74,"负对数似然就是凸的","b");
+       link(600,243,740,243);
+       note("只有一个最高点，没有别的局部最优",365,326,"d");
+       note("凸优化那一整套工具都能用",960,326,"d");
+       note("⭐ 所以线性回归、逻辑回归、softmax 都不存在「卡在局部最优」",640,396,"y");},"Ng 说得很明白：<b>用指数族，是因为它有几条很好的数学性质。</b>这一镜讲第一条。<br><b>只要按自然参数 η 来参数化，对数似然对 η 就是凹的</b>；翻个符号，<b>负对数似然就是凸的</b>。<br><b>⭐ 凹意味着只有一个最高点，不存在别的局部最优。</b>所以梯度上升不管从哪儿起步，<b>最后都会爬到同一个地方</b>。<br><b>⚠ 这正是线性回归、逻辑回归、softmax 都不用担心初始化的原因</b>——<b>而神经网络没有这条性质，所以它要操心初始化。</b>");
+  S(2108,function(){clearScene();setEq(null);setCap("性质二、三：求导就能拿到均值和方差");
+       says("35:08","you generally need to integrate something");
+       boxNode(130,206,470,74,"a′(η) = E[y; η]","g");
+       boxNode(740,206,440,74,"a″(η) = Var[y; η]","y");
+       note("求一次导 ⇒ 均值",365,326,"d");
+       note("求两次导 ⇒ 方差",960,326,"d");
+       note("⭐ Ng：一般求均值方差要做积分，这里只要求导",640,374,"y");
+       note("⚠ 这两条正是第一次作业要你证的",640,404,"d");},"另外两条性质，是同一个 a(η) 的一阶和二阶导数。<br><b>把 a(η) 对 η 求一次导，得到的就是这个分布的均值</b>；<b>再求一次，得到方差。</b><br><b>⭐ Ng 点出了这件事为什么稀罕</b>：一般要算一个分布的均值和方差，<b>你得去做积分</b>；<b>而在指数族里，只要做微分就行了</b>——微分比积分好做得多。<br><b>⚠ 他还说了一句：这两条性质会让你在第一次作业里自己证一遍。</b><br><b>也顺带回答了上一节的疑问：a(η) 远不只是个归一化常数，它把整个分布的均值和方差都编码在里面了。</b>");
+  SUM(1978,12,{h:"★ 指数族的三条性质：凹 / a′=均值 / a″=方差",k:"① 按 η 参数化时，<b>对数似然对 η 是凹的</b>（负对数似然是凸的）⇒ <b>没有局部最优</b>。",m:"② <b>a′(η) = E[y;η]</b>　③ <b>a″(η) = Var[y;η]</b> —— 一般要积分才能算的量，这里<b>求导就行</b>。",w:"⚠ 性质 ① 正是<b>线性回归 / 逻辑回归 / softmax 不用操心初始化</b>的原因，而神经网络没有这条。",e:"⭐ 性质 ②③ 也说明 <b>a(η) 不是普通的归一化常数</b>：它把均值和方差都编码在里面了。"});
+  QUIZ(1978,12,{t:"对数配分函数 a(η) 的一阶导和二阶导分别是什么？",o:["两个都是归一化常数","一阶导是方差，二阶导是均值","一阶导是 η 本身，二阶导是 0","一阶导是 E[y;η]（均值），二阶导是 Var[y;η]（方差）"],a:3,w:"⭐ Ng 强调这为什么好：<b>一般求均值方差要做积分，在指数族里只要做微分</b>。⚠ 别记反顺序：<b>一阶是均值、二阶是方差</b>。"});
+});
+KP("13 · ★ 怎么按 y 的类型挑分布",function(){
+  S(2323,function(){clearScene();setEq(null);setCap("先看 y 长什么样，分布基本就定了");
+       says("38:43","if you have counts, you can use a Poisson");
+       matrix({rows:5,cols:2,cw:430,ch:44,x:210,y:186,
+         cell:function(i,j){var t=[
+           ["y 是什么样的数","选哪个分布"],
+           ["任意实数（房价）","高斯"],
+           ["只有 0 / 1（是不是垃圾邮件）","伯努利"],
+           ["非负整数、计数（网站访客数）","泊松"],
+           ["正实数（体积、等待时长）","Gamma / 指数分布"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ Ng：任务基本上就把分布替你定了，很少需要纠结",640,404,"y");},"第一条假设说「y|x 属于指数族」，<b>可到底选哪一个？Ng 给的办法非常朴素：先看 y 长什么样。</b><br><b>任意实数</b>（房价）⇒ <b>高斯</b>。<b>只有 0 和 1</b> ⇒ <b>伯努利</b>。<b>非负整数、计数</b>（网站今天来了多少访客）⇒ <b>泊松</b>。<b>正实数</b>（体积、等待时长）⇒ <b>Gamma 或指数分布</b>。<br>他还提了一句：<b>还有「分布的分布」，比如 Beta、Dirichlet，那属于贝叶斯那一套。</b><br><b>⭐ 原话大意是：任务基本上就把分布替你定了，大多数时候这个选择相当明显。</b>");
+  S(2323,function(){clearScene();setEq(null);setCap("⚠ 两个长得很像、其实不是一回事的词");
+       says("38:43","they're not the same thing");
+       boxNode(130,206,470,74,"指数族 exponential family","b");
+       boxNode(740,206,440,74,"指数分布 exponential distribution","r");
+       note("一大类分布的统称",365,326,"d");
+       note("其中具体的一个成员",960,326,"d");
+       note("⭐ 关系是「类别」和「成员」：指数分布属于指数族，但两者不是一回事",640,396,"y");},"这里 Ng 特意停下来澄清了一对很容易混的词。<br><b>「指数族」是一大类分布的统称</b>——高斯、伯努利、泊松都在里面。<b>「指数分布」是其中具体的一个成员</b>，专门用来描述等待时长。<br><b>⭐ 关系是「类别」和「成员」</b>：<b>指数分布确实属于指数族，但两者绝不是一回事。</b>Ng 的原话就是「<b>它们不是同一个东西</b>」。<br><b>⚠ 这种名字撞车在考试里是现成的陷阱题</b>：<b>看到 exponential 先想清楚问的是 family 还是 distribution。</b>");
+  SUM(2323,13,{h:"★ 按 y 的类型挑分布；⚠ 指数族 ≠ 指数分布",k:"<b>实数→高斯；0/1→伯努利；计数→泊松；正实数→Gamma/指数分布</b>；分布的分布→Beta/Dirichlet。",m:"Ng：<b>任务基本上就把分布替你定了</b>，大多数时候这个选择相当明显。",w:"⚠ <b>「指数族」是一大类的统称，「指数分布」是其中一个成员</b>——两者不是一回事。",e:"⭐ 答题顺序固定：<b>先说 y 是什么类型 → 再说选哪个分布 → 再说 h(x) 是什么形状</b>。"});
+  QUIZ(2323,13,{t:"要预测「网站今天的访客数」，第一条假设该选哪个分布？",o:["高斯，因为访客数可以很大","指数分布，因为它属于指数族","泊松，因为访客数是非负整数的计数","伯努利，因为每个访客要么来要么不来"],a:2,w:"⭐ <b>计数型 y ⇒ 泊松</b>，于是 h(x)=e^(θᵀx)。⚠ 顺带注意：<b>「指数分布」只是指数族里的一个成员</b>，不要和「指数族」混为一谈。"});
+});
+KP("14 · 先铺词：条件期望 E[y|x]",function(){
+  S(2138,function(){clearScene();setEq(null);setCap("给定 x 之后，y 的「平均取值」");
+       axes({x0:280,x1:1000,y0:385,y1:190});
+       dots([[420,330],[420,290],[420,355],[420,310],[420,270]],"b",7);
+       dots([[420,311]],"y",11);
+       dots([[760,265],[760,225],[760,290],[760,245],[760,205]],"g",7);
+       dots([[760,246]],"y",11);
+       note("x = 某个值",420,395,"d"); note("x = 另一个值",760,395,"d");
+       note("⭐ 黄点 = 这一列 y 的平均 —— 这就是 E[y|x]",640,170,"y");},"<b>还有一个词要铺：条件期望 E[y|x]。</b><br><b>它的意思是：给定了 x 之后，y 的平均取值是多少。</b>看图——固定某个 x，对应的 y 会有好几个（因为有随机性），<b>把它们平均一下，就是这个 x 处的 E[y|x]</b>（图上的黄点）。<br><b>⭐ 为什么它重要？因为「预测」这件事，通常要的就是这个数。</b>你问「这栋房子值多少钱」，<b>最合理的回答就是「这类房子的平均成交价」</b>。<br><b>⚠ 下一节的三条假设里，有一条就是「我们要预测的是 E[y|x]」。</b>");
+  S(2138,function(){clearScene();setEq(null);setCap("⚠ E[y|x] 和 E[y] 差在哪");
+       boxNode(130,206,470,74,"E[y]：全体的平均","r");
+       boxNode(740,206,440,74,"E[y|x]：这个 x 下的平均","g");
+       note("所有房子的均价",365,326,"d");
+       note("「100 平、学区房」的均价",960,326,"d");
+       note("⭐ 加了竖线，就从一个数变成了一个随 x 变化的函数",640,396,"y");},"条件期望和普通期望的差别，用房价一句话就说清了。<br><b>E[y] 是所有房子的均价——一个数。</b><b>E[y|x] 是「给定这套房子的面积、地段…之后」的均价</b>——<b>换一个 x，这个数就变</b>。<br><b>⭐ 所以加了那根竖线，它就从一个数变成了一个随 x 变化的函数</b>——<b>而「函数」正是我们想要的东西：模型 h(x)。</b><br><b>⚠ 这就解释了下一节那条假设为什么是 h(x)=E[y|x] 而不是别的</b>：<b>我们要的从来不是「平均房价」，而是「这套房子值多少」。</b>");
+  SUM(2138,14,{h:"条件期望 E[y|x]：给定 x 后 y 的平均取值",k:"固定某个 x，对应的 y 有好几个（有随机性），<b>把它们平均一下就是 E[y|x]</b>。",m:"⭐ <b>「预测」要的通常就是这个数</b>：问「这房子值多少钱」，最合理的回答是「这类房子的平均成交价」。",w:"⚠ 下一节的三条假设里，<b>有一条就是「我们要预测的是 E[y|x]」</b>。",e:"⚠ 别把它和「y 的某个具体取值」混——<b>它是平均值</b>。"});
+  QUIZ(2138,14,{t:"E[y|x] 表示什么？",o:["y 的方差","给定 x 之后，y 的平均取值","y 的最大可能取值","x 和 y 的相关系数"],a:1,w:"⭐ <b>「预测」通常要的就是这个数</b>。⚠ 别和「y 的某个具体取值」混——它是<b>平均值</b>。"});
+});
+KP("15 · ★★ GLM 的三条假设（Ng 强调：这是设计选择）",function(){
+  S(2138,function(){clearScene();setEq(null);setCap("从指数族走到 GLM，靠这三条");
+       says("12:43","it's a design choice that you make");
+       boxNode(170,195,980,68,"① 给定 x，y 服从某个指数族分布，参数是 η","b");
+       boxNode(170,278,980,68,"② η = θᵀx　　（唯一「线性」的地方）","y");
+       boxNode(170,361,980,68,"③ 我们要预测的是 E[y|x]","g");},"<b>现在把指数族缝成「广义线性模型」，只要三条假设。</b><br><b>① 给定 x，y 服从某个指数族分布，参数是 η。</b>（选哪个分布，由你的问题决定——二分类选伯努利，实数值选高斯。）<br><b>② η = θᵀx。</b><b>⭐ 这是整个框架里唯一「线性」的地方，也是 GLM 名字里 linear 的来源。</b><br><b>③ 我们要预测的是 E[y|x]</b>（上一节刚讲的条件期望）。<br><b>⚠ Ng 在课上特意强调了措辞：这些是「设计选择」——是我们选的，不是推出来的。</b>尤其第②条，<b>「η 对 x 是线性的」纯粹是一个建模决定，没有任何定律要求它必须如此。</b>");
+  S(2138,function(){clearScene();setEq(null);setCap("合起来就是一个生成算法的配方");
+       boxNode(130,215,230,76,"选一个分布","b");
+       boxNode(400,215,230,76,"写成指数族","b");
+       boxNode(670,215,250,76,"读出 η↔均值","y");
+       boxNode(960,215,210,76,"算法出来了","g");
+       link(360,253,400,253); link(630,253,670,253); link(920,253,960,253);
+       note("⭐ 由②③：h(x) = 把 θᵀx 代进「η↔均值」的那个关系式",640,340,"y");
+       note("所以关键就是前面那一行对照表",640,392,"d");},"<b>⭐ 把三条合起来，就得到一个「生成算法的配方」，只有四步：选一个分布 → 写成指数族 → 读出「η 和均值之间的关系」→ 算法就出来了。</b><br><b>为什么第三步是关键？</b>推一下：由假设③，预测值 <b>h(x) = E[y|x]</b>，也就是那个分布的均值；由假设②，<b>η = θᵀx</b>。<br><b>⭐ 所以 h(x) 就等于「把 θᵀx 代进 η↔均值的那个关系式」。</b><br><b>而那个关系式，前面已经给两个分布各算过一次了</b>——下面两节直接兑现。");
+  SUM(2138,15,{h:"★★ GLM 三条假设 ＝ 生成算法的配方",k:"<b>① y|x 服从指数族，参数 η；② η = θᵀx（唯一线性的地方）；③ 要预测的是 E[y|x]。</b>",m:"⭐ 由②③推出：<b>h(x) ＝ 把 θᵀx 代进「η↔均值」的关系式</b>。所以关键是那张对照表。",w:"⚠ Ng 强调这些是<b>「设计选择」——我们选的，不是推出来的</b>。特别是「η 对 x 线性」纯属建模决定。",e:"⭐ 配方四步：<b>选分布 → 写成指数族 → 读出 η↔均值 → 算法出来</b>。"});
+  QUIZ(2138,15,{t:"GLM 三条假设中，哪一条是「linear」这个名字的来源？",o:["T(y) = y","y 服从指数族分布","h(x) = E[y|x]","η = θᵀx —— 自然参数对输入是线性的"],a:3,w:"⚠ 注意<b>线性是加在自然参数 η 上，不是加在预测值 h(x) 上</b>——逻辑回归的 h(x) 显然不是 x 的线性函数，但它的 η 是。"});
+});
+KP("16 · 兑现（一）：高斯 ⇒ 线性回归",function(){
+  S(2138,function(){clearScene();
+       setEq("$$h(x) = E[y\\mid x] = \\mu = \\eta = \\theta^\\top x$$");
+       setCap("一串等号，一路推到底");
+       note("第一个等号：假设③",640,170,"g");
+       note("第二个等号：高斯分布的均值就是 µ",640,201,"b");
+       note("第三个等号：高斯那边 η = µ",640,233,"y");
+       note("⭐ 第四个等号：假设② ⇒ 这就是线性回归",640,265,"r");},"<b>先兑现高斯这边，就是一串等号：</b><br><b>h(x) = E[y|x]</b> —— 这是<b>假设③</b>。<br><b>= µ</b> —— 高斯分布的均值就是 µ。<br><b>= η</b> —— 这是<b>高斯那边 η 与均值的关系</b>（直接相等）。<br><b>= θᵀx</b> —— 这是<b>假设②</b>。<br><b>⭐ 串起来：h(x) = θᵀx。这就是线性回归。</b><br><b>注意我们什么都没「设计」——它是从三条假设里推出来的。</b>");
+  S(2138,function(){clearScene();setEq(null);setCap("顺着三条假设走一遍");
+       boxNode(100,206,250,66,"选高斯","b");
+       boxNode(390,206,230,66,"η = µ","g");
+       boxNode(660,206,250,66,"η = θᵀx","g");
+       boxNode(950,206,240,66,"h(x) = θᵀx","y");
+       link(350,239,390,239); link(620,239,660,239); link(910,239,950,239);
+       note("假设一",225,314,"d");
+       note("高斯的换算",505,314,"d");
+       note("假设二",785,314,"d");
+       note("假设三 h=E[y|x]",1070,314,"d");
+       note("⭐ 四步全是照抄，没有任何一步是「设计」出来的",640,396,"y");},"把这条路一步步走一遍，就知道它有多机械。<br><b>第一步（假设一）</b>：y|x 选高斯。<b>第二步</b>：高斯的 η 和均值的换算关系是 η=µ，上一节算过。<b>第三步（假设二）</b>：η=θᵀx。<b>第四步（假设三）</b>：h(x)=E[y|x]=µ=η=θᵀx。<br><b>⭐ 四步全是照抄，没有任何一步是「设计」出来的。</b><br><b>⚠ 这正是 GLM 这套框架的意义所在</b>：<b>线性回归的那个「线性」，不是谁拍脑袋规定的，是从三条假设里掉出来的</b>。<b>换个分布，掉出来的就是别的形状。</b>");
+  SUM(2138,16,{h:"高斯 ⇒ h(x) = θᵀx ＝ 线性回归",k:"<b>h(x) = E[y|x]（假设③）= µ（高斯的均值）= η（高斯那边两者相等）= θᵀx（假设②）。</b>",m:"⭐ 一串等号推到底，<b>什么都没「设计」</b>。",w:"<b>这就是线性回归。</b>",e:"⚠ 关键的那一步是「η = µ」——<b>高斯特有的性质</b>。"});
+  QUIZ(2138,16,{t:"为什么选高斯分布就得到线性回归？",o:["因为高斯那边 η 直接等于均值 µ，所以 h(x)=E[y|x]=µ=η=θᵀx","因为线性回归用平方损失","因为高斯是最常用的分布","因为高斯的方差是 1"],a:0,w:"⭐ 关键一步是<b>「η = µ」</b>——高斯特有的性质。<b>换成伯努利，这一步就会插进一个 sigmoid。</b>"});
+});
+KP("17 · 兑现（二）：伯努利 ⇒ 逻辑回归",function(){
+  S(2138,function(){clearScene();
+       setEq("$$h(x) = E[y\\mid x] = \\phi = \\frac{1}{1+e^{-\\eta}} = \\frac{1}{1+e^{-\\theta^\\top x}}$$");
+       setCap("同一串等号，只有中间那一步不同");
+       note("第一个等号：假设③（一样）",640,170,"g");
+       note("第二个等号：伯努利的均值就是 φ",640,201,"b");
+       note("⚠ 第三个等号：这里插进了 sigmoid —— 全部差别就在这",640,233,"r");
+       note("⭐ 最后一步：假设② ⇒ 这就是逻辑回归",640,265,"y");},"<b>伯努利这边是同一串等号，只有中间那一步不同。</b><br><b>h(x) = E[y|x]</b> —— 假设③，和刚才<b>一模一样</b>。<br><b>= φ</b> —— 伯努利的均值就是 φ（因为 y 只取 0/1，平均值就等于取 1 的概率）。<br><b>⚠ = 1/(1+e^(−η))</b> —— <b>这里插进了 sigmoid。全部的差别就在这一步。</b><br><b>= 1/(1+e^(−θᵀx))</b> —— 假设②。<br><b>⭐ 这就是逻辑回归。</b><b>和线性回归对比，两条推导只在「η 与均值的关系」那一步分道扬镳——而那一步完全由你选的分布决定。</b>");
+  S(2138,function(){clearScene();setEq(null);setCap("两条路并排看：岔口在哪");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","选高斯","选伯努利"],
+           ["假设一","y|x ~ 高斯","y|x ~ 伯努利"],
+           ["η 与均值","µ = η","φ = 1/(1+e⁻ᵑ)"],
+           ["h(x) 变成","θᵀx","sigmoid(θᵀx)"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 只有第 2 行不一样 —— 其余三行一字不差",640,396,"y");},"把两条路并排摆出来，岔口一眼就找到了。<br><b>假设一不一样（选的分布不同），这是起因</b>；<b>最后一行也不一样（一个是直线、一个是 S 形），这是结果</b>。<br><b>⭐ 而真正造成差别的只有中间那一行：η 和均值之间怎么换算。</b>高斯那里是 µ=η，<b>伯努利那里是 sigmoid</b>。<br><b>⚠ 所以 sigmoid 不是「为了把输出压到 0 和 1 之间而挑的函数」</b>——<b>它是伯努利这个分布自己带来的换算关系</b>。<b>换泊松，这一格会变成 e 的 η 次方，于是 h(x)=e^(θᵀx)。</b>");
+  SUM(2138,17,{h:"伯努利 ⇒ h(x) = sigmoid(θᵀx) ＝ 逻辑回归",k:"<b>h(x) = E[y|x]（同上）= φ（伯努利的均值）= 1/(1+e^(−η))（这里插进 sigmoid）= 1/(1+e^(−θᵀx))。</b>",m:"⭐ <b>和线性回归的推导只在「η 与均值的关系」那一步分道扬镳</b>——而那一步<b>完全由你选的分布决定</b>。",w:"<b>伯努利的均值就是 φ</b>，因为 y 只取 0/1，平均值等于取 1 的概率。",e:"⭐ 能说出「两种回归是同一个配方的两次调用」，比分别背两个公式强得多。"});
+  QUIZ(2138,17,{t:"线性回归和逻辑回归的推导，在哪一步开始不同？",o:["在「η 与分布均值的关系」那一步：高斯是直接相等，伯努利要经过一个 sigmoid","在选择损失函数那一步","在假设 η = θᵀx 那一步","在求导那一步"],a:0,w:"⭐ 而那一步<b>完全由你选的分布决定</b>。<b>两种回归是同一个配方的两次调用。</b>"});
+});
+KP("18 · 顺带一个术语：链接函数",function(){
+  S(3118,function(){clearScene();setEq(null);setCap("两个方向，两个名字");
+       says("51:58","this is also called the canonical link function");
+       boxNode(200,215,280,84,"η","y");
+       boxNode(800,215,280,84,"均值 µ","g");
+       link(480,240,800,240); link(800,275,480,275);
+       note("响应函数（η → 均值）",640,205,"d");
+       note("链接函数（均值 → η）",640,310,"d");
+       note("⭐ 伯努利的响应函数就是 sigmoid；它的逆就是链接函数",640,392,"y");},"<b>顺带把两个术语认一下，因为教材里会用到。</b><br><b>从 η 换算到均值的那个函数，叫「响应函数」</b>（canonical response function）。<b>伯努利的响应函数就是 sigmoid。</b><br><b>反过来，从均值换算回 η 的那个，叫「链接函数」</b>（canonical link function）。Ng 在课上就是这么说的——<b>你可以用它的逆从 µ 回到 η</b>。<br><b>⚠ 这两个名字很容易记反</b>，而且<b>不同教材的叫法还不完全一致</b>。<b>与其纠结名字，不如记住那张「η ↔ 均值」的对照表——那才是有内容的东西。</b>");
+  S(3118,function(){clearScene();setEq(null);setCap("哪个方向叫链接函数，别记反");
+       boxNode(130,206,470,74,"均值 ⟶ η：链接函数 g","b");
+       boxNode(740,206,440,74,"η ⟶ 均值：反链接 g⁻¹","g");
+       note("从你看得懂的量，换到 η",365,326,"d");
+       note("⭐ 我们实际用的是这个方向",960,326,"g");
+       note("⚠ 名字叫「链接函数」的是前者，但做预测用的是后者",640,396,"y");},"这个术语最容易记反，<b>花一镜钉死它</b>。<br><b>「链接函数」g 指的是：从均值换到 η 的那个方向。</b>反过来，<b>从 η 换回均值的叫反链接函数 g⁻¹</b>。<br><b>⭐ 而我们做预测实际用的是后者</b>：先算出 η=θᵀx，<b>再换回均值当作 h(x)</b>。<br><b>⚠ 所以名字叫「链接函数」的那一个，恰恰不是我们日常用的那一个</b>——<b>伯努利那里，g⁻¹ 就是 sigmoid，而 g 是 logit（对数几率）。</b><br><b>考试里看到「canonical link」，指的是 g；看到 sigmoid、softmax，那都是 g⁻¹。</b>");
+  SUM(3118,18,{h:"响应函数 / 链接函数：同一关系的两个方向",k:"<b>响应函数</b>：η → 均值（伯努利的就是 <b>sigmoid</b>）。<b>链接函数</b>：均值 → η（它的逆）。",m:"Ng：<b>可以用它的逆从 µ 回到 η</b>。",w:"⚠ <b>这两个名字很容易记反</b>，不同教材叫法还不完全一致。",e:"⭐ <b>与其纠结名字，不如记住「η ↔ 均值」那张对照表</b>——那才是有内容的东西。"});
+  QUIZ(3118,18,{t:"伯努利分布的「响应函数」是什么？",o:["指数函数","恒等函数","log 函数","sigmoid 函数"],a:3,w:"<b>响应函数</b>是从 η 到均值的方向（伯努利：η → φ 就是 sigmoid）；<b>链接函数</b>是它的逆。⚠ <b>两个名字容易记反</b>，记那张对照表更实在。"});
+});
+KP("19 · ★ 三套参数、三个空间 —— 只有 θ 是学出来的",function(){
+  S(3186,function(){clearScene();setEq(null);setCap("同一个模型，三种参数化方式");
+       says("53:06","we have the model parameters");
+       boxNode(110,206,300,74,"模型参数 θ","y");
+       boxNode(500,206,280,74,"自然参数 η","b");
+       boxNode(870,206,320,74,"原生参数 φ / µ,σ² / λ","g");
+       link(410,243,500,243); link(780,243,870,243);
+       note("唯一要学的东西",260,326,"y");
+       note("η = θᵀx（设计选择）",640,326,"d");
+       note("g⁻¹ 换过去，g 换回来",1030,326,"d");
+       note("⭐ 三个空间来回换，是这一讲最容易绕晕的地方 —— Ng 自己也这么说",640,396,"y");},"这一讲参数名满天飞，Ng 专门停下来理了一遍：<b>其实只有三套。</b><br><b>模型参数 θ</b>——就是线性模型里那个 θ。<b>自然参数 η</b>——指数族模板里的那个。<b>原生参数</b>——各分布自己的名字：<b>伯努利叫 φ，高斯叫 µ 和 σ²，泊松叫 λ</b>。<br><b>三者怎么连起来</b>：<b>θ 到 η 是 η=θᵀx，这是第二条假设、是个设计选择</b>；<b>η 到原生参数靠 g⁻¹，回来靠 g</b>。<br><b>⭐ Ng 原话承认：第一次看会很confusing，因为参数被换来换去。</b>所以值得把这张图单独记住。");
+  S(3186,function(){clearScene();setEq(null);setCap("⭐ 真正被「学」的只有一套");
+       says("53:06","it is only this thing that we learn");
+       boxNode(130,206,470,74,"θ：梯度下降在更新它","y");
+       boxNode(740,206,440,74,"η 和原生参数：算出来的","d");
+       link(600,243,740,243);
+       note("随机初始化，然后一步步更新",365,326,"d");
+       note("θ 定了，它们就跟着定了",960,326,"d");
+       note("⭐ 所以「训练一个 GLM」＝「只训练那个线性模型」",640,396,"y");},"这张图里最要紧的一句话是：<b>我们真正学的只有 θ。</b><br><b>η 不是学出来的，它是算出来的</b>（η=θᵀx）；<b>φ、µ、λ 也不是学出来的，它们由 η 换算而来</b>。<br><b>⭐ 所以「训练一个 GLM」这件事，归根结底就是「训练那个线性模型 θ」。</b>外面套的那层分布，<b>只决定最后怎么把 θᵀx 翻译成预测值</b>。<br><b>⚠ 这也解释了为什么下一个知识点的结论能成立</b>：<b>既然大家学的都是同一个 θ、都用同一条链子连到 η，那更新规则长得一样就不奇怪了。</b>");
+  SUM(3186,19,{h:"★ 三套参数：θ（学）→ η（算）→ 原生参数（换算）",k:"<b>模型参数 θ</b>｜<b>自然参数 η</b>｜<b>原生参数</b>（伯努利 φ、高斯 µ σ²、泊松 λ）。",m:"连接方式：<b>η = θᵀx</b>（设计选择）；<b>η ↔ 原生参数</b> 靠 g 和 g⁻¹。",w:"⭐ <b>只有 θ 是学出来的</b>，另外两套都是算出来的 ⇒ 「训练 GLM」＝「训练那个线性模型」。",e:"⚠ Ng 自己说这里第一次看最容易绕晕，<b>考前把这张三格图默写一遍最划算</b>。"});
+  QUIZ(3186,19,{t:"训练一个 GLM 时，梯度下降实际更新的是哪一套参数？",o:["自然参数 η","三套一起更新","模型参数 θ","分布的原生参数（如伯努利的 φ）"],a:2,w:"⭐ <b>只有 θ 被学</b>；η = θᵀx 是算出来的，原生参数再由 η 换算而来。⚠ 这正是「不管选哪个分布，更新规则都一样」的根本原因。"});
+});
+KP("20 · GLM 实际拿什么优化：Ng 推荐牛顿法",function(){
+  S(2814,function(){clearScene();setEq(null);setCap("小规模问题上，牛顿法比梯度下降省事");
+       says("46:54","most common you would use with GLMs");
+       boxNode(130,206,470,74,"梯度下降：要调学习率","b");
+       boxNode(740,206,440,74,"牛顿法：几步就收敛","g");
+       link(600,243,740,243);
+       note("步子大小得自己试",365,326,"d");
+       note("用上二阶信息，不用调步长",960,326,"d");
+       note("⭐ Ng：GLM 上最常用的就是牛顿法",640,396,"y");},"推完更新规则，自然要问：<b>实际跑的时候用什么优化器？</b><br><b>Ng 的回答很直接：GLM 上最常用的是牛顿法。</b><br><b>理由</b>：对数似然是凹的（前面那条性质），<b>牛顿法用上二阶信息，往往几步就收敛，而且不用调学习率</b>。梯度下降则要自己试步长。<br><b>⚠ 顺带一句他也提到了：想用批量梯度下降也行，把所有样本的那一项加起来就是。</b><br><b>⭐ 这和 M1 讲优化那一讲能对上</b>：<b>牛顿法收敛快，但每一步都要解一个和参数维数同阶的线性系统——所以它有前提。</b>");
+  S(2814,function(){clearScene();setEq(null);setCap("⚠ 牛顿法的前提：特征数不能太多");
+       says("46:54","number of features is less than a few thousand");
+       boxNode(130,206,470,74,"特征数 < 几千 ⇒ 牛顿法","g");
+       boxNode(740,206,440,74,"特征数很大 ⇒ 梯度那一类","b");
+       note("每步要处理 n×n 的二阶矩阵",365,326,"d");
+       note("n 一大就扛不住",960,326,"d");
+       note("⭐ 这条数量级（几千）是 Ng 明确给的，值得记",640,396,"y");},"牛顿法不是无条件好用，<b>Ng 给了一条很具体的界</b>。<br><b>原话大意是：只要特征数少于几千，就可以用牛顿法。</b><br><b>为什么有这条界</b>：牛顿法每一步都要用到二阶导数矩阵，<b>它的大小是「特征数 × 特征数」</b>；<b>n 到几万，光是存它、解它就扛不住了</b>。<br><b>⭐ 所以选优化器的判据很简单：特征数小就牛顿法，特征数大就回到梯度那一类。</b><br><b>⚠ 这个「几千」的数量级是 Ng 明确说出来的，比含糊的「维数不要太高」好用得多，值得记。</b>");
+  SUM(2814,20,{h:"GLM 常用牛顿法；⚠ 前提是特征数 < 几千",k:"对数似然是凹的 ⇒ <b>牛顿法往往几步收敛，而且不用调学习率</b>，是 GLM 上最常用的做法。",m:"⚠ 代价：每步要处理 <b>n×n 的二阶导数矩阵</b>；Ng 给的界是<b>特征数少于几千</b>。",w:"特征数很大时回到<b>梯度下降那一类</b>；想用批量梯度下降，就把所有样本那一项加起来。",e:"⭐ 「几千」这个数量级是 Ng 明说的，<b>比含糊的「维数别太高」好写进答案</b>。"});
+  QUIZ(2814,20,{t:"Ng 说 GLM 上最常用牛顿法，但附了什么前提？",o:["分布必须是高斯","特征数要少于几千（否则 n×n 的二阶导数矩阵扛不住）","数据量必须小于一千条","学习率必须调得很小"],a:1,w:"⭐ 限制来自<b>二阶导数矩阵的规模是「特征数 × 特征数」</b>，与样本量无关。⚠ 特征数很大时就换回梯度下降那一类。"});
+});
+KP("21 · ★★★ 高潮：不管选哪个分布，更新规则都一样",function(){
+  S(2814,function(){clearScene();
+       setEq("$$\\theta_j := \\theta_j + \\alpha\\,\\big(y^{(i)} - h_\\theta(x^{(i)})\\big)\\,x_j^{(i)}$$","top");
+       setCap("三种回归，一字不差");
+       says("46:54","no matter which choice of distribution that you make",186);
+       matrix({rows:4,cols:2,cw:430,ch:50,x:210,y:200,
+         cell:function(i,j){var t=[
+           ["模型","更新规则"],
+           ["线性回归","θ += α(y − h)x"],
+           ["逻辑回归","θ += α(y − h)x"],
+           ["softmax 回归","θ += α(y − h)x"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i>0&&j===1)?"hl":"";}});},"<b>⭐ 现在是这一讲的高潮。</b>Ng 的原话是：<b>不管你做哪种 GLM、不管你选哪个分布，学习更新规则都是同一条。</b><br><b>线性回归是它，逻辑回归是它，softmax 回归还是它——一个字都不差。</b><br><b>⭐ 变的只有 h 的定义</b>：线性回归里 h = θᵀx，逻辑回归里 h = sigmoid(θᵀx)，softmax 里 h 是那一组概率。<b>式子本身纹丝不动。</b><br><b>⚠ 这不是巧合。下一镜说明为什么。</b>");
+  S(2814,function(){clearScene();setEq(null);setCap("为什么会这样");
+       boxNode(230,200,840,66,"对数似然对 θ 求导","b");
+       boxNode(230,283,840,66,"链式法则：∂ℓ/∂θ = (∂ℓ/∂η) · (∂η/∂θ)","y");
+       boxNode(230,366,840,66,"∂η/∂θ = x　　∂ℓ/∂η = y − a′(η) = y − h(x)","g");
+       link(640,266,640,283); link(640,349,640,366);
+       note("⭐ 整个推导没用到「这是哪个具体分布」—— 只用到「它是指数族成员」",640,170,"d");},"<b>为什么会这样？推导其实很短。</b><br>对数似然对 θ 求导，用链式法则拆成两项：<b>∂ℓ/∂η × ∂η/∂θ</b>。<br><b>第二项很简单</b>：因为 η = θᵀx（假设②），所以 <b>∂η/∂θ = x</b>。<br><b>第一项要用到前面那条性质</b>：指数族的对数似然对 η 求导得到 <b>y − a′(η)</b>，<b>而我们已经知道 a′(η) 就是均值，也就是 h(x)</b>。<br><b>两项乘起来，梯度就是 (y − h(x))·x。</b><br><b>⭐ 请注意整个推导里，从头到尾没有用到「这是哪个具体分布」——只用到了「它是指数族的成员」。所以结论对全体成员成立。这就是把一堆分布写成统一模板的回报。</b>");
+  SUM(2814,21,{h:"★★★ 所有 GLM 共用一条更新规则",k:"<b>θⱼ := θⱼ + α(y − h(x))xⱼ</b>——线性回归、逻辑回归、softmax <b>一字不差</b>。<b>变的只有 h 的定义。</b>",m:"推导：<b>∂η/∂θ = x</b>（因为 η=θᵀx）；<b>∂ℓ/∂η = y − a′(η) = y − h(x)</b>（因为 a′(η) 就是均值）。两项相乘即得。",w:"⭐ <b>整个推导没用到「是哪个具体分布」，只用到「它是指数族成员」</b> ⇒ 结论对全体成员成立。",e:"⭐⭐ <b>这条能把 M1 里分散学的线性回归和逻辑回归串成一条线。</b>答「它们更新规则相同，因为都是 GLM」很有说服力。"});
+  QUIZ(2814,21,{t:"为什么线性回归、逻辑回归、softmax 的参数更新规则完全相同？",o:["因为它们的 h(x) 相同","因为它们都用平方损失","因为推导只用到了「分布属于指数族」，没用到具体是哪个分布——所以结论对全体成员成立","巧合，只是形式上像"],a:2,w:"关键两步：<b>∂η/∂θ = x</b> 与 <b>∂ℓ/∂η = y − h(x)</b>。⚠ <b>h 的定义随分布而变，但式子的形状不变。</b>"});
+});
+KP("22 · 最后一次调用配方：softmax 回归",function(){
+  S(4110,function(){clearScene();
+       setEq("$$P(y=k\\mid x) = \\frac{e^{\\theta_k^\\top x}}{\\sum_j e^{\\theta_j^\\top x}}$$","top");
+       setCap("选多项式分布，走同一个配方");
+       says("68:30","softmax regression is explained as yet another member of the GLM family",242);
+       matrix({rows:4,cols:3,cw:290,ch:37,x:190,y:258,
+         cell:function(i,j){var t=[
+           ["类别","分数 θₖᵀx","归一化后"],
+           ["猫","2.0","0.70"],
+           ["狗","1.0","0.26"],
+           ["鸟","−1.0","0.04"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===1&&j===2)?"hl":"";}});},"<b>最后把配方再调用一次，这次选多项式分布（K 个类别），得到的就是 softmax 回归。</b><br><b>每个类别有自己的一组参数 θₖ</b>：先算出 K 个分数 θₖᵀx，<b>然后用 exp 把它们拉开（保证为正），再除以总和归一化</b>。<br>举例：猫 2.0、狗 1.0、鸟 −1.0，<b>过一遍 softmax 就变成 0.70 / 0.26 / 0.04，加起来正好是 1</b>——<b>还记得第 1 节那条铁律吗，这里兑现了。</b><br><b>⭐ exp 的作用：把分数上的差距放大成概率上的倍数关系</b>——<b>分数差 1，概率就差 e 倍（约 2.7 倍）</b>。");
+  S(4077,function(){clearScene();setEq(null);setCap("⚠ 一个值得知道的细节");
+       boxNode(230,215,820,84,"给所有 θₖ 同时加上同一个向量","y");
+       note("分子分母会同时乘上同一个因子 ⇒ 互相抵消",640,340,"d");
+       note("⭐ 所有输出概率完全不变 ⇒ softmax 的参数不唯一",640,392,"y");},"<b>⚠ 最后提一个值得知道的细节：softmax 的参数是冗余的。</b><br><b>如果你给所有的 θₖ 同时加上同一个向量会怎样？</b>分子和分母<b>会同时乘上同一个因子，然后互相抵消</b>——<b>所有输出概率完全不变。</b><br><b>⭐ 这意味着优化问题的解不唯一：有无穷多组参数给出完全相同的预测。</b><br><b>⚠ 实现时的常见处理</b>：<b>固定最后一类的参数为 0</b>，或者<b>加一个正则项</b>（在要优化的目标里额外加一项，惩罚过大的参数）来把解钉死。<b>这不影响预测，只是让数值计算更稳。</b>");
+  SUM(4077,22,{h:"softmax 回归：配方的第三次调用",k:"选<b>多项式分布</b>代入同一配方。每类一组 θₖ，<b>先算 K 个分数，再 exp 拉开、除以总和归一</b>，<b>加起来正好是 1</b>。",m:"⭐ <b>exp 把分数差距放大成倍数关系</b>——分数差 1，概率约差 e 倍（2.7 倍）。",w:"⚠ <b>参数是冗余的</b>：所有 θₖ 同时加同一向量，分子分母同乘一个因子互相抵消，<b>输出完全不变 ⇒ 解不唯一</b>。",e:"<b>实现时常固定最后一类参数为 0 或加正则</b>把解钉死；<b>不影响预测，只是数值更稳</b>。"});
+  QUIZ(4077,22,{t:"关于 softmax 回归的参数，下面哪句正确？",o:["参数是唯一确定的","参数是冗余的——所有 θₖ 同时加上同一个向量，输出概率完全不变，所以解不唯一","参数个数必须等于样本数","所有类别共用一组参数"],a:1,w:"分子分母会同乘同一个因子而<b>抵消</b>。⚠ 实现时常<b>固定最后一类参数为 0 或加正则</b>把解钉死——不影响预测，只是数值更稳。"});
+});
+KP("完 · 一个模板，三种回归",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L4 · 完","感知机与广义线性模型","下一讲：生成式学习算法");},
+    "收一下这一讲。<b>它的价值不在于多学了一个算法，而在于把你已经会的两个算法接到了同一个根上。</b><br><b>开场的感知机</b>：把 sigmoid 换成「一刀切」的硬阶跃。<b>⚠ 但它恰恰不在这一讲的框架里</b>——<b>因为它的输出是 0 或 1，不是概率，没有概率就谈不上似然</b>，极大似然那一套推不动。<b>Ng 讲它主要是历史和对照。</b><br><b>动机</b>：要建模的东西五花八门（实数值、0/1、多选一、计数），<b>一个一个推太累</b>，所以找共同骨架。<br><b>⭐ 指数族</b>：p(y;η)=b(y)exp(ηT(y)−a(η))。<b>四个零件里 T(y) 多半就是 y、b(y) 不影响参数解，都可以先不管</b>；核心是 <b>η「自然参数」——它和你熟悉的参数（µ、φ）一一对应，只是换了个坐标系</b>。<b>a(η) 看着像个无聊的归一化常数，其实一阶导是均值、二阶导是方差</b>，⭐ 由此推出 <b>a 凸 ⇒ 对数似然凹 ⇒ 只有一个峰 ⇒ 梯度上升不会陷在局部最优</b>（神经网络就没这个保证）。<br><b>⭐⭐ 全讲最该记的一条</b>：<b>把伯努利塞进模板，纯代数变形，没有任何近似</b>，得到 η=log(φ/(1−φ))；<b>倒过来解出 φ，sigmoid 自己掉出来了</b>。<b>所以「逻辑回归为什么用 sigmoid」的答案不是「因为它在 0 到 1 之间」——那是结果带来的好处，不是原因。真正的原因是：伯努利的自然参数与均值之间的换算关系就是 sigmoid。</b><br><b>GLM 三条假设</b>（⚠ Ng 强调这是<b>设计选择</b>）：①y|x 属指数族；②<b>η=θᵀx——唯一「线性」的地方，注意线性是加在 η 上不是加在 h(x) 上</b>；③预测 E[y|x]。<b>合起来就是四步配方：选分布 → 写成指数族 → 读出 η↔均值 → 算法出来。</b><br><b>兑现</b>：<b>高斯 η=µ（直接相等）⇒ h=θᵀx ⇒ 线性回归</b>；<b>伯努利 η 与均值隔着 sigmoid ⇒ h=sigmoid(θᵀx) ⇒ 逻辑回归</b>；<b>多项式 ⇒ softmax</b>（⚠ 它的参数冗余，所有 θₖ 同加一个向量输出不变）。<b>⭐ 两条推导只在「η 与均值的关系」那一步分道扬镳，而那一步完全由你选的分布决定。</b><br><b>⭐⭐ 最后的高潮</b>：<b>三种回归共用一条更新规则 θ:=θ+α(y−h)x，一个字都不差，变的只有 h 的定义</b>。<b>因为推导只用到「它是指数族成员」，从没用到「是哪个具体分布」</b>——这就是写统一模板的回报。");
+});
+window.__startProjector(CFG);
+})();
+</script>

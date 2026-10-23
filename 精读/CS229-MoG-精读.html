@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲义精读 · 混合高斯与 EM（讲义） · 逐页精读</title>
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --panel2:#FAF8F4; --sunken:#EDEAE3;
+  --stage:#E9E6DF; --hover:#F0EDE6;
+  --line:#E3DFD6; --line2:#D2CCC0;
+  --dot:#DDD8CE; --dot2:#B9B1A2; --errdot:#D08A8A;
+  --ink:#23272C; --ink2:#111417; --ink3:#4A525C; --dim:#616973;
+  --acc:#0E7355; --acc2:#845808; --warn:#B23540; --blue:#1C6AA6;
+  --mark:#FFF6DC; --codeink:#17506E; --eqink:#1E2833;
+  --okink:#0B5B43; --noink:#8F2A33; --violet:#6A4BA3; --tintviolet:rgba(106,75,163,.07);
+  --okfill:rgba(14,115,85,.10); --nofill:rgba(178,53,64,.09);
+  --missbg:rgba(245,243,238,.97);
+  --tintacc:rgba(14,115,85,.07); --tintacc2:rgba(14,115,85,.05);
+  --tintblue:rgba(28,106,166,.06); --tintwarn:rgba(178,53,64,.05);
+  --tintwarn2:rgba(178,53,64,.06);
+  --lift:rgba(60,54,44,.022); --lift2:rgba(60,54,44,.028);
+  --scrim:rgba(58,52,42,.40);
+  --shadow:0 1px 2px rgba(40,34,20,.05), 0 6px 18px rgba(40,34,20,.05);
+
+  --cjk:"PingFang SC","Microsoft YaHei","微软雅黑","Deng",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --bar:50px; --strip:36px;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f15; --panel:#121823; --panel2:#0d141c; --sunken:#0a0e14;
+  --stage:#070a0f; --hover:#0d141c;
+  --line:#212c3c; --line2:#2a3b4f;
+  --dot:#18212e; --dot2:#2c3c52; --errdot:#7a3a3a;
+  --ink:#e7eef7; --ink2:#f4f8fd; --ink3:#c3d2e3; --dim:#8b9ab0;
+  --acc:#6fd3bb; --acc2:#f2bd63; --warn:#ff8f8f; --blue:#7fb8ff;
+  --mark:#16202e; --codeink:#cfe3f5; --eqink:#dbe8f7;
+  --okink:#d8fff4; --noink:#ffdede; --violet:#B48BF5; --tintviolet:rgba(180,139,245,.08);
+  --okfill:rgba(111,211,187,.13); --nofill:rgba(255,143,143,.12);
+  --missbg:rgba(10,14,20,.97);
+  --tintacc:rgba(111,211,187,.09); --tintacc2:rgba(111,211,187,.07);
+  --tintblue:rgba(127,184,255,.055); --tintwarn:rgba(255,120,120,.055);
+  --tintwarn2:rgba(255,143,143,.08);
+  --lift:rgba(255,255,255,.022); --lift2:rgba(255,255,255,.025);
+  --scrim:rgba(6,9,13,.82);
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--cjk);font-size:15px;line-height:1.75}
+
+#bar{height:var(--bar);display:flex;align-items:center;gap:11px;padding:0 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+#bar h1{margin:0;font-size:14.5px;font-weight:650;white-space:nowrap}
+#bar h1 span{color:var(--acc)}
+.btn{background:var(--sunken);border:1px solid var(--line);border-radius:7px;color:var(--dim);
+  font:13px var(--cjk);padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{color:var(--acc);border-color:var(--acc)}
+#pnum{width:48px;background:var(--sunken);border:1px solid var(--line);border-radius:7px;
+  color:var(--ink);font:13px var(--mono);text-align:center;padding:5px 0}
+#bar .sp{flex:1}
+#tot{font:12px var(--mono);color:var(--dim)}
+
+#strip{height:var(--strip);display:flex;align-items:center;gap:2px;padding:0 14px;
+  background:var(--sunken);border-bottom:1px solid var(--line);overflow-x:auto}
+#strip::-webkit-scrollbar{height:0}
+#strip b{flex:0 0 auto;width:13px;height:16px;border-radius:3px;background:var(--dot);
+  cursor:pointer;font:0/0 a}
+#strip b.has{background:var(--dot2)}
+#strip b.on{background:var(--acc2)}
+#strip b:hover{background:var(--acc)}
+
+#main{display:flex;height:calc(100% - var(--bar) - var(--strip))}
+/* 左栏 = 一块板，板中央摆一张 4:3 的幻灯片。
+   幻灯片本身就是 363×272（4:3），把框裁成同样比例再用 view=FitH，
+   这一页正好铺满框，下一页落到框外 —— 这样才是「一页」，
+   而不是一个能上下滚、还露出半张下一页的阅读器。 */
+#left{width:50%;min-width:280px;position:relative;background:var(--stage);
+  display:flex;align-items:center;justify-content:center;padding:14px}
+#stage{aspect-ratio:4/3;width:100%;max-width:100%;max-height:100%;
+  border-radius:8px;overflow:hidden;background:#fff;
+  box-shadow:var(--shadow)}
+#stage iframe{width:100%;height:100%;border:0;display:block}
+#drag{width:6px;cursor:col-resize;background:var(--line);flex:0 0 6px}
+#drag:hover{background:var(--acc)}
+#right{flex:1;overflow-y:auto;padding:24px 28px 40px}
+
+.pg{font:11.5px var(--mono);color:var(--bg);background:var(--acc2);border-radius:999px;
+  padding:2px 11px;font-weight:700;display:inline-block;margin-bottom:12px}
+.pg.multi{background:var(--blue)}
+h2{margin:0 0 14px;font-size:21px;font-weight:680;line-height:1.4}
+.one{font-size:16.5px;line-height:1.7;color:var(--ink2);border-left:3px solid var(--acc);
+  padding:9px 0 9px 14px;margin:0 0 16px;
+  background:linear-gradient(90deg,var(--tintacc),transparent)}
+ul{margin:0 0 16px;padding-left:0;list-style:none}
+ul li{margin-bottom:11px;padding-left:22px;position:relative;line-height:1.72}
+ul li::before{content:"";position:absolute;left:6px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--acc)}
+b{font-weight:650;color:var(--ink2)}
+.k{color:var(--acc);font-weight:650}
+.w{color:var(--warn);font-weight:650}
+code{font-family:var(--mono);font-size:.9em;background:var(--mark);padding:1.5px 6px;
+  border-radius:4px;color:var(--codeink)}
+.eq{display:block;text-align:center;background:var(--mark);border-radius:8px;padding:12px 8px;
+  margin:14px 0;font-family:var(--mono);font-size:14px;color:var(--eqink);overflow-x:auto}
+.say{border:1px solid var(--line2);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;background:var(--tintblue);font-size:14px;line-height:1.72}
+.say .t{color:var(--blue);font-weight:700;font-size:12.5px;display:block;margin-bottom:5px;
+  letter-spacing:.5px}
+.tip{border:1px solid var(--line);border-radius:9px;padding:11px 15px;margin:14px 0;
+  background:var(--lift2);font-size:14px;line-height:1.72}
+.tip .t{font-weight:700;color:var(--acc);margin-right:7px}
+.tip.w2{border-color:var(--warnline);background:var(--tintwarn)}
+.tip.w2 .t{color:var(--warn)}
+.star{color:var(--acc2);font-size:14px;margin-left:8px;letter-spacing:1px}
+.nav{display:flex;gap:10px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+.nav .btn{flex:1;text-align:center;padding:9px}
+.empty{color:var(--dim);font-size:14px;padding:36px 0;text-align:center;line-height:2}
+#miss{position:absolute;inset:0;background:var(--missbg);z-index:5;display:none;
+  padding:26px;color:var(--dim);font-size:13.5px;line-height:1.9}
+#miss code{background:var(--mark);padding:2px 6px;border-radius:4px;color:var(--acc2)}
+
+
+.qbadge{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;
+  margin-left:9px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 9px;font:11.5px var(--mono);color:var(--acc);cursor:pointer;
+  background:var(--sunken);transition:border-color .12s}
+.qbadge:hover{border-color:var(--acc)}
+.qbadge.bad{color:var(--warn)}
+#wrongBox .tally{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+#wrongBox .tally span{border:1px solid var(--line);border-radius:8px;padding:5px 11px;
+  font-size:12.5px;color:var(--dim);background:var(--sunken)}
+#wrongBox .tally b{color:var(--ink);font-weight:650}
+#wrongBox .tally b.hot{color:var(--warn)}
+.wrow .h{gap:3px}
+.wrow .h u{display:flex;gap:2px;text-decoration:none;
+  padding-right:7px;margin-right:4px;border-right:1px solid var(--line)}
+.wrow .h u:last-child{border-right:0;padding-right:0;margin-right:0}
+#revChip{display:none;align-items:center;gap:9px;border:1px solid var(--warn);
+  border-radius:8px;padding:5px 11px;font-size:12.5px;color:var(--warn);
+  background:var(--tintwarn2);white-space:nowrap}
+#revChip.on{display:inline-flex}
+#revChip b{font:650 12px var(--mono)}
+#revChip button{background:none;border:0;color:var(--dim);cursor:pointer;
+  font:12px var(--cjk);text-decoration:underline;padding:0}
+#revChip button:hover{color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn:disabled:hover{border-color:var(--line)}
+
+/* ── 自测 ── */
+.quiz{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.quiz>h3{margin:0 0 12px;font-size:13px;color:var(--dim);letter-spacing:.16em;
+  display:flex;align-items:center;gap:8px}
+.quiz>h3 b{color:var(--acc2);font-weight:700}
+.qq{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:11px;
+  background:var(--lift)}
+.qq .t{font-size:14.5px;font-weight:600;margin-bottom:10px;line-height:1.6}
+.opt{display:block;width:100%;text-align:left;background:var(--sunken);border:1px solid var(--line);
+  border-radius:8px;color:var(--ink);font:14px var(--cjk);padding:8px 12px;margin-bottom:7px;
+  cursor:pointer;line-height:1.5;transition:border-color .12s,background .12s}
+.opt:hover:not(:disabled){border-color:var(--acc);background:var(--hover)}
+.opt:disabled{cursor:default}
+.opt.ok{border-color:var(--acc);background:var(--okfill);color:var(--okink)}
+.opt.no{border-color:var(--warn);background:var(--nofill);color:var(--noink)}
+.opt .m{float:right;font-weight:700;margin-left:10px}
+.why{font-size:13.5px;line-height:1.7;color:var(--ink3);border-left:3px solid var(--acc);
+  padding:8px 0 8px 12px;margin-top:9px;background:linear-gradient(90deg,var(--tintacc2),transparent)}
+.qhist{font:11px var(--mono);color:var(--dim);margin-top:8px;display:flex;
+  align-items:center;gap:5px}
+.qhist i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.qhist i.o{background:var(--acc)} .qhist i.x{background:var(--warn)}
+.qagain{background:none;border:0;color:var(--dim);font:12px var(--cjk);cursor:pointer;
+  text-decoration:underline;padding:0;margin-left:auto}
+.qagain:hover{color:var(--acc2)}
+#strip b.err{background:var(--errdot)}
+#strip b.err.on{background:var(--acc2)}
+/* 错题本 */
+#wrongPanel{position:fixed;inset:0;background:var(--scrim);z-index:80;display:none;
+  align-items:center;justify-content:center;padding:28px}
+#wrongPanel.on{display:flex}
+#wrongBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  width:min(760px,100%);max-height:84vh;overflow:auto;padding:22px 24px}
+#wrongBox h3{margin:0 0 4px;font-size:18px}
+#wrongBox .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+.wrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--line);margin-bottom:8px;cursor:pointer;background:var(--sunken)}
+.wrow:hover{border-color:var(--acc2)}
+.wrow .p{font:700 12px var(--mono);color:var(--acc2);flex:0 0 52px}
+.wrow.done{opacity:.5}
+.wrow.done .p{color:var(--acc)}
+.wrow .n2{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.wrow .s{font:11.5px var(--mono);color:var(--dim);flex:0 0 auto}
+.wrow .h{display:flex;gap:3px;flex:0 0 auto}
+.wrow .h i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.wrow .h i.o{background:var(--acc)} .wrow .h i.x{background:var(--warn)}
+#wrongBox .none{color:var(--dim);text-align:center;padding:30px 0;line-height:2}
+#wrongFoot{display:flex;gap:10px;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--line)}
+#wrongFoot .btn{flex:1;text-align:center}
+
+@media (max-width:900px){
+  #main{flex-direction:column} #left{width:100%;height:40%} #drag{display:none}
+  #right{padding:16px 16px 30px}
+}
+
+/* ══ EXTRA_CSS:BEGIN ══ */
+/* ══ 讲解区里的链接兜底 ══
+   ⚠ 2026-10-03 查出来的：原先只给 .ng a 上了色，放在 tip / say / pts / exam 里的链接
+   会退回浏览器默认的 #0000EE —— 浅色下还能看（8.47:1），**暗色下只有 1.95:1**。
+   做 notes2 时第一次往 tip 里放时间码链接就撞上了。这条规则管住所有其它位置。 */
+#card a{color:var(--blue);text-decoration:none;border-bottom:1px solid var(--blue)}
+#card a:hover{opacity:.75}
+
+/* ══ 「从零补基础 · Andrew Ng」栏 ══ */
+.ng{border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintviolet)}
+.ng .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--violet);
+  letter-spacing:.4px;margin-bottom:5px}
+/* ⚠ 要用 #card .ng a 而不是 .ng a —— 上面的兜底规则带了 #card 这个 id，
+   光写 .ng a（0,1,1）会被 #card a（1,0,1）压过去，紫色链接会变蓝。 */
+#card .ng a{color:var(--violet);text-decoration:none;border-bottom:1px solid var(--violet)}
+#card .ng a:hover{opacity:.75}
+.ng .src{display:block;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+:root:not([data-theme="dark"]) .ng{box-shadow:var(--shadow)}
+
+/* ══ 「课件原话」栏：引官方英文 ══ */
+.quote{border-left:3px solid var(--dim);background:var(--lift2);border-radius:0 8px 8px 0;
+  padding:10px 15px;margin:12px 0;font-size:13px;line-height:1.7;color:var(--ink3)}
+.quote .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--dim);
+  letter-spacing:.4px;margin-bottom:5px}
+.quote b{color:var(--ink2)}
+.quote em{font-style:normal;color:var(--ink2);font-weight:560}
+
+/* ══ 笔记表格：对比表 / 情况表 / 数值表 ══ */
+.tw{margin:13px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.tc{font-size:11.5px;font-family:var(--mono);color:var(--dim);letter-spacing:.3px;
+  padding:7px 12px;background:var(--sunken);border-bottom:1px solid var(--line)}
+table.nt{width:100%;border-collapse:collapse;font-size:12.8px;line-height:1.55}
+table.nt th{text-align:left;font-weight:620;font-size:11.5px;color:var(--dim);
+  background:var(--panel2);padding:7px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.nt td{padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.nt tbody tr:last-child td{border-bottom:none}
+table.nt td:first-child{font-weight:560;color:var(--ink2)}
+table.nt b{color:var(--ink2)}
+:root:not([data-theme="dark"]) .tw{box-shadow:var(--shadow)}
+
+/* ══ 「与考试的联系」栏 ══ */
+.exam{border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintacc2)}
+.exam .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--acc2);
+  letter-spacing:.4px;margin-bottom:5px}
+:root:not([data-theme="dark"]) .exam{box-shadow:var(--shadow)}
+
+/* ══ 双主题补丁：浅色下的可读性与质感 ══ */
+html{color-scheme:light dark}
+:root:not([data-theme="dark"]) #right{background:var(--bg)}
+:root:not([data-theme="dark"]) .quiz,
+:root:not([data-theme="dark"]) details,
+:root:not([data-theme="dark"]) .opt{box-shadow:var(--shadow)}
+:root:not([data-theme="dark"]) body{-webkit-font-smoothing:antialiased}
+:root:not([data-theme="dark"]) h2{letter-spacing:-.1px}
+:root:not([data-theme="dark"]) .one{font-weight:520}
+:root:not([data-theme="dark"]) .pg{color:#fff}
+:root:not([data-theme="dark"]) #strip b.on{background:var(--acc2)}
+/* 主题切换按钮 */
+#themeBtn{min-width:34px;text-align:center;font-size:14px;line-height:1}
+/* ══ EXTRA_CSS:END ══ */
+
+</style>
+</head>
+<body data-key="cs234-2019-l01">
+
+<div id="bar">
+  <h1>CS229 讲义精读 · <span>混合高斯与 EM（讲义）</span></h1>
+  <button class="btn" id="prev">← 上一页</button>
+  <input id="pnum" value="1" inputmode="numeric">
+  <span id="tot">/ 4</span>
+  <button class="btn" id="next">下一页 →</button>
+  <div class="sp"></div>
+  <span id="revChip">复习模式 <b></b><button id="revOff">退出</button></span>
+  <button class="btn" id="wrongBtn">错题本</button>
+  <button class="btn" id="themeBtn" title="切换主题">☾</button>
+  <button class="btn" id="help">打不开？</button>
+</div>
+
+<div id="strip"></div>
+
+
+<div id="wrongPanel"><div id="wrongBox">
+  <h3>错题本</h3>
+  <p class="sub">错过的题<b>连着答对两次就毕业</b>，自动从这里和复习模式里退出。<br>
+  还没毕业的排在前面，最近错得多的更靠前。点任意一行跳到那一页重看。</p>
+  <div class="tally" id="wrongTally"></div>
+  <div id="wrongList"></div>
+  <div id="wrongFoot">
+    <button class="btn" id="revOn">只复习这些页</button>
+    <button class="btn" id="wrongClose">关闭</button>
+    <button class="btn" id="wrongReset">清空全部记录</button>
+  </div>
+</div></div>
+
+<div id="main">
+  <div id="left">
+    <div id="stage"><iframe id="pdf" title="原课件"></iframe></div>
+    <div id="miss">
+      <p><b>左边没显示课件？</b></p>
+      <p>本页直接引用同目录下的 <code>slides/cs229-notes7b.pdf</code>。</p>
+      <p>确认文件在即可。若浏览器拦本地 iframe 读 PDF，在 <code>精读</code> 目录下执行
+      <code>python -m http.server 8080</code>，再访问
+      <code>http://127.0.0.1:8080/CS229-MoG-精读.html</code>。</p>
+    </div>
+  </div>
+  <div id="drag"></div>
+  <div id="right"><div id="card"></div></div>
+</div>
+
+<script>
+
+/* ══ 主题切换：浅色默认，记住选择 ══ */
+(function(){
+  var KEY = "mlreader-theme";
+  var root = document.documentElement, btn = document.getElementById("themeBtn");
+  function apply(t){
+    root.setAttribute("data-theme", t);
+    if (btn) btn.textContent = (t === "dark" ? "☀" : "☾");
+    if (btn) btn.title = (t === "dark" ? "切到浅色" : "切到暗色");
+  }
+  var saved;
+  try { saved = localStorage.getItem(KEY); } catch(e){}
+  apply(saved === "dark" ? "dark" : "light");
+  if (btn) btn.addEventListener("click", function(){
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next);
+    try { localStorage.setItem(KEY, next); } catch(e){}
+  });
+})();
+
+/* 每页一条。r:[起,止] = 这几页是同一张图的不同阶段，点哪页都显示同一条。
+   one 一句话 · pts 要点 · say CS229 / 讲义补充（课件上没有）· tip 提醒 */
+
+/* ══ 题库。键 = 该单元的起始页；a 是正确项下标；why 是判完给的解释 ══ */
+var Q = {"1": [{"q": "讲义说什么使得混合高斯的估计问题变难？", "o": ["高斯密度不好算", "z 是潜变量——它在模型里真实存在，但是隐藏的、未被观测的", "数据量通常不够", "参数个数太多"], "a": 1, "why": "原文：<em>the z⁽ⁱ⁾'s are latent random variables, meaning that they're hidden/unobserved. <b>This is what will make our estimation problem difficult.</b></em> ⭐ 困难不在模型复杂，而在<b>那个「选了哪个成分」的结果没被记下来</b>。"}, {"q": "讲义说直接对混合高斯的对数似然求导令零会怎样？", "o": ["能解出闭式解，只是计算量大", "会得到多个解，需要挑一个", "解不出闭式的极大似然估计", "导数不存在"], "a": 2, "why": "原文：<em>it is not possible to find the maximum likelihood estimates of the parameters in closed form</em>（还留了句「回家自己试试」）。根因是<b>求和号被困在 log 里面</b>，log(a+b) 拆不开。"}], "2": [{"q": "讲义说「如果 z 已知」，极大似然估计会变成什么？", "o": ["退化成 k-means", "仍然无法求解", "几乎就是 GDA，只不过 z 扮演了类别标签的角色", "变成线性回归"], "a": 2, "why": "原文：<em>nearly identical to … the Gaussian discriminant analysis model, except that here the z⁽ⁱ⁾'s playing the role of the class labels</em>。⭐ 一句话记住：<b>GMM 就是 GDA 把标签藏起来</b>。脚注列的两处次要差别是：z 推广成多项分布、每个高斯有各自的 Σⱼ。"}, {"q": "按讲义的说法，EM 的 M 步为什么「变容易了」？", "o": ["因为 M 步里假装 E 步的猜测是对的，于是可以直接套「z 已知」时的那组公式", "因为数据被降维了", "因为用了梯度下降", "因为参数变少了"], "a": 0, "why": "原文：<em>Since in the M-step we are pretending that the guesses in the first part were correct, the maximization becomes easy</em>。⭐ 所以 <b>M 步不是新算法，它就是极大似然</b>，只不过喂进去的是猜出来的软标签。"}], "3": [{"q": "把 M 步的公式和「z 已知」时的公式并排看，差别在哪？", "o": ["多了一个正则项", "完全相同，只是把指示函数 1{z=j} 换成了责任度 w⁽ⁱ⁾ⱼ", "分母不同", "求和范围不同"], "a": 1, "why": "原文：<em>They are identical, except that instead of the indicator functions “1{z⁽ⁱ⁾=j}” … we now instead have the w⁽ⁱ⁾ⱼ's</em>。⭐ Ng 在课堂上还补了一层：<b>w 恰好就是那个指示函数的期望</b>——这正是「E 步」名字的由来。"}, {"q": "讲义脚注里对「软（soft）」的定义是什么？", "o": ["猜测是概率、取值在 [0,1]；而「硬」是给出单个最佳猜测，取值在 {0,1} 或 {1,…,k}", "猜测只用于初始化阶段", "猜测可以随时修改", "猜测允许有误差"], "a": 0, "why": "脚注 2 原文给的就是这个定义。⭐ 对应到代码：<code>predict_proba</code> 返回软的（完整责任度向量），<code>predict</code> 返回硬的（argmax 成分，<b>丢掉不确定性</b>）。"}, {"q": "讲义说 EM 和 k-means 有一个共同的毛病，是什么？", "o": ["都不能处理高维数据", "都需要数据服从高斯分布", "都要求簇的大小相同", "都可能卡在局部最优，所以用几组不同的初始参数重跑是个好主意"], "a": 3, "why": "原文：<em>Similar to K-means, it is also susceptible to local optima, so reinitializing at several different initial parameters may be a good idea</em>。⭐ 这正是 sklearn 里 <code>n_init</code> 的由来——<b>GMM 与 k-means 共用同一个参数名、同一个理由</b>（独立重启次数，不是迭代次数）。"}]};
+
+var N = [{"r": [1, 1], "star": 3, "t": "★★ 生成故事，与「直接求导解不出来」", "one": "先掷骰子选成分、再从那个高斯抽点；骰子结果看不见——这就是全部困难的来源。", "quote": "<em>our model posits that each x⁽ⁱ⁾ was generated by <b>randomly choosing z⁽ⁱ⁾</b> from {1,…,k}, and then x⁽ⁱ⁾ was drawn from one of k Gaussians depending on z⁽ⁱ⁾</em> … <em>the z⁽ⁱ⁾’s are <b>latent</b> random variables, meaning that they’re hidden/unobserved. <b>This is what will make our estimation problem difficult.</b></em>", "eq": "z⁽ⁱ⁾ ~ Multinomial(φ)，  φⱼ ≥ 0，Σⱼ φⱼ = 1，φⱼ = p(z⁽ⁱ⁾ = j)\nx⁽ⁱ⁾ | z⁽ⁱ⁾ = j  ~  N(µⱼ, Σⱼ)\nℓ(φ,µ,Σ) = Σᵢ log Σ_{z⁽ⁱ⁾} p(x⁽ⁱ⁾|z⁽ⁱ⁾; µ,Σ) · p(z⁽ⁱ⁾; φ)", "pts": ["<b>两行就把模型写完了</b>：z 服从<b>多项分布</b>（权重 φ，非负且和为 1），给定 z=j 时 x 服从<b>第 j 个高斯</b>。<b>k 就是 z 能取的值的个数。</b>", "⭐ <b>讲义一句话点明困难所在</b>：z 是<b>潜变量</b>，意思是<em>隐藏的 / 未被观测的</em>——<b>这正是让估计问题变难的原因</b>。不是数据不够、不是模型太复杂，就是<b>那个骰子结果没被记下来</b>。", "<b>对数似然长这样</b>：外层对所有观测求和，<b>内层对 z 求和</b>（把各成分加权密度加起来）。", "⭐ <b>然后是关键的一句</b>：如果你把这个式子对参数求导令零去解，会发现<b>根本解不出闭式的极大似然估计</b>。讲义还顺手留了句 <em>(Try this yourself at home.)</em>。", "<b>为什么解不出来</b>（讲义没说，但一眼就能看出）：<b>求和号被困在 log 的里面</b>，而 log(a+b) 拆不开，对 µⱼ 求导时每一项都纠缠着所有成分的参数。"], "tbl": [{"cap": "模型的三组参数", "head": ["参数", "是什么", "约束"], "rows": [["φ", "混合权重，φⱼ = p(z=j)", "<b>φⱼ ≥ 0 且 Σφⱼ = 1</b>"], ["µⱼ", "第 j 个高斯的均值", "—"], ["Σⱼ", "第 j 个高斯的协方差", "<b>每个成分各有一个</b>"]]}], "say": "⭐ <b>「Σⱼ 每个成分各有一个」这个约定要留意</b>——它正是 sklearn 里 <code>covariance_type='full'</code> 的默认含义。讲义在下一页的脚注里也点了这一条：这是它与 GDA 的「次要差别」之一（GDA 共享一个 Σ）。<b>限制越强（tied / diag / spherical），参数越少，AIC/BIC 的罚项也越小</b>——本课 T3 考这个。", "ng": "课堂上 Ng 在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1447s\" target=\"_blank\">24:07</a> 写下这个模型，并特意解释了 <b>latent</b> 这个词：<em>就是隐藏的、未被观测的</em>——意思是它确实存在，但你看不到它的值。<span class=\"src\">CS229/transcripts/L13.txt · 本地已下载</span>", "exam": "本课 T3 常考「z 代表什么」。答：<b>每个观测实际来自哪个成分，在模型里真实存在但未被观测</b>。若问「为什么不能直接用极大似然」，答<b>求和号困在 log 内部、无闭式解</b>。", "tip": {"t": "记号差别", "v": "讲义用 <b>φ</b> 表示混合权重、<b>w⁽ⁱ⁾ⱼ</b> 表示责任度；本课课件用 <b>π</b> 和 <b>r_ik</b>。<b>是同一组东西</b>，看到别慌。另外讲义用 n 表样本数，本课常用 N。"}}, {"r": [2, 2], "star": 3, "t": "★★★ 「如果知道 z 就好办了」——EM 的全部动机", "one": "z 已知时公式和 GDA 几乎一样；正因为不知道，才要先猜再套同一组公式。", "quote": "<em>if the z⁽ⁱ⁾’s were known, then maximum likelihood estimation becomes <b>nearly identical to</b> … the Gaussian discriminant analysis model, except that here the z⁽ⁱ⁾’s playing the role of the <b>class labels</b>.</em>", "eq": "若 z 已知：\nφⱼ = (1/n) Σᵢ 1{z⁽ⁱ⁾=j}\nµⱼ = Σᵢ 1{z⁽ⁱ⁾=j} x⁽ⁱ⁾ ÷ Σᵢ 1{z⁽ⁱ⁾=j}\nΣⱼ = Σᵢ 1{z⁽ⁱ⁾=j} (x⁽ⁱ⁾−µⱼ)(x⁽ⁱ⁾−µⱼ)ᵀ ÷ Σᵢ 1{z⁽ⁱ⁾=j}", "pts": ["⭐ <b>讲义的论证方式非常有说服力</b>：先假想 <b>z 已知</b>——那时对数似然里<b>再没有求和号困在 log 里</b>（每个点只属于一个确定的成分），直接求导令零，<b>三组参数一步到位</b>。", "<b>而且这三个式子你见过</b>：讲义明说，<b>z 已知时的极大似然估计几乎就是 GDA</b>，只不过<b>z 扮演了类别标签的角色</b>。<b>这意味着 M3 之前你在 M1 学的 GDA 不是白学的。</b>", "<b>脚注 1 列了两处「次要差别」</b>：① 这里的 z 被推广成<b>多项分布</b>而不是伯努利（GDA 只有两类）；② 这里<b>每个高斯用各自的 Σⱼ</b>（GDA 共享一个）。", "⭐ <b>于是 EM 的想法呼之欲出</b>：<b>E 步「猜」z 的值，M 步拿猜的 z 去套上面那组现成的公式。</b> 讲义说得很直白——<em>因为 M 步里我们假装第一步的猜测是对的，最大化就变容易了</em>。", "<b>E 步算的是什么</b>：w⁽ⁱ⁾ⱼ := p(z⁽ⁱ⁾=j | x⁽ⁱ⁾; φ,µ,Σ)，也就是<b>给定观测之后，这个点属于成分 j 的后验概率</b>。"], "tbl": [{"cap": "z 已知 vs z 未知：差别只在一处", "head": ["", "z 已知（＝GDA）", "z 未知（＝GMM）"], "rows": [["对数似然", "log 里<b>没有</b>求和号", "log 里<b>有</b>求和号"], ["能否闭式求解", "<b>能</b>，一步到位", "<b>不能</b>"], ["公式里用什么", "指示函数 <b>1{z=j}</b>", "责任度 <b>w⁽ⁱ⁾ⱼ</b>"], ["做法", "直接极大似然", "<b>先猜 z，再套同一组公式</b>"]]}], "say": "⭐ <b>这一页是整个 T3 最省力的理解入口</b>：<b>GMM 就是 GDA 把标签藏起来。</b><br>把这句话记住，后面所有公式都不用单独背——<b>M 步的三个式子就是 GDA 的极大似然公式</b>，只是把「这个点属于第 j 类」这个<b>非 0 即 1 的指示函数</b>，换成了「这个点有多大概率属于第 j 个成分」这个<b>0 到 1 之间的责任度</b>。<br>⚠️ 顺带解决一个常见困惑：<b>M 步不是什么新算法，它就是极大似然</b>，只不过喂进去的是猜出来的软标签。", "ng": "课堂上 Ng 讲这一段在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1642s\" target=\"_blank\">27:22</a>，而且他说得更口语：<em>要是我们知道 z 就好了，可惜不知道</em>。他把这种「用猜测跑算法、再更新猜测、再跑」的套路叫作 <b>bootstrap procedure</b>。⭐ <b>建议先听这 3 分钟再回来看公式</b>，顺序对了就不用背。<span class=\"src\">CS229/transcripts/L13.txt · 本地已下载</span>", "exam": "本课 T3 常考「GMM 与 GDA 的关系」。答：<b>模型结构相同，差别是 GDA 的 y 可观测、GMM 的 z 不可观测</b>；因此 GDA 能直接 MLE，GMM 必须用 EM。若问「M 步的公式从哪来」，答<b>就是 z 已知时的极大似然公式，把指示函数换成责任度</b>。"}, {"r": [3, 4], "star": 3, "t": "★★★ E 步的贝叶斯式子，与「软/硬」之分", "one": "E 步用贝叶斯算后验；M 步与「z 已知」版逐项对应，只把指示函数换成了 w。", "quote": "<em>contrast the updates in the M-step with the formulas we had when the z⁽ⁱ⁾’s were known exactly. <b>They are identical</b>, except that instead of the indicator functions “1{z⁽ⁱ⁾=j}” … we now instead have the w⁽ⁱ⁾ⱼ’s.</em> … 脚注：<em>The term <b>“soft”</b> refers to our guesses being <b>probabilities and taking values in [0,1]</b>; in contrast, a <b>“hard”</b> guess is one that represents a single best guess.</em>", "eq": "E 步（贝叶斯）：\np(z⁽ⁱ⁾=j | x⁽ⁱ⁾) = p(x⁽ⁱ⁾|z⁽ⁱ⁾=j) p(z⁽ⁱ⁾=j)  ÷  Σₗ p(x⁽ⁱ⁾|z⁽ⁱ⁾=l) p(z⁽ⁱ⁾=l)\nM 步：φⱼ := (1/n) Σᵢ w⁽ⁱ⁾ⱼ ，  µⱼ := Σᵢ w⁽ⁱ⁾ⱼ x⁽ⁱ⁾ ÷ Σᵢ w⁽ⁱ⁾ⱼ", "pts": ["<b>E 步就是一次贝叶斯计算</b>：分子是<b>该成分的密度 × 它的先验权重</b>，分母是<b>所有成分同类项之和</b>。讲义逐项解释了每个因子：p(x|z=j) 是<b>在 x 处求第 j 个高斯的密度值</b>，p(z=j) 就是 <b>φⱼ</b>。", "⚠️ <b>分母正是 p(x) 本身</b>，所以每个观测的各成分责任度<b>自动加起来等于 1</b>——手算时这是最省事的自检。", "⭐ <b>M 步与「z 已知」版逐项对应</b>：讲义让你把两组公式并排看——<b>它们是一样的</b>，唯一的差别是把<b>指示函数 1{z=j} 换成了 w⁽ⁱ⁾ⱼ</b>。", "<b>脚注 2 把「软」定义清楚了</b>：<b>软</b>＝猜测是<b>概率</b>、取值在 [0,1]；<b>硬</b>＝给出<b>单个最佳猜测</b>（取值在 {0,1} 或 {1,…,k}）。", "⭐ <b>讲义自己点出了和 k-means 的关系</b>：<em>EM 让人想起 k-means，只是把硬分配 c⁽ⁱ⁾ 换成了软分配 w⁽ⁱ⁾ⱼ</em>；并补了一句——<b>和 k-means 一样，它也可能卡在局部最优，所以用几组不同的初始参数重跑是个好主意</b>。", "<b>第 4 页只有一句话</b>：它预告下一份讲义（notes8）会给出<b>更一般的 EM 视角</b>，并且<b>给出收敛性保证</b>。<b>也就是说这份讲义只讲了「怎么做」，没讲「为什么有效」。</b>"], "tbl": [{"cap": "硬分配 vs 软分配（讲义脚注 2 的定义）", "head": ["", "硬 hard", "软 soft"], "rows": [["是什么", "单个<b>最佳猜测</b>", "<b>概率</b>"], ["取值", "{0,1} 或 {1,…,k}", "<b>[0,1]</b>"], ["谁用", "<b>k-means</b> 的 c⁽ⁱ⁾", "<b>EM</b> 的 w⁽ⁱ⁾ⱼ"]]}, {"cap": "M 步：两版公式逐项对照", "head": ["参数", "z 已知时", "EM 的 M 步"], "rows": [["φⱼ", "(1/n) Σ <b>1{z=j}</b>", "(1/n) Σ <b>w⁽ⁱ⁾ⱼ</b>"], ["µⱼ", "Σ <b>1{z=j}</b>x ÷ Σ <b>1{z=j}</b>", "Σ <b>w</b>x ÷ Σ <b>w</b>"], ["Σⱼ", "同理，分母是计数", "同理，分母是<b>有效计数</b>"]]}], "say": "⭐ <b>把两张表合起来看，T3 的全部机制就清楚了</b>：k-means 的分配是「非 0 即 1」，EM 的分配是「0 到 1 之间的概率」；而<b>一旦分配确定，两者更新参数的方式是同一个套路——加权平均</b>。差别只在权重是硬的还是软的。<br>⚠️ 还有一条讲义顺手提到、但很重要的：<b>EM 和 k-means 一样会卡在局部最优，要用不同初始参数重跑</b>——这就是 sklearn 里 <code>n_init</code> 的由来，<b>GMM 和 k-means 共用同一个参数名、同一个理由</b>。", "ng": "课堂上 Ng 讲 E 步 M 步在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a>。⭐ 他在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=2140s\" target=\"_blank\">35:40</a> 点破了一件讲义没说的事：<b>责任度 w 恰好就是指示函数 1{z=j} 的期望</b>（一个指示函数的期望等于它为真的概率）。<b>这就是「E 步」里 E（Expectation，期望）这个名字的由来</b>——E 步做的正是把那个看不见的指示函数替换成它的期望。同一段他还用<b>「稍微近一点就 100% 归过去」</b>的说法讲清了硬分配丢掉了什么。<span class=\"src\">CS229/transcripts/L13.txt · 本地已下载</span>", "exam": "本课 T3 的手算大题就是这两步。E 步写成<b>四步表</b>（算每成分密度 → 乘权重 → 相加得分母 → 各自除），算完核对<b>每行和为 1</b>。M 步按<b>有效计数 → 权重与均值 → 协方差（用新均值）</b>三步写，<b>分母一律是 N_k</b>。", "tip": {"t": "高频失分点", "v": "<b>把责任度当成临时硬标签。</b> 讲义的脚注 2 说得很清楚：<b>软＝概率、取值在 [0,1]</b>。责任度 0.55/0.45 的含义是「这个点其实很难分」，压成硬标签就把这个信息丢了——对应 sklearn 里 <code>predict</code> 与 <code>predict_proba</code> 的差别。", "w": 1}}];
+
+(function(){
+  var PDF="slides/cs229-notes7b.pdf", MAX=4;
+  var frame=document.getElementById("pdf"), card=document.getElementById("card"),
+      pnum=document.getElementById("pnum"), strip=document.getElementById("strip"),
+      right=document.getElementById("right");
+  var cur=0, map={}, cells=[];
+
+  /* 存档键带课程前缀 —— file:// 下所有本地页面共用一个 origin，
+     两门课都用 "cs229-mogquiz" 会互相覆盖。 */
+  var KEY = document.body.dataset.key;
+  try {                       // 一次性迁移：早期版本用的是不带课程前缀的键
+    if(!localStorage.getItem(KEY+"quiz")){
+      var _old = localStorage.getItem("cs229-mogquiz");
+      if(_old){
+        localStorage.setItem(KEY+"quiz", _old);
+        var _p = localStorage.getItem("cs229-mogp");
+        if(_p) localStorage.setItem(KEY+"p", _p);
+      }
+      /* 搬完就把旧键删掉。不删的话它会一直躺在那儿，
+         用户「清空全部记录」之后下次打开又被复活一遍。 */
+      localStorage.removeItem("cs229-mogquiz");
+      localStorage.removeItem("cs229-mogp");
+    }
+  } catch(e) {}
+
+  N.forEach(function(n,i){ for(var p=n.r[0];p<=n.r[1];p++) map[p]=i; });
+
+  for(var p=1;p<=MAX;p++){
+    var b=document.createElement("b");
+    b.title="第 "+p+" 页";
+    if(map[p]!=null) b.className="has";
+    b.onclick=(function(x){ return function(){ go(x); }; })(p);
+    strip.appendChild(b); cells.push(b);
+  }
+
+  function navHtml(){
+    return '<div class="nav"><button class="btn" id="p2">← 上一页</button>'+
+           '<button class="btn" id="n2">下一页 →</button></div>';
+  }
+  function bindNav(){
+    var a=document.getElementById("p2"), b=document.getElementById("n2");
+    if(a) a.onclick=function(){ step(-1); };
+    if(b) b.onclick=function(){ step(1); };
+  }
+  function render(p){
+    var i=map[p];
+    if(i==null){
+      card.innerHTML='<div class="empty">这一页没有单独的讲解。<br>'+
+        '它多半是上一页的<b>增量构建</b>——往前翻一页即可。</div>'+navHtml();
+      bindNav(); return;
+    }
+    var n=N[i], multi=n.r[0]!==n.r[1], h="";
+    h+='<span class="pg'+(multi?" multi":"")+'">p'+n.r[0]+(multi?"–"+n.r[1]:"")+'</span>';
+    h+='<h2>'+n.t+(n.star?'<span class="star">'+Array(n.star+1).join("★")+'</span>':'')+
+        qBadge(n.r[0])+'</h2>';
+    if(n.one) h+='<div class="one">'+n.one+'</div>';
+    if(n.quote) h+='<div class="quote"><span class="t">课件原话</span>'+n.quote+'</div>';
+    if(n.eq)  h+='<span class="eq">'+n.eq.replace(/\n/g,"<br>")+'</span>';
+    if(n.pts) h+='<ul>'+n.pts.map(function(x){ return "<li>"+x+"</li>"; }).join("")+'</ul>';
+    if(n.tbl) h+=n.tbl.map(function(T){var s='<div class="tw">'+(T.cap?'<div class="tc">'+T.cap+'</div>':"")+'<table class="nt">';if(T.head) s+='<thead><tr>'+T.head.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead>';s+='<tbody>'+T.rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>';}).join("")+'</tr>';}).join("")+'</tbody></table></div>';return s;}).join("");
+    if(n.say) h+='<div class="say"><span class="t">CS229 / 讲义补充</span>'+n.say+'</div>';
+    if(n.ng) h+='<div class="ng"><span class="t">从零补基础 · Andrew Ng CS229</span>'+n.ng+'</div>';
+    if(n.exam) h+='<div class="exam"><span class="t">与考试的联系</span>'+n.exam+'</div>';
+    if(n.tip) h+='<div class="tip'+(n.tip.w?" w2":"")+'"><span class="t">'+n.tip.t+'</span>'+n.tip.v+'</div>';
+    card.innerHTML=h+quizHtml(n.r[0])+navHtml();
+    bindNav();
+    bindQuiz();
+    bindBadge();
+  }
+  function go(p){
+    p=Math.max(1,Math.min(MAX,parseInt(p,10)||1));
+    if(p===cur) return;
+    cur=p; pnum.value=p;
+    // 只改 #hash 不会让 Chrome 内置 PDF 阅读器翻页 —— 实测 src 已是 #page=49
+    // 而工具栏仍停在 1/78。必须让它认为这是一次**新的导航**，所以加查询参数。
+    frame.src=PDF+"?p="+p+"#page="+p+"&toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    render(p);
+    paintStrip();
+    revPaint();
+    right.scrollTop=0;
+    var on=strip.querySelector("b.on");
+    if(on) on.scrollIntoView({block:"nearest",inline:"center"});
+    try{ localStorage.setItem(KEY+"p",p); }catch(e){}
+  }
+
+
+  /* ══ 自测与错题记录 ══════════════════════════════════════════════
+     记录形状： ST["起始页#题号"] = {n:做过几次, w:错过几次, r:[最近 6 次 1/0]}
+     全部存 localStorage，纯本地。 */
+  var ST = {};
+  try { ST = JSON.parse(localStorage.getItem(KEY+"quiz") || "{}") || {}; } catch(e){ ST = {}; }
+  function save(){ try{ localStorage.setItem(KEY+"quiz", JSON.stringify(ST)); }catch(e){} }
+
+  function rec(key, ok){
+    var d = ST[key] || {n:0, w:0, r:[]};
+    d.n++; if(!ok) d.w++;
+    d.r.push(ok ? 1 : 0);
+    if(d.r.length > 6) d.r = d.r.slice(-6);
+    ST[key] = d; save();
+  }
+  /* 最近错次数 —— 薄弱点排序用的就是它，不是历史总错数：
+     一个月前错过三次但最近三次全对，不该再排在最前面。 */
+  function recentWrong(d){ return (d.r||[]).filter(function(x){ return x===0; }).length; }
+  /* 「还算不算薄弱」：错过、且最近两次没有连对。
+     用连对而不是「最近窗口里没有 0」，是为了让规则能一句话说清楚，
+     用户看得见自己离毕业还差几次；也挡住了蒙对一次就算掌握。 */
+  function isWeak(d){
+    if(!d || !d.w) return false;
+    var r = d.r || [];
+    return !(r.length >= 2 && r[r.length-1] === 1 && r[r.length-2] === 1);
+  }
+  function unitWrong(start){
+    var qs = Q[start] || [], rw = 0, w = 0, n = 0, qw = 0;
+    qs.forEach(function(_,i){
+      var d = ST[start+"#"+i]; if(!d) return;
+      rw += recentWrong(d); w += d.w; n += d.n; if(isWeak(d)) qw++;
+    });
+    // rw 数的是最近错的**次数**（只用来排序，谁更该先复习）；
+    // qw 数的是**还没毕业的题数**（给人看，也决定标红和进不进复习队列）。
+    return {rw:rw, w:w, n:n, qw:qw};
+  }
+  function histHtml(d){
+    var h = "";
+    for(var i=0;i<6;i++){
+      var v = d && d.r ? d.r[d.r.length-6+i] : undefined;
+      h += '<i class="'+(v===1?"o":v===0?"x":"")+'"></i>';
+    }
+    return h;
+  }
+
+  function quizHtml(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var h = '<div class="quiz"><h3>自测 <b>'+qs.length+'</b> 题</h3>';
+    qs.forEach(function(q,i){
+      var key = start+"#"+i, d = ST[key];
+      h += '<div class="qq" data-k="'+key+'" data-a="'+q.a+'">';
+      h += '<div class="t">'+q.q+'</div>';
+      q.o.forEach(function(o,j){
+        h += '<button class="opt" data-j="'+j+'">'+o+'</button>';
+      });
+      h += '<div class="why" style="display:none"></div>';
+      h += '<div class="qhist">'+histHtml(d)+
+           '<span style="margin-left:6px">'+
+           (d ? "做过 "+d.n+" 次 · 错 "+d.w : "还没做过")+'</span>'+
+           '<button class="qagain">重做</button></div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  function bindQuiz(){
+    document.querySelectorAll(".qq").forEach(function(box){
+      var key = box.dataset.k, ans = +box.dataset.a;
+      var why = box.querySelector(".why"), opts = box.querySelectorAll(".opt");
+      var qs = Q[key.split("#")[0]], q = qs[+key.split("#")[1]];
+      opts.forEach(function(b){
+        b.onclick = function(){
+          var j = +b.dataset.j, ok = (j === ans);
+          opts.forEach(function(x){
+            x.disabled = true;
+            if(+x.dataset.j === ans){ x.classList.add("ok"); x.innerHTML += '<span class="m">✓</span>'; }
+          });
+          if(!ok){ b.classList.add("no"); b.innerHTML += '<span class="m">✗</span>'; }
+          why.innerHTML = q.why; why.style.display = "block";
+          rec(key, ok);
+          box.querySelector(".qhist").innerHTML =
+            histHtml(ST[key]) + '<span style="margin-left:6px">做过 '+ST[key].n+
+            ' 次 · 错 '+ST[key].w+'</span><button class="qagain">重做</button>';
+          bindAgain(box); paintStrip(); revSync();
+          var bd = document.querySelector('#card>h2 .qbadge');
+          if(bd) bd.outerHTML = qBadge(+key.split('#')[0]);
+          bindBadge();
+        };
+      });
+      bindAgain(box);
+    });
+  }
+  function bindBadge(){
+    var b = document.querySelector("#card>h2 .qbadge");
+    if(b) b.onclick = function(){
+      var q = document.querySelector(".quiz");
+      if(q) q.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+  }
+  function bindAgain(box){
+    var a = box.querySelector(".qagain");
+    if(a) a.onclick = function(){ render(cur); };
+  }
+
+  /* 页条上标红：这一单元最近还在错 */
+  function paintStrip(){
+    cells.forEach(function(c,k){
+      var i = map[k+1];
+      var cls = (i!=null ? "has" : "");
+      if(i!=null){
+        if(unitWrong(N[i].r[0]).qw > 0) cls += " err";
+      }
+      if(k+1===cur) cls += " on";
+      c.className = cls;
+    });
+  }
+
+
+  /* ── 标题角标：不用滚到底就知道这页有没有题、错没错过 ── */
+  function qBadge(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var st = unitWrong(start);
+    return '<span class="qbadge'+(st.qw?" bad":"")+'" title="跳到自测">'+
+      (st.qw ? "还错 "+st.qw+"/"+qs.length+" 题" : qs.length+" 题")+' ↓</span>';
+  }
+
+  /* ── 复习模式：前进/后退只在「最近还在错」的页之间跳 ──
+     用户要的是「专项针对薄弱部分复习」。光有一张错题清单还得自己一条条点，
+     所以把它接到翻页上：开了之后 ← → 就只在这些页里走。
+     依据是**最近**错次，不是累计——早就改对的题不该再拦路。 */
+  var rev = false, revList = [];
+  function weakPages(){
+    return N.filter(function(n){ return unitWrong(n.r[0]).qw > 0; })
+            .map(function(n){ return n.r[0]; });
+  }
+  function revPaint(){
+    var chip = document.getElementById("revChip");
+    chip.classList.toggle("on", rev);
+    if(!rev) return;
+    var i = revList.indexOf(mapStart(cur));
+    chip.querySelector("b").textContent =
+      (i < 0 ? "?" : (i+1)) + " / " + revList.length + " 页";
+  }
+  function mapStart(p){ var i = map[p]; return i==null ? -1 : N[i].r[0]; }
+
+  function step(d){
+    if(!rev) return go(cur + d);
+    if(!revList.length) return exitRev(true);
+    var here = mapStart(cur), i = revList.indexOf(here);
+    if(i < 0){                       // 当前不在清单里：跳到顺着方向最近的一页
+      var t = null;
+      for(var k=0;k<revList.length;k++){
+        if(d > 0 ? revList[k] > cur : revList[k] < cur){ t = revList[k]; if(d>0) break; }
+      }
+      return go(t == null ? revList[d>0 ? 0 : revList.length-1] : t);
+    }
+    go(revList[(i + d + revList.length) % revList.length]);
+  }
+  function enterRev(){
+    revList = weakPages();
+    if(!revList.length){ alert("没有待复习的页——错过的题都连对两次毕业了。"); return; }
+    rev = true; wp.classList.remove("on");
+    go(revList.indexOf(mapStart(cur)) >= 0 ? cur : revList[0]);
+    revPaint();
+  }
+  function exitRev(done){
+    rev = false; revPaint();
+    if(done) alert("待复习的页都毕业了，已退出复习模式。");
+  }
+  document.getElementById("revOff").onclick = function(){ exitRev(false); };
+
+  /* 答完一题就重算一次清单：刚改对的页当场从复习队列里消失。 */
+  function revSync(){
+    if(!rev) return;
+    revList = weakPages();
+    if(!revList.length) exitRev(true); else revPaint();
+  }
+
+  /* 错题本 */
+  var wp = document.getElementById("wrongPanel");
+  function openWrong(){
+    var list = [];
+    N.forEach(function(n){
+      var st = unitWrong(n.r[0]);
+      if(st.n === 0 || st.w === 0) return;
+      list.push({n:n, rw:st.rw, w:st.w, tot:st.n, qw:st.qw});
+    });
+    // 还没毕业的一律排前面；同样没毕业的，最近错得多的更靠前。
+    list.sort(function(a,b){
+      return (b.qw > 0) - (a.qw > 0) || (b.rw - a.rw) || (b.w - a.w); });
+    var box = document.getElementById("wrongList");
+    if(!list.length){
+      box.innerHTML = '<div class="none">还没有错题。<br>做几道自测再回来看。</div>';
+    } else {
+      box.innerHTML = list.map(function(it){
+        var qs = Q[it.n.r[0]] || [];
+        // 每道题的六格单独成一组，多题的单元才不会连成一片看不出边界
+        var h = qs.map(function(_,i){
+          return "<u>"+histHtml(ST[it.n.r[0]+"#"+i])+"</u>"; }).join("");
+        return '<div class="wrow'+(it.qw ? "" : " done")+'" data-p="'+it.n.r[0]+'">'+
+          '<span class="p">p'+it.n.r[0]+'</span>'+
+          '<span class="n2">'+it.n.t+'</span>'+
+          '<span class="h">'+h+'</span>'+
+          '<span class="s">'+(it.qw ? "还差 "+it.qw+" 题毕业" : "已毕业")+
+          ' · 累计错 '+it.w+'/'+it.tot+'</span></div>';
+      }).join("");
+      box.querySelectorAll(".wrow").forEach(function(r){
+        r.onclick = function(){ wp.classList.remove("on"); go(+r.dataset.p); };
+      });
+    }
+    // 总账。三个数分工明确：做了多少、还有多少没过关、一共栽过几次。
+    var done=0, tot=0, weak=0, wsum=0;
+    Object.keys(Q).forEach(function(k){
+      Q[k].forEach(function(_,i){
+        tot++;
+        var d = ST[k+"#"+i]; if(!d) return;
+        done++; wsum += d.w; if(isWeak(d)) weak++;
+      });
+    });
+    document.getElementById("wrongTally").innerHTML =
+      '<span>做过 <b>'+done+'</b> / '+tot+' 题</span>'+
+      '<span>没毕业 <b class="hot">'+weak+'</b> 题</span>'+
+      '<span>累计错 <b>'+wsum+'</b> 次</span>'+
+      '<span>待复习 <b>'+weakPages().length+'</b> 页</span>';
+    document.getElementById("revOn").disabled = !weakPages().length;
+    wp.classList.add("on");
+  }
+  document.getElementById("wrongBtn").onclick = openWrong;
+  document.getElementById("revOn").onclick = enterRev;
+  document.getElementById("wrongClose").onclick = function(){ wp.classList.remove("on"); };
+  document.getElementById("wrongReset").onclick = function(){
+    if(!confirm("清空全部自测记录？此操作不可撤销。")) return;
+    ST = {}; save(); exitRev(false); paintStrip(); openWrong(); render(cur);
+  };
+  wp.onclick = function(e){ if(e.target === wp) wp.classList.remove("on"); };
+
+  document.getElementById("prev").onclick=function(){ step(-1); };
+  document.getElementById("next").onclick=function(){ step(1); };
+  pnum.addEventListener("change",function(){ go(pnum.value); });
+  pnum.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ go(pnum.value); this.blur(); }
+  });
+  document.addEventListener("keydown",function(e){
+    if(document.activeElement===pnum) return;
+    if(e.key==="ArrowLeft"||e.key==="PageUp"){ step(-1); e.preventDefault(); }
+    if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){ step(1); e.preventDefault(); }
+  });
+
+  var miss=document.getElementById("miss");
+  frame.addEventListener("error",function(){ miss.style.display="block"; });
+  frame.addEventListener("load", function(){ miss.style.display="none"; });
+  document.getElementById("help").onclick=function(){
+    miss.style.display = miss.style.display==="block" ? "none" : "block";
+  };
+
+  var drag=document.getElementById("drag"), left=document.getElementById("left"), dragging=0;
+  drag.addEventListener("mousedown",function(){ dragging=1; document.body.style.userSelect="none"; });
+  document.addEventListener("mouseup",function(){ dragging=0; document.body.style.userSelect=""; });
+  document.addEventListener("mousemove",function(e){
+    if(!dragging) return;
+    left.style.width=Math.max(20,Math.min(78,e.clientX/window.innerWidth*100))+"%";
+  });
+
+  var s=1; try{ s=parseInt(localStorage.getItem(KEY+"p"),10)||1; }catch(e){}
+  go(s);
+})();
+</script>
+
+
+
+
+
+
+<!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
+<style>
+#nopdf{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+#nopdf .in{max-width:380px;text-align:center;font-size:14px;line-height:1.85;
+  color:var(--dim,#6a7686)}
+#nopdf b{color:var(--ink,#23272c)}
+#nopdf code{font-size:12.5px}
+</style>
+<script>
+(function(){
+  /* 公开站上 slides/*.pdf 不在仓库里（著作权）。与其让左栏挂一个空 iframe，
+     不如说清楚它去哪了 —— 右栏的讲解和自测题完全不受影响。
+     本地预览同样加 ?public=1 。*/
+  if (!/\.github\.io$/.test(location.hostname)
+      && !/[?&]public=1\b/.test(location.search)) return;
+  function go(){
+    var stage = document.getElementById("stage");
+    var frame = document.getElementById("pdf");
+    if (!stage) return;
+    if (frame) frame.remove();
+    var d = document.createElement("div");
+    d.id = "nopdf";
+    d.innerHTML = '<div class="in"><p><b>原课件不在公开仓库里。</b></p>'
+      + '<p>课件著作权属于学校与各课作者，本仓库不转载。</p>'
+      + '<p>右栏的逐页讲解与自测题是自己写的，<b>照常可用</b>。</p>'
+      + '<p style="opacity:.75">要让这一栏显示出来：把原 PDF 放回 <code>精读/slides/</code>，'
+      + '用本地静态服务器打开即可。</p></div>';
+    stage.appendChild(d);
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+</script>
+<!-- deploy-public-mode : end -->
+</body></html>

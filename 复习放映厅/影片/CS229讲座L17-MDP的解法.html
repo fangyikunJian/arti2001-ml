@@ -1,0 +1,903 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L17 · MDP 的解法</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L17 · MDP 的解法",
+  subtitle:"价值函数 · Bellman 方程 · 值迭代与策略迭代 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=d5gaWTo6kDM&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 网格世界：cols×rows 个格子，cb(i,j) 返回 [文字, 类名]，null 跳过 ── */
+function grid(x0,y0,cw,ch,cols,rows,cb){
+  var i,j;
+  for(j=0;j<rows;j++)for(i=0;i<cols;i++){
+    var v=cb(i,j); if(v===null) continue;
+    boxNode(x0+i*cw, y0+j*ch, cw-6, ch-6, v[0], v[1]||"");}}
+
+/* ── 一条收敛曲线（误差按比例下降）── */
+function decay(x0,x1,ybase,amp,k){
+  return fn(function(x){return ybase-amp*Math.exp(-k*(x-x0)/(x1-x0));},x0,x1,90);}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L17","MDP 的解法",
+      "把上一讲那个悬念算出来");},
+    "上一讲把「学开直升机」这类问题形式化成了 <b>MDP 五元组：S、A、P_sa、γ、R</b>，<b>并说算法最终要交出的是一个策略 π</b>。<br><b>但怎么把那个策略算出来，一个字都还没讲。</b>这一讲补上。<br><b>⭐ 它还会兑现一个具体的悬念。</b>L16 结尾时 Ng 指着网格世界里 −1 陷阱旁边那一格说：<b>往北还是往西，其实并不显然</b>——往北快但可能滑进陷阱，往西安全但路更长。<b>他当时说「这个光用眼睛看是看不出来的」。</b><br><b>这一讲会把两个数真正算出来：往西 0.740，往北 0.676。</b><br><b>路线是三步。</b>先定义<b>价值函数</b>——<b>它回答「待在某个状态有多好」</b>；再推出 <b>Bellman 方程</b>，它把这个问题变成一组可解的方程；最后给出两个算法：<b>值迭代</b>和<b>策略迭代</b>。<br><b>⚠ 最后还有一段很实际的内容</b>：<b>前面一直假装 P_sa 是已知的，可现实里它从哪来？</b>以及<b>一个光靠「每次都选当前最优」会掉进去的坑</b>。");
+});
+KP("1 · 路线图：这一讲只定义三样东西",function(){
+  S(385,function(){clearScene();setEq(null);setCap("Ng 自己画的路线图");
+       says("6:25","what I am about to do is define V_Pi, V_star, and Pi_star");
+       boxNode(110,200,330,76,"① V^π","b");
+       boxNode(475,200,330,76,"② V*","y");
+       boxNode(840,200,330,76,"③ π*","g");
+       link(440,238,475,238); link(805,238,840,238);
+       note("某个策略有多好",275,320,"d");
+       note("最好能有多好",640,320,"d");
+       note("⭐ 最好的那个策略",1005,320,"y");
+       note("⇒ 三者之间是一条链：有了前一个才能定义后一个",640,392,"y");},"<b>在往下走之前，先看 Ng 自己给的路线图——他说这一讲只需要定义三样东西。</b><br><b>① V^π：某一个策略有多好。</b><b>② V*：最好能有多好。</b><b>③ π*：最好的那个策略是什么。</b><br><b>⭐ 三者之间是一条链，而且顺序不能换</b>：<b>要定义 V*（最好能有多好），就得先有 V^π（某个策略有多好），因为 V* 是对所有 V^π 取最大；要找出 π*，又得先知道 V*。</b><br><b>⚠ 这条链也正是整个算法的形状</b>：<b>先想办法算出 V*，再用一个 argmax 读出 π*。</b><br><b>所以接下来的每一节，都是在这条链上往前挪一格。</b><b>把这张图记住，后面就不会迷路。</b>");
+  S(385,function(){clearScene();setEq(null);setCap("三个符号，先认清楚再往下走");
+   matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["符号","读作","回答的问题"],
+       ["V^π(s)","策略 π 的价值函数","按 π 走，从 s 出发能拿多少"],
+       ["V*(s)","最优价值函数","★ 最好能拿多少"],
+       ["π*(s)","最优策略","★ 在 s 该做哪个动作"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i>=2?"hl":"";}});
+   note("⚠ 前两个的输出是「一个数」，第三个的输出是「一个动作」",640,398,"r");},"<b>先把三个符号认清楚，后面所有式子都是在这三者之间倒腾。</b><br><b>V^π(s)：读作「策略 π 的价值函数」，回答「按 π 走、从 s 出发能拿多少」。</b><br><b>V*(s)：读作「最优价值函数」，回答「最好能拿多少」。</b><br><b>π*(s)：读作「最优策略」，回答「在 s 该做哪个动作」。</b><br><b>⚠ 注意一个很实用的区别：前两个的输出是一个数（期望回报），第三个的输出是一个动作。</b><br><b>⭐ 这个区别正是后面 max 和 argmax 的分工</b>：<b>max 给你数，argmax 给你动作。</b><br><b>⇒ 看到式子时先问「这个东西的输出是数还是动作」，很多混淆当场就化解了。</b>");
+  SUM(385,1,{h:"路线图：V^π → V* → π*",k:"Ng 说这一讲只需定义三样东西：<b>① V^π 某个策略有多好 ② V* 最好能有多好 ③ π* 最好的那个策略</b>。",m:"⭐ <b>三者是一条链，顺序不能换</b>：V* 是<b>对所有 V^π 取最大</b>，所以要先有 V^π；要找 π*，又得先知道 V*。",w:"⚠ <b>这条链就是整个算法的形状</b>：先想办法算出 V*，再用一个 argmax 读出 π*。",e:"⇒ 后面每一节都是在这条链上<b>往前挪一格</b>。"});
+  QUIZ(385,1,{t:"L17 要定义的三样东西是什么？它们的顺序为什么不能换？",o:["状态、动作、奖励；按字母顺序","V^π（某策略有多好）→ V*（最好能有多好）→ π*（最好的策略）；V* 是对所有 V^π 取最大，π* 又要先知道 V*","值迭代、策略迭代、ε-greedy；按复杂度递增","R、γ、P_sa；顺序无所谓"],a:1,w:"⚠ 这条链<b>就是整个算法的形状</b>：先算出 V*，再用一个 argmax 读出 π*。"});
+});
+KP("2 · ⚠ 为什么不能把策略一个个试过来",function(){
+  S(344,function(){clearScene();setEq(null);setCap("策略的数量是组合爆炸的");
+       says("5:44","there is an exponentially large number of possible policies");
+       boxNode(150,200,440,76,"11 个状态 × 每个 4 个动作","b");
+       boxNode(760,200,440,76,"4¹¹ ≈ 419 万种策略","r");
+       link(590,238,760,238);
+       note("⭐ 一般规律：策略数 = (动作数) 的 (状态数) 次方",640,320,"y");
+       note("⚠ 而 11 个状态已经是最小的玩具例子了",640,392,"r");},"<b>先说清楚这一讲为什么需要一整套理论，而不是写个循环试一遍。</b><br>Ng 说：<b>可能的策略数量是指数级的。</b><br><b>把网格世界代进去算一下</b>：<b>11 个状态，每个状态有 4 个动作可选</b>，所以<b>策略的总数是 4¹¹，大约 419 万种</b>。<br><b>⭐ 一般规律是：策略数 = 动作数的状态数次方。</b>Ng 的原话是<b>「组合意义上的大」</b>。<br><b>⚠ 关键在于 11 个状态已经是最小的玩具例子了。</b>换成下棋，状态数是天文数字；换成直升机，状态根本是连续的、有无穷多个。<br><b>⇒ 所以必须换一条路：不去枚举策略，而是先算出「每个状态有多好」，再由此反推策略。</b><b>这就是价值函数。</b>");
+  S(344,function(){clearScene();setEq(null);setCap("对比一下：值迭代要算多少次");
+   matrix({rows:4,cols:2,cw:430,ch:52,x:210,y:196,
+     cell:function(i,j){var t=[
+       ["办法","计算量"],
+       ["枚举所有策略","4¹¹ ≈ 419 万种，每种还要评估一遍"],
+       ["值迭代","几十轮 × 11 个状态 × 4 个动作 ≈ 几千次"],
+       ["★ 差距","三个数量级以上"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 而且枚举的代价随状态数指数增长，值迭代只是线性增长",640,398,"y");},"<b>把两条路的计算量摆在一起，就知道为什么必须换路了。</b><br><b>枚举法：419 万种策略，而且每一种都还要评估一遍</b>（评估本身又要解一个方程组）。<br><b>值迭代：几十轮，每轮扫 11 个状态、每个状态试 4 个动作——总共几千次基本运算。</b><br><b>⭐ 差距是三个数量级以上。</b><br><b>⚠ 但真正要命的不是这个倍数，而是它们随状态数增长的方式。</b><b>枚举法的代价是「动作数的状态数次方」——指数增长；而值迭代每一轮的代价只是「状态数 × 动作数」——线性增长。</b><br><b>⇒ 状态数一变大，两者的差距会迅速拉开到无法比较。</b><b>这才是换路的根本理由。</b>");
+  SUM(344,2,{h:"⚠ 枚举策略行不通：数量是指数级的",k:"Ng：<b>可能的策略数量是指数级的</b>。网格世界 <b>11 个状态 × 每状态 4 个动作 = 4¹¹ ≈ 419 万种</b>。",m:"⭐ <b>一般规律：策略数 = (动作数)^(状态数)</b>。",w:"⚠ <b>而 11 个状态已经是最小的玩具例子</b>：下棋的状态数是天文数字，直升机的状态根本是连续的。",e:"⇒ ⭐ <b>换一条路：先算出「每个状态有多好」，再由此反推策略</b>——这就是价值函数。"});
+  QUIZ(344,2,{t:"为什么不能靠枚举所有策略来找最优策略？",o:["策略数 = (动作数)^(状态数)，11 个状态 4 个动作就有 4¹¹ ≈ 419 万种，而这已是最小的玩具例子","因为策略之间无法比较好坏","因为每个策略的评估都需要无穷时间","因为策略是连续的，没法枚举"],a:0,w:"⭐ 出路是<b>先算出「每个状态有多好」（价值函数），再由此反推策略</b>，而不是在策略空间里硬找。"});
+});
+KP("3 · ★★ 价值函数 V^π：待在这个状态有多好",function(){
+  S(427,function(){clearScene();setEq("$$V^{\\pi}(s) \\;=\\; \\mathbb{E}\\big[\\,R(s_0)+\\gamma R(s_1)+\\gamma^2 R(s_2)+\\cdots \\;\\big|\\; s_0=s,\\ \\text{按 } \\pi \\text{ 行动}\\big]$$","top");
+       setCap("把「从这里出发能拿多少」变成一个数");
+       says("7:07","V_Pi of S is the expected total payoff for starting in state S and executing Pi",214);
+       note("① 从状态 s 出发　② 一路按策略 π 行动　③ 期望总回报是多少",640,278,"b");
+       note("⭐ 每个状态都得到一个数 ⇒ 11 个状态就是 11 个数",640,336,"y");
+       note("⚠ 注意它依赖 π —— 换个策略，这 11 个数全都会变",640,398,"r");},"<b>价值函数是这一讲的第一块地基。</b>Ng 的定义很直白：<b>V^π(s) 是「从状态 s 出发、执行策略 π」的期望总回报。</b><br><b>拆成三步看</b>：<b>① 把机器人放在状态 s；② 让它一路按策略 π 行动；③ 算它能拿到的期望总回报</b>（就是上一讲那个带 γ 折扣的和）。<br><b>⭐ 结果是：每个状态都得到一个数。</b>网格世界有 11 个状态，<b>V^π 就是 11 个数</b>。<br><b>⚠ 一个很要紧的细节：它依赖 π。</b><b>换一个策略，这 11 个数全都会变。</b>所以<b>「价值函数」永远是「某个策略的价值函数」</b>——<b>后面会看到还有另一种价值函数，Ng 说这是术语上最容易混的地方。</b><br><b>⭐ 为什么这个定义有用？因为它把「策略好不好」这个笼统问题，落到了每个状态上的一个具体数字。</b>");
+  S(427,function(){clearScene();setEq(null);setCap("在网格世界里，V^π 就是写在格子上的 11 个数");
+   grid(360,196,140,56,4,3,function(i,j){
+     if(i===1&&j===1) return ["墙","d"];
+     if(i===3&&j===0) return ["+1","g"];
+     if(i===3&&j===1) return ["−1","r"];
+     if(j===0) return [(i===0?"0.69":(i===1?"0.75":"0.81")),"b"];
+     if(j===1) return [(i===0?"0.65":"0.49"),"b"];
+     return [(i===0?"0.61":(i===1?"0.57":(i===2?"0.49":"0.28"))),"b"];});
+   note("⭐ 离 +1 越近的格子，值越高；−1 旁边的格子被拉低",640,172,"y");
+   note("⚠ 这些数不是奖励，是「从这里出发最终能拿多少」",640,398,"r");},"<b>抽象的定义落到网格世界上，V^π 就是写在每个格子里的一个数。</b><br><b>看一眼这些数的分布规律</b>：<b>离 +1 越近的格子，数值越高</b>（右上那几格 0.81、0.75）；<b>而 −1 旁边那格被明显拉低了</b>（0.49）。<br><b>⚠ 这里有个初学时极容易混的地方：这些数不是奖励。</b><b>网格世界里绝大多数格子的即时奖励 R(s) 都是同一个小负数（每走一步的代价），只有 +1 和 −1 两格特殊。</b><br><b>⭐ 而写在格子里的这些值说的是另一回事：从这一格出发，一路走下去，最终总共能拿到多少。</b><br><b>⇒ 所以 V 携带的是「前途」的信息，R 携带的是「眼下」的信息。</b><b>Bellman 方程正是把这两者连起来的那座桥。</b>");
+  SUM(427,3,{h:"★★ V^π(s)：从 s 出发、按 π 行动的期望总回报",k:"Ng：<b>V^π(s) 是从状态 s 出发、执行策略 π 的期望总回报</b>。",m:"<b>三步</b>：① 把机器人放在 s ② 一路按 π 行动 ③ 算期望总回报（带 γ 折扣的和）。⭐ <b>每个状态得到一个数</b>，11 个状态就是 11 个数。",w:"⚠ <b>它依赖 π</b>：换一个策略，这 11 个数全都会变。所以<b>「价值函数」永远是「某个策略的价值函数」</b>。",e:"⭐ <b>它的用处</b>：把「策略好不好」这个笼统问题，<b>落到每个状态上的一个具体数字</b>。"});
+  QUIZ(427,3,{t:"V^π(s) 的定义是什么？",o:["所有策略在 s 上的平均回报","在状态 s 能拿到的即时奖励","策略 π 在状态 s 选的那个动作","从状态 s 出发、一路按策略 π 行动，能拿到的期望（折扣）总回报"],a:3,w:"⭐ <b>每个状态得到一个数</b>（11 个状态 ⇒ 11 个数）。⚠ <b>它依赖 π</b>——换个策略这些数全变，所以价值函数永远是「某个策略的」。"});
+});
+KP("4 · ★★★ Bellman 方程：把无限的未来折成一步",function(){
+  S(697,function(){clearScene();setEq("$$V^{\\pi}(s) \\;=\\; \\underbrace{R(s)}_{\\text{立刻拿到的}} \\;+\\; \\gamma\\,\\underbrace{\\textstyle\\sum_{s'} P_{s\\pi(s)}(s')\\,V^{\\pi}(s')}_{\\text{折扣后的未来}}$$","top");
+       setCap("这是整个强化学习最核心的一个式子");
+       says("14:28","the immediate reward plus Gamma, times the expected future rewards",232);
+       note("⭐ 当前状态的价值 ＝ 立刻拿到的奖励 ＋ 折扣后的未来期望价值",640,296,"y");
+       note("⚠ 注意右边又出现了 V^π —— 它是一个「自己定义自己」的方程",640,352,"r");
+       note("而这恰恰是它的威力所在：无限长的未来被压成了「一步 + 剩下的」",640,402,"b");},"<b>★★★ 这是整个强化学习里最核心的一个式子，叫 Bellman 方程。</b><br>Ng 把它的含义说得很清楚：<b>一个状态的价值——也就是机器人在这个状态醒来时的期望总回报——等于立刻拿到的奖励，加上 γ 乘以未来奖励的期望。</b><br><b>逐项看式子</b>：<b>R(s) 是站在 s 这一刻就拿到的奖励</b>；<b>后面那一大项是「下一步会去哪儿、去了之后还能拿多少」</b>——<b>按 P_sa 对所有可能的 s′ 加权平均，再乘上折扣 γ</b>。<br><b>⚠ 注意一件怪事：等号右边又出现了 V^π。</b>这是一个<b>自己定义自己的方程</b>。<br><b>⭐ 而这恰恰是它的威力所在：一个无限长的未来，被压缩成了「走一步 + 剩下的价值」</b>，<b>而剩下的价值满足同一个方程</b>。<br><b>⇒ 这个结构让下一节那件事成为可能：把它变成一组能解的方程。</b>");
+  S(697,function(){clearScene();setEq(null);setCap("展开一层看看它为什么成立");
+       boxNode(120,185,420,54,"V^π(s) = 未来所有奖励的折扣和","b");
+       boxNode(120,250,420,54,"R(s) + γR(s₁) + γ²R(s₂) + γ³R(s₃) + ⋯","b");
+       boxNode(690,185,470,54,"把 γ 提出来","y");
+       boxNode(690,250,470,54,"R(s) + γ·[ R(s₁) + γR(s₂) + γ²R(s₃) + ⋯ ]","y");
+       note("⭐ 方括号里那一串，正好就是「从 s₁ 出发」的总回报 = V^π(s₁)",640,340,"g");
+       note("⚠ 而 s₁ 是随机的，所以要对它求期望 —— 这就得到了 Bellman 方程",640,398,"r");},"<b>Bellman 方程不是凭空来的，展开一层就能看出它为什么成立。</b><br><b>左边：V^π(s) 按定义是未来所有奖励的折扣和</b>，写开就是 <b>R(s) + γR(s₁) + γ²R(s₂) + γ³R(s₃) + ⋯</b>。<br><b>右边：把第一项之后的所有项都提一个 γ 出来</b>，得到 <b>R(s) + γ·[ R(s₁) + γR(s₂) + γ²R(s₃) + ⋯ ]</b>。<br><b>⭐ 现在看方括号里那一串——它正好就是「从 s₁ 出发」的总回报，也就是 V^π(s₁)。</b>因为折扣的幂次被重新从 0 开始数了。<br><b>⚠ 最后一步：s₁ 是随机的</b>（由 P_sa 决定），<b>所以不能直接写 V^π(s₁)，要对它求期望</b>——<b>按概率把各个可能的 s′ 的价值加权平均。</b><br><b>⇒ 这就是上一镜那个式子。</b><b>⭐ 整个推导的关键只有一步：把 γ 提出来之后，剩下的东西和原来是同一种东西。</b>");
+  SUM(697,4,{h:"★★★ Bellman 方程：V^π(s) = R(s) + γ·E[V^π(s′)]",k:"Ng：<b>一个状态的价值 ＝ 立刻拿到的奖励 ＋ γ 乘以未来奖励的期望</b>。",m:"<b>推导只有一步</b>：把 <b>R(s)+γR(s₁)+γ²R(s₂)+⋯</b> 的第一项之后<b>提出一个 γ</b>，方括号里剩下的<b>正好是「从 s₁ 出发」的总回报 = V^π(s₁)</b>（折扣幂次重新从 0 数起）。",w:"⚠ <b>s₁ 是随机的</b>（由 P_sa 决定），所以要<b>按概率对所有可能的 s′ 加权平均</b>。",e:"⭐ <b>威力所在</b>：等号右边又出现 V^π，<b>无限长的未来被压成「走一步 + 剩下的价值」</b>，而剩下的满足同一个方程。"});
+  QUIZ(697,4,{t:"Bellman 方程说的是什么？它的推导关键是哪一步？",o:["价值等于所有奖励之和；关键是无穷级数求和公式","价值等于奖励除以 1−γ；关键是等比数列","V^π(s) = R(s) + γ·E[V^π(s′)]；关键是把第一项之后提出一个 γ，剩下的正好就是「从 s₁ 出发」的总回报","价值等于最大的那个奖励；关键是取 max"],a:2,w:"⭐ 它的威力在于<b>把无限长的未来压成「走一步 + 剩下的价值」</b>。⚠ 因为 s′ 是随机的，所以是<b>按 P_sa 加权的期望</b>。"});
+});
+KP("5 · ★ 11 个状态 ⇒ 11 个方程、11 个未知数",function(){
+  S(1218,function(){clearScene();setEq(null);setCap("Bellman 方程给出的是一个线性方程组");
+       says("20:18","Bellman's equations defines a linear system of equations");
+       matrix({rows:5,cols:2,cw:420,ch:42,x:220,y:176,
+         cell:function(i,j){var t=[
+           ["每个状态写一个方程","未知数"],
+           ["V(1,1) = R(1,1) + γ·Σ…","V(1,1)"],
+           ["V(1,2) = R(1,2) + γ·Σ…","V(1,2)"],
+           ["⋮","⋮"],
+           ["V(4,3) = R(4,3) + γ·Σ…","V(4,3)"]];return t[i][j];},
+         dim:function(i,j){return i===0||i===3;}});
+       note("⭐ 11 个方程、11 个未知数，而且每个方程都是线性的",640,398,"y");},"<b>⭐ Bellman 方程真正的用处，是它给出一个能解的方程组。</b><br><b>把 11 个状态挨个代进去</b>，每个状态得到一个方程：<b>V(1,1) = R(1,1) + γ·Σ…、V(1,2) = …，一直到最后一个状态</b>。<br><b>⭐ 现在换个视角看：如果 π 是给定的，那么 R、γ、P_sa 全是已知的，唯一不知道的就是那 11 个 V 值。</b><br><b>⇒ 于是这是 11 个方程、11 个未知数。</b><b>而且关键是——每个方程都是线性的</b>（V 只以一次方出现，前面乘的都是常数）。<br><b>Ng 的说法是：Bellman 方程定义了一个线性方程组。</b><br><b>⇒ 所以可以直接用线性求解器解出来，不需要任何迭代。</b><b>⚠ 记住这一点，后面讲策略迭代时它是关键：策略迭代每一轮都要解一次这个方程组，这正是它在大状态空间上变慢的原因。</b>");
+  S(1218,function(){clearScene();setEq("$$V^{\\pi}(3,1) \\;=\\; R(3,1) \\;+\\; \\gamma\\!\\!\\sum_{s'} P_{(3,1)\\,\\pi(3,1)}(s')\\,V^{\\pi}(s')$$","top");
+   setCap("Ng 在课上挑的那一个方程");
+   note("① 左边是未知数之一",640,266,"b");
+   note("② 右边的 Σ 里又出现了别的未知数（邻居的 V）",640,318,"b");
+   note("⭐ 所以 11 个方程是互相耦合的 —— 必须一起解，不能一个一个来",640,370,"y");
+   note("Ng 的说法：把 11 个 V 排成一个 11 维向量，一次解出来",640,402,"g");},"<b>把 Ng 在课上挑出来的那一个方程单独看，耦合关系就清楚了。</b><br><b>左边 V^π(3,1) 是未知数之一。</b><br><b>右边那个求和里，出现的是邻居格子的 V 值——它们同样是未知数。</b><br><b>⭐ 所以这 11 个方程是互相耦合的：每一个都牵扯着别的几个。</b><b>⚠ 这意味着不能一个一个地解——你没法先把 V(3,1) 单独算出来，因为算它需要先知道邻居的值，而邻居的值又需要知道它。</b><br><b>Ng 给出的处理方式是：把 11 个 V 值排成一个 11 维向量，然后一次性解出整个向量。</b><br><b>⇒ 这正是线性代数擅长的事，也正是「线性方程组」这个说法的实际含义。</b>");
+  SUM(1218,5,{h:"★ Bellman 方程 ⇒ 线性方程组，可直接解",k:"把 11 个状态挨个代入 Bellman 方程，得到 <b>11 个方程</b>；给定 π 时 <b>R、γ、P_sa 全已知</b>，未知的只有那 <b>11 个 V 值</b>。",m:"⭐ <b>每个方程都是线性的</b>（V 只以一次方出现，系数都是常数）⇒ Ng：<b>Bellman 方程定义了一个线性方程组</b>。",w:"⇒ <b>可以直接用线性求解器解出来，不需要迭代。</b>",e:"⚠ <b>记住这点</b>：<b>策略迭代每轮都要解一次这个方程组</b>，这正是它在大状态空间上变慢的原因。"});
+  QUIZ(1218,5,{t:"给定策略 π 时，怎么求出 V^π？",o:["对所有策略取 max","把每个状态代入 Bellman 方程，得到 11 个线性方程、11 个未知数，用线性求解器直接解","只能靠反复模拟取平均","用梯度下降最小化误差"],a:1,w:"⭐ 之所以是<b>线性</b>的，是因为 V 只以一次方出现、系数都是常数。⚠ <b>策略迭代每轮都要解一次它</b>，这是它在大状态空间上变慢的原因。"});
+});
+KP("6 · ⚠ 两种价值函数：V^π 和 V*",function(){
+  S(1540,function(){clearScene();setEq("$$V^{*}(s) \\;=\\; \\max_{\\pi}\\; V^{\\pi}(s)$$","top");
+       setCap("Ng 说这是术语上最容易混的地方");
+       says("25:40","there are two types of value function",214);
+       matrix({rows:3,cols:2,cw:430,ch:46,x:210,y:246,
+         cell:function(i,j){var t=[
+           ["名字","是什么"],
+           ["V^π","某一个具体策略的价值（那个策略可能很烂）"],
+           ["V*","最优价值函数：所有策略里取最大"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 两个都叫「价值函数」，但说的是完全不同的两件事",640,398,"y");},"<b>⚠ Ng 在这里专门停下来提醒：强化学习的术语里有一个容易混淆的地方——有两种价值函数。</b><br><b>第一种是 V^π，某一个具体策略的价值函数。</b>Ng 特意说明：<b>那个策略可能很好，也可能很糟，也可能正好是最优的</b>——<b>V^π 只是忠实地报告「按这个策略走能拿多少」。</b><br><b>第二种是 V*，最优价值函数。</b><b>它的定义是：在所有可能的策略里，取价值最大的那个。</b><br><b>⭐ 注意 max 是对「策略」取的，而且是对每个状态分别取。</b><b>所以 V*(s) 的含义是：如果从 s 出发并且此后一直做得最好，最多能拿多少。</b><br><b>⚠ 两个都叫「价值函数」，但说的是完全不同的两件事</b>——<b>看到符号时一定要先看清上标是 π 还是星号。</b><br><b>⭐ 下一节会看到，V* 满足的 Bellman 方程和 V^π 的不一样。</b>");
+  S(1540,function(){clearScene();setEq(null);setCap("一个记号上的分辨法");
+   boxNode(130,196,470,58,"看到 V 带上标 π","b");
+   boxNode(130,264,470,58,"问：是哪个策略？换个策略这些数就变","b");
+   boxNode(690,196,470,58,"看到 V 带星号","y");
+   boxNode(690,264,470,58,"它是唯一的，和任何具体策略无关","y");
+   note("⭐ V^π 有无穷多个（每个策略一个）；V* 只有一个",640,348,"y");
+   note("⚠ 而 V* 又恰好等于某一个 V^π —— 就是 π* 的那一个",640,398,"r");},"<b>给一个实用的分辨法。</b><br><b>看到 V 带上标 π，就问自己「是哪个策略」</b>——<b>换一个策略，这一组数就全变了。</b><br><b>看到 V 带星号，就知道它是唯一的</b>，<b>和任何具体策略都无关，它只取决于这个 MDP 本身。</b><br><b>⭐ 数量上的对比很说明问题：V^π 有无穷多个（严格说是和策略一样多，4¹¹ 个），而 V* 只有一个。</b><br><b>⚠ 但这两者之间有一座桥：V* 又恰好等于某一个 V^π——就是最优策略 π* 的那一个。</b><br><b>⇒ 这正是后面那条「V*(s) = V^{π*}(s)」说的事。</b><b>所以它们既是两个不同的概念，又在最优处重合。把这两点同时记住，就不会乱。</b>");
+  SUM(1540,6,{h:"⚠ V^π 与 V*：两种价值函数别混",k:"⚠ Ng 专门提醒<b>这是术语上最容易混的地方</b>。",m:"<b>V^π</b>：某一个<b>具体策略</b>的价值（Ng 强调那个策略<b>可能很好也可能很糟</b>），它只忠实报告「按这个策略走能拿多少」。",w:"<b>V*</b>：<b>最优价值函数</b>，定义为 <b>max over π 的 V^π(s)</b>——⭐ <b>max 是对「策略」取的，而且对每个状态分别取</b>。",e:"⭐ <b>V*(s) 的含义</b>：从 s 出发、此后一直做得最好，最多能拿多少。⚠ <b>看符号先看上标是 π 还是星号。</b>"});
+  QUIZ(1540,6,{t:"V^π 和 V* 的区别是什么？",o:["V^π 用于离散状态，V* 用于连续状态","V* 是 V^π 的平均","V^π 是期望，V* 是方差","V^π 是某一个具体策略的价值（可能很糟）；V* 是在所有策略里取最大，即最优价值函数"],a:3,w:"⚠ Ng 专门说<b>这是术语上最容易混的地方</b>。⭐ 注意 <b>max 是对「策略」取的，而且对每个状态分别取</b>。"});
+});
+KP("7 · ★ V* 的 Bellman 方程：多了一个 max",function(){
+  S(1540,function(){clearScene();setEq("$$V^{*}(s) \\;=\\; R(s) \\;+\\; \\max_{a \\in A}\\; \\gamma \\textstyle\\sum_{s'} P_{sa}(s')\\,V^{*}(s')$$","top");
+       setCap("和 V^π 的那个只差一处");
+       boxNode(130,250,470,58,"V^π：动作由 π 定死 ⇒ 没得选","b");
+       boxNode(690,250,470,58,"V*：可以挑最好的动作 ⇒ 取 max","y");
+       note("⭐ 这个 max 正是「最优」二字的全部来源",640,342,"y");
+       note("⚠ 注意 max 在 γΣ 前面：先算出每个动作的期望未来价值，再挑最大的",640,398,"r");},"<b>V* 也满足一个 Bellman 方程，但和 V^π 的那个有一处关键差别。</b><br><b>V^π 的式子里，动作是由策略 π 定死的</b>——<b>站在 s 就只能做 π(s)，没得选，所以直接用 P_{sπ(s)}。</b><br><b>⭐ 而 V* 说的是「做得最好」，所以可以挑动作：对每个可能的动作 a 算一遍期望未来价值，然后取最大的那个。</b><br><b>⇒ 式子里就多了一个 max over a。</b><b>这个 max 正是「最优」二字的全部来源。</b><br><b>⚠ 注意 max 的位置：它在 γΣ 的前面、R(s) 的后面。</b>意思是——<b>立刻拿到的奖励 R(s) 跟你选什么动作无关（它只取决于你站在哪儿）</b>，<b>而未来的部分才取决于你怎么选</b>。<br><b>⭐ 所以读法是：先对每个动作算出它的期望未来价值，再挑最大的那个，最后加上 R(s)。</b>");
+  S(1540,function(){clearScene();setEq(null);setCap("两个式子逐项对照");
+   matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:192,
+     cell:function(i,j){var t=[
+       ["","V^π 的方程","V* 的方程"],
+       ["即时奖励","R(s)","R(s)　（一样）"],
+       ["动作","由 π(s) 定死","★ max over a　（可以挑）"],
+       ["未来","γ Σ P_{sπ(s)}(s′) V^π(s′)","γ Σ P_sa(s′) V*(s′)"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return (i===2&&j===2)?"hl":"";}});
+   note("⭐ 全部差别只有一行：动作是被定死的，还是可以挑的",640,398,"y");},"<b>把两个 Bellman 方程逐项摆开，差别就只剩一行了。</b><br><b>即时奖励那一项：完全一样，都是 R(s)。</b>因为<b>站在哪儿就拿多少，和策略无关。</b><br><b>未来那一项：形式也一样，都是「按转移概率对邻居的价值加权平均，再乘 γ」。</b><br><b>⭐ 唯一的差别在动作那一行：V^π 里动作由 π(s) 定死，所以转移概率的下标是 P_{sπ(s)}；而 V* 里可以挑动作，所以出现 max over a，下标是 P_sa。</b><br><b>⚠ 这个差别带来一个重要后果：V^π 的方程是线性的（可以直接解），而 V* 的方程因为有 max 就不是线性的了。</b><br><b>⇒ 这正是为什么 V* 要靠值迭代一轮一轮逼近，而 V^π 可以一次解出来。</b><b>也正是策略迭代能用线性求解器的原因。</b>");
+  SUM(1540,7,{h:"★ V* 的 Bellman 方程：多一个 max over a",k:"<b>V^π</b>：动作由 π <b>定死</b>，没得选 ⇒ 直接用 P_{sπ(s)}。",m:"⭐ <b>V*</b> 说的是「做得最好」⇒ <b>对每个动作 a 算一遍期望未来价值，取最大的</b>。<b>这个 max 正是「最优」二字的全部来源。</b>",w:"⚠ <b>max 的位置</b>：在 γΣ 前面、R(s) 后面——<b>R(s) 跟选什么动作无关（只取决于你站在哪儿）</b>，<b>未来的部分才取决于怎么选</b>。",e:"⭐ <b>读法</b>：先对每个动作算期望未来价值 → 挑最大的 → 再加上 R(s)。"});
+  QUIZ(1540,7,{t:"V* 的 Bellman 方程和 V^π 的差在哪里？",o:["多了一个 max over a：V^π 的动作由 π 定死，而 V* 可以挑最好的动作","V* 的方程不含 R(s)","差一个折扣因子 γ","V* 的方程是非线性的，因为含有平方项"],a:0,w:"⚠ 注意 <b>max 在 γΣ 前面、R(s) 后面</b>：<b>R(s) 只取决于你站在哪儿，与选什么动作无关</b>；未来的部分才取决于怎么选。"});
+});
+KP("8 · ★★ 从 V* 到 π*：一个 argmax",function(){
+  S(2069,function(){clearScene();setEq("$$\\pi^{*}(s) \\;=\\; \\arg\\max_{a \\in A}\\; \\textstyle\\sum_{s'} P_{sa}(s')\\,V^{*}(s')$$","top");
+       setCap("把 max 换成 argmax 就得到策略");
+       says("34:29","use the argmax equation to find Pi star",214);
+       note("max 问「最大值是多少」　argmax 问「是哪个动作取到的」",640,276,"b");
+       note("⭐ 所以求最优策略只有两步：① 先求 V*　② 再对每个状态取 argmax",640,334,"y");
+       note("⚠ 注意这里不需要 R(s) —— 它对所有动作都一样，比大小时会抵消",640,398,"r");},"<b>有了 V*，最优策略就几乎是白送的。</b><br><b>回忆上一节：V* 的方程里那个 max 问的是「最大值是多少」。</b><b>⭐ 而我们真正想要的是「是哪个动作取到了这个最大值」——那就是 argmax。</b><br><b>所以 π*(s) 就定义成：让期望未来价值最大的那个动作。</b>Ng 把整个策略总结成两步：<b>第一，求出 V*；第二，用 argmax 的式子求出 π*。</b><br><b>⚠ 注意一个细节：这个式子里没有 R(s)，也没有 γ。</b>为什么可以省掉？<b>因为 R(s) 只取决于你站在哪一格，对所有动作都是同一个数；γ 也是同一个正数。</b><b>⇒ 比较不同动作的大小时，它们会一起抵消，不影响谁最大。</b><br><b>⭐ 这一节把整个问题收口了：只要能算出 V*，最优策略就能立刻读出来。</b><b>⇒ 剩下的唯一问题是：V* 怎么算？下一节的值迭代就是答案。</b>");
+  S(2069,function(){clearScene();setEq(null);setCap("在一个格子上实际走一遍");
+   boxNode(120,196,250,52,"往北 → 算出 0.676","b");
+   boxNode(390,196,250,52,"往南 → 算出 0.61","b");
+   boxNode(660,196,250,52,"往东 → 算出 0.65","b");
+   boxNode(930,196,250,52,"★ 往西 → 算出 0.740","y");
+   note("↓ 四个数里挑最大的那一个对应的动作",640,280,"d");
+   boxNode(430,320,420,56,"π*(这一格) = 往西","g");
+   note("⭐ argmax 返回的是「动作」，不是那个数值本身",640,402,"y");},"<b>把 argmax 在一个具体格子上走一遍，就不抽象了。</b><br><b>对这一格的四个动作各算一遍期望未来价值：往北 0.676、往南 0.61、往东 0.65、往西 0.740。</b><br><b>然后挑最大的那一个——是往西。</b><b>⇒ 所以 π*(这一格) = 往西。</b><br><b>⭐ 注意 argmax 返回的是「动作」，不是那个数值本身。</b><b>数值 0.740 是 max 给出的，动作「往西」才是 argmax 给出的。</b>这正是上一镜说的那个区别。<br><b>⚠ 再强调一遍 Ng 的严谨之处：四个方向都要算，不能只比你猜的那两个。</b><br><b>⭐ 而这一整套计算，对 11 个格子各做一遍，就得到了完整的最优策略——也就是 L16 里那张布满箭头的图。</b>");
+  SUM(2069,8,{h:"★★ π*(s) = argmax over a 的期望未来价值",k:"<b>max 问「最大值是多少」，argmax 问「是哪个动作取到的」</b>——我们要的是后者。",m:"⭐ Ng 把求最优策略总结成<b>两步</b>：<b>① 先求出 V* ② 再对每个状态取 argmax</b>。",w:"⚠ <b>式子里没有 R(s) 也没有 γ</b>：R(s) <b>只取决于你站在哪一格，对所有动作是同一个数</b>，γ 也是同一个正数 ⇒ <b>比大小时一起抵消</b>。",e:"⭐ <b>问题收口了</b>：只要能算出 V*，最优策略就能立刻读出来。⇒ 剩下的唯一问题是 <b>V* 怎么算</b>。"});
+  QUIZ(2069,8,{t:"已知 V* 之后，怎么得到最优策略 π*？",o:["对所有策略逐一评估后比较","把 V* 归一化成概率分布","对每个状态取 argmax：挑出让期望未来价值最大的那个动作","再跑一次 Bellman 方程"],a:2,w:"⚠ 式子里<b>不需要 R(s) 和 γ</b>——它们对所有动作都是同一个数，<b>比大小时会抵消</b>。⭐ 所以求最优策略就是<b>先求 V*、再取 argmax</b>两步。"});
+});
+KP("9 · ★★★ 一个策略同时在所有状态上最优",function(){
+  S(1996,function(){clearScene();setEq("$$V^{*}(s) \\;=\\; V^{\\pi^{*}}(s) \\;\\ge\\; V^{\\pi}(s) \\qquad \\text{对每个 } \\pi \\text{、每个 } s$$","top");
+       setCap("这件事比看上去不显然得多");
+       says("33:16","for every policy Pi in every state S",214);
+       note("⭐ 注意「对每个 s」这四个字 —— 同一个 π* 在所有状态上同时取到最大",640,278,"y");
+       note("⚠ 先验地看完全可能不是这样：",640,334,"r");
+       note("从 A 出发最好的策略，和从 B 出发最好的策略，本来可以是两个不同的策略",640,398,"r");},"<b>⭐ 这是这一讲里最容易被一带而过、但其实很不显然的一件事。</b><br><b>式子说的是：V*(s) 等于 V^{π*}(s)，而且对每一个策略 π、每一个状态 s，它都大于等于 V^π(s)。</b><br><b>⚠ 要紧的是「对每个 s」这四个字。</b>它的意思是——<b>存在同一个策略 π*，它在所有状态上同时取到最大值。</b><br><b>⭐ 为什么说这不显然？</b>回想 V* 的定义：<b>V*(s) = max over π 的 V^π(s)，这个 max 是对每个状态分别取的。</b><b>⚠ 先验地看，完全可能出现这种情况：从 A 格出发最好的策略是某一个 π₁，从 B 格出发最好的却是另一个 π₂。</b><b>那样的话就不存在「一个最优策略」，只有「每个起点各自的最优策略」。</b><br><b>⇒ 而这条性质保证了这种尴尬不会发生。</b><b>整个「求一个最优策略」的说法，正是立在它上面。</b>");
+  S(1996,function(){clearScene();setEq(null);setCap("⚠ Ng 自己说了：他没有证明这一条");
+       says("32:55","I am just claiming this. I am not proving this");
+       boxNode(150,205,440,70,"Ng 在课上","b");
+       boxNode(760,205,440,70,"「我只是断言，没有证明」","y");
+       link(590,240,760,240);
+       note("⭐ 这是个好习惯：把「讲过的」和「证过的」分清楚",640,320,"y");
+       note("⚠ 考试时别把它当成课上推导过的结论去写推导过程",640,392,"r");},"<b>⚠ 这里有一点值得单独说：Ng 在课上明确讲了「我只是断言这件事，我没有证明它」。</b><br><b>⭐ 这其实是个很好的习惯——把「我告诉你的」和「我证给你看的」分清楚。</b><br><b>对你的实际意义有两点。</b><b>第一，考试或作业里引用这条性质时，它是一个可以直接用的已知结论，但别假装自己推导过它</b>——<b>课上确实没有推导。</b><br><b>第二，知道哪些是未证明的断言，你才知道自己真正理解到了哪一层。</b><br><b>⚠ 顺带说一句它为什么是对的（直觉上的）：Bellman 的那个 max 是在每个状态上「逐点」取最优动作的，而这种逐点的贪心选择之所以能拼成一个全局最优策略，正是 MDP 这个结构特有的好性质。</b><b>严格证明属于动态规划理论，CS229 没展开。</b>");
+  SUM(1996,9,{h:"★★★ 同一个 π* 在所有状态上同时最优",k:"<b>V*(s) = V^{π*}(s) ≥ V^π(s)，对每个 π、每个 s</b>。⭐ 要紧的是<b>「对每个 s」</b>——<b>存在同一个 π*，在所有状态上同时取到最大</b>。",m:"⚠ <b>为什么不显然</b>：V* 的 max 是<b>对每个状态分别取的</b>。先验地看完全可能<b>从 A 出发最好的是 π₁、从 B 出发最好的是 π₂</b>，那就不存在「一个最优策略」。",w:"⇒ <b>这条性质保证了这种尴尬不会发生</b>，整个「求一个最优策略」的说法就立在它上面。",e:"⚠ <b>Ng 明说「我只是断言，没有证明」</b>——引用时可以直接用，<b>但别假装课上推导过</b>。严格证明属于动态规划理论。"});
+  QUIZ(1996,9,{t:"「V*(s) = V^{π*}(s) 对每个 s 成立」这件事为什么不显然？",o:["因为 V* 可能是无穷大","因为策略数是指数级的，无法验证","V* 的 max 是对每个状态分别取的，先验地可能不同起点各有各的最优策略；这条性质保证了存在同一个 π* 在所有状态上同时最优","因为 γ<1 时级数才收敛"],a:2,w:"⚠ <b>Ng 在课上明说他只是断言、没有证明</b>。⭐ 整个「求一个最优策略」的说法正是立在这条性质上。"});
+});
+KP("10 · ★★★ 值迭代：反复用 Bellman 方程更新",function(){
+  S(2179,function(){clearScene();setEq(null);setCap("算法本身只有三行");
+       says("36:19","you initialize the estimated value of every state to 0");
+       boxNode(170,195,980,56,"① 把每个状态的 V(s) 初始化为 0","b");
+       boxNode(170,263,980,56,"② 对每个 s：V(s) ← R(s) + max_a γ Σ P_sa(s′) V(s′)","y");
+       boxNode(170,331,980,56,"③ 重复 ② 直到不再变化","g");
+       note("⭐ 就是「把 Bellman 方程当成赋值语句，反复执行」",640,398,"y");},"<b>★★★ 值迭代是求 V* 的算法，而它本身只有三行。</b><br><b>第一步：把每个状态的价值估计初始化为 0。</b>Ng 的原话就是这句。<b>⚠ 注意初始值是随便定的——0 只是最方便，换成别的数也能收敛。</b><br><b>第二步：对每个状态，用 V* 的 Bellman 方程去更新它的估计值。</b><br><b>第三步：重复第二步，直到数值不再变化。</b><br><b>⭐ 一句话概括：把 Bellman 方程当成赋值语句，反复执行。</b><br><b>为什么这样能行？</b>直觉是这样的：<b>第一轮之后，每个状态的估计值反映的是「只考虑眼前一步」的价值；第二轮之后反映两步；第三轮三步……</b><b>⇒ 轮数越多，看得越远，而 γ 的折扣让很远的部分越来越不重要，所以它会稳定下来。</b><br><b>⚠ 下一节讲第二步里一个容易被忽略、但实现时必须想清楚的细节。</b>");
+  S(2179,function(){clearScene();setEq(null);setCap("前几轮在发生什么");
+       matrix({rows:5,cols:3,cw:330,ch:42,x:155,y:172,
+         cell:function(i,j){var t=[
+           ["轮数","估计值反映的是","网格世界里"],
+           ["初始","全是 0","什么都不知道"],
+           ["第 1 轮","只看眼前一步","只有 +1 和 −1 旁边的格子有了值"],
+           ["第 2 轮","看两步","值开始向外扩散一圈"],
+           ["⋯ 之后","看得越来越远","⭐ 直到每一格都反映「最终能拿多少」"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===4?"hl":"";}});
+       note("⚠ γ 的折扣让很远的部分越来越不重要 —— 这正是它会停下来的原因",640,398,"r");},"<b>把前几轮摊开看，值迭代在干什么就很直观了。</b><br><b>初始时全是 0——什么都不知道。</b><br><b>第一轮之后</b>，只有<b>紧挨着 +1 和 −1 的那几格</b>有了非零的值，因为只有它们能「一步之内」碰到奖励。<br><b>第二轮之后</b>，<b>这些值开始向外扩散一圈</b>——<b>离奖励两步远的格子，通过邻居间接知道了那边有东西。</b><br><b>⇒ 可以把它想成：奖励的信息从 +1 和 −1 那两格开始，一轮一圈地往外渗。</b><br><b>⚠ 那它为什么会停下来，而不是一直变？因为 γ 的折扣。</b><b>每往外扩散一圈，带来的新信息都要再乘一次 γ</b>，<b>所以很远处的影响越来越小，直到小到可以忽略。</b><br><b>⭐ 这也解释了下一节那件事：γ 越接近 1，衰减越慢，需要的轮数就越多。</b>");
+  SUM(2179,10,{h:"★★★ 值迭代：把 Bellman 方程当赋值语句反复执行",k:"<b>① 每个状态的 V(s) 初始化为 0</b>（⚠ 初值随便，0 只是方便）<b>② V(s) ← R(s) + max_a γΣP_sa(s′)V(s′) ③ 重复到不变</b>。",m:"⭐ <b>每轮在干什么</b>：第 1 轮只反映「眼前一步」⇒ 只有 +1/−1 旁边的格子有值；第 2 轮反映两步，值<b>向外扩散一圈</b>……",w:"⇒ 可以想成：<b>奖励的信息从 +1 和 −1 那两格开始，一轮一圈往外渗</b>。",e:"⚠ <b>为什么会停下来</b>：每扩散一圈就要再乘一次 γ，<b>远处的影响越来越小</b>。⭐ 所以 <b>γ 越接近 1，需要的轮数越多</b>。"});
+  QUIZ(2179,10,{t:"值迭代做的是什么？它为什么会收敛？",o:["枚举所有策略取最好的；因为策略数有限","把 Bellman 方程当赋值语句反复执行；每多一轮就多看一步未来，而 γ 的折扣让远处影响越来越小","解一次线性方程组；因为方程组有唯一解","用梯度下降最小化误差；因为目标函数是凸的"],a:1,w:"⭐ 直观图景：<b>奖励的信息从 +1 和 −1 那两格开始，一轮一圈往外渗</b>。⚠ 初始值随便定，<b>0 只是最方便</b>。"});
+});
+KP("11 · ⚠ 同步更新 vs 异步更新",function(){
+  S(2313,function(){clearScene();setEq(null);setCap("一个实现上必须想清楚的细节");
+       says("38:33","that is called a synchronous update");
+       boxNode(120,195,470,58,"同步：算完全部 11 个","b");
+       boxNode(120,263,470,58,"再一起替换掉旧的 11 个","b");
+       boxNode(690,195,470,58,"异步：算一个就立刻覆盖一个","y");
+       boxNode(690,263,470,58,"后面的计算会用上刚更新的值","y");
+       note("⭐ Ng：两种都收敛，而多数人用异步",640,350,"y");
+       note("⚠ 差别在于算到第 11 个时，它用的邻居值是新的还是旧的",640,398,"r");},"<b>第二步「对每个状态更新」里藏着一个实现细节：更新的顺序怎么安排。</b><br><b>同步更新：把 11 个状态的新值全部算完，再一起替换掉旧的那 11 个。</b>也就是说<b>整轮计算用的都是上一轮的值</b>。<br><b>异步更新：算出一个就立刻覆盖一个。</b>于是<b>算第二个状态时，用的邻居值里已经有刚刚更新过的了</b>。<br><b>⚠ 差别就在这里：算到第 11 个状态时，它引用的邻居值，是这一轮的新值还是上一轮的旧值。</b><br><b>⭐ Ng 的结论很干脆：两种都能工作，值迭代用同步或异步都收敛，而多数人用异步。</b><br><b>为什么偏好异步？因为它省内存（不用存两份），而且新信息传播得更快——刚算出来的改进立刻就能被用上。</b>");
+  S(2313,function(){clearScene();setEq(null);setCap("用两个格子看清差别");
+   matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["","同步","异步"],
+       ["先算 V(A)","用旧的邻居值","用旧的邻居值"],
+       ["再算 V(B)（B 的邻居含 A）","⚠ 仍用旧的 V(A)","★ 用刚算出的新 V(A)"],
+       ["本轮结束","一起替换 11 个","已经边算边换完了"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return (i===2&&j===2)?"hl":"";}});
+   note("⭐ 所以异步相当于「本轮的改进立刻就能被本轮后面用上」",640,398,"y");},"<b>用两个格子就能把差别看清楚。</b><br><b>假设先算 A 再算 B，而且 B 的邻居里包含 A。</b><br><b>算 V(A) 时：两种方式都用旧的邻居值，没区别。</b><br><b>⭐ 算 V(B) 时差别出现了：同步方式仍然用旧的 V(A)，因为新值还没替换进去；异步方式用的是刚刚算出来的新 V(A)。</b><br><b>⇒ 所以异步相当于「本轮的改进立刻就能被本轮后面的计算用上」。</b><b>这就是它传播得更快的原因。</b><br><b>⚠ 那为什么还要讲同步？因为它在数学上更好分析</b>——<b>整轮更新可以写成「新向量 = 某个算子作用在旧向量上」，证明收敛时这种形式干净得多。</b><b>Ng 讲收敛性时用的就是这个写法。</b>");
+  SUM(2313,11,{h:"⚠ 同步更新 vs 异步更新",k:"<b>同步</b>：全部 11 个新值算完，<b>再一起替换</b>——整轮用的都是上一轮的值。",m:"<b>异步</b>：<b>算一个就立刻覆盖一个</b>，后面的计算会用上刚更新的值。",w:"⚠ <b>差别</b>：算到第 11 个时，它引用的邻居值<b>是这一轮的新值还是上一轮的旧值</b>。",e:"⭐ Ng：<b>两种都收敛，多数人用异步</b>。<b>异步省内存（不用存两份），而且新信息传播更快</b>。"});
+  QUIZ(2313,11,{t:"值迭代里同步更新和异步更新的区别及取舍？",o:["同步是全部算完再一起替换，异步是算一个覆盖一个；两种都收敛，多数人用异步（省内存、信息传得快）","同步正确、异步会发散，所以必须用同步","异步只能用于连续状态","同步更快，异步更准"],a:0,w:"⚠ 差别在于<b>算到第 11 个状态时，它引用的邻居值是新的还是旧的</b>。⭐ Ng 明确说<b>两种都能工作</b>。"});
+});
+KP("12 · 收敛有多快：γ 决定一切",function(){
+  S(2633,function(){clearScene();setEq(null);setCap("误差按比例往下掉");
+       says("43:53","this algorithm actually converges quite quickly");
+       axes({x0:260,x1:1020,y0:370,y1:190});
+       curve(decay(290,990,368,170,2.6),"g");
+       curve(decay(290,990,368,170,0.55),"y");
+       note("γ = 0.9：十几到几十轮就很接近了",470,218,"g");
+       note("γ = 0.99：要几百轮",880,270,"y");
+       note("⭐ 误差每一轮按一个固定比例缩小 —— 所以是指数级下降",640,398,"y");},"<b>值迭代收敛得有多快？Ng 说：相当快。</b><br><b>机制是这样的：每迭代一轮，误差就按一个固定的比例缩小。</b><b>⭐ 固定比例的缩小意味着指数级下降</b>——<b>这就是图上两条曲线的形状。</b><br><b>而那个比例由 γ 决定。</b>Ng 给了很具体的数：<b>γ = 0.9 时，十几到几十轮就已经很接近 V* 了；γ = 0.99 时，需要一百多到几百轮。</b><br><b>⚠ 为什么 γ 越大越慢？</b>回到上一节那个图景：<b>γ 控制着「信息往外渗一圈要衰减多少」</b>。<b>γ 接近 1 意味着衰减很慢，很远处的奖励也还有分量，所以必须多渗几圈才能稳定。</b><br><b>⭐ 反过来说，γ 小的时候算法很短视，但也收敛得很快。</b><b>这是一个实实在在的权衡，不只是理论。</b>");
+  S(2633,function(){clearScene();setEq(null);setCap("γ 的权衡，两头都有代价");
+   matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["γ","收敛速度","策略的性格"],
+       ["0.9","快（几十轮）","⚠ 短视：只顾近处的奖励"],
+       ["0.99","慢（几百轮）","看得长远"],
+       ["★ 怎么选","","看你的问题需要看多远"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 关键：γ 不是一个「调快点」的旋钮 —— 它会改变最优策略本身",640,398,"y");},"<b>把 γ 的两头代价摆出来。</b><br><b>γ = 0.9：收敛快，几十轮搞定；但策略短视，只顾近处的奖励。</b><br><b>γ = 0.99：收敛慢，要几百轮；但策略看得长远。</b><br><b>⭐ 这里有一个必须说清楚的要点：γ 不是一个「嫌慢就调小点」的性能旋钮。</b><br><b>⚠ 它会改变最优策略本身。</b>想想网格世界：<b>γ 很小的时候，远处那个 +1 被折扣得几乎没有分量，机器人就没什么动力跑过去；而每走一步的小惩罚是立刻生效的。</b><b>⇒ 极端情况下它可能干脆原地不动。</b><br><b>⇒ 所以 γ 是问题定义的一部分，不是求解器的参数。</b><b>该怎么选，取决于你的问题真正需要看多远。</b>");
+  SUM(2633,12,{h:"收敛速度：误差按固定比例缩小，γ 决定快慢",k:"Ng：<b>这个算法收敛得相当快</b>。<b>每迭代一轮，误差按一个固定比例缩小</b> ⇒ ⭐ <b>指数级下降</b>。",m:"<b>具体的数</b>：<b>γ = 0.9 ⇒ 十几到几十轮</b>就很接近 V*；<b>γ = 0.99 ⇒ 要一百多到几百轮</b>。",w:"⚠ <b>为什么 γ 越大越慢</b>：γ 控制「信息往外渗一圈衰减多少」，<b>接近 1 时衰减很慢、远处奖励仍有分量</b>，必须多渗几圈。",e:"⭐ <b>反过来</b>：γ 小则算法短视，但<b>收敛很快</b>——这是实实在在的权衡。"});
+  QUIZ(2633,12,{t:"值迭代的收敛速度由什么决定？",o:["初始值离 V* 有多远","状态数：状态越多越慢","动作数的多少","折扣因子 γ：误差每轮按固定比例缩小，γ=0.9 要几十轮，γ=0.99 要几百轮"],a:3,w:"⚠ 机理：<b>γ 控制信息往外渗一圈要衰减多少</b>，接近 1 时衰减慢，<b>必须多渗几圈</b>。⭐ γ 小则短视但收敛快，是实在的权衡。"});
+});
+KP("13 · ★★★ 兑现悬念：往西 0.740，往北 0.676",function(){
+  S(2884,function(){clearScene();setEq(null);setCap("上一讲那个「光看看不出来」的格子");
+       says("48:04","if you tend to go west, you end up with a 0.740 as expected future rewards");
+       grid(400,196,130,54,4,3,function(i,j){
+         if(i===1&&j===1) return ["墙","d"];
+         if(i===3&&j===0) return ["+1","g"];
+         if(i===3&&j===1) return ["−1","r"];
+         if(i===2&&j===2) return ["？","y"];
+         return ["",""];});
+       note("黄色这格要在「往北」和「往西」之间做决定",640,172,"y");
+       note("⭐ 算完 V* 之后，这件事不再需要猜 —— 两个数直接比就行",640,398,"y");},"<b>⭐ 现在可以兑现 L16 结尾留下的那个悬念了。</b><br><b>当时 Ng 指着这一格说：这里到底该往北还是往西，其实并不显然</b>——<b>往北是近路但可能滑进 −1，往西安全但路更长、折扣更重、沿途一直在扣分。</b><b>他说「这个很难光用眼睛看出来、做个判断」。</b><br><b>而现在我们有了工具：先用值迭代算出 V*，得到 11 个状态各自的最优价值；然后对这一格的每个动作，用 argmax 那个式子算一遍期望未来价值。</b><br><b>⇒ 两个数一比，答案就出来了，不需要任何直觉。</b><br><b>下一镜把 Ng 在课上写的那两个算式完整摆出来。</b>");
+  S(2905,function(){clearScene();setEq(null);setCap("两个加权平均，逐项对照");
+       says("48:25","You find that this is equal to 0.676");
+       matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:186,
+         cell:function(i,j){var t=[
+           ["","往西（绕路）","往北（近路）"],
+           ["0.8 的概率 按命令走到","0.8 × 0.75","0.8 × 0.69"],
+           ["各 0.1 的概率 偏到两侧","0.1 × 0.69 ＋ 0.1 × 0.71","0.1 × 0.75 ＋ 0.1 × 0.49"],
+           ["期望未来回报","★ 0.740","0.676"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===3&&j===1)?"hl":"";}});
+       note("⚠ Ng 补了一句严谨的：实际上东南西北四个方向都要算一遍再比",640,398,"r");},"<b>把两个算式摆在一起，逐项对照。</b><br><b>往西：0.8 的概率真的走到西边那格（它的 V* 是 0.75）；各 0.1 的概率偏到两侧</b>——<b>一侧偏向北（0.69），另一侧往南撞墙弹回来（0.71）</b>。<b>加权平均得到 0.740。</b><br><b>往北：0.8 的概率走到北边那格（0.69）；各 0.1 的概率偏到两侧（0.75 和 0.49）。加权平均得到 0.676。</b><br><b>⭐ 0.740 明显高于 0.676 ⇒ 往西（绕路）才是最优动作。</b>这正是 L16 里那张图上箭头朝左的原因。<br><b>⚠ 注意往北那一列里的 0.49</b>——<b>那是因为偏过去的方向离 −1 更近，价值被陷阱拉低了。</b><b>风险就是这样被定量地算进去的。</b><br><b>⚠ Ng 还补了一句很严谨的话：实际上东南西北四个方向都要各算一遍再比，才能确定往西确实最高。</b>");
+  SUM(2884,13,{h:"★★★ 0.740 对 0.676：绕路确实更优",k:"<b>往西</b>：0.8×0.75 ＋ 0.1×0.69 ＋ 0.1×0.71 = <b>0.740</b>（偏到两侧分别是往北、和往南撞墙弹回）。",m:"<b>往北</b>：0.8×0.69 ＋ 0.1×0.75 ＋ 0.1×0.49 = <b>0.676</b>。⭐ <b>0.740 > 0.676 ⇒ 往西（绕路）是最优动作。</b>",w:"⚠ <b>注意往北那列里的 0.49</b>：偏过去的方向<b>离 −1 更近，价值被陷阱拉低了</b>——<b>风险就是这样被定量算进去的</b>。",e:"⚠ Ng 补充：<b>实际上东南西北四个方向都要各算一遍再比</b>。⭐ 这就兑现了 L16 那句「光用眼睛看不出来」。"});
+  QUIZ(2884,13,{t:"那一格「往西 0.740 比往北 0.676 高」是怎么算出来的？",o:["比较两条路径的长度","统计模拟一万次取平均","按 P_sa 对三种去向（0.8 按命令走、各 0.1 偏向两侧）的 V* 做加权平均，两个动作各算一次再比大小","比较两个方向的即时奖励 R(s)"],a:2,w:"⚠ 往北那列的 <b>0.49</b> 是因为偏过去的方向<b>离 −1 更近，价值被陷阱拉低</b>——风险就是这样定量算进去的。⚠ Ng 说<b>四个方向都要算一遍</b>。"});
+});
+KP("14 · ★★ 策略迭代：盯着策略而不是价值",function(){
+  S(3129,function(){clearScene();setEq(null);setCap("换一个焦点");
+       says("52:09","the focus of attention is on the policy Pi rather than the value function");
+       boxNode(170,195,980,56,"① 随便初始化一个策略 π","b");
+       boxNode(170,263,980,56,"② 解线性方程组，求出这个 π 的价值函数 V^π","y");
+       boxNode(170,331,980,56,"③ 把 V^π 当成最优的，用 argmax 更新 π；回到 ②","g");
+       note("⭐ 和值迭代的区别：这里每一轮都产出一个新策略",640,398,"y");},"<b>解 MDP 还有第二个经典算法：策略迭代。</b>Ng 说它<b>把注意力放在策略 π 上，而不是价值函数上</b>。<br><b>第一步：随便初始化一个策略</b>——好不好无所谓。<br><b>第二步：解那个线性方程组，求出这个策略的价值函数 V^π。</b><b>⭐ 注意这里用的是 V^π 的 Bellman 方程（没有 max），所以是线性的、可以直接解。</b><br><b>第三步：假装 V^π 就是最优价值函数，用 argmax 的式子更新出一个新策略；然后回到第二步。</b><br><b>⭐ 和值迭代最大的区别在于：值迭代是先把 V* 彻底算准，最后才生成一次策略；而策略迭代每一轮都产出一个新策略。</b><br><b>⚠ 它有一个很好的性质：Ng 说迭代有限次之后，这个算法就会停止变化——也就是策略不再改变，说明已经到最优了。</b>");
+  S(3129,function(){clearScene();setEq(null);setCap("走一轮看看");
+   matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["","第 1 轮","第 2 轮"],
+       ["手上的策略 π","随便初始化的烂策略","上一轮改进出的新策略"],
+       ["解方程组得到 V^π","这个烂策略的真实价值","新策略的真实价值"],
+       ["argmax 更新 π","★ 得到一个更好的策略","又更好一点 ⋯"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return (i===3&&j===1)?"hl":"";}});
+   note("⭐ 注意第二步算的是「这个策略真实的价值」，不是近似",640,398,"y");},"<b>把策略迭代走一轮，看看每一步手上拿的是什么。</b><br><b>第一轮开始时，手上是一个随便初始化的烂策略。</b><br><b>第二步解方程组，得到的是「这个烂策略的真实价值」</b>——<b>⭐ 注意是真实的、精确的值，不是近似</b>，因为线性方程组是直接解出来的。<br><b>第三步假装这个价值就是最优的，用 argmax 挑动作，得到一个新策略。</b><b>⭐ 关键点在于：这个新策略保证不会比原来差。</b><br><b>第二轮拿着新策略重复一遍，又好一点。</b><br><b>⚠ 和值迭代对比着看，两者的「精确」出现在不同的地方</b>：<b>值迭代的 V 一直是近似的，但它瞄准的是正确的目标 V*；策略迭代的 V^π 每轮都是精确的，但它瞄准的是一个还不够好的策略。</b>");
+  SUM(3129,14,{h:"★★ 策略迭代：评估策略 → 改进策略 → 重复",k:"Ng：它<b>把注意力放在策略 π 上，而不是价值函数上</b>。",m:"<b>① 随便初始化一个 π ② 解线性方程组求出 V^π</b>（⭐ 用的是<b>没有 max</b> 的那个 Bellman 方程，所以线性可解）<b>③ 把 V^π 当最优的，用 argmax 更新 π，回到 ②</b>。",w:"⭐ <b>与值迭代的区别</b>：值迭代<b>先把 V* 彻底算准，最后才生成一次策略</b>；策略迭代<b>每一轮都产出一个新策略</b>。",e:"⚠ <b>好性质</b>：Ng 说<b>迭代有限次后算法会停止变化</b>——策略不再改变，说明已到最优。"});
+  QUIZ(3129,14,{t:"策略迭代的两步分别是什么？",o:["对策略参数做梯度上升","① 解线性方程组求出当前策略的 V^π ② 把 V^π 当成最优的、用 argmax 更新策略；反复","初始化 V 为 0，然后反复用带 max 的 Bellman 方程更新","枚举所有策略，比较它们的价值"],a:1,w:"⭐ 第 ① 步用的是<b>不含 max 的 V^π Bellman 方程</b>，所以是线性方程组、可直接解。⚠ Ng 说它<b>有限次迭代后就会停止变化</b>。"});
+});
+KP("15 · ⚠ 两个算法怎么选",function(){
+  S(3342,function(){clearScene();setEq(null);setCap("瓶颈在「解线性方程组」这一步");
+       says("55:42","I would favor a value iteration over policy iterations");
+       matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:192,
+         cell:function(i,j){var t=[
+           ["","值迭代","策略迭代"],
+           ["每轮做什么","一遍 max 更新，便宜","⚠ 解一次线性方程组"],
+           ["状态少（十几～几百）","可以","✓ 往往更快收敛"],
+           ["状态多","✓ Ng 偏向这个","⚠ 解方程组成了瓶颈"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===3&&j===1)?"hl":"";}});
+       note("⭐ 关键是解 n 个未知数的线性方程组，代价随 n 增长得很快",640,398,"y");},"<b>两个算法都能解 MDP，怎么选？Ng 给的判据只有一个：状态数。</b><br><b>根子在于：策略迭代每一轮都要解一次线性方程组</b>，而<b>值迭代每轮只做一遍 max 更新，便宜得多</b>。<br><b>⭐ 解一个 n 个未知数的线性方程组，代价随 n 增长得很快</b>（一般是 n 的三次方量级）。<br><b>⇒ 状态少的时候这不算事。</b>Ng 说<b>像 11 个状态、或者几百个状态这种规模，策略迭代跑得很快</b>，而且<b>它往往用更少的轮数就收敛</b>。<br><b>⚠ 但状态一多，解方程组就成了瓶颈。</b>Ng 的原话是<b>这种情况下他会偏向值迭代</b>。<br><b>⭐ 记住这个判据的形状：不是「哪个算法更好」，而是「你的状态空间有多大」。</b>");
+  S(3342,function(){clearScene();setEq(null);setCap("代价随状态数怎么长");
+   axes({x0:280,x1:1000,y0:370,y1:190});
+   curve(fn(function(x){var n=(x-300)/700;return 365-300*n*n*n;},300,1000,80),"r");
+   curve(fn(function(x){var n=(x-300)/700;return 365-70*n;},300,1000,60),"g");
+   note("策略迭代：解方程组 ≈ n³",870,232,"r");
+   note("值迭代：每轮 ≈ n × 动作数",880,320,"g");
+   note("⭐ 状态少时右边那点差距无所谓，状态一多就是天壤之别",640,398,"y");},"<b>把两者的代价随状态数的增长画出来，取舍就一目了然。</b><br><b>策略迭代每轮要解一个 n 个未知数的线性方程组，代价大约是 n 的三次方</b>——<b>图上那条陡峭的红线。</b><br><b>值迭代每轮只是扫一遍所有状态、每个状态试一遍所有动作，代价大约是 n 乘以动作数</b>——<b>绿色那条几乎是直线。</b><br><b>⭐ 看图的左半边：状态少的时候两者差不多，这时策略迭代「轮数更少」的优势反而占上风，所以它更快。</b><br><b>⭐ 再看右半边：状态一多，红线就甩开了，而且越来越离谱。</b><br><b>⇒ 这就是 Ng 那句「状态多时我偏向值迭代」的全部内容。</b><b>⚠ 注意这不是说策略迭代不好，而是说它的代价结构在大问题上撑不住。</b>");
+  SUM(3342,15,{h:"⚠ 选哪个：看状态数",k:"<b>根子</b>：<b>策略迭代每轮要解一次线性方程组</b>，而<b>值迭代每轮只做一遍 max 更新，便宜得多</b>。",m:"⭐ 解 n 个未知数的线性方程组，<b>代价随 n 增长很快</b>（约 n³ 量级）。",w:"<b>状态少（十几～几百）</b>：Ng 说<b>策略迭代跑得很快</b>，而且<b>往往用更少轮数就收敛</b>。",e:"⚠ <b>状态多</b>：解方程组成为瓶颈 ⇒ Ng 说<b>他会偏向值迭代</b>。⭐ 判据不是「哪个更好」，而是<b>「状态空间多大」</b>。"});
+  QUIZ(3342,15,{t:"值迭代和策略迭代之间该怎么选？",o:["看动作是离散还是连续","永远选值迭代，策略迭代不保证收敛","看折扣因子 γ 的大小","看状态数：策略迭代每轮要解一次线性方程组，状态少时很快且轮数更少；状态一多就成瓶颈，此时偏向值迭代"],a:3,w:"⭐ 解 n 个未知数的线性方程组代价约 n³ 量级。⭐ 判据的形状是「<b>你的状态空间有多大</b>」，而不是「哪个算法更好」。"});
+});
+KP("16 · ⚠ 收敛性：课上没证，问题集里要你证",function(){
+  S(2581,function(){clearScene();setEq(null);setCap("哪些是讲过的，哪些是要你自己做的");
+       says("43:01","showing that this will make a V of S converge to V star");
+       boxNode(130,200,470,58,"课上给的","b");
+       boxNode(130,268,470,58,"算法怎么做 + 收敛很快的直觉","b");
+       boxNode(690,200,470,58,"问题集里要你证的","y");
+       boxNode(690,268,470,58,"反复套用 Bellman 方程，V 会收敛到 V*","y");
+       note("⭐ 和上一个知识点一样：分清「被告知的」和「被证明的」",640,352,"y");
+       note("⚠ 这是这一讲第二处 Ng 明确说「细节在问题集里」的地方",640,398,"r");},"<b>值迭代真的会收敛到 V* 吗？Ng 在课上说了结论，但把证明留给了问题集。</b><br><b>他的原话是：你会在问题集里看到更多细节——证明「反复套用 Bellman 方程会让 V(s) 收敛到 V*」。</b><br><b>⭐ 所以这一讲里有两处「被告知但没被证明」的地方</b>：<b>一处是上一节那条「同一个 π* 在所有状态同时最优」，另一处就是这里的收敛性。</b><br><b>⚠ 为什么要特意提醒？</b>因为<b>这两条恰恰是整套方法能成立的两根支柱</b>：<b>没有收敛性，值迭代算出来的东西就不知道是什么；没有同时最优性，「一个最优策略」这个说法就不成立。</b><br><b>⇒ 知道它们没在课上被证明，不是为了怀疑它们，而是为了知道自己的理解停在哪一层。</b>");
+  S(2581,function(){clearScene();setEq(null);setCap("这一讲的逻辑结构：哪些撑着哪些");
+   boxNode(300,190,680,52,"① 值迭代会收敛到 V*　（未证）","y");
+   boxNode(300,254,680,52,"② 同一个 π* 在所有状态同时最优　（未证）","y");
+   boxNode(300,330,680,56,"⇒ 「先算 V*、再 argmax」这套方法成立","g");
+   link(640,242,640,330); link(640,306,640,330);
+   note("⭐ 两条都未证，但它们都是真的 —— 属于动态规划的标准结论",640,398,"y");},"<b>把这一讲的逻辑结构画出来，就知道哪些东西撑着哪些东西。</b><br><b>整套方法是「先算 V*，再用 argmax 读出 π*」。</b>而它成立需要两个前提：<b>① 值迭代确实会收敛到 V*；② 确实存在同一个 π* 在所有状态上同时最优。</b><br><b>⚠ 这两条课上都没证明。</b><b>第一条留给了问题集，第二条 Ng 明说「我只是断言」。</b><br><b>⭐ 但要讲清楚分寸：它们都是真的，属于动态规划的标准结论，不是什么可疑的假设。</b><b>把它们拎出来，是为了让你知道这套方法的地基在哪儿，而不是为了怀疑它。</b><br><b>⇒ 实用的结论是：这两条可以放心引用，但别在答题时假装自己推导过。</b>");
+  SUM(2581,16,{h:"⚠ 收敛性的证明留在问题集里",k:"Ng 说：<b>问题集里会证「反复套用 Bellman 方程会让 V(s) 收敛到 V*」</b>；课上只给了算法和「收敛很快」的直觉。",m:"⭐ <b>这一讲有两处「被告知但没被证明」</b>：① <b>同一个 π* 在所有状态同时最优</b> ② <b>值迭代的收敛性</b>。",w:"⚠ <b>而这两条恰恰是整套方法的两根支柱</b>：没有收敛性，算出来的东西不知道是什么；没有同时最优性，「一个最优策略」就不成立。",e:"⇒ 知道它们未被课上证明，<b>不是为了怀疑，而是为了知道自己的理解停在哪一层</b>。"});
+  QUIZ(2581,16,{t:"关于值迭代收敛到 V*，L17 课上是怎么处理的？",o:["课上只给算法和「收敛很快」的直觉，证明留给问题集——这是本讲两处「告知但未证明」之一","收敛性只在 γ=1 时成立","课上给出了完整证明","课上证明了它不收敛，需要加阻尼"],a:0,w:"⭐ 另一处是<b>「同一个 π* 在所有状态同时最优」</b>。⚠ 这两条<b>恰是整套方法的两根支柱</b>。"});
+});
+KP("17 · ★ 策略迭代为什么会在有限步内停下来",function(){
+  S(3432,function(){clearScene();setEq(null);setCap("和值迭代的收敛是两回事");
+       says("57:12","after a finite number of iterations, this algorithm will stop changing");
+       boxNode(130,196,470,58,"值迭代","b");
+       boxNode(130,264,470,58,"数值逐渐逼近，理论上永远在变小","b");
+       boxNode(690,196,470,58,"策略迭代","y");
+       boxNode(690,264,470,58,"⭐ 策略完全不再改变 ⇒ 真的停住","y");
+       note("⚠ 因为策略只有有限多个，而每一轮要么变好、要么就是最优了",640,348,"r");
+       note("⇒ 不可能一直变下去，所以必然在有限步停住",640,398,"y");},"<b>策略迭代有一个值迭代没有的性质：它会在有限步之后真正停住。</b>Ng 说<b>迭代有限次之后，这个算法就不再变化了</b>。<br><b>⚠ 注意这和值迭代的「收敛」不是一回事。</b><b>值迭代的数值是逐渐逼近 V* 的，理论上每一轮都还在变一点点，你得设一个阈值来决定何时停手。</b><b>⭐ 而策略迭代是策略完全不再改变——那是一个干脆的、可以检测的终止条件。</b><br><b>为什么必然会停？直觉是这样的：策略的总数虽然巨大，但是有限的</b>（上一节算过是 4¹¹ 这个量级）；<b>而每一轮改进要么让策略严格变好，要么说明它已经是最优的了。</b><br><b>⇒ 不可能一直变下去，否则就会无限多次地产生不同的、越来越好的策略，而策略只有有限个。</b><b>所以它必然在有限步内停住。</b>");
+  SUM(3432,17,{h:"★ 策略迭代有限步停止（和值迭代的收敛不同）",k:"Ng：<b>迭代有限次之后这个算法就不再变化</b>。",m:"⚠ <b>和值迭代的收敛不是一回事</b>：值迭代的数值<b>逐渐逼近、理论上一直在变</b>，要设阈值决定何时停手；⭐ <b>策略迭代是策略完全不变，终止条件干脆可检测</b>。",w:"<b>为什么必然停</b>：<b>策略总数虽巨大但有限</b>（4¹¹ 量级），<b>每轮要么严格变好、要么已是最优</b>。",e:"⇒ <b>不可能一直变下去</b>——否则会无限多次产生越来越好的不同策略，而策略只有有限个。"});
+  QUIZ(3432,17,{t:"策略迭代的「有限步停止」和值迭代的「收敛」有什么不同？",o:["值迭代数值逐渐逼近、理论上一直在变，要设阈值；策略迭代是策略完全不再改变，终止条件干脆可检测","值迭代不保证收敛，策略迭代保证","两者是同一件事，只是说法不同","策略迭代更快，所以叫有限步"],a:0,w:"⭐ <b>必然停的理由</b>：策略总数虽巨大但<b>有限</b>，而每轮<b>要么严格变好、要么已是最优</b>，不可能一直变下去。"});
+});
+KP("18 · ★ 状态是连续的怎么办（预告 L18）",function(){
+  S(2985,function(){clearScene();setEq(null);setCap("这一讲全程假设状态有限");
+       says("49:45","if you have a continuous state MDP, one of the things that is often done is to discretize");
+       boxNode(130,200,470,58,"这一讲的全部内容","b");
+       boxNode(130,268,470,58,"都建立在「状态有限」之上","b");
+       boxNode(690,200,470,58,"⚠ 可直升机的状态是连续的","r");
+       boxNode(690,268,470,58,"位置和速度是实数 ⇒ 无穷多个状态","r");
+       note("⭐ 办法一：离散化 —— 把连续空间切成有限多个格子",640,352,"y");
+       note("办法二：有些版本的值迭代可以直接处理连续状态（L18 讲）",640,398,"g");},"<b>课上有同学问了一个很关键的问题：状态数总是有限的吗？</b><br><b>Ng 的回答很干脆：在我们目前讨论的范围里，是的。</b><br><b>⚠ 但这一讲全部的内容——11 个方程 11 个未知数、对所有状态遍历更新、解线性方程组——都建立在「状态有限」这个前提上。</b><b>而直升机的状态是连续的：位置和速度都是实数，有无穷多个状态。</b><b>⇒ 那时候「对每个状态更新一遍」根本写不出循环。</b><br><b>Ng 给了两条出路。</b><b>⭐ 第一条是离散化：把连续空间切成有限多个格子，每个格子当成一个状态</b>，这样就退回到这一讲的框架里了。<br><b>第二条是：有些版本的值迭代可以直接处理连续状态。</b><br><b>⇒ 这正是下一讲 L18 的主题。</b>");
+  S(2985,function(){clearScene();setEq(null);setCap("离散化：把连续切成格子");
+   axes({x0:300,x1:980,y0:370,y1:190});
+   curve([[300,370],[980,370]],"d");
+   var gx=[360,440,520,600,680,760,840,920];
+   for(var q=0;q<gx.length;q++) curve([[gx[q],200],[gx[q],370]],"d");
+   dots([[395,300],[475,260],[555,320],[635,280],[715,240],[795,310],[875,270]],"b",6);
+   note("连续的位置 → 落在第几个格子里",640,172,"y");
+   note("⭐ 切得越细 ⇒ 越准，但状态数爆炸",640,398,"y");},"<b>离散化的做法可以一句话说清：把连续的取值范围切成有限多段，每一段当成一个状态。</b><br><b>图上那些竖线就是切分，连续的位置落在第几格，就算处在第几个状态。</b><br><b>⚠ 但这里有一个躲不开的权衡：切得越细，近似越准，可状态数也越多。</b><br><b>⭐ 而且这个爆炸是按维度来的。</b>直升机的状态如果有<b>位置三个维度、速度三个维度、姿态三个维度</b>，<b>每个维度切 100 段，总状态数就是 100 的 9 次方</b>——<b>一个完全没法处理的数字。</b><br><b>⇒ 这个现象有个名字叫「维数灾难」。</b><b>它正是 L18 要面对的核心困难，也是为什么那一讲要讲「不靠离散化」的办法。</b>");
+  SUM(2985,18,{h:"★ 连续状态：离散化，或用能直接处理的版本",k:"⚠ <b>这一讲的全部内容都建立在「状态有限」之上</b>：11 个方程 11 个未知数、遍历所有状态、解线性方程组。",m:"<b>而直升机的状态是连续的</b>——位置和速度是实数，<b>无穷多个状态</b> ⇒ <b>「对每个状态更新一遍」根本写不出循环</b>。",w:"⭐ <b>出路一：离散化</b>——把连续空间切成有限多个格子，每格当一个状态，就退回这一讲的框架。",e:"<b>出路二</b>：有些版本的值迭代<b>可以直接处理连续状态</b>。⇒ <b>这正是 L18 的主题</b>。"});
+  QUIZ(2985,18,{t:"状态连续时，这一讲的方法为什么不能直接用？有哪两条出路？",o:["改用策略迭代就能处理连续状态","把 γ 设为 1 即可","可以直接用，只是慢一些","本讲全部内容建立在「状态有限」上，连续状态有无穷多个、无法遍历；出路是离散化成有限格子，或用能直接处理连续状态的值迭代版本"],a:3,w:"⭐ 离散化就是<b>把连续空间切成有限多个格子，每格当一个状态</b>，退回本讲框架。⇒ <b>L18 的主题</b>。"});
+});
+KP("19 · ★ P_sa 现实里从哪来：数次数",function(){
+  S(3622,function(){clearScene();setEq("$$\\hat{P}_{sa}(s') \\;=\\; \\frac{\\text{在 } s \\text{ 做 } a \\text{ 后到达 } s' \\text{ 的次数}}{\\text{在 } s \\text{ 做过 } a \\text{ 的总次数}}$$","top");
+       setCap("前面一直假装它是已知的");
+       says("60:22","number of times took action a, in the state S and got to S prime",232);
+       note("做法：先让机器人按某个策略（哪怕是随机策略）跑一阵，记录下每一步",640,296,"b");
+       note("然后对每一组 (s, a) 数：去过哪些 s′、各去了几次",640,352,"b");
+       note("⭐ 这就是极大似然估计 —— 和数硬币正反面是同一回事",640,402,"y");},"<b>到这里为止，我们一直假装 P_sa 是已知的。可现实里没人会把转移概率递给你。</b><br><b>Ng 说的工作流程很朴素：让机器人按某个策略在环境里跑一阵</b>（<b>哪怕是一个随机策略也行</b>），<b>把每一步都记下来</b>。<br><b>然后对每一组「状态 s + 动作 a」数次数</b>：<b>分子是「在 s 做 a 之后到达 s′ 的次数」，分母是「在 s 做过 a 的总次数」。</b><br><b>⭐ Ng 明确指出：这个比值就是极大似然估计。</b><b>它和「数硬币正反面来估计硬币的偏向」是同一回事</b>——<b>观察到的频率就是最可能的概率。</b><br><b>⚠ 但这个公式有个明显的破绽：如果某个 (s, a) 从来没试过，分母就是 0，整个式子是 0/0。</b><b>下一节讲这个。</b>");
+  S(3622,function(){clearScene();setEq(null);setCap("一个具体的小例子");
+   matrix({rows:5,cols:2,cw:400,ch:42,x:240,y:174,
+     cell:function(i,j){var t=[
+       ["在格子 (3,1) 命令「往西」共 100 次","次数"],
+       ["真的到了西边那格","82"],
+       ["偏到北边","9"],
+       ["偏到南边（撞墙弹回）","9"],
+       ["★ 于是估计 P = 0.82 / 0.09 / 0.09","对照真值 0.8/0.1/0.1"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===4?"hl":"";}});
+   note("⭐ 样本越多，估计越接近真值 —— 这就是极大似然的全部内容",640,398,"y");},"<b>用一个具体的数来看「数次数」是怎么回事。</b><br><b>假设机器人在某一格命令「往西」总共 100 次：其中 82 次真的到了西边，9 次偏到北边，9 次往南撞墙弹回。</b><br><b>⇒ 于是估计出的转移概率就是 0.82 / 0.09 / 0.09。</b><br><b>而这个环境真正的参数是 0.8 / 0.1 / 0.1——估计得相当准。</b><br><b>⭐ 样本越多，估计越接近真值，这就是极大似然估计的全部内容。</b><br><b>⚠ 但要注意一件事：这 100 次是怎么来的？是机器人实际走出来的。</b><b>如果它的策略从来不往某个方向走，那个方向的样本数就是 0。</b><br><b>⇒ 所以「数据从哪来」和「策略是什么」是纠缠在一起的——这个纠缠正是后面探索问题的根源。</b>");
+  SUM(3622,19,{h:"★ P_sa 靠「数次数」估出来",k:"<b>做法</b>：让机器人<b>按某个策略（哪怕随机策略）跑一阵</b>，把每一步记下来。",m:"<b>公式</b>：分子 = <b>在 s 做 a 后到达 s′ 的次数</b>，分母 = <b>在 s 做过 a 的总次数</b>。",w:"⭐ Ng 明确指出<b>这就是极大似然估计</b>——和<b>数硬币正反面估计偏向</b>是同一回事，观察到的频率就是最可能的概率。",e:"⚠ <b>破绽</b>：某个 (s, a) <b>从来没试过时分母为 0</b>，整个式子是 <b>0/0</b>。"});
+  QUIZ(3622,19,{t:"实际项目里 P_sa 是怎么得到的？",o:["由环境的物理方程推导出来","假定均匀分布即可","让机器人按某个策略跑一阵并记录，然后数次数：到达 s′ 的次数 ÷ 在 s 做过 a 的总次数，这就是极大似然估计","用神经网络拟合"],a:2,w:"⭐ 它和<b>数硬币正反面估计偏向</b>是同一回事。⚠ 破绽是<b>没试过的 (s,a) 会出现 0/0</b>。"});
+});
+KP("20 · ⚠ 没试过的动作怎么办",function(){
+  S(3690,function(){clearScene();setEq(null);setCap("0/0 的那一格填什么");
+       says("61:30","just assume that the state transition probability is 1 over 11");
+       boxNode(130,196,470,58,"常用做法","g");
+       boxNode(130,264,470,58,"假定它等概率通向任意状态：1/11","g");
+       boxNode(690,196,470,58,"另一个选项：拉普拉斯平滑","y");
+       boxNode(690,264,470,58,"分子加 1，分母加 11","y");
+       note("⚠ Ng：MDP 的解法对 0 概率不像朴素贝叶斯那么敏感",640,348,"r");
+       note("⇒ 所以实践中拉普拉斯平滑并不常用，前一种更常见",640,398,"y");},"<b>某个动作在某个状态下从来没试过，分母是 0，那一格填什么？</b><br><b>Ng 给的常用做法很直接：假定它等概率地通向任意一个状态，也就是 1/11。</b>意思是<b>「我完全不知道会发生什么，那就当它随机把我扔到某处」</b>。<br><b>另一个选项是拉普拉斯平滑</b>——<b>分子加 1、分母加 11</b>，<b>这同样避免了 0/0。</b><br><b>⚠ 但 Ng 在这里讲了一个很有意思的对比。</b>在<b>朴素贝叶斯</b>里，<b>出现 0 概率是非常要命的</b>——<b>一个 0 会让整个连乘变成 0，分类结果直接废掉</b>，所以那里必须做平滑。<br><b>⭐ 而 MDP 的解法对 0 概率没那么敏感</b>：<b>就算有些估计是 0，算法表现也不会差太多。</b><br><b>⇒ 所以 Ng 说实践中拉普拉斯平滑反而不常用，前面那个 1/11 的做法更常见。</b>");
+  S(3690,function(){clearScene();setEq(null);setCap("两种填法的数值对比");
+   matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["情形","1/11 的填法","拉普拉斯平滑"],
+       ["完全没试过（0 次）","每个去向都填 1/11","也是 1/11（1÷11）"],
+       ["试过 10 次，都去了同一处","1.0 和 0","0.52 和 0.048"],
+       ["试过 1000 次","几乎相同","几乎相同"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===2?"hl":"";}});
+   note("⭐ 两种填法只在「样本很少」时才有差别，样本一多就趋同",640,398,"y");},"<b>把两种填法的数值摆出来对比。</b><br><b>完全没试过时：两种办法给出的结果其实一样，都是 1/11</b>（拉普拉斯平滑是 1 除以 11）。<br><b>⭐ 差别出现在「试过几次但很少」的时候。</b><b>比如试了 10 次、每次都去了同一个地方：直接数次数会给出 1.0 和 0（斩钉截铁），而拉普拉斯平滑给出 0.52 和 0.048（留了余地）。</b><br><b>试过 1000 次之后：两者几乎没有差别，数据压倒了平滑项。</b><br><b>⇒ 所以这两种填法的分歧，只存在于「样本很少」这个区间。</b><br><b>⭐ 这也解释了 Ng 为什么说实践中平滑不常用：MDP 的解法对那几个 0 不敏感，而真正重要的状态通常会被访问很多次，到那时两种填法早就趋同了。</b>");
+  SUM(3690,20,{h:"⚠ 没试过的 (s,a)：填 1/11 或拉普拉斯平滑",k:"<b>常用做法</b>：<b>假定它等概率通向任意状态（1/11）</b>——「完全不知道会发生什么，就当它随机把我扔到某处」。",m:"<b>另一个选项</b>：拉普拉斯平滑，<b>分子加 1、分母加 11</b>。",w:"⚠ <b>和朴素贝叶斯的对比</b>：那里<b>一个 0 会让整个连乘变成 0，分类直接废掉</b>，所以必须平滑。",e:"⭐ <b>而 MDP 的解法对 0 概率没那么敏感</b>，就算有些估计是 0 表现也不会差太多 ⇒ Ng 说<b>实践中平滑反而不常用</b>。"});
+  QUIZ(3690,20,{t:"某个 (s,a) 从未试过导致 0/0 时怎么办？为什么这里不像朴素贝叶斯那样必须平滑？",o:["直接把该状态从 MDP 中删掉","常用做法是假定等概率通向任意状态（1/11）；MDP 的解法对 0 概率不敏感，不像朴素贝叶斯那样一个 0 就让连乘归零","必须用拉普拉斯平滑，否则算法会崩溃","用邻近状态的转移概率代替"],a:1,w:"⭐ 朴素贝叶斯里<b>一个 0 概率会让整个连乘变成 0，分类结果直接废掉</b>；MDP 解法没有这个结构，所以<b>实践中平滑反而不常用</b>。"});
+});
+KP("21 · ★★ 把一切拼起来：完整的强化学习算法",function(){
+  S(3900,function(){clearScene();setEq(null);setCap("前面所有零件装进一个循环");
+       boxNode(170,180,980,50,"① 随便初始化一个策略 π","b");
+       boxNode(170,238,980,50,"② 用 π 在环境里跑一阵，记录每一步","y");
+       boxNode(170,296,980,50,"③ 数次数，更新对 P_sa（和 R）的估计","y");
+       boxNode(170,354,980,50,"④ 用值迭代求 V*，再 argmax 得到新的 π；回到 ②","g");
+       note("⭐ 注意这是个套娃：④ 里面的值迭代自己还有一层循环",640,166,"y");},"<b>现在把这一讲的所有零件装进一个循环，就是一个能真正跑起来的强化学习算法。</b><br><b>① 随便初始化一个策略。</b><br><b>② 用它在环境里跑一阵，把每一步都记录下来。</b><br><b>③ 数次数，更新对 P_sa 的估计</b>（<b>如果奖励也未知，同样用观测到的平均值估计 R</b>）。<br><b>④ 拿更新后的模型跑值迭代求出 V*，再用 argmax 得到新策略；然后回到第二步。</b><br><b>⭐ 注意这是一个套娃结构：第四步里面的值迭代，自己还有一层循环。</b>所以<b>外层是「收集数据 → 更新模型 → 重新求解」，内层是值迭代在反复刷 Bellman 方程。</b><br><b>⇒ 循环的逻辑很清楚：策略变好 ⇒ 走出的轨迹更有价值 ⇒ 模型估得更准 ⇒ 策略又能更好。</b><br><b>⚠ 但这个漂亮的循环里藏着一个严重的毛病，下一节就讲它。</b>");
+  S(3900,function(){clearScene();setEq(null);setCap("⚠ 这个循环里，代价最大的是哪一步");
+   boxNode(130,200,470,58,"② 跑一阵收集数据","y");
+   boxNode(130,268,470,58,"要花真实时间（机器人要真的动）","d");
+   boxNode(690,200,470,58,"④ 值迭代求 V*","b");
+   boxNode(690,268,470,58,"纯计算，但要反复跑几十轮","d");
+   note("⭐ 一个常见的加速：④ 不必从 0 开始，可以用上一轮的 V 当初值",640,348,"y");
+   note("⚠ 因为模型只变了一点，上一轮的 V 已经是很好的起点了",640,398,"g");},"<b>这个循环跑起来之后，代价最大的是哪一步？值得想清楚。</b><br><b>第二步要花真实时间——机器人得真的在环境里动起来，这是没法加速的。</b><br><b>第四步是纯计算，但要反复跑几十轮值迭代。</b><br><b>⭐ 这里有一个很常用的加速办法：第四步不必每次都把 V 重新初始化为 0。</b><br><b>⚠ 理由是：每一轮外层循环只是让模型 P_sa 变了一点点（多了一批数据），所以新的 V* 和上一轮的 V* 应该很接近。</b><b>⇒ 用上一轮的结果当初值，值迭代往往几轮就收敛了，而不是几十轮。</b><br><b>⭐ 这个技巧的名字叫「热启动」，在很多迭代算法里都用得上。</b><b>它也再次印证了之前那句话：值迭代的初始值可以随便定，这给了我们利用先验信息的自由。</b>");
+  SUM(3900,21,{h:"★★ 完整算法：收集数据 → 更新模型 → 重新求解",k:"<b>① 随便初始化 π ② 用它跑一阵、记录每一步 ③ 数次数更新 P_sa（R 未知时同样用平均值估计）④ 值迭代求 V*、argmax 得新 π，回到 ②</b>。",m:"⭐ <b>这是套娃结构</b>：第 ④ 步里面的<b>值迭代自己还有一层循环</b>。外层是「收集 → 更新 → 重解」，内层是值迭代刷 Bellman 方程。",w:"⇒ <b>循环逻辑</b>：策略变好 ⇒ 轨迹更有价值 ⇒ 模型估得更准 ⇒ 策略又能更好。",e:"⚠ <b>但这个循环里藏着一个严重的毛病</b>——见下一个知识点。"});
+  QUIZ(3900,21,{t:"完整的（基于模型的）强化学习算法是怎么循环的？",o:["枚举所有策略，选价值最高的","直接对策略参数做梯度上升，不需要模型","初始化 π → 用 π 跑一阵记录 → 数次数更新 P_sa → 值迭代求 V* 并 argmax 得新 π → 回到第二步","收集全部数据 → 训练一次 → 结束"],a:2,w:"⭐ 注意这是<b>套娃结构</b>：第四步里的值迭代自己还有一层循环。⚠ 这个循环里藏着一个严重毛病（探索不足）。"});
+});
+KP("22 · ⚠⚠ 探索 vs 利用：它可能永远找不到那桶金子",function(){
+  S(4181,function(){clearScene();setEq(null);setCap("纯贪心算法的致命盲点");
+       says("69:41","it is called the exploration versus exploitation problem");
+       grid(330,200,150,56,5,3,function(i,j){
+         if(i===4&&j===0) return ["+1","g"];
+         if(i===0&&j===2) return ["+10","y"];
+         if(i===2&&j===1) return ["墙","d"];
+         return ["",""];});
+       note("⭐ 它找到了 +1，于是一直往那儿跑",640,176,"g");
+       note("⚠ 左下角那个 +10 它可能一辈子都发现不了 —— 因为它从没去过",640,398,"r");},"<b>⚠⚠ 上一节那个算法有一个致命的盲点。</b><br><b>它是纯粹贪心的：每一步都按当前估计的最优去走。</b>听起来很合理，但想想会发生什么——<b>机器人偶然找到了右上角那个 +1，于是以后就一直往那儿跑。</b><br><b>⭐ 而左下角可能藏着一个 +10 的宝藏，它却一辈子都发现不了。</b><b>为什么？因为它从来没去过那边</b>，<b>而没去过就没有数据，没有数据就不知道那里有东西，不知道就更不会去。</b><b>⇒ 这是个自我锁死的循环。</b><br><b>Ng 说这叫「探索与利用」问题</b>：<b>利用是「用好你已经知道的」，探索是「去试试那些看起来不够好、但你其实没把握的选择」。</b><br><b>⚠ 他特意强调这不只是学术问题。</b>下一镜讲他举的那个现实例子。");
+  S(4181,function(){clearScene();setEq(null);setCap("在线广告平台也有同一个问题");
+       boxNode(130,196,470,58,"纯利用","r");
+       boxNode(130,264,470,58,"只推你最可能点的广告 ⇒ 短期收入最高","r");
+       boxNode(690,196,470,58,"带探索","g");
+       boxNode(690,264,470,58,"偶尔推一个「不像你会点」的 ⇒ 可能发现新兴趣","g");
+       note("⭐ Ng 的例子：如果平台从不试，就永远不知道他对火星着陆器感兴趣",640,348,"y");
+       note("⚠ 他也说了句题外话：exploitation 这个词在广告语境里听起来很不妙",640,398,"d");},"<b>Ng 举的现实例子是大型在线广告平台，他说它们面对的是同一个问题。</b><br><b>纯利用的做法是：永远只推你最可能点击的广告</b>，<b>这样短期收入最高</b>。<br><b>⭐ 而带探索的做法是：偶尔推一个「我们并不认为你会点」的广告。</b>Ng 用自己打比方：<b>如果平台从来不试，就永远不会知道他其实对火星着陆器很感兴趣</b>；<b>而只要试一次、他点了，平台就学到了新东西。</b><br><b>⇒ 这正是网格世界里那个 +10 宝藏的现实版本：不去试，就永远不知道。</b><br><b>⚠ 顺带一提，Ng 在课上还特意澄清了一句：exploitation 这个词在广告的语境里听起来很不妙，但它在这里是纯技术术语，指「利用已有知识」，没有剥削的意思。</b>");
+  SUM(4181,22,{h:"⚠⚠ 探索与利用：纯贪心会自我锁死",k:"纯贪心算法<b>每步都按当前估计的最优走</b> ⇒ 找到 +1 就一直往那儿跑，<b>左下角的 +10 可能一辈子发现不了</b>。",m:"⭐ <b>自我锁死的循环</b>：<b>没去过 ⇒ 没数据 ⇒ 不知道那里有东西 ⇒ 更不会去</b>。",w:"<b>术语</b>：<b>利用</b> = 用好你已经知道的；<b>探索</b> = 去试那些看起来不够好、但你其实没把握的选择。",e:"⭐ <b>Ng 的现实例子</b>：在线广告平台。纯利用 = 只推你最可能点的；带探索 = <b>偶尔推一个「不像你会点」的</b>，否则<b>永远不会知道他对火星着陆器感兴趣</b>。"});
+  QUIZ(4181,22,{t:"「探索与利用」问题指的是什么？纯贪心算法为什么有问题？",o:["计算资源在探索和利用之间的分配","纯贪心只按当前估计的最优走，于是没去过的地方永远没有数据、也就永远不会去——可能一辈子发现不了更好的选择","模型复杂度与数据量的权衡","训练集和测试集的划分问题"],a:1,w:"⭐ 关键是<b>自我锁死</b>：没去过 ⇒ 没数据 ⇒ 不知道 ⇒ 更不会去。⭐ Ng 的例子是<b>在线广告平台</b>：不偶尔试试，就永远发现不了用户的新兴趣。"});
+});
+KP("23 · ★ ε-greedy：留 10% 给运气",function(){
+  S(4438,function(){clearScene();setEq(null);setCap("最常用的那个办法");
+       says("73:58","this particular exploration policy is called Epsilon-greedy");
+       boxNode(150,200,440,76,"90% 的概率","g");
+       boxNode(150,290,440,56,"照当前最优策略走","g");
+       boxNode(760,200,440,76,"10% 的概率","y");
+       boxNode(760,290,440,56,"随便挑一个动作","y");
+       note("⭐ 每一步都掷一次这个偏心的硬币",640,172,"y");
+       note("⚠ 这样它总有机会误打误撞走到那桶金子，然后学到它的存在",640,398,"r");},"<b>怎么强迫算法去探索？最常用的办法叫 ε-greedy，而且它简单得出奇。</b><br><b>每一步掷一次偏心的硬币：90% 的概率照当前认为最优的策略走，10% 的概率随便挑一个动作。</b><br><b>⭐ 就这么一点随机性，就打破了上一节那个自我锁死的循环</b>——<b>机器人总有机会误打误撞走到左下角，然后学到那里有个 +10。</b><br><b>⚠ 这里有个细节值得留意：探索的动作不是「好动作」，它按定义就是次优的。</b><b>所以探索是有代价的——你要用一部分短期收益，去换取「发现更好东西」的机会。</b><br><b>⭐ 那个 10% 就是 ε。</b>Ng 还吐槽了这个名字：<b>ε 是「随机行动」的概率，不是「贪心」的概率，所以按字面读 ε-greedy 像是说「只有 10% 的时间贪心」，其实正好反了——叫 1−ε greedy 才对。</b><br><b>⚠ 他也说明了：探索的办法不止这一种，有很多启发式做法。</b>");
+  S(4438,function(){clearScene();setEq(null);setCap("ε 该设多大");
+   matrix({rows:4,cols:3,cw:350,ch:48,x:130,y:196,
+     cell:function(i,j){var t=[
+       ["ε","后果",""],
+       ["太小（如 0.01）","⚠ 几乎不探索，还是可能错过宝藏",""],
+       ["太大（如 0.5）","⚠ 一半时间在瞎走，表现很差",""],
+       ["★ 常见做法","一开始大、随时间逐渐调小",""]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return i===3?"hl":"";}});
+   note("⭐ 直觉：刚开始什么都不知道，该多试；了解得多了，就该多用",640,398,"y");},"<b>ε 该设多大？两头都有明显的坏处。</b><br><b>ε 太小（比如 0.01）：几乎不探索，上一节那个「错过宝藏」的问题还是存在，只是概率低一点。</b><br><b>ε 太大（比如 0.5）：一半的时间在瞎走，机器人的实际表现会很差</b>——<b>因为探索的动作按定义就是次优的。</b><br><b>⭐ 所以常见的做法是让 ε 随时间变化：一开始设得大一些，随着学习的进行逐渐调小。</b><br><b>直觉很顺：刚开始什么都不知道，应该多试；了解得多了，就应该多利用已有的知识。</b><br><b>⚠ 最后重申 Ng 说过的一句：探索的办法远不止 ε-greedy 这一种，有很多启发式做法。</b><b>ε-greedy 的地位是「最简单、最常用的那个基线」，不是「最好的那个」。</b>");
+  SUM(4438,23,{h:"★ ε-greedy：每步 90% 贪心、10% 随机",k:"<b>每一步掷一次偏心硬币</b>：<b>90% 照当前最优策略走，10% 随便挑一个动作</b>。",m:"⭐ <b>就这一点随机性就打破了自我锁死</b>——总有机会误打误撞走到 +10，然后学到它的存在。",w:"⚠ <b>探索是有代价的</b>：探索的动作按定义就是次优的，<b>你在用短期收益换「发现更好东西」的机会</b>。",e:"⭐ Ng 吐槽这个名字<b>起反了</b>：ε 是「随机」的概率而不是「贪心」的概率，<b>叫 1−ε greedy 才对</b>。⚠ 他也说<b>探索办法不止这一种</b>。"});
+  QUIZ(4438,23,{t:"ε-greedy 是怎么做的？Ng 为什么说这个名字起反了？",o:["每步以 1−ε（如 90%）照当前最优走、以 ε（如 10%）随机走；而 ε 是「随机」的概率不是「贪心」的概率，叫 1−ε greedy 才对","以 ε 的概率重新初始化策略；名字指重启概率","每轮迭代把 ε 减半；名字指的是衰减率","每步按 ε 的比例混合两个策略；名字没问题"],a:0,w:"⭐ 这一点随机性就<b>打破了自我锁死</b>。⚠ 但<b>探索有代价</b>：探索动作按定义是次优的，是用短期收益换发现机会。"});
+});
+KP("完 · 从一个 MDP 到一个能跑的算法",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L17 · 完","MDP 的解法",
+      "价值函数 → Bellman → 值迭代 → 真正的算法");},
+    "收一下。<b>出发点是一个很实际的困难：策略的数量是组合爆炸的。</b>Ng 算给你看——<b>11 个状态、每个状态 4 个动作，就有 4¹¹ 种策略</b>，而<b>一般是「动作数的状态数次方」</b>。<b>⇒ 枚举是没指望的，必须换一条路。</b><br><b>那条路是价值函数。</b><b>V^π(s) 的定义是：从状态 s 出发、一路按 π 行动，能拿到的期望总回报。</b>⭐ <b>它把「策略好不好」这个笼统问题，变成了每个状态上的一个数。</b><br><b>★★★ 核心是 Bellman 方程</b>：<b>V^π(s) = R(s) + γ · E[V^π(s′)]</b>——<b>当前状态的价值 ＝ 立刻拿到的奖励 ＋ 折扣后的未来期望价值</b>。⭐ <b>它的威力在于把一个「无限长的未来」压缩成了「一步 + 剩下的价值」</b>，而剩下的价值也满足同样的方程。<br><b>⇒ 于是 11 个状态给出 11 个方程、11 个未知数，这是一个线性方程组，可以直接解。</b><br><b>然后是两种价值函数，⚠ Ng 专门说这是术语上最容易混的地方</b>：<b>V^π 是某个具体策略的价值</b>（那个策略可能很烂），<b>V* 是最优价值函数</b>，定义成<b>所有策略里取最大</b>。<b>V* 的 Bellman 方程里多了一个 max</b>——因为你可以挑动作。<b>⭐ 有了 V*，最优策略就是一个 argmax：在每个状态挑那个让期望未来价值最大的动作。</b><br><b>值迭代</b>：<b>把所有状态的价值初始化为 0，然后反复用 Bellman 方程更新</b>。⚠ <b>同步更新</b>是算完全部 11 个再一起替换，<b>异步更新</b>是算一个就立刻覆盖一个；<b>两种都收敛，多数人用异步</b>。<b>收敛很快</b>：<b>γ=0.9 时几十次迭代就很接近了，γ=0.99 时要几百次</b>。<br><b>⭐ 算完 V* 再用 argmax，就兑现了上一讲的悬念</b>：那一格<b>往西的期望未来回报是 0.8×0.75 + 0.1×0.69 + 0.1×0.71 = 0.740</b>，<b>往北是 0.8×0.69 + 0.1×0.75 + 0.1×0.49 = 0.676</b>。<b>往西明显更高 ⇒ 绕路才是对的。</b>⚠ Ng 补了一句严谨的：<b>实际上四个方向都要算一遍再比。</b><br><b>策略迭代</b>换了个焦点：<b>盯着策略而不是价值函数</b>。<b>随便初始化一个 π，解线性方程组得到 V^π，再把 V^π 当成最优的来更新 π，如此反复</b>。<b>它在有限步内就会停止变化。</b><br><b>⚠ 怎么选</b>：<b>策略迭代每轮都要解一次线性方程组</b>，<b>状态只有十几个到几百个时很快</b>；<b>状态一多，解方程组就成了瓶颈，Ng 说他会偏向值迭代</b>。<br><b>最后两件很实际的事。</b>其一，<b>P_sa 现实里是估出来的</b>：<b>让机器人按某个策略跑一阵，然后数次数</b>——<b>在 s 做 a 后到达 s′ 的次数，除以在 s 做 a 的总次数</b>。<b>这就是极大似然估计。</b>⚠ <b>没试过的动作会出现 0/0</b>，常见做法是<b>假定它等概率通向任意状态（1/11）</b>；也可以用拉普拉斯平滑，<b>但 Ng 说 MDP 的解法对 0 概率不像朴素贝叶斯那么敏感，所以实践中不常用</b>。<br><b>⚠⚠ 其二是探索与利用。</b>上面那套算法是<b>纯粹贪心的</b>——<b>永远按当前估计的最优去走</b>。<b>后果是：它可能一辈子都发现不了角落里那个 +10 的宝藏，因为它从没去过那儿。</b>Ng 用在线广告平台做类比：<b>纯利用就是只推你最可能点的广告</b>，<b>而适当探索才能发现你自己都没意识到的兴趣</b>。<b>常用的办法是 ε-greedy：每一步以 90% 的概率照当前最优走，10% 的概率随便走一步。</b>⭐ <b>Ng 还吐槽这个名字起反了——ε 是「随机」的概率而不是「贪心」的概率，叫 1−ε greedy 才对。</b><br><b>下一讲 L18 处理一个这一讲回避了的前提：状态是连续的怎么办。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

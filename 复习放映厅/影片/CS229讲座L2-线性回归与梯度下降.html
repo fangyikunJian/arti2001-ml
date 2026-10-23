@@ -1,0 +1,1151 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 第二讲 放映厅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#77849A; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+#eqBox{font-size:clamp(18px,2.8vw,40px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease, transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(14px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:5.5vh}
+#eqBox.low{align-self:flex-end;margin-bottom:24vh}
+
+#big{font-family:var(--mono);font-size:clamp(40px,7.6vw,112px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.32);text-align:center;
+  transition:opacity .55s ease, transform .55s cubic-bezier(.2,.7,.3,1);font-variant-numeric:tabular-nums}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.2em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.5em;font-weight:400}
+
+#quizL{align-items:flex-end;pointer-events:none}
+#quiz{max-width:min(64ch,88%);margin-bottom:7.5vh;pointer-events:auto;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(12px);pointer-events:none}
+#quiz .qq{font-size:clamp(14px,1.62vw,23px);font-weight:600;text-align:center;
+  margin:0 0 14px;color:var(--yellow)}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(12px,1.28vw,17px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:7px;padding:9px 15px;cursor:pointer;text-align:left;line-height:1.45;
+  transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.35}
+#quiz .why{margin:12px 0 0;font-size:clamp(12px,1.26vw,16.5px);font-weight:300;
+  color:var(--dim);text-align:center;line-height:1.55}
+#quiz .why[hidden]{display:none}
+#capL{align-items:flex-end}
+#capWrap{max-width:min(78ch,90%);margin-bottom:4.2vh;display:flex;flex-direction:column;align-items:center}
+#cap{text-align:center;
+  font-size:clamp(14px,1.62vw,23px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease, transform .45s cubic-bezier(.2,.7,.3,1)}
+#narr{margin:1.1em 0 0;max-width:min(74ch,100%);text-align:left;
+  font-size:clamp(11.5px,1.16vw,16px);font-weight:300;line-height:1.78;color:#93A1B5;
+  border-top:1px solid #1E2634;padding-top:.95em;
+  transition:opacity .4s ease}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#cap .sub{display:block;font-size:.73em;color:var(--dim);margin-top:.55em}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(30px,5.6vw,80px);font-weight:800;letter-spacing:-.045em;margin:0;
+  line-height:1.04;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.4vw,19px);color:var(--dim);font-weight:300;margin:2.2vh 0 0;letter-spacing:.05em}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.4vh 0 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.2vw,15px);color:var(--blue);
+  letter-spacing:.28em;margin:0 0 2.4vh;text-transform:uppercase}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.mut{color:var(--dimmer)}
+.tok.ded{color:var(--coral);opacity:.55}
+.frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;
+  font-size:.84em;line-height:1.2;padding:0 .16em}
+.frac .n{border-bottom:2px solid currentColor;padding:0 .3em .08em}
+.frac .d{padding:.08em .3em 0}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px}
+#acts{display:flex;gap:3px;flex:1}
+.actbar{display:flex;gap:2px;flex:1;position:relative}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.actlbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8.5px;color:var(--dimmer);
+  letter-spacing:.1em;white-space:nowrap;transition:color .3s}
+.actbar.active .actlbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;
+  text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);
+  letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:15%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.gridl{stroke:#131924;stroke-width:1}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.q{fill:none;stroke:var(--violet);stroke-width:2.4;stroke-dasharray:4 4}
+.fit{stroke:var(--blue);stroke-width:3.4;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 10px rgba(84,169,247,.5))}
+.res{stroke:var(--coral);stroke-width:2.2;stroke-dasharray:5 4}
+.sq{fill:var(--coral);fill-opacity:.18;stroke:var(--coral);stroke-width:1.4;stroke-opacity:.55}
+.ct{fill:none;stroke:var(--blue);stroke-width:1.2}
+.optd{fill:var(--green);filter:drop-shadow(0 0 12px rgba(91,221,168,.85))}
+.mkd{fill:var(--yellow);filter:drop-shadow(0 0 12px rgba(255,211,110,.8))}
+.gdp{fill:none;stroke:var(--coral);stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round;filter:drop-shadow(0 0 8px rgba(255,124,135,.5))}
+.gdp.b{stroke:var(--green);filter:drop-shadow(0 0 8px rgba(91,221,168,.5))}
+.arrow{stroke:var(--yellow);stroke-width:3;marker-end:url(#ah);filter:drop-shadow(0 0 6px rgba(255,211,110,.7))}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)} .slbl.r{fill:var(--coral)}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#141E33;stroke:var(--blue);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+.brk{stroke:var(--dim);stroke-width:2;fill:none}
+.curve{fill:none;stroke:var(--blue);stroke-width:3;filter:drop-shadow(0 0 8px rgba(84,169,247,.4))}
+.curve.w{stroke:var(--coral);filter:drop-shadow(0 0 8px rgba(255,124,135,.4))}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+
+/* ── caption placement: P cycles bottom / top / side ──────────────────────
+   The caption block carries a translucent backdrop so it stays readable even
+   when it lands on top of the artwork; side mode also shifts the scene left
+   so the two never fight for the same pixels. */
+#capWrap{background:rgba(8,11,17,.74);backdrop-filter:blur(7px);
+  -webkit-backdrop-filter:blur(7px);border-radius:13px;padding:13px 20px 15px}
+#capL.pos-top{align-items:flex-start}
+#capL.pos-top #capWrap{margin-bottom:0;margin-top:3.4vh}
+#capL.pos-side{align-items:center;justify-content:flex-end}
+#capL.pos-side #capWrap{margin-bottom:0;margin-right:2vw;max-width:min(44ch,36%);align-items:flex-start}
+#capL.pos-side #cap{text-align:left}
+#capL.pos-side #narr{max-width:100%}
+/* Percentage translations on an SVG element resolve unreliably, so side mode
+   narrows the canvas instead: preserveAspectRatio re-centres the artwork
+   inside the smaller box, which moves it clear of the caption panel. */
+svg#scene{transition:width .5s cubic-bezier(.2,.7,.3,1)}
+body.scene-shift svg#scene{width:64%;right:auto}
+#posHint{position:fixed;left:50%;top:16px;transform:translateX(-50%);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--yellow);background:rgba(8,11,17,.86);padding:5px 13px;border-radius:20px;
+  opacity:0;transition:opacity .3s ease;pointer-events:none;z-index:9}
+#posHint.show{opacity:1}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet">
+    <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#FFD36E"/></marker></defs>
+  </svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off"></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · 1–7 跳幕 · N 讲解 · P 字幕位置</div>
+<div id="strip"><div id="acts"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+(function(){
+"use strict";
+var W=1280,H=720,DUR=720,FAST=false;
+var VID="https://www.youtube.com/watch?v=4b4MUYve_U8&t=";
+function tr(sel,dur,delay){ return FAST?sel:sel.transition().duration(dur==null?DUR:dur).delay(delay||0); }
+
+var svg=d3.select("#scene");
+var gGrid=svg.append("g"), gData=svg.append("g"), gParam=svg.append("g"),
+    gMat=svg.append("g"), gNote=svg.append("g");
+
+/* ── data & maths (verified: OLS = 9.4 / 5.5, J* = 3.07) ── */
+var D=[{x:2,y:22},{x:3,y:24},{x:4,y:33},{x:5,y:33},{x:6,y:45}];
+function ols(){var m=D.length,sx=0,sy=0,i;for(i=0;i<m;i++){sx+=D[i].x;sy+=D[i].y;}
+  var xb=sx/m,yb=sy/m,n=0,d=0;for(i=0;i<m;i++){n+=(D[i].x-xb)*(D[i].y-yb);d+=(D[i].x-xb)*(D[i].x-xb);}
+  return{t0:yb-(n/d)*xb,t1:n/d};}
+function J(a,b){var s=0;for(var i=0;i<D.length;i++){var r=a+b*D[i].x-D[i].y;s+=r*r;}return s/(2*D.length);}
+function grad(a,b){var g0=0,g1=0;for(var i=0;i<D.length;i++){var r=a+b*D[i].x-D[i].y;g0+=r;g1+=r*D[i].x;}
+  return[g0/D.length,g1/D.length];}
+var OPT=ols(), S={t0:26,t1:1.2};
+
+var P={l:400,r:880,t:118,b:452};
+var xs=d3.scaleLinear().domain([1,7]).range([P.l,P.r]);
+var ys=d3.scaleLinear().domain([0,52]).range([P.b,P.t]);
+var Q={l:420,r:860,t:118,b:452};
+var xc=d3.scaleLinear().domain([OPT.t0-26,OPT.t0+26]).range([Q.l,Q.r]);
+var yc=d3.scaleLinear().domain([OPT.t1-8,OPT.t1+8]).range([Q.b,Q.t]);
+
+/* ── scatter builders ── */
+function axes(on){
+  gGrid.selectAll("*").remove(); if(!on)return;
+  gGrid.selectAll("line.g").data(ys.ticks(5)).join("line").attr("class","gridl g")
+    .attr("x1",P.l).attr("x2",P.r).attr("y1",ys).attr("y2",ys);
+  gGrid.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gGrid.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);
+  gGrid.selectAll("text.x").data(xs.ticks(6)).join("text").attr("class","axlbl x")
+    .attr("x",xs).attr("y",P.b+25).attr("text-anchor","middle").text(String);
+  gGrid.selectAll("text.y").data(ys.ticks(5)).join("text").attr("class","axlbl y")
+    .attr("x",P.l-13).attr("y",function(d){return ys(d)+5;}).attr("text-anchor","end").text(String);
+  gGrid.append("text").attr("class","axlbl").attr("x",P.r).attr("y",P.b+50).attr("text-anchor","end").text("房间数 x");
+  gGrid.append("text").attr("class","axlbl").attr("x",P.l-13).attr("y",P.t-14).attr("text-anchor","end").text("价格 y");
+}
+function pts(on){
+  if(!on){gData.selectAll("circle.pt").remove();return;}
+  var s=gData.selectAll("circle.pt").data(D).join("circle").attr("class","pt")
+    .attr("cx",function(d){return xs(d.x);}).attr("cy",function(d){return ys(d.y);});
+  if(FAST) s.attr("r",9); else { s.attr("r",0);
+    s.transition().duration(DUR).delay(function(d,i){return i*90;}).attr("r",9); }
+}
+function line(t0,t1){
+  var xd=xs.domain();
+  var e=gData.selectAll("line.fit").data([0]).join("line").attr("class","fit");
+  (FAST?e:e.transition().duration(DUR).ease(d3.easeCubicOut))
+    .attr("x1",xs(xd[0])).attr("y1",ys(t0+t1*xd[0]))
+    .attr("x2",xs(xd[1])).attr("y2",ys(t0+t1*xd[1]));
+}
+function noline(){gData.selectAll("line.fit").remove();}
+function resid(on){
+  if(!on){gData.selectAll("line.res").remove();return;}
+  var s=gData.selectAll("line.res").data(D).join("line").attr("class","res")
+    .attr("x1",function(d){return xs(d.x);}).attr("x2",function(d){return xs(d.x);})
+    .attr("y1",function(d){return ys(d.y);}).attr("y2",function(d){return ys(S.t0+S.t1*d.x);});
+  if(FAST)s.style("opacity",1); else {s.style("opacity",0);
+    s.transition().duration(DUR).delay(function(d,i){return i*75;}).style("opacity",1);}
+}
+function squares(on){
+  if(!on){gData.selectAll("rect.sq").remove();return;}
+  var s=gData.selectAll("rect.sq").data(D).join("rect").attr("class","sq")
+    .attr("x",function(d){var side=Math.abs(ys(S.t0+S.t1*d.x)-ys(d.y)),L=xs(d.x);
+      return (L+side>P.r+70)?L-side:L;})
+    .attr("y",function(d){return Math.min(ys(S.t0+S.t1*d.x),ys(d.y));})
+    .attr("width",function(d){return Math.abs(ys(S.t0+S.t1*d.x)-ys(d.y));})
+    .attr("height",function(d){return Math.abs(ys(S.t0+S.t1*d.x)-ys(d.y));});
+  if(FAST)s.attr("opacity",1); else {s.attr("opacity",0);
+    s.transition().duration(DUR).delay(function(d,i){return i*75;}).attr("opacity",1);}
+}
+function mergeSq(){ if(FAST){gData.selectAll("rect.sq,line.res").remove();return;}
+  gData.selectAll("rect.sq").transition().duration(880).ease(d3.easeCubicInOut)
+    .attr("x",W/2-8).attr("y",H/2-8).attr("width",16).attr("height",16).attr("opacity",0).remove();
+  gData.selectAll("line.res").transition().duration(560).style("opacity",0).remove(); }
+
+/* ── parameter space ── */
+function contours(on){
+  gParam.selectAll("*").remove(); if(!on)return;
+  var NX=60,NY=60,v=[],mn=1e9,mx=-1e9,xd=xc.domain(),yd=yc.domain();
+  for(var j=0;j<NY;j++)for(var i=0;i<NX;i++){
+    var a=xd[0]+(xd[1]-xd[0])*i/(NX-1),b=yd[0]+(yd[1]-yd[0])*j/(NY-1),q=J(a,b);
+    v[j*NX+i]=q; if(q<mn)mn=q; if(q>mx)mx=q;}
+  var lv=[];for(var k=1;k<=11;k++)lv.push(mn+(mx-mn)*Math.pow(k/11,2.6));
+  var gx=(Q.r-Q.l)/(NX-1),gy=(Q.b-Q.t)/(NY-1);
+  var sel=gParam.selectAll("path.ct").data(d3.contours().size([NX,NY]).thresholds(lv)(v))
+    .join("path").attr("class","ct")
+    .attr("d",function(p){return p.coordinates.map(function(pl){return pl.map(function(rg){
+      return "M"+rg.map(function(pt){return (Q.l+pt[0]*gx).toFixed(1)+","+(Q.b-pt[1]*gy).toFixed(1);}).join("L")+"Z";}).join("");}).join("");});
+  if(FAST)sel.attr("stroke-opacity",function(d,i){return .44-i*.031;});
+  else {sel.attr("stroke-opacity",0).transition().duration(860).delay(function(d,i){return i*50;})
+    .attr("stroke-opacity",function(d,i){return .44-i*.031;});}
+  gParam.append("line").attr("class","axline").attr("x1",Q.l).attr("x2",Q.r).attr("y1",Q.b).attr("y2",Q.b);
+  gParam.append("line").attr("class","axline").attr("x1",Q.l).attr("x2",Q.l).attr("y1",Q.t).attr("y2",Q.b);
+  gParam.append("text").attr("class","axlbl").attr("x",Q.r).attr("y",Q.b+28).attr("text-anchor","end").text("θ₀");
+  gParam.append("text").attr("class","axlbl").attr("x",Q.l-13).attr("y",Q.t-12).attr("text-anchor","end").text("θ₁");
+}
+function optDot(on){
+  if(!on)return;
+  var c=gParam.append("circle").attr("class","optd").attr("cx",xc(OPT.t0)).attr("cy",yc(OPT.t1));
+  if(FAST)c.attr("r",9); else c.attr("r",0).transition().duration(680).delay(420).attr("r",9);
+  var t=gParam.append("text").attr("class","slbl g").attr("x",xc(OPT.t0)+17).attr("y",yc(OPT.t1)+5).text("最低点");
+  if(FAST)t.attr("opacity",1); else t.attr("opacity",0).transition().duration(560).delay(760).attr("opacity",1);
+}
+function marker(t0,t1){
+  var c=gParam.selectAll("circle.mkd").data([0]).join("circle").attr("class","mkd")
+    .attr("cx",xc(t0)).attr("cy",yc(t1));
+  if(FAST)c.attr("r",9); else c.attr("r",9).transition().duration(DUR).attr("cx",xc(t0)).attr("cy",yc(t1));
+}
+function path(alpha,n,noisy,cls){
+  var a=OPT.t0+17,b=OPT.t1-4.6,pp=[[a,b]],seed=11;
+  function rnd(){seed=(seed*9301+49297)%233280;return seed/233280-.5;}
+  for(var i=0;i<n;i++){var g=grad(a,b);
+    var g0=g[0]+(noisy?rnd()*7:0), g1=g[1]+(noisy?rnd()*26:0);
+    a-=alpha*g0; b-=alpha*g1; pp.push([a,b]);
+    if(!isFinite(a)||Math.abs(a)>1e5)break;}
+  var d="M"+pp.map(function(p){return xc(p[0]).toFixed(1)+","+yc(p[1]).toFixed(1);}).join("L");
+  var p=gParam.append("path").attr("class","gdp "+(cls||"")).attr("d",d);
+  var nd=p.node();
+  if(nd&&nd.getTotalLength&&!FAST){var L=nd.getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(1600).ease(d3.easeCubicOut).attr("stroke-dashoffset",0);}
+  return pp[pp.length-1];
+}
+function arrow(x1,y1,x2,y2){
+  var a=gNote.append("line").attr("class","arrow").attr("x1",x1).attr("y1",y1).attr("x2",x2).attr("y2",y2);
+  if(!FAST)a.attr("opacity",0).transition().duration(600).delay(300).attr("opacity",1);
+}
+function note(txt,x,y,cls,anchor){
+  var t=gNote.append("text").attr("class","slbl "+(cls||"")).attr("x",x).attr("y",y)
+    .attr("text-anchor",anchor||"middle").text(txt);
+  if(FAST)t.attr("opacity",1); else t.attr("opacity",0).transition().duration(560).delay(280).attr("opacity",1);
+}
+function clearNotes(){gNote.selectAll("*").remove();}
+
+/* ── generic matrix / table renderer ── */
+function matrix(o){
+  var cw=o.cw||74, ch=o.ch||40, R=o.rows, C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2, y0=o.y!=null?o.y:(H-R*ch)/2-20;
+  var g=gMat.append("g");
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=g.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=g.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){ rc.attr("opacity",0); tx.attr("opacity",0);
+      var dl=(i*C+j)*22;
+      rc.transition().duration(400).delay(dl).attr("opacity",1);
+      tx.transition().duration(400).delay(dl).attr("opacity",1); }
+  }
+  if(o.bracket){
+    var bw=C*cw-3, bh=R*ch-3, e=9;
+    g.append("path").attr("class","brk").attr("d","M"+(x0-e)+","+y0+"h-"+e+"v"+bh+"h"+e);
+    g.append("path").attr("class","brk").attr("d","M"+(x0+bw+e)+","+y0+"h"+e+"v"+bh+"h-"+e);
+  }
+  if(o.label) note(o.label, x0+C*cw/2-1, y0-22, o.labelCls||"b");
+  if(o.rowLabels) o.rowLabels.forEach(function(t,i){
+    note(t, x0-24, y0+i*ch+(ch-3)/2+5, "", "end"); });
+  if(o.colLabels) o.colLabels.forEach(function(t,j){
+    note(t, x0+j*cw+(cw-3)/2, y0-8, "", "middle"); });
+  return g;
+}
+function clearMat(){gMat.selectAll("*").remove();}
+
+/* ── curve panel (convex vs not) ── */
+function curves(kind){
+  var g=gMat.append("g");
+  function draw(x0,w,f,cls,lab){
+    var d="",N=90;
+    for(var i=0;i<=N;i++){var t=i/N,X=x0+t*w,Y=430-f(t)*230;d+=(i?"L":"M")+X.toFixed(1)+","+Y.toFixed(1);}
+    var p=g.append("path").attr("class","curve "+(cls||"")).attr("d",d);
+    if(!FAST){var L=p.node().getTotalLength();
+      p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+       .transition().duration(1100).attr("stroke-dashoffset",0);}
+    g.append("line").attr("class","axline").attr("x1",x0-14).attr("x2",x0+w+14).attr("y1",436).attr("y2",436);
+    note(lab,x0+w/2,494,cls==="w"?"r":"b");
+  }
+  var cv=function(t){var u=(t-.5)*2;return u*u*.86;};
+  var nc=function(t){var u=(t-.5)*2;return .40+.30*Math.sin(u*5.1)+.19*u*u+.09*Math.cos(u*9);};
+  if(kind==="both"){ draw(230,380,cv,"","线性回归的 J — 凸");
+    draw(690,380,nc,"w","一般损失面 — 非凸");
+    g.append("circle").attr("class","optd").attr("cx",420).attr("cy",430).attr("r",8);
+    [0.17,0.52,0.86].forEach(function(t){
+      g.append("circle").attr("fill","#FF7C87").attr("cx",690+t*380).attr("cy",430-nc(t)*230).attr("r",6);});
+  } else { draw(450,380,cv,"","J(θ) 是一个碗");
+    g.append("circle").attr("class","optd").attr("cx",640).attr("cy",430).attr("r",8); }
+}
+
+/* split view: the same state shown in data space and parameter space at once */
+var P2={l:150,r:560,t:150,b:410}, Q2={l:730,r:1140,t:150,b:410};
+var xs2=d3.scaleLinear().domain([1,7]).range([P2.l,P2.r]);
+var ys2=d3.scaleLinear().domain([0,52]).range([P2.b,P2.t]);
+var xc2=d3.scaleLinear().domain([OPT.t0-26,OPT.t0+26]).range([Q2.l,Q2.r]);
+var yc2=d3.scaleLinear().domain([OPT.t1-8,OPT.t1+8]).range([Q2.b,Q2.t]);
+function split(t0,t1,trail){
+  gMat.selectAll("*").remove();
+  var g=gMat.append("g");
+  /* left: data space */
+  g.append("line").attr("class","axline").attr("x1",P2.l).attr("x2",P2.r).attr("y1",P2.b).attr("y2",P2.b);
+  g.append("line").attr("class","axline").attr("x1",P2.l).attr("x2",P2.l).attr("y1",P2.t).attr("y2",P2.b);
+  var xd=xs2.domain();
+  g.append("line").attr("class","fit")
+    .attr("x1",xs2(xd[0])).attr("y1",ys2(t0+t1*xd[0]))
+    .attr("x2",xs2(xd[1])).attr("y2",ys2(t0+t1*xd[1]));
+  g.selectAll("circle.p2").data(D).join("circle").attr("class","pt p2").attr("r",7)
+    .attr("cx",function(d){return xs2(d.x);}).attr("cy",function(d){return ys2(d.y);});
+  note("数据空间 · 一条直线",(P2.l+P2.r)/2,P2.b+34,"b");
+  /* right: parameter space */
+  var NX=44,NY=44,v=[],mn=1e9,mx=-1e9,ax=xc2.domain(),ay=yc2.domain();
+  for(var j=0;j<NY;j++)for(var i=0;i<NX;i++){
+    var a=ax[0]+(ax[1]-ax[0])*i/(NX-1),b=ay[0]+(ay[1]-ay[0])*j/(NY-1),q=J(a,b);
+    v[j*NX+i]=q; if(q<mn)mn=q; if(q>mx)mx=q;}
+  var lv=[];for(var k=1;k<=9;k++)lv.push(mn+(mx-mn)*Math.pow(k/9,2.6));
+  var gx=(Q2.r-Q2.l)/(NX-1),gy=(Q2.b-Q2.t)/(NY-1);
+  g.selectAll("path.c2").data(d3.contours().size([NX,NY]).thresholds(lv)(v))
+    .join("path").attr("class","ct c2").attr("stroke-opacity",function(d,i){return .40-i*.034;})
+    .attr("d",function(pp){return pp.coordinates.map(function(pl){return pl.map(function(rg){
+      return "M"+rg.map(function(pt){return (Q2.l+pt[0]*gx).toFixed(1)+","+(Q2.b-pt[1]*gy).toFixed(1);}).join("L")+"Z";}).join("");}).join("");});
+  g.append("circle").attr("class","optd").attr("cx",xc2(OPT.t0)).attr("cy",yc2(OPT.t1)).attr("r",6);
+  if(trail&&trail.length>1)
+    g.append("path").attr("class","gdp").attr("d","M"+trail.map(function(q){
+      return xc2(q[0]).toFixed(1)+","+yc2(q[1]).toFixed(1);}).join("L"));
+  g.append("circle").attr("class","mkd").attr("cx",xc2(t0)).attr("cy",yc2(t1)).attr("r",8);
+  note("参数空间 · 就是一个点",(Q2.l+Q2.r)/2,Q2.b+34,"y");
+}
+function sweepSplit(alpha,n){
+  var a=OPT.t0+17,b=OPT.t1-4.6,tr=[[a,b]],k=0;
+  if(FAST){ for(var i=0;i<n;i++){var g=grad(a,b);a-=alpha*g[0];b-=alpha*g[1];tr.push([a,b]);}
+    split(a,b,tr); return; }
+  split(a,b,tr);
+  (function tick(){ if(k>=n)return;
+    var g=grad(a,b); a-=alpha*g[0]; b-=alpha*g[1]; tr.push([a,b]); k++;
+    split(a,b,tr.slice()); setTimeout(tick,150); })();
+}
+/* J against iteration — how you actually tell that it converged */
+function lossCurve(alpha,n,noisy){
+  gMat.selectAll("*").remove();
+  var a=OPT.t0+17,b=OPT.t1-4.6,js=[J(a,b)],seed=5;
+  function rnd(){seed=(seed*9301+49297)%233280;return seed/233280-.5;}
+  for(var i=0;i<n;i++){var g=grad(a,b);
+    a-=alpha*(g[0]+(noisy?rnd()*7:0)); b-=alpha*(g[1]+(noisy?rnd()*26:0)); js.push(J(a,b));}
+  var L={l:300,r:980,t:170,b:470};
+  var X=d3.scaleLinear().domain([0,n]).range([L.l,L.r]);
+  var Y=d3.scaleLinear().domain([0,d3.max(js)]).range([L.b,L.t]);
+  var g=gMat.append("g");
+  g.append("line").attr("class","axline").attr("x1",L.l).attr("x2",L.r).attr("y1",L.b).attr("y2",L.b);
+  g.append("line").attr("class","axline").attr("x1",L.l).attr("x2",L.l).attr("y1",L.t).attr("y2",L.b);
+  var pth=g.append("path").attr("class","curve"+(noisy?" w":""))
+    .attr("d","M"+js.map(function(q,i){return X(i).toFixed(1)+","+Y(q).toFixed(1);}).join("L"));
+  if(!FAST){var TL=pth.node().getTotalLength();
+    pth.attr("stroke-dasharray",TL+" "+TL).attr("stroke-dashoffset",TL)
+       .transition().duration(1500).attr("stroke-dashoffset",0);}
+  note("迭代次数 →",(L.l+L.r)/2,L.b+34,"");
+  note("J(θ)",L.l-26,L.t-8,"y","end");
+}
+
+/* ── text layers ── */
+var eqBox=document.getElementById("eqBox"),big=document.getElementById("big"),
+    cap=document.getElementById("cap"),titleBox=document.getElementById("titleBox");
+function setCap(h){ if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  if(FAST){cap.innerHTML=h;cap.classList.remove("off");return;}
+  cap.classList.add("off"); setTimeout(function(){cap.innerHTML=h;cap.classList.remove("off");},160); }
+function setEq(h,pos){ if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var apply=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){apply();return;} eqBox.classList.add("off"); setTimeout(apply,160); }
+function setBig(v,s){ if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":""); big.classList.remove("off"); }
+var quizEl=document.getElementById("quiz"), locked=false;
+function clearQuiz(){ quizEl.classList.add("off"); quizEl.innerHTML=""; locked=false; }
+function askQ(q){
+  if(FAST){ locked=false; quizEl.classList.add("off"); quizEl.innerHTML=""; return; }
+  locked=true;
+  quizEl.innerHTML='<p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+(q.w||"")+'</p>';
+  quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){ b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){ x.classList.add("lk");
+      x.classList.add(k===q.a?"ok":(k===i?"no":"off2")); });
+    quizEl.querySelector(".why").hidden=false;
+    locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";
+  });});
+}
+var narrEl=document.getElementById("narr"), narrOn=true;
+var NARR={};
+NARR[1]="这张表就是<b>训练集</b>。机器学习和普通编程的分界就在这里：我们不写「面积超过多少就值多少钱」这类规则，而是把这些成交记录交给算法，让它<i>自己找出</i>面积和价格之间的关系。表里每一行称作一个<b>训练样本</b>，整门课的记号都建立在这张表上。";
+NARR[2]="这是<b>泛化</b>的要求。如果只要求在这五套房子上答对，直接背下这张表就行——但那毫无用处。真正要的是对<s>没出现在表里</s>的房子给出合理估价。这条要求贯穿全课：训练集上的表现从来不是目的，只是手段。你课程 T1 讲的 train/test 划分，根源就在这里。";
+NARR[3]="这张图整个学期都在用。左边是训练集，中间是<b>学习算法</b>，右边吐出一个函数 <i>h</i>（hypothesis，假设）。h 接收新的输入、输出预测。要点是<b>两个阶段分开</b>：训练时算法调整参数，预测时 h 已经冻结、不再学习。这正是 sklearn 里 fit() 和 predict() 的分工。";
+NARR[4]="为什么先试直线？因为它是<b>最简单的可能</b>，而且只有两个自由度：θ₀ 决定线的高低，θ₁ 决定倾斜程度。从最简单的模型开始，看它够不够用，不够再加复杂度——这是建模的常规做法，也是你课程里「先看基线」那条习惯的来源。";
+NARR[5]="特征增加时，每个特征配一个自己的参数，加进来就行。这里出现一个术语上的讲究：真正的<b>线性函数</b>必须过原点，带了常数项 θ₀ 之后严格来说叫<i>仿射函数</i>。数学系的同学会较真，但机器学习圈子里一律称线性——知道有这回事就够了，考试不会考这个区别。";
+NARR[6]="<b>m 和 n 千万别搞反</b>。m 是行数（有多少套房子），n 是列数（每套房子用几个数描述）。MNIST 的 X_train.shape 是 (60000, 784)，意思就是 m=60000、n=784——每张图 784 个像素，每个像素是一个特征。你课程 T3 practical 里那句「每个特征是 28×28 图像中某个固定像素的强度」说的就是 n。";
+NARR[7]="这是最容易出错的地方。<i>上标带括号</i>的 x⁽ⁱ⁾ 指第 i 个<b>样本</b>——它是一整个向量，对应表里一整行。<b>下标</b>的 xⱼ 指第 j 个<b>特征</b>——是一个数。两个合起来 xⱼ⁽ⁱ⁾ 才锁定表里的一个格子。注意上标不是指数，i 次方和第 i 个样本是两回事。";
+NARR[8]="这个技巧看着像作弊，其实很关键。原本 θ₀ 孤零零地挂在求和号外面，每次写公式都要单独照顾它。补一个恒等于 1 的<b>哑特征</b> x₀ 之后，θ₀ 就变成 θ₀·x₀，可以和其他项一起进求和号。代价只是向量维度从 n 变成 n+1。";
+NARR[9]="于是假设函数写成一个<b>内积</b> θᵀx，之后所有推导都能用向量和矩阵表达，不必单独伺候截距。<b>但要注意换算</b>：你课程（以及 CS229 讲 SVM 时）把截距单独写成 f(x)=wᵀx+b。两种写法完全等价，<s>考试要写本课的形式</s>——看视频时心里就翻译好。";
+NARR[10]="这是从「感觉」到「算法」的关键一跳。人眼一看就知道哪条线更贴合，但计算机需要一个<b>能比大小的数</b>。有了这个数，「找最好的线」才能变成「让这个数最小」——一个可以交给数学处理的问题。";
+NARR[11]="为什么是<b>竖直</b>距离而不是垂直距离？因为回归的目标是<i>预测 y</i>。给定房间数 x，模型给出 h(x)，真实值是 y，两者的差就是我们关心的误差，它天然是竖直方向的。点到直线的垂直距离在几何上更「对称」，但它把 x 的误差也算了进来，和预测任务不匹配。";
+NARR[12]="平方做了两件事。第一，<b>消掉符号</b>——预测高了和低了都算错，不能互相抵消。第二，<b>放大大误差</b>：差 2 万罚 4，差 10 万罚 100，是 25 倍而不是 5 倍。所以最小二乘对<i>离群点很敏感</i>。想让它不敏感就得换损失函数，比如绝对值损失。";
+NARR[13]="注意这一步的性质：<b>五个方块塌缩成一个数</b>。信息被大量丢弃了——J 只告诉你「总体有多差」，不告诉你差在哪个样本。这是所有单一指标的通病，也是你课程反复强调「不能只看一个数字」的原因。";
+NARR[14]="这个 ½ 纯粹是<b>为了后面好看</b>。求导时平方的 2 会掉下来，正好和 ½ 相乘得 1，式子干净。乘一个正常数不改变最小值的<b>位置</b>，只改变函数的高度和梯度的尺度。<s>所以 CS229 用 ½SSE、你课程用 MSE（除以 N），最优解完全相同</s>——但手算梯度时系数不一样，按本课的写。";
+NARR[15]="问题被彻底改写了：原来是「找一条好的直线」，现在是「<b>最小化一个二元函数</b>」。这是机器学习里最常见的套路——把学习问题翻译成优化问题。接下来两幕就是解这个优化问题的两条路：一条迭代着走，一条一步到位。";
+NARR[16]="梯度下降的思路很朴素：<b>不知道最低点在哪，就往低处挪</b>。初始值可以随便取（对线性回归确实随便，因为只有一个极小点；换成神经网络就不随便了，起点会影响结果）。剩下的问题只有一个：往哪个方向挪、挪多远。";
+NARR[17]="<b>这张图最容易被误读</b>。它的横纵轴不是数据的 x 和 y，而是<i>参数</i> θ₀ 和 θ₁；等高线的高低是 J(θ)，也就是「这组参数有多差」。Ng 在课上专门停下来强调过一句 get the axes right。换句话说：<b>左边数据图上的一整条直线，在这张图上只是一个点</b>。";
+NARR[18]="梯度下降是一个<b>局部</b>算法——它只能看见脚下这一小块地形，看不到全局。所以它做的事很有限：在当前位置环顾一圈，找出下降最快的方向，迈一小步，然后重复。它不知道谷底在哪，只知道现在该往哪边走。";
+NARR[19]="梯度 ∇J 指向函数<b>增长最快</b>的方向，所以下山要走它的<i>反方向</i>。这就是更新式里那个负号的全部作用。另外一个有用的事实：梯度的<b>长度</b>也有意义——地形越陡梯度越长，步子自然越大；接近谷底时梯度变短，步子自动变小。";
+NARR[21]="α 是唯一需要你手动定的旋钮。它太小，方向没错但走得慢，可能跑几千步还没到；太大则会跨过谷底落到对面更高的地方，来回震荡甚至发散。<b>它没有万能取值</b>，通常要试几个数量级（0.001、0.01、0.1）看哪个损失下降得又快又稳。";
+NARR[22]="接下来这几镜是<b>本讲最硬的一段</b>，但也是最值的——你课程 T3 Tutorial Q2 要手算的梯度，用的就是同一套推法。技巧是先只处理<i>一个样本</i>，把代数走通，最后再套上求和号推广到 m 个。";
+NARR[23]="注意这里的 J 没有求和号，是<b>单样本版本</b>的代价。这样做纯粹是为了让代数清爽——多个样本的情况只需在最后加一个 Σ，因为求导是线性运算，和的导数等于导数的和。";
+NARR[24]="链式法则的标准套路：<b>由外往里剥</b>。外层是平方，内层是括号里的表达式。先对外层求导（保持内层不动），再乘上内层的导数。这一步只完成了第一半。";
+NARR[25]="这就是幂函数求导规则 (u²)' = 2u·u'。指数 <b>2</b> 掉到前面来，剩下 u 的一次方，再乘内层导数。现在式子前面同时挂着 ½ 和 2。";
+NARR[26]="½ 和 2 相乘正好是 1，一起消失。<b>这就是当初在 J 里加那个 ½ 的全部动机</b>——不是数学上必要，纯粹是让这一步干净。如果当初没加，这里就会一路拖着一个 2，最终梯度变成 2(h−y)x，也完全正确，只是难看一点。";
+NARR[27]="现在处理内层的导数。把 h_θ(x) 按定义展开成 θ₀x₀ + θ₁x₁ + ⋯ + θₙxₙ，这样才能看清哪些项和 θⱼ 有关。";
+NARR[28]="关键观察：这个求和式里，<b>只有第 j 项含 θⱼ</b>。其余每一项（以及最后那个 −y）对 θⱼ 来说都是<i>常数</i>，求导后全部归零。所以整个括号的偏导就只剩下 θⱼxⱼ 那一项的导数，也就是 xⱼ。";
+NARR[29]="最终形式极其简洁：<b>误差乘以该特征的取值</b>。这个式子有很好的直觉——误差决定「要调多少」，特征值决定「这个参数该负多少责任」。某个特征在这个样本上取值为 0，它就不该为这次预测错误负责，梯度里对应的项也确实是 0。";
+NARR[30]="LMS 是 least mean squares 的缩写，也叫 <b>Widrow-Hoff 学习规则</b>，1960 年就提出来了，比现代机器学习早得多。它的形式简单到可以用模拟电路实现，历史上确实被用在自适应滤波器里。";
+NARR[31]="从单样本推广到 m 个样本，靠的是<b>求导的线性性</b>：和的导数等于导数的和。所以只需要在梯度前面套一个 Σ，把所有样本的贡献加起来。因为每一步都用上了<i>全部</i>训练数据，这个版本叫<b>批量</b>梯度下降。";
+NARR[32]="公式推完了，现在<b>验算一次</b>。取 θ₀=26、θ₁=1.2 这组（就是前面那条明显偏平的线），逐个样本算出预测值 h(x) 和误差 h−y。注意误差有正有负：前两套房子预测高了，后三套预测低了。";
+NARR[33]="两个偏导都是<b>负数</b>，这个符号信息很重要：负梯度意味着<i>沿正方向走能让 J 下降</i>，所以 θ₀ 和 θ₁ 都应该<b>调大</b>。这和图上看到的一致——那条线太平也太低，需要抬高并转陡。θ₁ 的梯度（−11）远大于 θ₀ 的（−0.6），说明这一步主要在调斜率。";
+NARR[34]="代进更新式。注意<b>减去负数等于加</b>，所以两个参数都变大了。θ₀ 只动了 0.024，θ₁ 却动了 0.44——梯度大的方向走得多，这正是梯度下降的自适应之处。";
+NARR[35]="<b>损失真的降了</b>，而且降幅不小（约 14%）。这就是全部的秘密：重复这个动作几十上百次。要注意的是「一步就见效」有前提——α 选得合适。α 太大时同样一步可能让 J 反而上升，这也是判断学习率是否合理最直接的办法。";
+NARR[36]="这个形状会在整门课里反复出现。逻辑回归的梯度是 <b>(p−y)x</b>，其中 p = σ(θᵀx)；感知机的更新是 <b>y·x</b>（只在分错时）。三者都是「某种误差 × 特征」。Ng 说这不是巧合，背后是<i>广义线性模型</i>的统一框架——你的 T3 Tutorial Q2 用的正是逻辑回归那一版。";
+NARR[37]="这个前提看似废话，但澄清了一个常见困惑：<b>J 到底是谁的函数</b>？数据固定不动，唯一在变的是 θ，所以 J 是 <i>θ 的函数</i>。这就是为什么地形图的坐标轴是参数而不是数据。反过来说，一旦你改了训练集（比如加了新样本），整张地形图就变了，最低点也会挪位。";
+NARR[38]="「重复直到收敛」在实践中需要一个<b>具体的停止条件</b>：可以是迭代次数上限，可以是 J 的下降幅度小于某个阈值，也可以是梯度长度足够小。工程上最常用的其实是<i>画出 J 随迭代的曲线看它有没有走平</i>——后面会专门讲这个。";
+NARR[39]="「<b>同时更新</b>」是个容易踩的坑。正确做法是：先用<i>当前</i>的 θ 把所有偏导算完，暂存起来，然后一次性写回去。如果你算完 ∂J/∂θ₀ 就立刻更新 θ₀，再拿<b>新的</b> θ₀ 去算 ∂J/∂θ₁，那就不是梯度下降了——虽然有时也能跑通，但它不再沿着真正的负梯度方向。";
+NARR[40]="「碗形」的严格说法是<b>凸函数</b>。J 是关于 θ 的二次函数，二阶导数（Hessian）是 XᵀX，它总是<i>半正定</i>的，几何上就意味着曲面处处向上弯。你课程 T2 Tutorial Q2 的答案里写的「Hessian 是 2XᵀX，半正定，所以 S(β) 是凸二次函数」，说的是同一件事。";
+NARR[41]="凸性带来一个极强的保证：<b>局部最优即全局最优</b>。梯度下降只要 α 合适，从任何起点出发都会滚到同一个底。逻辑回归也有这个性质（Ng 在 L3 会说 no local optima）。神经网络<s>没有</s>——它的损失面坑坑洼洼，起点和随机种子都会影响最终结果，这也是深度学习难调的根源之一。";
+NARR[42]="等高线是把三维的碗<b>从正上方压平</b>来看：同一圈上的所有点 J 值相同。圈越密说明地形越陡。这里的等高线是<i>细长的斜椭圆</i>而不是同心圆，原因是 θ₀ 和 θ₁ 高度相关——房间数都集中在 2 到 6 之间，把斜率调大一点，就得把截距调小很多才能补回来。";
+NARR[43]="这是梯度的一个基本几何性质：<b>梯度方向永远垂直于等高线</b>。直觉上讲，沿着等高线走 J 不变（不上不下），那么变化最快的方向必然和它成直角。所以梯度下降的每一步，都和当前所在的那圈等高线垂直。";
+NARR[44]="<b>之字形</b>是细长椭圆的直接后果。因为垂直于等高线的方向并不指向谷底，算法会先快速横穿峡谷、冲到对面坡上，再折回来一点点沿谷底挪。特征尺度差异越大，椭圆越细长，之字形越严重，收敛越慢。这就是「训练前先标准化特征」的几何理由。";
+NARR[45]="α 太小时算法<b>没有错，只是慢</b>。方向始终正确，损失也单调下降，问题纯粹是效率——四十多步还没走到，实际任务里可能意味着多花几小时。判断方法很简单：如果 J 的曲线一直在降但降得极慢，就该把 α 调大。";
+NARR[46]="发散的临界值可以<b>算出来</b>：对二次代价函数，收敛条件是 α < 2/λ_max，其中 λ_max 是 Hessian 的最大特征值。这份数据算出来约 <b>0.106</b>——所以 0.10 还能收敛，0.11 就开始崩。这不是玄学，是能验证的数学。实践中虽然很少真去算特征值，但知道有这个界，就明白为什么 α 不能随便调大。";
+NARR[47]="<b>这是本讲最值得记住的一张图</b>。左右两边显示的是<i>同一个状态</i>：右边参数空间里那个点的坐标 (θ₀, θ₁)，就是左边那条直线的截距和斜率。点每挪一步，线就转一次。理解了这个对应，前面所有关于「地形图」的说法才真正落地。";
+NARR[48]="换个说法：<b>梯度下降在参数空间里走路，你在数据空间里看到直线被摆正</b>。两个视角缺一不可——参数空间告诉你优化进行到哪一步，数据空间告诉你这组参数拟合得怎么样。调模型时两边都要看。";
+NARR[49]="这是<b>工程上最常用的收敛判据</b>，Ng 在回答学生提问时给出的。不去看参数怎么变，而是画 J(θ) 随迭代次数的曲线：曲线还在明显下降就继续跑，走平了就可以停。这条曲线还能诊断学习率——一直不降说明 α 太小，上下乱跳或者往上翘说明 α 太大。";
+NARR[50]="随机梯度下降的损失曲线<b>天生带噪声</b>，因为每步只用一个样本，J 会上下抖动。这不是出错，看<i>整体趋势</i>就好。实践中常用的办法是每隔若干次迭代算一次平均损失再画点，曲线会平滑很多。";
+NARR[51]="回到数据空间做个收尾对照：参数收敛后，那些红色方块的<b>总面积达到了所有直线里最小的</b>——这正是「最小二乘」这个名字的字面含义。J = 3.07，就是这个最小值。";
+NARR[52]="这个 Σ 是<b>成本所在</b>。它意味着每迈一步之前，都要把整个训练集从头到尾扫一遍、算出每个样本的贡献、加起来。数据小的时候无所谓，数据大的时候，「走一步」本身就成了瓶颈。";
+NARR[53]="把数字摆出来就很直观：一亿条记录、迭代 50 次，是 <b>5×10⁷</b> 次单样本梯度计算——而 50 步在优化里根本不算多，通常要几百上千步。更要命的是这些数据往往<i>装不进内存</i>，每一步都要从磁盘读一遍。这就是引出随机梯度下降的全部动机。";
+NARR[54]="想法直接得近乎粗暴：<b>既然 Σ 是瓶颈，那就别求和了</b>。不等扫完全部样本，看一个就更新一次。这听起来像是在用一个很差的梯度估计——确实是，但接下来会看到，差的估计走得快，反而更划算。";
+NARR[55]="单个样本的梯度是全体梯度的一个<b>无偏但高方差的估计</b>：平均而言方向是对的，具体到某一步可能偏得很远。「随机」这个名字就来自这里——每一步的方向带随机性，取决于你恰好看到了哪个样本。";
+NARR[56]="路径的抖动<b>不是 bug</b>。每一步都朝着「让当前这个样本预测得更准」的方向走，而不同样本想把参数拉向不同地方，合起来就是一条曲折的路。但请注意：虽然绕，它总体<i>还是在往谷底走</i>——因为平均方向是对的。";
+NARR[57]="这就是核心权衡：<b>批量每步准但贵，随机每步糙但便宜 m 倍</b>。判断标准不该是「哪个路径好看」，而是<i>单位时间内走了多远</i>。数据量大时，随机梯度下降在批量还没算完第一步的时间里，已经走了几万步了。";
+NARR[58]="这是 SGD 的固有代价：它<b>不会停在最低点</b>，而是在谷底附近一个区域里持续游荡。原因很简单——即使参数已经到了最优，某个单独样本的梯度通常也不为零，它还是会把参数推走。批量梯度下降没有这个问题，因为在最优点处全体梯度确实是零。";
+NARR[59]="Ng 的实用主义立场值得记住：<b>游荡范围内的参数，工程上完全够用</b>。机器学习的目标是在<i>新数据</i>上表现好，而不是把训练集的损失压到小数点后第八位——后者反而可能是过拟合。这个观点和你课程反复讲的「训练集表现不是目的」是同一个道理。";
+NARR[60]="注意算法结构<b>多了一层内循环</b>：外层遍历整个数据集（一轮叫一个 epoch），内层对每个样本立刻更新全部 θⱼ。所以扫完一遍数据，批量梯度下降只更新了 1 次参数，而随机梯度下降更新了 <b>m 次</b>。";
+NARR[61]="批量和随机是两个极端：一个用全部 m 个样本，一个只用 1 个。中间显然还有很大空间——这就引出实践中真正最常用的那个折中方案。";
+NARR[62]="<b>小批量梯度下降</b>：每次用一小批（常见 32、64、128、256 个）样本估计梯度。它同时拿到两边的好处——方向比单样本稳得多，每步又远比全量便宜。而且批量计算能充分利用 GPU 的并行能力。今天训练神经网络<i>基本上全是它</i>，纯粹的批量或纯粹的随机反而少见。";
+NARR[63]="这类<b>混合策略</b>在实践中很常见：先用便宜的步子快速接近谷底，再切换到更精确的方法收尾。同一思路的另一个版本是保持算法不变、但<i>随时间减小学习率</i>——早期大步快跑，后期小步精调。";
+NARR[64]="总结这一段的实践结论：<b>数据规模决定方法选择</b>。几百几千个样本，批量梯度下降完全够用而且更稳；上百万样本，就必须用随机或小批量。这也解释了为什么现代深度学习几乎不用全量梯度——数据集根本装不下。";
+NARR[65]="学习率衰减的常见做法是让 α 随迭代次数按 1/t 或类似速度下降。直觉很清楚：<b>早期离谷底远，大步走划算；后期在谷底附近，大步只会让你在里面乱撞</b>，这时候把步子收小才能真正停下来。理论上还能证明，只要衰减速度合适，SGD 可以收敛到真正的最优点。";
+NARR[66]="把两条路的取舍并排放着看。<b>没有哪个绝对更好</b>——选哪个取决于数据规模、内存限制和你对精度的要求。这种「按场景权衡」的思路，正是你课程 practical feedback 里反复要求的：把每个选择和证据挂钩，而不是背结论。";
+NARR[67]="到这里，迭代这条路已经讲完了。接下来 Ng 换了一个完全不同的思路：<b>既然 J 是个碗，为什么不直接求出碗底的坐标</b>？这就是后半节课的全部内容。";
+NARR[68]="这是微积分最基本的事实：<b>光滑函数的极值点处导数为零</b>。对凸函数来说更强——导数为零的点<i>就是</i>全局最低点，不需要再检验。所以不用一步步往下走，直接解方程 ∇J = 0 就行。";
+NARR[69]="必须说清这个方法的<b>适用边界</b>：闭式解只有线性回归（以及少数几个模型）才有。逻辑回归的似然方程解不出封闭形式，SVM 要解带约束的二次规划，神经网络更不用说。<s>所以前面讲的梯度下降不是白讲</s>——它才是通用的那个，闭式解反而是特例。";
+NARR[70]="要对向量求导，先得约定<b>结果长什么样</b>。约定是：J 对 θ 的导数，是一个和 θ <i>同形状</i>的向量，第 j 个分量放 ∂J/∂θⱼ。这样「梯度为零」就等价于「每个偏导都为零」，一次写出 n+1 个方程。";
+NARR[71]="把定义推广一步：函数的输入可以是<b>整个矩阵</b>，输出仍是一个实数。这类函数在机器学习里到处都是——损失函数关于权重矩阵的形式就是这样。";
+NARR[72]="规则依然是<b>逐元素</b>：结果矩阵的第 (i,j) 格，放 f 对 A 的第 (i,j) 个元素的偏导。所以 ∇_A f 必然和 A <i>同形状</i>——3×4 的矩阵求导出来还是 3×4，这是判断有没有算错的第一道检查。";
+NARR[73]="抽象定义讲完，用一个能动手算的例子把它坐实。取一个具体的 2×2 矩阵和一个具体的函数 f，接下来三镜逐格算出 ∇_A f。";
+NARR[74]="注意这个 f 的特点：它<b>只用到了 A 的第一行</b>，A₂₁ 和 A₂₂ 压根没出现在表达式里。代入具体数值 A₁₁=5、A₁₂=6，得到 f(A) = 5 + 36 = 41。";
+NARR[75]="逐格求偏导。∂f/∂A₁₁ = 1（因为 A₁₁ 是一次项）；∂f/∂A₁₂ = 2A₁₂（幂函数求导）；而 <b>A₂₁ 和 A₂₂ 根本没出现在 f 里，对它们求导自然是 0</b>——这一点看似显然，但正是矩阵求导「逐元素」定义的直接体现。";
+NARR[76]="把四个偏导填回原来的位置，就得到 ∇_A f。代入 A₁₂ = 6，结果是 [[1, 12], [0, 0]]。<b>形状和 A 完全一样</b>，这是每次算完都该顺手检查的一件事。";
+NARR[77]="迹的定义简单得出奇：<b>把主对角线上的元素加起来</b>。它只对<i>方阵</i>有定义。看起来这个运算丢掉了矩阵绝大部分信息，但接下来会看到，正是这种「把矩阵压成一个数」的能力，让它成为矩阵求导推导中的关键工具。";
+NARR[78]="用刚才那个 A 验算一次：主对角线是 5 和 8，迹就是 <b>13</b>。注意副对角的 6 和 7 完全不参与——迹只关心对角线。";
+NARR[79]="这条性质看着像废话，<b>但它是整段推导的钥匙</b>。一个实数可以看成 1×1 矩阵，它的对角线就是它自己。作用在于：我们的代价函数 J 是个<i>标量</i>，给它套上 tr 不改变任何值，却让我们能使用所有关于迹的矩阵求导公式。这是一个纯粹的技术手法。";
+NARR[80]="迹的<b>循环不变性</b>：tr AB = tr BA。注意这不是说 AB = BA（矩阵乘法本来就不交换），只是说它们的<i>迹</i>相等。推广到三个矩阵：tr ABC = tr CAB = tr BCA——可以循环轮换，但不能任意重排。这条性质用来把想求导的那个矩阵挪到方便的位置。";
+NARR[81]="转置把 A 沿主对角线翻折，<b>对角线上的元素原地不动</b>，所以迹不变。这条性质在推导中用来处理那些「差一个转置」的项。";
+NARR[82]="这条直接给出梯度，是后面推导里用得最频繁的一条。<b>结果是 Bᵀ 而不是 B</b>——转置的位置是最容易出错的地方，记的时候要连转置一起记。";
+NARR[83]="这一条形式最复杂，但它的存在是<b>有针对性的</b>：J 展开后会出现 θᵀXᵀXθ 这样「θ 出现两次」的二次型，普通的求导公式处理不了，正是需要这个形状。四条性质的完整证明都在讲义 notes1 里，<i>考试不会要求你推它们</i>，会用就行。";
+NARR[84]="把整个技巧串起来：<b>J 是标量 → 标量等于自己的迹 → 套上 tr 后可以用矩阵求导公式 → 算出梯度</b>。这就是为什么要绕这么一大圈引入迹。Ng 也承认这一段是纯技术准备，讲义里推得更细。";
+NARR[85]="工具准备完毕。下一幕要做的事很明确：把 J 从带 Σ 的求和式改写成矩阵形式，然后用刚才这四条性质把梯度<b>一行行推出来</b>，最后令它为零。";
+NARR[86]="要用矩阵语言写 J，第一步是把散落的训练样本<b>组织成一个矩阵</b>。约定是：<i>每个样本占一行</i>，每个特征占一列。这个约定和 sklearn 里 X 的形状 (n_samples, n_features) 完全一致。";
+NARR[87]="这个矩阵有个专门的名字：<b>设计矩阵</b>（design matrix）。它的第一列全是 1，正是前面补的那个哑特征 x₀——有了它，截距 θ₀ 才能一起被矩阵乘法处理，不用单独拎出来。";
+NARR[88]="<b>形状是最容易出错的地方</b>，也是检查推导对不对的第一道关：X 是 m×(n+1)，θ 是 (n+1)×1，所以 Xθ 是 m×1，和 y 同形状，可以相减。任何一步如果形状对不上，一定是哪里写错了。";
+NARR[89]="抽象符号讲完，换成我们这五套房子的真实数字。<b>后面每一步都会拿它验算</b>——最终目标是看这个矩阵公式能不能算出你手算的 θ₀=9.4、θ₁=5.5。";
+NARR[90]="矩阵乘法在这里做了一件很经济的事：<b>一次把 m 个预测全算出来</b>。展开看，Xθ 的第 i 行正好是 X 的第 i 行（也就是 x⁽ⁱ⁾ᵀ）点乘 θ，等于 θᵀx⁽ⁱ⁾，正是第 i 个样本的预测值。";
+NARR[91]="逐行展开能看清这个向量的含义：<b>第 i 行就是第 i 个样本的残差</b>。所以 Xθ−y 不是什么抽象记号，它就是把前面那 m 条红色虚线<i>装进了一个向量</i>。";
+NARR[92]="减掉真值得到残差向量。到这里，前面用 Σ 写的东西全部被翻译成了矩阵语言，而矩阵语言的好处马上就会显现——它能让求导变成机械的公式套用。";
+NARR[93]="这一步是把「平方和」翻译成矩阵运算的关键：<b>vᵀv 展开就是各分量的平方和</b>。而各分量正是残差，所以 (Xθ−y)ᵀ(Xθ−y) 就是残差平方和——和最初那个带 Σ 的定义<i>完全是同一个数</i>。";
+NARR[94]="至此 J 有了纯矩阵形式，不含任何求和号。<b>这不是换了个模型，只是换了个写法</b>——数值完全相同。这么做的唯一理由是：矩阵形式可以用上一幕那四条性质来求导，而带 Σ 的形式不行。";
+NARR[95]="展开的方式和标量的 (ax−b)² = a²x² − 2abx + b² 完全类似，只是要小心<b>矩阵乘法不交换</b>，展开时必须保持每一项里因子的先后顺序。展开后得到四项。";
+NARR[96]="中间两项 θᵀXᵀy 和 yᵀXθ 都是 <b>1×1 的矩阵，也就是标量</b>；而且它们互为转置。标量的转置等于它自己，所以<i>这两项相等</i>——这才允许我们把它们合并。";
+NARR[97]="合并后只剩三项。注意最后那个 yᵀy <b>完全不含 θ</b>，对 θ 求导时它会直接消失，所以后面可以不管它。这也从另一个角度说明：常数项不影响最优参数的位置。";
+NARR[98]="<b>这是整段推导的转折点</b>。括号里是个标量，套上 tr 之后数值分毫未变，但形式上它成了「矩阵的迹」，于是上一幕那四条求导性质全部可用。绕这一圈的唯一目的就是拿到使用这些公式的资格。";
+NARR[99]="两条性质各司其职：<b>性质四</b>处理二次项 θᵀXᵀXθ（θ 出现两次），给出<i>两个</i> XᵀXθ 相加；<b>性质三</b>处理线性项，给出 Xᵀy。中间还要用循环不变性把 θ 挪到合适位置。这几步 Ng 在课上走得很快，讲义里推得很细。";
+NARR[100]="外面那个 ½ 把 2 约掉，梯度就出来了：<b>∇θ J = XᵀXθ − Xᵀy</b>。可以做个合理性检查——它的形状是 (n+1)×1，和 θ 一致，符合梯度的定义。";
+NARR[101]="令梯度为零。因为 J 是凸的，这个驻点<b>就是全局最低点</b>，不需要再做二阶检验——这一点在你课程 T2 Tutorial Q2 的答案里也专门说了（Hessian 半正定 ⟹ 凸）。";
+NARR[102]="移项得到的这组方程叫 <b>正规方程</b>（normal equations）。名字里的 normal 是「正交、垂直」的意思——它的几何含义是：<i>最优时残差向量与 X 的所有列都正交</i>。换句话说，数据里剩下的误差已经无法再用特征的任何线性组合解释了。";
+NARR[103]="两边左乘 (XᵀX)⁻¹ 就解出了 θ。<b>注意「若各列线性无关」这个前提</b>——它是 XᵀX 可逆的充要条件，也是你课程 T2 Tutorial Q2 答案里那句「若 X 的三列线性无关则 XᵀX 可逆」的出处。";
+NARR[104]="公式推完了，但推导正确不等于理解到位。<b>接下来五镜把真实数字代进去算一遍</b>——如果这个矩阵公式真的对，它必须给出和手算完全相同的 θ₀=9.4、θ₁=5.5。";
+NARR[105]="XᵀX 的每个元素都有清楚的来历：<b>因为第一列全是 1</b>，左上角就是 1 的个数也就是 m=5；副对角是 Σx=20；右下是 Σx²=90。这也解释了为什么它一定是<i>对称</i>矩阵——XᵀX 的转置还是它自己。";
+NARR[106]="Xᵀy 同理：第一个分量是 1 与 y 的内积，也就是 <b>Σy=157</b>；第二个是 x 与 y 的内积，也就是 <b>Σxy=683</b>。到这里，原始数据已经被完全压缩成这五个数——m、Σx、Σx²、Σy、Σxy，解就只依赖它们。";
+NARR[107]="二阶行列式 ad−bc = 5·90 − 20·20 = <b>50</b>。它不为零，所以矩阵可逆，方程有唯一解。<i>如果它是 0</i>，就说明 x 的取值没有变化（所有房子房间数相同），那时候根本定不出斜率。";
+NARR[108]="二阶矩阵求逆的口诀：<b>主对角对调，副对角变号，整体除以行列式</b>。算出来的三个分数 9/5、−2/5、1/10 都很干净，因为这份数据是精心选过的。";
+NARR[109]="最后一步就是普通的矩阵乘向量。把 (XᵀX)⁻¹ 和 Xᵀy 相乘，得到的两个分量就是 θ₀ 和 θ₁。";
+NARR[110]="<b>矩阵公式和手算给出了完全相同的答案。</b>这不是巧合——前面用中心化公式 θ₁=Σ(x−x̄)(y−ȳ)/Σ(x−x̄)² 推出的结果，和这里的 (XᵀX)⁻¹Xᵀy 在单特征情形下是<i>同一个式子</i>的两种写法。两条路殊途同归，这也是验算自己有没有推错的好办法。";
+NARR[111]="回到数据空间收尾：这条线让红色方块的总面积达到最小，J = 3.07。换回原单位就是 <b>ŷ = 94000 + 55000x</b>——每多一个房间约涨 5.5 万。<i>这正是你课程 M1 T2 Regression by hand 那道题的答案</i>。";
+NARR[112]="这是很重要的一句实务提醒。数值上<b>直接求逆既慢又不稳定</b>：矩阵接近奇异时误差会被放大得很厉害。实际库（包括 sklearn 的 LinearRegression）用的是 QR 分解或 SVD，它们不但更稳，还能在 XᵀX 不可逆时通过<i>伪逆</i>给出一个合理的解。你课程 T2 Tutorial Q2 的答案里写的就是这一句。";
+NARR[113]="这个式子就是你要带走的东西。<b>T2 Tutorial Q2 考的正是它</b>——那道题只是把设计矩阵换成多项式的 [xᵢ² xᵢ 1]，其余步骤一模一样：写出 X 和 y、代入公式、说明列满秩时可逆。能把这一整套写下来，那道题就是满分。";
+function setNarr(n){
+  var t=NARR[n];
+  if(!t||!narrOn){ narrEl.hidden=true; return; }
+  narrEl.hidden=false;
+  if(FAST){ narrEl.innerHTML=t; narrEl.classList.remove("off"); return; }
+  narrEl.classList.add("off");
+  setTimeout(function(){ narrEl.innerHTML=t; narrEl.classList.remove("off"); },160);
+}
+function setTitle(act,h1,p){ titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+act+'</p><h1>'+h1+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>'; }
+function noTitle(){ titleBox.classList.add("off"); }
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h; eqBox.className=""; eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:800,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(11px)"},{opacity:1,transform:"none"}],
+      {duration:540,delay:260,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});
+}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+
+/* ═══════════ THE FILM ═══════════ */
+function S_(t,fn,q){return{t:t,enter:fn,q:q};}
+var ACTS=[], SHOTS=[];
+function act(name,shots){ACTS.push({name:name,from:SHOTS.length,len:shots.length});
+  shots.forEach(function(s){SHOTS.push(s);});}
+
+/* ── ACT I ── */
+act("I · 问题与记号",[
+S_(0,function(){ setTitle("Stanford CS229 · Lecture 2","线性回归<br>与梯度下降","78 分钟 · 七幕 · 空格推进");
+  axes(false);pts(false);clearMat();clearNotes();contours(false);setCap(null);setEq(null);setBig(null); }),
+S_(110,function(){ noTitle(); clearMat();
+  matrix({rows:6,cols:3,cw:120,ch:44,y:180,bracket:false,
+    cell:function(i,j){ if(i===0)return["房号","房间数 x","价格 y"][j];
+      return [String(i),String(D[i-1].x),String(D[i-1].y)][j]; },
+    dim:function(i){return i===0;}});
+  setCap("先从一张表开始。<br>每一行是<b>一套房子</b>：几个房间，卖了多少钱。"); }),
+S_(215,function(){ clearMat();
+  matrix({rows:6,cols:3,cw:120,ch:44,y:180,
+    cell:function(i,j){ if(i===0)return["房号","房间数 x","价格 y"][j];
+      return i===6?["?","7","?"][j]:[String(i),String(D[i-1].x),String(D[i-1].y)][j];},
+    dim:function(i){return i===0;},
+    hl:function(i,j){return i===6?"hl":"";}});
+  setCap("目标不是记住这张表。<br>是对一套<i>没见过的房子</i>给出估价。"); }),
+S_(215,function(){ clearMat(); clearNotes();
+  ["训练集","学习算法","假设 h"].forEach(function(t,i){
+    var x=250+i*390;
+    gMat.append("rect").attr("class","cellbg"+(i===2?" hl3":"")).attr("x",x).attr("y",300)
+      .attr("width",300).attr("height",90).attr("rx",8);
+    note(t,x+150,352,i===2?"b":"");
+    if(i<2) arrow(x+312,345,x+372,345);
+  });
+  note("x  →",190,352,"","end"); note("→  ŷ",1096,352,"b","start");
+  setCap("监督学习的三个部件。<br>参数在<b>训练时</b>定下，预测时 h 已经固定、<b>不再学习</b>。"); }),
+S_(320,function(){ clearMat(); clearNotes(); axes(true); pts(true); S.t0=26;S.t1=1.2; line(S.t0,S.t1);
+  setEq("$$h(x)=\\theta_0+\\theta_1x$$","top");
+  setCap("最简单的假设：<i>一条直线</i>。<br>两个数就能完全决定它。"); }),
+S_(320,function(){ axes(true);pts(true);line(S.t0,S.t1);
+  setEq("$$h(x)=\\theta_0+\\theta_1x_1+\\theta_2x_2$$","top");
+  setCap("多一个特征（比如卧室数）就多一项。<br><span class='sub'>严格说带常数项 θ₀ 的是仿射函数，不过机器学习里一律叫线性</span>"); }),
+S_(537,function(){ axes(false);pts(false);noline();clearMat();
+  matrix({rows:6,cols:4,cw:112,ch:44,y:175,
+    cell:function(i,j){ if(i===0)return["i","x₁","x₂","y"][j];
+      return [String(i),String(D[i-1].x),String(2+(i%3)),String(D[i-1].y)][j];},
+    dim:function(i){return i===0;}});
+  clearNotes();
+  note("m = 5  样本数（行）",640,470,"y"); note("n = 2  特征数（列，不含 x₀）",640,500,"y");
+  setEq(null); setCap("两个字母贯穿整门课：<b>m</b> 是样本数，<b>n</b> 是特征数。"); }),
+S_(537,function(){ clearMat();
+  matrix({rows:6,cols:4,cw:112,ch:44,y:175,
+    cell:function(i,j){ if(i===0)return["i","x₁","x₂","y"][j];
+      return [String(i),String(D[i-1].x),String(2+(i%3)),String(D[i-1].y)][j];},
+    dim:function(i){return i===0;},
+    hl:function(i,j){ if(i===3&&j>0&&j<3)return "hl3"; if(i===3&&j===2)return "hl"; return "";}});
+  clearNotes();
+  note("x⁽³⁾ 是一整行",640,470,"b"); note("x₂⁽³⁾ 是一个格子",640,500,"y");
+  setCap("<i>上标</i>指第几个样本，<b>下标</b>指第几个特征。<br>这两个最容易混。"); }),
+S_(427,function(){ clearMat(); clearNotes();
+  matrix({rows:6,cols:5,cw:104,ch:44,y:175,
+    cell:function(i,j){ if(i===0)return["i","x₀","x₁","x₂","y"][j];
+      return [String(i),"1",String(D[i-1].x),String(2+(i%3)),String(D[i-1].y)][j];},
+    dim:function(i){return i===0;},
+    hl:function(i,j){return j===1?"hl":"";}});
+  note("补一列恒等于 1",640,478,"y");
+  setCap("一个记号技巧：补一个<b>恒为 1</b> 的假特征 x₀。<br>截距就能被吸收进求和号。"); }),
+S_(427,function(){ clearMat(); clearNotes();
+  matrix({rows:3,cols:1,cw:96,ch:46,x:430,y:250,bracket:true,label:"x",
+    cell:function(i){return ["1","x₁","x₂"][i];},
+    hl:function(i){return i===0?"hl":"";}});
+  matrix({rows:3,cols:1,cw:96,ch:46,x:700,y:250,bracket:true,label:"θ",labelCls:"y",
+    cell:function(i){return ["θ₀","θ₁","θ₂"][i];}});
+  note("·",640,320,"y");
+  setEq("$$h(x)=\\sum_{j=0}^{n}\\theta_jx_j=\\theta^{\\top}x$$","low");
+  setCap("于是整个假设塌缩成一个<b>内积</b>。<br><span class='sub'>本课和 SVM 那边把 b 单独写：f(x)=wᵀx+b —— 等价，但考试写本课的形式</span>"); })
+]);
+
+/* ── ACT II ── */
+act("II · 代价函数",[
+S_(855,function(){ clearMat();clearNotes();setEq(null);axes(true);pts(true);S.t0=26;S.t1=1.2;line(S.t0,S.t1);
+  setCap("怎么衡量这条线好不好？"); }),
+S_(855,function(){ axes(true);pts(true);line(S.t0,S.t1);resid(true);
+  setCap("每个点到直线的<b>竖直</b>距离，叫<b>残差</b>。<span class='sub'>是竖直距离，不是点到直线的垂直距离——我们要预测的是 y</span>"); }),
+S_(855,function(){ axes(true);pts(true);line(S.t0,S.t1);resid(true);squares(true);
+  setCap("平方它。<b>边长是残差，面积就是平方。</b><span class='sub'>平方消掉正负号，也让大误差被罚得更重</span>"); }),
+S_(962,function(){ axes(true);pts(true);line(S.t0,S.t1);resid(true);squares(true);mergeSq();
+  setBig(J(S.t0,S.t1).toFixed(2),"J(θ)");
+  setCap("加起来。<br>整条直线的好坏，<b>塌缩成一个数</b>。"); }),
+S_(962,function(){ setBig(null);
+  setEq("$$J(\\theta)=\\frac{1}{2}\\sum_{i=1}^{m}\\bigl(h_\\theta(x^{(i)})-y^{(i)}\\bigr)^2$$","top");
+  axes(true);pts(true);line(S.t0,S.t1);squares(true);
+  setCap("那个 <b>½</b> 不是随便加的——<br>后面求导时平方的 2 会掉下来，正好约掉。"); }),
+S_(1068,function(){ setEq(null);squares(false);resid(false);
+  setBig("min J(θ)","问题重述");
+  setCap("于是整个问题变成一句话：<br><b>找一组 θ，让这个数最小。</b>"); })
+]);
+
+/* ── ACT III ── */
+act("III · 梯度下降与 LMS",[
+S_(1068,function(){ setBig(null);axes(true);pts(true);line(S.t0,S.t1);
+  setCap("从<i>随便一组 θ</i> 出发，然后一点点改进它。"); }),
+S_(1177,function(){ axes(false);pts(false);noline();squares(false);resid(false);contours(true);
+  setCap("换一张图。横轴 <i>θ₀</i>、纵轴 <i>θ₁</i>，等高线是 J 的高低。<br><b>这不是数据图，是参数的地形图。</b>"); }),
+S_(1284,function(){ contours(true);optDot(true);marker(OPT.t0+17,OPT.t1-4.6);
+  setCap("你站在<b>黄点</b>。<em>绿点</em>是谷底。<br>环顾四周，往最陡的下坡迈一步。"); }),
+S_(1284,function(){ contours(true);optDot(true);marker(OPT.t0+17,OPT.t1-4.6);
+  var x=xc(OPT.t0+17),y=yc(OPT.t1-4.6);
+  arrow(x,y,x-58,y+44); note("最陡下降方向",x-70,y+70,"y");
+  setCap("这个方向就是<b>负梯度</b>。"); }),
+S_(1495,function(){ contours(true);optDot(true);marker(OPT.t0+17,OPT.t1-4.6);
+  setEq("$$\\theta_j\\;\\leftarrow\\;\\theta_j-\\alpha\\frac{\\partial J}{\\partial\\theta_j}$$","top");
+  setCap("更新式。"); },
+  {t:"式子里那个负号是干什么的？",
+   o:["让 θ 一直变小","偏导指向<b>上坡</b>，负号把它翻成下坡","保证 α 为正","消掉 J 里的 ½"],
+   a:1, w:"梯度指向函数<b>增长</b>最快的方向。要下山就得往反方向走，所以前面加负号。"}),
+S_(1507,function(){ contours(true);optDot(true);marker(OPT.t0+17,OPT.t1-4.6);
+  setEq("$$\\theta_j\\;\\leftarrow\\;\\theta_j-\\underbrace{\\alpha}_{\\text{学习率}}\\frac{\\partial J}{\\partial\\theta_j}$$","top");
+  setCap("<b>α 是学习率</b>，决定步子多大。"); }),
+S_(1601,function(){ contours(false);clearNotes();
+  setEq(null); setBig("现在真的算","这个偏导");
+  setCap("下面六镜是<b>逐行的代数</b>。<br>先只看<i>一个</i>样本，最后再推广到 m 个。"); }),
+S_(1601,function(){ setBig(null);
+  flip(T("J","J(θ) = ")+T("h","½")+T("lp","(")+T("hx","h<sub>θ</sub>(x)")+T("m","−")+T("y","y")+T("rp",")")+T("sq","²"));
+  setCap("起点：单个样本的代价。"); }),
+S_(1707,function(){ flip(T("d","∂/∂θⱼ ")+T("J","J = ")+T("h","½")+T("dot"," · ")+T("out","∂/∂θⱼ","hl")+T("lp","(")+T("hx","h<sub>θ</sub>(x)")+T("m","−")+T("y","y")+T("rp",")")+T("sq","²"));
+  setCap("对 θⱼ 求偏导。<b>链式法则</b>：先剥外层的平方。"); }),
+S_(1707,function(){ flip(T("d","∂/∂θⱼ ")+T("J","J = ")+T("h","½","hl")+T("two"," · 2","hl")+T("lp","(")+T("hx","h<sub>θ</sub>(x)")+T("m","−")+T("y","y")+T("rp",")")+T("dd"," · ∂/∂θⱼ")+T("lp2","(")+T("hx2","h<sub>θ</sub>(x)")+T("m2","−")+T("y2","y")+T("rp2",")"));
+  setCap("平方的 <b>2</b> 掉下来，乘在前面。"); }),
+S_(1707,function(){ flip(T("d","∂/∂θⱼ ")+T("J","J = ")+T("h","½","ded")+T("two"," · 2","ded")+T("lp","(")+T("hx","h<sub>θ</sub>(x)")+T("m","−")+T("y","y")+T("rp",")")+T("dd"," · ∂/∂θⱼ")+T("lp2","(")+T("hx2","h<sub>θ</sub>(x)")+T("m2","−")+T("y2","y")+T("rp2",")"));
+  setCap("<s>½ 和 2 约掉了。</s><br>这就是<b>当初加那个 ½ 的全部原因</b>。"); }),
+S_(1813,function(){ flip(T("d","∂/∂θⱼ ")+T("J","J = ")+T("lp","(")+T("hx","h<sub>θ</sub>(x)")+T("m","−")+T("y","y")+T("rp",")")+T("dd"," · ∂/∂θⱼ")+T("lp2","(")+T("sum","θ₀x₀ + θ₁x₁ + ⋯ + θₙxₙ")+T("my"," − y")+T("rp2",")"));
+  setCap("把 h<sub>θ</sub>(x) 展开成求和式。"); }),
+S_(1813,function(){ flip(T("d","∂/∂θⱼ ")+T("J","J = ")+T("lp","(")+T("hx","h<sub>θ</sub>(x)")+T("m","−")+T("y","y")+T("rp",")")+T("dd"," · ∂/∂θⱼ")+T("lp2","(")+T("pre","θ₀x₀ + ⋯ + ","ded")+T("tj","θⱼxⱼ","hl")+T("post"," + ⋯ + θₙxₙ","ded")+T("my"," − y","ded")+T("rp2",")"));
+  setCap("对 θⱼ 求导时，<s>其余每一项都是常数</s>，导数为零。<br><b>只有 θⱼxⱼ 这一项活下来</b>，y 也是常数。"); }),
+S_(1813,function(){ flip(T("d","∂/∂θⱼ ")+T("J","J = ")+T("lp","(")+T("hx","h<sub>θ</sub>(x)")+T("m","−")+T("y","y")+T("rp",")")+T("xj"," xⱼ","res"));
+  setCap("<em>算完了。</em><br><b>误差 × 这个特征的取值</b>——就这么简单。"); },
+  {t:"如果某个样本预测得正好准（h(x) = y），它对这次更新的贡献是多少？",
+   o:["贡献最大，因为它是对的","等于 xⱼ","<b>0</b> —— 误差项是零，它不推动参数","取决于 α"],
+   a:2, w:"梯度是<b>误差</b>乘特征。预测准的样本误差为零，乘出来就是零。逻辑回归同理：pᵢ = yᵢ 时 (pᵢ−yᵢ) = 0；感知机也只在分错时才更新。"}),
+S_(1919,function(){ clearQuiz();
+  flip(T("t","θⱼ ← θⱼ − α ")+T("lp","(")+T("hx","h<sub>θ</sub>(x⁽ⁱ⁾)")+T("m","−")+T("y","y⁽ⁱ⁾")+T("rp",")")+T("xj"," xⱼ⁽ⁱ⁾","res"));
+  setCap("代回更新式。这条叫 <b>LMS 规则</b>（least mean squares）。<span class='sub'>也叫 Widrow-Hoff 学习规则</span>"); }),
+S_(1919,function(){ flip(T("t","θⱼ ← θⱼ − α ")+T("S","Σ","hl")+T("sub","i=1..m","hl")+T("lp","(")+T("hx","h<sub>θ</sub>(x⁽ⁱ⁾)")+T("m","−")+T("y","y⁽ⁱ⁾")+T("rp",")")+T("xj"," xⱼ⁽ⁱ⁾"));
+  setCap("推广到 <b>m 个样本</b>：和的导数等于导数的和。<br>这就是<i>批量梯度下降</i>。"); }),
+S_(1919,function(){ setEq(null);clearMat();clearNotes();
+  matrix({rows:6,cols:4,cw:118,ch:44,y:190,
+    cell:function(i,j){ if(i===0)return["xᵢ","yᵢ","h(xᵢ)","h−y"][j];
+      var d=D[i-1],h=26+1.2*d.x;
+      return [String(d.x),String(d.y),h.toFixed(1),(h-d.y).toFixed(1)][j];},
+    dim:function(i){return i===0;},
+    hl:function(i,j){return j===3&&i>0?"hl":"";}});
+  setCap("<b>代一次真实数字。</b>取 θ = (26, 1.2)，先算出每个样本的误差。"); }),
+S_(1919,function(){ clearMat();clearNotes();
+  setEq("$$\\frac{\\partial J}{\\partial\\theta_0}=\\frac{-3.0}{5}=-0.6,\\qquad \\frac{\\partial J}{\\partial\\theta_1}=\\frac{-55.0}{5}=-11.0$$","top");
+  setCap("Σ(h−y) = <b>−3.0</b>，Σ(h−y)x = <b>−55.0</b>。<br>除以 m 就是两个偏导。<span class='sub'>都是负的 —— 说明 θ₀ 和 θ₁ 都该<b>调大</b></span>"); }),
+S_(1919,function(){ setEq("$$\\theta_0\\leftarrow 26-0.04(-0.6)=26.02,\\qquad \\theta_1\\leftarrow 1.2-0.04(-11.0)=1.64$$","top");
+  setCap("取 α = 0.04，走<b>一步</b>。"); }),
+S_(1919,function(){ setEq(null); setBig("21.74 → 18.67","J 真的下降了");
+  setCap("代价从 <s>21.74</s> 降到 <em>18.67</em>。<br><b>一步就见效。</b>剩下的只是重复。"); }),
+S_(1919,function(){ setBig(null);
+  setEq("$$\\frac{\\partial J}{\\partial\\theta_j}=\\sum_{i=1}^{m}\\bigl(h_\\theta(x^{(i)})-y^{(i)}\\bigr)x_j^{(i)}$$","top");
+  setCap("记住这个<b>形状</b>：误差 × 特征。<br><span class='sub'>逻辑回归的梯度是 (p−y)x —— 一模一样，只是 h 换成了 σ(θᵀx)。Ng 说这不是巧合，背后是 GLM</span>"); }),
+S_(1369,function(){ setEq(null);clearMat();clearNotes();
+  setBig("训练集是固定的","一个容易忽略的前提");
+  setCap("推导前有个前提值得说破：<b>训练集在整个过程中不变</b>。<br>变的<i>只有 θ</i>。所以 J 是<b>θ 的函数</b>，不是数据的函数——<br>这也是为什么地形图的坐标轴是参数。"); }),
+S_(1980,function(){ setBig(null);clearMat();
+  setEq("$$\\textbf{repeat until convergence }\\{\\;\\theta_j:=\\theta_j-\\alpha\\sum_{i=1}^{m}\\bigl(h_\\theta(x^{(i)})-y^{(i)}\\bigr)x_j^{(i)}\\;\\}$$","top");
+  setCap("<b>批量梯度下降的完整算法。</b><br>外面是一个「重复直到收敛」的循环。"); }),
+S_(1980,function(){ clearMat();clearNotes();
+  matrix({rows:4,cols:2,cw:210,ch:52,y:250,
+    cell:function(i,j){var t=[["每轮迭代","对 j = 0, 1, …, n"],
+      ["更新谁","全部 θⱼ"],["用多少数据","全部 m 个样本"],["关键","同时更新"]];return t[i][j];},
+    dim:function(i,j){return j===0;},
+    hl:function(i,j){return i===3&&j===1?"hl":"";}});
+  setEq(null);
+  setCap("<b>每一轮要把所有 θⱼ 都更新一遍</b>，j 从 0 到 n。<br><span class='sub'>而且是「同时」更新——先用旧的 θ 算完所有偏导，再一起写回去</span>"); })
+]);
+
+/* ── ACT IV ── */
+act("IV · 几何与收敛",[
+S_(2025,function(){ setEq(null);clearMat();clearNotes();contours(false);curves("one");
+  setCap("好消息：线性回归的 J 是一个<b>碗</b>。"); }),
+S_(2025,function(){ clearMat();curves("both");
+  setCap("<em>碗只有一个底</em>。不管从哪出发都滚到同一处。<br><s>右边</s>那种坑坑洼洼的损失面，起点会决定结果。"); }),
+S_(2130,function(){ clearMat();clearNotes();contours(true);optDot(true);
+  setCap("从上往下看这个碗，就是一圈圈<b>椭圆等高线</b>。"); }),
+S_(2130,function(){ contours(true);optDot(true);
+  var x=xc(OPT.t0+14),y=yc(OPT.t1-3.6);
+  marker(OPT.t0+14,OPT.t1-3.6); arrow(x,y,x-54,y+40);
+  note("⊥ 等高线",x-72,y+66,"y");
+  setCap("一个几何事实：<b>最陡下降方向垂直于等高线</b>。"); }),
+S_(2130,function(){ clearNotes();contours(true);optDot(true);
+  var e=path(0.045,44,false,"b"); marker(e[0],e[1]);
+  setCap("走起来是这样。<br><span class='sub'>注意它不是直奔谷底——先横冲到谷底再沿谷挪，因为椭圆细长</span>"); }),
+S_(2130,function(){ contours(true);optDot(true);
+  var e=path(0.012,44,false,"b"); marker(e[0],e[1]);
+  setBig("α = 0.012","太小");
+  setCap("α 太小：方向没错，<b>就是慢</b>。四十多步还没到。"); }),
+S_(2130,function(){ setBig(null);contours(true);optDot(true);
+  var e=path(0.13,26); marker(e[0],e[1]);
+  clearNotes(); note("α = 0.13 · 发散",640,600,"y");
+  setCap("α 太大：<s>跨过谷底、落到对面更高处</s>，来回放大。<span class='sub'>临界值 α &lt; 2/λmax ≈ 0.106，这份数据算得出来</span>"); }),
+S_(2278,function(){ clearNotes();contours(false);axes(false);pts(false);noline();
+  sweepSplit(0.045,40);
+  setCap("<b>把两个视角并排看。</b><br>右边的点每挪一步，左边的直线就跟着转一次——<br><em>它们是同一件事的两种画法。</em>"); }),
+S_(2278,function(){ clearNotes();sweepSplit(0.045,40);
+  setCap("这就是梯度下降<b>真正在做的事</b>：<br>在参数空间里走路，在数据空间里<i>把直线摆正</i>。"); }),
+S_(3041,function(){ clearNotes();clearMat();lossCurve(0.045,60,false);
+  setCap("<b>怎么知道它收敛了？</b><br>画 J(θ) 随迭代次数的曲线，看它<i>是不是走平了</i>。<span class='sub'>Ng 回答学生提问时给的实操建议——这是工程上最常用的判断方法</span>"); }),
+S_(3041,function(){ clearNotes();lossCurve(0.045,60,true);
+  setCap("随机梯度下降的曲线<b>会抖</b>，但整体趋势向下。<br>看趋势，别看单点。"); }),
+S_(2236,function(){ clearNotes();clearMat();contours(false);axes(true);pts(true);
+  S.t0=OPT.t0;S.t1=OPT.t1;line(S.t0,S.t1);resid(true);squares(true);
+  setCap("收敛之后回到数据：<em>方块缩到了最小</em>。"); })
+]);
+
+/* ── ACT V ── */
+act("V · 批量与随机",[
+S_(2553,function(){ squares(false);resid(false);clearMat();
+  setEq("$$\\theta_j\\leftarrow\\theta_j-\\alpha\\sum_{i=1}^{m}\\bigl(h_\\theta(x^{(i)})-y^{(i)}\\bigr)x_j^{(i)}$$","top");
+  setCap("但批量梯度下降有个硬伤。<br>看那个 <b>Σ</b>：为了迈出<b>哪怕一步</b>，都得扫完全部 m 个样本。"); }),
+S_(2553,function(){ setEq(null);axes(false);pts(false);noline();
+  setBig("5 × 10⁷","50 步 × 100 万样本");
+  setCap("一亿条记录，走 50 步，就是<b>五千万次</b>单样本梯度。<br>这还只是走了 50 步。"); }),
+S_(2659,function(){ setBig(null);
+  flip(T("t","θⱼ ← θⱼ − α ")+T("S","Σ","ded")+T("sub","i=1..m","ded")+T("lp","(")+T("hx","h(x⁽ⁱ⁾)")+T("m","−")+T("y","y⁽ⁱ⁾")+T("rp",")")+T("xj"," xⱼ⁽ⁱ⁾"));
+  setCap("那就<s>把 Σ 去掉</s>。"); }),
+S_(2659,function(){ flip(T("t","θⱼ ← θⱼ − α ")+T("lp","(")+T("hx","h(x⁽ⁱ⁾)")+T("m","−")+T("y","y⁽ⁱ⁾")+T("rp",")")+T("xj"," xⱼ⁽ⁱ⁾","res"));
+  setCap("<b>每看一个样本就更新一次。</b><br>这叫<i>随机梯度下降</i>（stochastic gradient descent）。"); }),
+S_(2765,function(){ setEq(null);clearNotes();contours(true);optDot(true);
+  var e=path(0.03,70,true); marker(e[0],e[1]);
+  setCap("路径像喝醉了一样绕。<br>因为每一步只用<b>一个样本</b>的梯度，方向有噪声。"); }),
+S_(2765,function(){ clearNotes();contours(true);optDot(true);
+  path(0.045,44,false,"b"); var e=path(0.03,70,true); marker(e[0],e[1]);
+  note("批量 · 平滑",300,180,"g","start"); note("随机 · 曲折",300,208,"r","start");
+  setCap("放一起看。<em>批量</em>方向准但每步贵；<s>随机</s>方向糙但每步便宜 m 倍。"); }),
+S_(2976,function(){ clearNotes();contours(true);optDot(true);
+  var e=path(0.03,120,true); marker(e[0],e[1]);
+  setCap("而且 SGD <b>不会精确收敛</b>到最低点，<br>它在谷底附近<i>来回游荡</i>。"); }),
+S_(2976,function(){ setCap("但 Ng 的原话是：那个参数<b>其实也不差</b>。<br><span class='sub'>工程上完全够用——SGD 的优势不是最终精度，是单位时间内的进展</span>"); }),
+S_(2732,function(){ clearNotes();clearMat();contours(false);
+  setEq("$$\\textbf{repeat }\\{\\;\\textbf{for } i=1\\textbf{ to } m\\;\\{\\;\\theta_j:=\\theta_j-\\alpha\\bigl(h_\\theta(x^{(i)})-y^{(i)}\\bigr)x_j^{(i)}\\;\\}\\;\\}$$","top");
+  setCap("<b>随机梯度下降的完整算法。</b><br>注意<i>多了一层内循环</i>：每扫到一个样本就立刻更新全部 θⱼ。"); }),
+S_(2890,function(){ setEq(null);clearMat();clearNotes();
+  matrix({rows:4,cols:3,cw:190,ch:52,y:245,
+    cell:function(i,j){var t=[["","批量","随机"],
+      ["一次更新用","全部 m 个","1 个"],
+      ["方向","准确","有噪声"],
+      ["每步代价","高","低 m 倍"]];return t[i][j];},
+    dim:function(i,j){return i===0||j===0;},
+    hl:function(i,j){return i===0&&j===2?"hl":(i===0&&j===1?"hl3":"");}});
+  setCap("两者之间还有第三条路。"); }),
+S_(2890,function(){ clearMat();clearNotes();
+  setBig("mini-batch","每次用一小批，比如 100 个");
+  setCap("<b>小批量梯度下降</b>：折中方案。<br>方向比 SGD 稳，每步又比批量便宜得多。<span class='sub'>Ng 说这个当年没写进讲义，但实践中最常用——今天训练神经网络基本都是它</span>"); }),
+S_(2890,function(){ setBig(null);
+  setCap("学生问：<i>能不能先跑随机、快到谷底附近再切回批量？</i><br><b>可以。</b>这是常见做法：先用便宜的步子快速接近，再用精确的步子收尾。"); }),
+S_(2870,function(){ clearNotes();clearMat();contours(true);optDot(true);path(0.03,120,true);
+  setCap("所以<b>数据量大时，实践中 SGD 用得比批量多得多</b>。"); }),
+S_(3083,function(){ clearNotes();contours(true);optDot(true);
+  var e=path(0.03,60,true); marker(e[0],e[1]);
+  setBig(null); setEq("$$\\alpha \\;\\propto\\; \\frac{1}{t}$$","top");
+  setCap("想缓解游荡？<b>让 α 随时间逐步减小</b>。<br><span class='sub'>课上有学生问到这一点</span>"); }),
+S_(3083,function(){ setEq(null);clearNotes();contours(false);clearMat();
+  matrix({rows:3,cols:3,cw:200,ch:52,y:280,
+    cell:function(i,j){ var t=[["","批量 GD","随机 GD"],
+      ["每步代价","扫全部 m 个","只看 1 个"],
+      ["收敛","精确到最低点","在附近游荡"]]; return t[i][j];},
+    dim:function(i,j){return i===0||j===0;},
+    hl:function(i,j){return i===0&&j===2?"hl":(i===0&&j===1?"hl3":"");}});
+  setCap("两条路的取舍。"); }),
+S_(3189,function(){ clearMat();clearNotes();
+  setBig("?","有没有第三条路");
+  setCap("不过——<br><b>如果根本不用走呢？</b>"); })
+]);
+
+/* ── ACT VI ── */
+act("VI · 矩阵求导与迹",[
+S_(3189,function(){ setBig(null);clearMat();clearNotes();contours(false);axes(false);pts(false);
+  setCap("J 是个碗，碗底那一点<b>导数为零</b>。<br>那就直接<i>令导数为零解方程</i>——一步到位，不用迭代。"); }),
+S_(3189,function(){ setCap("代价是：这个好事<b>只有线性回归有</b>。<br><span class='sub'>广义线性模型、神经网络都没有闭式解，只能迭代——所以前面那半节课不白讲</span>"); }),
+S_(3294,function(){ clearMat();
+  matrix({rows:3,cols:1,cw:130,ch:48,x:575,y:250,bracket:true,label:"∇θ J",labelCls:"y",
+    cell:function(i){return ["∂J/∂θ₀","∂J/∂θ₁","∂J/∂θ₂"][i];}});
+  setCap("先要一套<b>矩阵求导</b>的记号。<br>J 对向量 θ 的导数，<b>本身也是一个向量</b>——每个分量是对应的偏导。"); }),
+S_(3400,function(){ clearMat();clearNotes();
+  setEq("$$f:\\mathbb{R}^{m\\times n}\\to\\mathbb{R}$$","top");
+  setCap("更一般地：一个函数吃进一个<b>矩阵</b>，吐出一个<b>实数</b>。"); }),
+S_(3400,function(){ setEq(null);clearMat();
+  matrix({rows:2,cols:2,cw:158,ch:58,x:482,y:270,bracket:true,label:"∇_A f",labelCls:"y",
+    cell:function(i,j){return "∂f/∂A"+(i+1)+(j+1);}});
+  setCap("它对矩阵的导数，是一个<b>同样形状</b>的矩阵。<br>第 (i,j) 格放对应元素的偏导。"); }),
+S_(3508,function(){ clearMat();clearNotes();
+  setEq("$$f(A)=A_{11}+A_{12}^{\\,2}$$","top");
+  matrix({rows:2,cols:2,cw:112,ch:54,x:528,y:300,bracket:true,label:"A",
+    cell:function(i,j){return [["5","6"],["7","8"]][i][j];}});
+  setCap("举个能算的。取这个具体的 A。"); }),
+S_(3508,function(){ clearMat();clearNotes();
+  setEq("$$f(A)=A_{11}+A_{12}^{\\,2}$$","top");
+  matrix({rows:2,cols:2,cw:112,ch:54,x:528,y:300,bracket:true,label:"A",
+    cell:function(i,j){return [["5","6"],["7","8"]][i][j];},
+    hl:function(i,j){return i===0?"hl":"";}});
+  setBig(null); note("f(A) = 5 + 6² = 41",640,470,"y");
+  setCap("<b>f 只用到第一行</b>：A₁₁ 加上 A₁₂ 的平方。"); }),
+S_(3616,function(){ clearMat();clearNotes();
+  setEq("$$\\frac{\\partial f}{\\partial A_{11}}=1,\\quad \\frac{\\partial f}{\\partial A_{12}}=2A_{12},\\quad \\frac{\\partial f}{\\partial A_{21}}=\\frac{\\partial f}{\\partial A_{22}}=0$$","top");
+  setCap("逐格求偏导。<br><b>A₂₁ 和 A₂₂ 根本没出现在 f 里</b>，所以是 0。"); }),
+S_(3616,function(){ clearMat();clearNotes();setEq(null);
+  matrix({rows:2,cols:2,cw:132,ch:56,x:508,y:290,bracket:true,label:"∇_A f",labelCls:"y",
+    cell:function(i,j){return [["1","2A₁₂"],["0","0"]][i][j];},
+    hl:function(i,j){return i===0?"hl2":"";}});
+  note("代入 A₁₂ = 6 → [[1, 12],[0, 0]]",640,470,"g");
+  setCap("填回同样形状的矩阵。<em>这就是 ∇_A f。</em>"); },
+  {t:"若 A 是 3×4 的矩阵，∇_A f 的形状是？",
+   o:["4×3","3×4 —— 和 A 完全一样","1×1（因为 f 是标量）","取决于 f"],
+   a:1, w:"梯度是<b>逐元素</b>定义的：每个位置放对该元素的偏导。所以它必然和被求导的矩阵同形状。"}),
+S_(3826,function(){ clearMat();clearNotes();setEq(null);
+  matrix({rows:3,cols:3,cw:98,ch:50,x:493,y:255,bracket:true,label:"A",
+    cell:function(i,j){return "A"+(i+1)+(j+1);},
+    hl:function(i,j){return i===j?"hl":"";}});
+  setEq("$$\\operatorname{tr}A=\\sum_{i}A_{ii}$$","low");
+  setCap("再要一个工具：<b>迹</b>——把<i>对角线</i>上的元素加起来。<span class='sub'>只对方阵有定义</span>"); }),
+S_(3826,function(){ clearMat();clearNotes();
+  matrix({rows:2,cols:2,cw:112,ch:54,x:528,y:280,bracket:true,label:"A",
+    cell:function(i,j){return [["5","6"],["7","8"]][i][j];},
+    hl:function(i,j){return i===j?"hl":"";}});
+  note("tr A = 5 + 8 = 13",640,450,"y");
+  setEq(null); setCap("用刚才那个 A 算一次：<b>5 + 8 = 13</b>。"); }),
+S_(3931,function(){ clearMat();clearNotes();
+  setEq("$$\\operatorname{tr}a=a\\qquad(a\\in\\mathbb{R})$$","top");
+  setCap("<b>性质一。</b>一个实数可以看成 1×1 矩阵，<br>它的迹<b>就是它自己</b>。<span class='sub'>看着像废话，但它是整段推导的钥匙</span>"); }),
+S_(3931,function(){ setEq("$$\\operatorname{tr}AB=\\operatorname{tr}BA$$","top");
+  setCap("<b>性质二。</b>迹里的乘积<b>可以循环交换</b>。<br><span class='sub'>推论：tr ABC = tr CAB = tr BCA</span>"); }),
+S_(3931,function(){ setEq("$$\\operatorname{tr}A=\\operatorname{tr}A^{\\top}$$","top");
+  setCap("<b>性质二点五。</b>转置不改变对角线，<br>所以<i>迹也不变</i>。"); }),
+S_(3931,function(){ setEq("$$\\nabla_A\\operatorname{tr}AB=B^{\\top}$$","top");
+  setCap("<b>性质三。</b>这一条直接给出梯度。"); }),
+S_(3931,function(){ setEq("$$\\nabla_A\\operatorname{tr}ABA^{\\top}C=CAB+C^{\\top}AB^{\\top}$$","top");
+  setCap("<b>性质四。</b>看着吓人，但它正是<i>θᵀXᵀXθ</i> 那一项需要的形状。<span class='sub'>四条性质的证明都在讲义 notes1 里，考试不要求推它们</span>"); }),
+S_(4019,function(){ setEq(null);clearMat();clearNotes();
+  flip(T("J","J(θ)")+T("is"," 是一个")+T("sc","标量","hl")+T("so"," ⟹ ")+T("tr","J(θ) = tr J(θ)","res"));
+  setCap("<b>为什么要绕道迹？</b><br>因为 J 是标量，而<i>标量等于自己的迹</i>——<br>一旦写成迹，上面那些矩阵求导公式就能用了。"); }),
+S_(4019,function(){ setBig("工具齐了","四条性质 + 一个技巧");
+  setEq(null); setCap("下一幕把 J 写成矩阵形式，然后<b>一行行推到底</b>。"); })
+]);
+
+/* ── ACT VII ── */
+act("VII · 正规方程",[
+S_(4145,function(){ setBig(null);clearMat();clearNotes();axes(true);pts(true);
+  setCap("回到数据。把每个训练样本<b>横着摞成一行</b>。"); }),
+S_(4145,function(){ axes(false);pts(false);clearMat();
+  matrix({rows:4,cols:3,cw:104,ch:46,x:420,y:250,bracket:true,label:"X",labelCls:"y",
+    cell:function(i,j){ if(i===3)return ["⋮","⋮","⋮"][j];
+      return ["1","x₁⁽"+(i+1)+"⁾","x₂⁽"+(i+1)+"⁾"][j];},
+    hl:function(i,j){return j===0?"hl":"";}});
+  matrix({rows:4,cols:1,cw:104,ch:46,x:800,y:250,bracket:true,label:"y",
+    cell:function(i){return i===3?"⋮":"y⁽"+(i+1)+"⁾";}});
+  setCap("<b>X 叫设计矩阵</b>：每行一个样本。<br>第一列全是 1 —— 就是那个 x₀。"); }),
+S_(4145,function(){ clearNotes();
+  note("m × (n+1)",524,540,"y"); note("m × 1",852,540,"");
+  setCap("形状要记牢：<b>X 是 m×(n+1)</b>，y 是 m×1，θ 是 (n+1)×1。"); }),
+S_(4145,function(){ clearMat();clearNotes();
+  matrix({rows:5,cols:2,cw:88,ch:44,x:452,y:240,bracket:true,label:"X",labelCls:"y",
+    cell:function(i,j){return j===0?"1":String(D[i].x);}});
+  matrix({rows:5,cols:1,cw:88,ch:44,x:760,y:240,bracket:true,label:"y",
+    cell:function(i){return String(D[i].y);}});
+  setCap("<b>换成我们这五套房子的真实数字。</b><br>后面每一步都会拿它验算。"); }),
+S_(4251,function(){ clearMat();clearNotes();
+  flip(T("X","X")+T("t","θ")+T("e"," = ")+T("all","所有 m 个预测值组成的向量","res"));
+  setCap("<b>Xθ</b> 一次算完全部预测。<br><span class='sub'>矩阵乘法的第 i 行，正好是 θᵀx⁽ⁱ⁾</span>"); }),
+S_(4251,function(){ clearMat();clearNotes();
+  matrix({rows:4,cols:1,cw:280,ch:50,x:500,y:250,bracket:true,label:"Xθ − y",labelCls:"y",
+    cell:function(i){return i===3?"⋮":"θᵀx⁽"+(i+1)+"⁾ − y⁽"+(i+1)+"⁾";}});
+  setCap("<b>逐行看</b>：第 i 行正好是第 i 个样本的残差。<br><span class='sub'>矩阵乘法把 m 个 θᵀx⁽ⁱ⁾ 一次算完，这就是它的全部作用</span>"); }),
+S_(4251,function(){ clearMat();clearNotes();
+  flip(T("X","X")+T("t","θ")+T("m"," − ")+T("y","y")+T("e"," = ")+T("all","残差向量","res"));
+  setCap("减掉真值，就是<b>残差向量</b>。"); },
+  {t:"这份数据 m=5、n=1。残差向量 Xθ−y 是什么形状？",
+   o:["2×1","5×1 —— 每个样本一个残差","5×2","1×1"],
+   a:1, w:"X 是 5×2，θ 是 2×1，所以 Xθ 是 <b>5×1</b>；减去同为 5×1 的 y，还是 5×1。每一行对应一个样本的残差。"}),
+S_(4251,function(){ clearQuiz();
+  flip(T("v","vᵀv")+T("e"," = ")+T("s","v₁² + v₂² + ⋯ + v")+T("mm","ₘ")+T("s2","²","res"));
+  setCap("一个向量<b>和自己做内积</b>，正好等于各分量的平方和。<br><span class='sub'>这就是转置那一撇在这里的作用</span>"); }),
+S_(4251,function(){ setEq("$$J(\\theta)=\\tfrac12(X\\theta-y)^{\\top}(X\\theta-y)$$","top");
+  setCap("于是代价函数有了<b>矩阵形式</b>。<br>和最开始那个带 Σ 的式子<em>完全等价</em>。"); }),
+S_(4357,function(){ setEq(null);
+  flip(T("h","½")+T("lp","(")+T("a","θᵀXᵀXθ")+T("m1"," − ")+T("b","θᵀXᵀy")+T("m2"," − ")+T("c","yᵀXθ")+T("p"," + ")+T("d","yᵀy")+T("rp",")"));
+  setCap("展开。像 (ax−b)² 一样，得到<b>四项</b>。"); }),
+S_(4357,function(){ flip(T("h","½")+T("lp","(")+T("a","θᵀXᵀXθ")+T("m1"," − ")+T("b","θᵀXᵀy","hl")+T("m2"," − ")+T("c","yᵀXθ","hl")+T("p"," + ")+T("d","yᵀy")+T("rp",")"));
+  setCap("中间两项都是<b>标量</b>，而且<i>互为转置</i>。<br>标量的转置等于自己，所以<b>这两项相等</b>。"); }),
+S_(4357,function(){ flip(T("h","½")+T("lp","(")+T("a","θᵀXᵀXθ")+T("m1"," − ")+T("b2","2θᵀXᵀy","res")+T("p"," + ")+T("d","yᵀy")+T("rp",")"));
+  setCap("合并。<span class='sub'>最后那项 yᵀy 与 θ 无关，求导时会消失</span>"); }),
+S_(4470,function(){ flip(T("g","∇θ J = ")+T("h","½")+T("nb","∇θ ")+T("tr","tr","hl")+T("lp","(")+T("a","θᵀXᵀXθ")+T("m1"," − ")+T("b2","2θᵀXᵀy")+T("p"," + ")+T("d","yᵀy")+T("rp",")"));
+  setCap("<b>关键一步：套上 tr。</b><br>整个括号是标量，而<i>标量等于自己的迹</i>——加个 tr 不改变任何东西，<br>但现在可以用那四条性质了。"); }),
+S_(4470,function(){ flip(T("g","∇θ J = ")+T("h","½")+T("lp","(")+T("t1","XᵀXθ","hl")+T("p1"," + ")+T("t2","XᵀXθ","hl")+T("m1"," − ")+T("t3","2Xᵀy","hl")+T("rp",")"));
+  setCap("性质四处理第一项（给出<b>两个</b> XᵀXθ），<br>性质三处理第二项。"); }),
+S_(4470,function(){ flip(T("g","∇θ J = ")+T("res","XᵀXθ − Xᵀy","res"));
+  setCap("½ 把那个 2 约掉。<em>梯度算完了。</em>"); }),
+S_(4575,function(){ flip(T("g","∇θ J = ")+T("res","XᵀXθ − Xᵀy")+T("z"," = 0","hl"));
+  setCap("碗底那一点，<b>梯度为零</b>。"); }),
+S_(4575,function(){ flip(T("XX","XᵀXθ")+T("e"," = ")+T("Xy","Xᵀy","res"));
+  setCap("移项。<br>这组方程就叫 <b>正规方程</b>（normal equations）。"); }),
+S_(4575,function(){ flip(T("t","θ")+T("e"," = ")+T("inv","(XᵀX)⁻¹","res")+T("Xy","Xᵀy","res"));
+  setCap("若 X 各列<b>线性无关</b>，XᵀX 可逆，两边左乘它的逆。<br><b>一个公式，没有迭代，没有 α。</b>"); }),
+S_(4575,function(){ setEq(null);clearMat();clearNotes();
+  setBig("代真实数字","验证这个公式");
+  setCap("公式好看，但它<b>真能算出我们手算的答案吗</b>？<br>下面五镜逐步验算。"); }),
+S_(4575,function(){ setBig(null);clearMat();clearNotes();
+  matrix({rows:2,cols:2,cw:104,ch:52,x:568,y:275,bracket:true,label:"XᵀX",labelCls:"y",
+    cell:function(i,j){return [["5","20"],["20","90"]][i][j];}});
+  note("m = 5    Σx = 20    Σx² = 90",640,455,"g");
+  setCap("<b>XᵀX</b>。因为第一列全是 1，<br>左上角就是 <i>m</i>，副对角是 <i>Σx</i>，右下是 <i>Σx²</i>。"); }),
+S_(4575,function(){ clearMat();clearNotes();
+  matrix({rows:2,cols:1,cw:118,ch:52,x:580,y:275,bracket:true,label:"Xᵀy",labelCls:"y",
+    cell:function(i){return ["157","683"][i];}});
+  note("Σy = 157    Σxy = 683",640,440,"g");
+  setCap("<b>Xᵀy</b> 同理：上面是 <i>Σy</i>，下面是 <i>Σxy</i>。"); }),
+S_(4575,function(){ clearMat();clearNotes();
+  setEq("$$\\det = 5\\cdot 90-20\\cdot 20=450-400=50$$","top");
+  setCap("二阶行列式。<b>不为零，所以可逆</b>。"); }),
+S_(4575,function(){ setEq(null);clearMat();clearNotes();
+  matrix({rows:2,cols:2,cw:112,ch:52,x:562,y:275,bracket:true,label:"(XᵀX)⁻¹",labelCls:"y",
+    cell:function(i,j){return [["9/5","−2/5"],["−2/5","1/10"]][i][j];}});
+  note("= (1/50) · [[90, −20], [−20, 5]]",640,450,"");
+  setCap("二阶求逆：<b>主对角对调，副对角变号，再除以行列式</b>。"); }),
+S_(4575,function(){ clearMat();clearNotes();
+  setEq("$$\\theta=\\frac{1}{50}\\begin{bmatrix}90&-20\\\\-20&5\\end{bmatrix}\\begin{bmatrix}157\\\\683\\end{bmatrix}$$","top");
+  setCap("最后一步：相乘。"); }),
+S_(4575,function(){ setEq(null);clearMat();clearNotes();
+  setBig("θ₀ = 9.4<br>θ₁ = 5.5","(XᵀX)⁻¹Xᵀy");
+  setCap("<em>落在了你手算的答案上。</em><br><span class='sub'>(90·157 − 20·683)/50 = 470/50 = 9.4 &nbsp;·&nbsp; (−20·157 + 5·683)/50 = 275/50 = 5.5</span>"); }),
+S_(4575,function(){ setBig(null);axes(true);pts(true);
+  S.t0=OPT.t0;S.t1=OPT.t1;line(S.t0,S.t1);resid(true);squares(true);
+  setCap("放回数据上：<em>方块缩到了最小</em>，J = 3.07。<br><b>ŷ = 94000 + 55000x</b>"); },
+  {t:"如果 XᵀX <b>不可逆</b>，说明数据出了什么问题？",
+   o:["样本太多","特征线性相关（比如同一特征重复了），或者 m &lt; n+1","y 里有负数","学习率没选对"],
+   a:1, w:"XᵀX 不可逆 ⟺ X 的列<b>线性相关</b>。常见原因：冗余特征（面积同时用平方米和平方英尺），或样本数少于特征数。解法是去掉冗余特征、加正则化，或直接用<b>伪逆</b>。"}),
+S_(4681,function(){ clearQuiz();squares(false);resid(false);
+  setCap("最后一句实务提醒：<b>软件不会真的去求那个逆</b>。<br><span class='sub'>QR 分解、SVD、伪逆都更稳定，而且能处理秩亏的情况——你课程 T2 Tutorial Q2 的答案里也写了同一句</span>"); }),
+S_(4681,function(){ axes(false);pts(false);noline();clearMat();
+  setEq("$$\\theta=(X^{\\top}X)^{-1}X^{\\top}y$$","top");
+  setCap("带走这一个式子。<br><b>这就是你的 T2 Tutorial Q2</b>——只是把 X 换成多项式的 [xᵢ² xᵢ 1]。"); }),
+S_(4681,function(){ setEq(null);clearMat();clearNotes();
+  setTitle("第二讲 · 完","78 分钟，走完了","记号 · LMS 逐行求导 · 批量与随机 · 迹与矩阵求导 · 正规方程验算");
+  setCap(null); })
+]);
+
+/* ── projector ── */
+var cur=-1, actsEl=document.getElementById("acts"), pipEls=[];
+ACTS.forEach(function(a,ai){
+  var bar=document.createElement("div"); bar.className="actbar";
+  var lb=document.createElement("span"); lb.className="actlbl"; lb.textContent=a.name; bar.appendChild(lb);
+  for(var k=0;k<a.len;k++){ var p=document.createElement("span"); p.className="pip";
+    bar.appendChild(p); pipEls.push(p); }
+  bar.addEventListener("click",function(){go(a.from,true);});
+  actsEl.appendChild(bar);
+});
+function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+function go(n,force){
+  n=Math.max(0,Math.min(SHOTS.length-1,n));
+  if(n===cur)return;
+  /* A checkpoint gates only the linear flow (space / →). Going back, jumping
+     to an act, or clicking the act bar is deliberate navigation and always
+     works — otherwise an unanswered question would trap the whole film. */
+  if(locked && n>cur && !force) return;
+  FAST=true;
+  gData.selectAll("*").remove(); gParam.selectAll("*").remove();
+  gMat.selectAll("*").remove(); gNote.selectAll("*").remove();
+  gGrid.selectAll("*").remove();
+  for(var i=0;i<n;i++) SHOTS[i].enter();
+  FAST=false;
+  cur=n; clearQuiz(); SHOTS[n].enter(); setNarr(n);
+  if(SHOTS[n].q) askQ(SHOTS[n].q);
+  pipEls.forEach(function(p,i){p.className="pip"+(i===n?" now":(i<n?" seen":""));});
+  var ai=0; ACTS.forEach(function(a,k){ if(n>=a.from) ai=k; });
+  [].slice.call(actsEl.children).forEach(function(b,k){b.classList.toggle("active",k===ai);});
+  document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+
+    (SHOTS[n].q?"  ·  先回答":"");
+  var tc=document.getElementById("tc");
+  tc.textContent="▶ "+hhmmss(SHOTS[n].t); tc.href=VID+Math.round(SHOTS[n].t)+"s";
+}
+window.__go=go; window.__n=SHOTS.length; window.__narr=NARR; window.__acts=ACTS.map(function(a){return a.from;});
+document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+window.addEventListener("keydown",function(e){
+  if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="PageDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+  else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="PageUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+  else if(e.key==="Home"){e.preventDefault();go(0,true);}
+  else if(e.key>="1"&&e.key<="7"){var a=ACTS[+e.key-1]; if(a){e.preventDefault();go(a.from,true);}}
+  else if(e.key==="n"||e.key==="N"){ e.preventDefault(); narrOn=!narrOn; setNarr(cur);
+    document.getElementById("kbd").textContent=narrOn?"空格 推进 · ← 回退 · 1–7 跳幕 · N 讲解 · P 字幕位置":
+      "空格 推进 · ← 回退 · 1–7 跳幕 · N 显示讲解"; }
+});
+go(0);
+
+/* ── caption placement ─────────────────────────────────────────────────── */
+var CAP_POS=["bottom","top","side"],CAP_LABEL={bottom:"字幕 · 底部",top:"字幕 · 顶部",side:"字幕 · 侧栏"};
+var capIdx=0;
+try{var _cp=localStorage.getItem("filmCapPos");if(_cp!==null)capIdx=Math.max(0,Math.min(2,+_cp));}catch(e){}
+var posHint=document.createElement("div");posHint.id="posHint";document.body.appendChild(posHint);
+var _hintT=null;
+function applyCapPos(announce){
+  var L=document.getElementById("capL"),p=CAP_POS[capIdx];
+  L.classList.remove("pos-top","pos-side");
+  if(p!=="bottom")L.classList.add("pos-"+p);
+  document.body.classList.toggle("scene-shift",p==="side");
+  try{localStorage.setItem("filmCapPos",String(capIdx));}catch(e){}
+  if(announce){
+    posHint.textContent=CAP_LABEL[p];posHint.classList.add("show");
+    if(_hintT)clearTimeout(_hintT);
+    _hintT=setTimeout(function(){posHint.classList.remove("show");},1400);
+  }
+}
+window.addEventListener("keydown",function(e){
+  if(e.key==="p"||e.key==="P"){e.preventDefault();capIdx=(capIdx+1)%CAP_POS.length;applyCapPos(true);}
+});
+applyCapPos(false);
+})();
+</script>

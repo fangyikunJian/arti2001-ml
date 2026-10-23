@@ -1,0 +1,264 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M1 考前框架走查</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#F4F6F8; --card:#FFFFFF; --card2:#FAFBFC;
+  --ink:#18202B; --muted:#586274; --faint:#8A93A3; --line:#E2E6EC; --line2:#EDF0F4;
+  --blue:#2560C4; --green:#0B7A4C; --amber:#A65A0C; --red:#BE2F45; --violet:#6A3CC0; --teal:#0B7480;
+  --blue-s:rgba(37,96,196,.09); --green-s:rgba(11,122,76,.09); --amber-s:rgba(166,90,12,.10);
+  --red-s:rgba(190,47,69,.08); --violet-s:rgba(106,60,192,.08);
+  --mark:#FFDF7A;
+  --sans:"IBM Plex Sans","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+}
+:root:not([data-theme="light"]){ @media (prefers-color-scheme:dark){
+  --bg:#0D131A; --card:#151D27; --card2:#111823;
+  --ink:#E7ECF3; --muted:#95A1B4; --faint:#68748699; --line:#232D3A; --line2:#1B2430;
+  --blue:#74B4FF; --green:#54D69C; --amber:#F0B45E; --red:#FF8593; --violet:#B694F2; --teal:#3FC6D4;
+  --blue-s:rgba(116,180,255,.12); --green-s:rgba(84,214,156,.11); --amber-s:rgba(240,180,94,.12);
+  --red-s:rgba(255,133,147,.11); --violet-s:rgba(182,148,242,.11); --mark:rgba(255,206,102,.30);
+}}
+:root[data-theme="dark"]{
+  --bg:#0D131A; --card:#151D27; --card2:#111823;
+  --ink:#E7ECF3; --muted:#95A1B4; --faint:#68748699; --line:#232D3A; --line2:#1B2430;
+  --blue:#74B4FF; --green:#54D69C; --amber:#F0B45E; --red:#FF8593; --violet:#B694F2; --teal:#3FC6D4;
+  --blue-s:rgba(116,180,255,.12); --green-s:rgba(84,214,156,.11); --amber-s:rgba(240,180,94,.12);
+  --red-s:rgba(255,133,147,.11); --violet-s:rgba(182,148,242,.11); --mark:rgba(255,206,102,.30);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:26px 20px 80px}
+mark{background:linear-gradient(transparent 55%,var(--mark) 55%);padding:0 .05em;color:inherit}
+code{font-family:var(--mono);font-size:.88em;background:var(--card2);border:1px solid var(--line2);
+  border-radius:5px;padding:.06em .38em}
+b{font-weight:700}
+.blue{color:var(--blue);font-weight:600}.green{color:var(--green);font-weight:600}
+.amber{color:var(--amber);font-weight:600}.red{color:var(--red);font-weight:600}.violet{color:var(--violet);font-weight:600}
+
+header{border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:22px}
+h1{font-size:clamp(1.5rem,3.4vw,2rem);font-weight:700;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:8px 0 0;font-size:.95rem}
+.sub b{color:var(--ink)}
+.tag{display:inline-block;font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;
+  background:var(--red-s);color:var(--red);border:1px solid color-mix(in srgb,var(--red) 35%,var(--line));
+  border-radius:100px;padding:3px 11px;margin-left:8px;vertical-align:middle}
+
+h2{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--teal);margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+
+/* skeleton flow */
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 16px;
+  font-family:var(--mono);font-size:14px}
+.flow .node{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 14px;box-shadow:0 1px 2px rgba(20,28,40,.05)}
+.flow .node b{color:var(--blue)}
+.flow .arw{color:var(--faint);font-size:16px}
+.swap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;margin:8px 0}
+table{border-collapse:collapse;width:100%;font-size:.92rem;background:var(--card)}
+th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--line2);vertical-align:top}
+thead th{font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;color:var(--muted);background:var(--card2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+td:first-child{font-weight:600;white-space:nowrap}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+@media(max-width:720px){.grid{grid-template-columns:1fr}.flow{font-size:12.5px}}
+.tcard{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);
+  border-radius:12px;padding:15px 17px;box-shadow:0 2px 8px rgba(20,28,40,.05)}
+.tcard.t1{--acc:var(--violet)}.tcard.t2{--acc:var(--green)}.tcard.t3{--acc:var(--blue)}.tcard.t4{--acc:var(--amber)}
+.tcard h3{margin:0 0 4px;font-size:1.05rem;display:flex;align-items:baseline;gap:8px}
+.tcard h3 .code{font-family:var(--mono);font-size:12px;color:var(--acc);font-weight:600}
+.tcard .role{color:var(--muted);font-size:.82rem;margin:0 0 10px}
+.tcard ul{margin:0;padding:0;list-style:none}
+.tcard li{position:relative;padding-left:16px;margin:6px 0;font-size:.9rem;line-height:1.5}
+.tcard li::before{content:"▸";position:absolute;left:0;color:var(--acc);font-size:.8em;top:.2em}
+.tcard .trap{margin-top:11px;padding:9px 11px;background:var(--red-s);border-radius:8px;
+  font-size:.85rem;line-height:1.5}
+.tcard .trap b{color:var(--red)}
+.fml{font-family:var(--mono);font-size:.9em;background:var(--card2);border:1px solid var(--line2);
+  border-radius:5px;padding:.06em .34em;white-space:nowrap}
+
+.rubric{background:linear-gradient(var(--amber-s),var(--amber-s)),var(--card);
+  border:1px solid color-mix(in srgb,var(--amber) 40%,var(--line));border-left:5px solid var(--amber);
+  border-radius:12px;padding:16px 20px;margin-top:6px}
+.rubric .steps{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 6px;font-family:var(--mono);font-size:14px}
+.rubric .steps .s{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 12px}
+.rubric .steps .s b{color:var(--amber)}
+.rubric .steps .a{color:var(--faint)}
+
+.thread{background:linear-gradient(var(--violet-s),var(--violet-s)),var(--card);
+  border:1px solid color-mix(in srgb,var(--violet) 35%,var(--line));border-radius:12px;padding:14px 18px;font-size:.92rem}
+.thread b{color:var(--violet)}
+
+.traps{columns:2;column-gap:26px;margin:4px 0}
+@media(max-width:720px){.traps{columns:1}}
+.traps .t{break-inside:avoid;background:var(--card);border:1px solid var(--line);border-radius:9px;
+  padding:9px 12px;margin-bottom:10px;font-size:.86rem;line-height:1.5}
+.traps .t b{color:var(--red)}
+.traps .t .ok{color:var(--green);font-weight:600}
+
+.plan{counter-reset:st;list-style:none;padding:0;margin:6px 0}
+.plan li{position:relative;padding:11px 14px 11px 52px;background:var(--card);border:1px solid var(--line);
+  border-radius:10px;margin-bottom:9px;font-size:.92rem}
+.plan li::before{counter-increment:st;content:counter(st);position:absolute;left:12px;top:11px;
+  width:26px;height:26px;border-radius:8px;background:var(--blue-s);color:var(--blue);
+  font-family:var(--mono);font-weight:600;font-size:13px;display:grid;place-items:center}
+.plan li .min{font-family:var(--mono);color:var(--teal);font-weight:600;font-size:.82rem}
+.plan li b{color:var(--ink)}
+
+.foot{margin-top:30px;padding:16px 18px;border:1px dashed var(--line);border-radius:12px;
+  background:var(--card2);color:var(--muted);font-size:.9rem;line-height:1.65}
+.foot b{color:var(--ink)}
+.controls{position:fixed;top:12px;right:12px;display:flex;gap:8px;z-index:10}
+.controls button{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--card);
+  border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+.controls button:hover{color:var(--ink);border-color:var(--blue)}
+@media print{.controls{display:none}body{background:#fff}.tcard,.swap,table,.rubric,.thread,.traps .t,.plan li{box-shadow:none}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div class="controls">
+  <button id="themeBtn">☾ 暗色</button>
+  <button onclick="window.print()">🖨 打印</button>
+</div>
+
+<div class="wrap">
+<header>
+  <h1>M1 考前框架走查 <span class="tag">开卷 · 2h · 20 选 + 4 大题 · 占 60%</span></h1>
+  <p class="sub">睡醒后 <b>~50 分钟</b>走一遍这张图，把 T1–T4 锁成<b>一根主线</b>。这是框架，不是速查表——公式细节看你的备考包速查表。</p>
+</header>
+
+<h2>整个 M1 就一套骨架</h2>
+<div class="flow">
+  <span class="node"><b>数据</b></span><span class="arw">→</span>
+  <span class="node">带参数的<b>模型</b><br><code>wᵀx + b</code></span><span class="arw">→</span>
+  <span class="node"><b>代价函数</b></span><span class="arw">→</span>
+  <span class="node"><b>优化</b></span><span class="arw">→</span>
+  <span class="node"><b>评估</b></span>
+</div>
+<p class="sub" style="margin:0 0 10px">每个主题<mark>只换其中一两块零件</mark>，底层哲学不变。学会这个，四个主题当一个记：</p>
+<div class="swap"><table>
+  <thead><tr><th>主题</th><th>模型 / 输出</th><th>代价函数</th><th>优化</th></tr></thead>
+  <tbody>
+    <tr><td class="green">T2 回归</td><td>线性 <code>ŷ=wᵀx+b</code>（连续值）</td><td>½·平方误差（残差²之和）</td><td>梯度下降 <b>或</b> 正规方程（闭式）</td></tr>
+    <tr><td class="blue">T3 逻辑回归</td><td><code>σ(wᵀx+b)</code>=P(y=1)（概率）</td><td>交叉熵 BCE</td><td>梯度下降</td></tr>
+    <tr><td class="blue">T3 感知机</td><td><code>sign(wᵀx+b)</code>（硬 ±1）</td><td>错误驱动（分错才更新）</td><td>逐样本更新</td></tr>
+    <tr><td class="amber">T4 SVM</td><td><code>sign(wᵀx+b)</code>，最大间隔</td><td>½‖w‖² + C·Σξ</td><td>二次规划 / 对偶(SMO)</td></tr>
+  </tbody>
+</table></div>
+
+<h2>四个主题 · 各记 3–4 条 + 头号陷阱</h2>
+<div class="grid">
+  <div class="tcard t1">
+    <h3><span class="code">T1</span> 流程 & 防泄漏</h3>
+    <p class="role">Pipeline / 数据纪律 / 评估</p>
+    <ul>
+      <li>流水线：<b>数据→模型→代价→优化→评估</b>（全课骨架）</li>
+      <li><b>回归 vs 分类</b>：看 y 是<span class="green">连续值</span>还是<span class="blue">离散类别</span></li>
+      <li>三划分 <b>train / dev(验证) / test</b>：验证选超参、测试只评一次</li>
+      <li>k 折交叉验证：小数据用，每折留 1/k</li>
+    </ul>
+    <div class="trap"><b>⚠ 头号陷阱</b>：<b>先划分再缩放</b>！scaler 只在训练集 fit、放进 pipeline。切分前缩放 = 泄漏。<b>测试集只用一次</b>，反复看 = 变第二个验证集。</div>
+  </div>
+
+  <div class="tcard t2">
+    <h3><span class="code">T2</span> 线性回归</h3>
+    <p class="role">残差 / 代价 / 梯度 / 正规方程</p>
+    <ul>
+      <li>代价 <span class="fml">J=½Σ(ŷ−y)²</span>（本课含 1/n 的 MSE，½ 为求导好看）</li>
+      <li>梯度 = <mark>(ŷ−y)·x</mark>「误差×特征」→ <span class="fml">θ:=θ−α∇J</span></li>
+      <li>正规方程 <span class="fml">θ=(XᵀX)⁻¹Xᵀy</span>（一步到位，需 <b>X 列满秩</b>）</li>
+      <li><b>MLE⇒最小二乘</b>：IID 高斯噪声下，最大似然 = 最小平方误差</li>
+    </ul>
+    <div class="trap"><b>⚠ 头号陷阱</b>：<b>相关≠因果</b>（说 associated 别说 causes）；<code>x⁽ⁱ⁾</code> 是<b>第 i 个样本、不是次方</b>；<b>m</b>=样本数、<b>n</b>=特征数别搞反。</div>
+  </div>
+
+  <div class="tcard t3">
+    <h3><span class="code">T3</span> 分类：感知机 & 逻辑回归</h3>
+    <p class="role">sigmoid / 交叉熵 / 决策边界</p>
+    <ul>
+      <li>逻辑回归：<span class="fml">P(y=1)=σ(wᵀx+b)</span>，σ=1/(1+e⁻ᶻ)</li>
+      <li>梯度 <mark>(p−y)·x</mark>（和线性回归<b>同形</b>！）→ 交叉熵最小化</li>
+      <li>决策边界 <span class="fml">wᵀx+b=0</span>（那里 p=0.5）</li>
+      <li>感知机：硬 ±1、<b>分错才更新</b>、可能返回任意分界（脆弱）</li>
+    </ul>
+    <div class="trap"><b>⚠ 头号陷阱</b>：<b>逻辑回归 y∈{0,1}</b>，<b>感知机/SVM y∈{−1,+1}</b>——换算别混！sigmoid 输出是概率、阈值默认 0.5。</div>
+  </div>
+
+  <div class="tcard t4">
+    <h3><span class="code">T4</span> 支持向量机 SVM</h3>
+    <p class="role">间隔 / 核 / 软间隔</p>
+    <ul>
+      <li>几何间隔 <span class="fml">y(wᵀx+b)/‖w‖</span>；判对错<b>看 y·f 符号</b></li>
+      <li>目标 <span class="fml">min ½‖w‖²</span> s.t. y(wᵀx+b)≥1；<b>全宽=2/‖w‖</b></li>
+      <li>支持向量 = 撑住间隔的点；只有它们决定边界</li>
+      <li>核 <span class="fml">K=φ(x)ᵀφ(z)</span>（linear/poly/RBF）；软间隔 <b>C</b> 权衡</li>
+    </ul>
+    <div class="trap"><b>⚠ 头号陷阱</b>：问「间隔宽度」答 <b>2/‖w‖</b>不是 1/‖w‖（1 一侧、2 两侧）；<b>y·f=0 在边界上</b>（算违反、非「正确一侧」）；宽间隔≠更好泛化。</div>
+  </div>
+</div>
+
+<h2>一根线记两块：GLM</h2>
+<div class="thread">
+  <b>为什么线性回归和逻辑回归的梯度都是「(y−h)·x」？</b> 因为 <b>T2 假设 y 是正态 → 最小二乘</b>，<b>T3 假设 y 是伯努利 → 逻辑回归</b>，两者都是<b>指数族的广义线性模型(GLM)</b>，MLE 梯度天生同形。sigmoid 也是「假设 y 伯努利」时必然冒出来的，不是硬凑。<span class="violet">→ 把 T2、T3 当一套记。</span>
+</div>
+
+<h2>★ 4 道大题的命根子：答题四步</h2>
+<div class="rubric">
+  <div class="steps">
+    <span class="s"><b>①</b> 报出结果</span><span class="a">→</span>
+    <span class="s"><b>②</b> 解释它说明什么</span><span class="a">→</span>
+    <span class="s"><b>③</b> 用可见证据支撑</span><span class="a">→</span>
+    <span class="s"><b>④</b> 说出证据的局限</span>
+  </div>
+  <p style="margin:6px 0 0;font-size:.9rem"><b>最大的失分点 = 只做到第①步就停。</b>每道 10 分大题都按这四步铺开：报数字 → 这数字意味着什么 → 拿图/指标/系数当证据 → 加一句「对这个模型/在这些假设下」的限定。这是 tutor 反馈 PDF 反复强调的采分口径。</p>
+</div>
+
+<h2>全 M1 高频陷阱清单（考前扫一眼）</h2>
+<div class="traps">
+  <div class="t"><b>先划分再缩放</b>，scaler 只 fit 训练集；<b>测试集只用一次</b>。</div>
+  <div class="t"><code>x⁽ⁱ⁾</code> = 第 i 个样本，<b>不是</b> x 的 i 次方。</div>
+  <div class="t"><b>m</b> 数样本、<b>n</b> 数特征，别互换。</div>
+  <div class="t">邮编/学号/电话是<b>类别</b>不是连续量（相减求平均无意义）。</div>
+  <div class="t">截距 <b>b 常无物理意义</b>——没关系，只是垂直偏移。</div>
+  <div class="t"><b>相关 ≠ 因果</b>：associated，别写 causes。</div>
+  <div class="t">逻辑回归 <b>y∈{0,1}</b>；感知机/SVM <b>y∈{−1,+1}</b>。</div>
+  <div class="t">SVM 间隔宽度 = <b>2/‖w‖</b>（全宽），不是 1/‖w‖。</div>
+  <div class="t">SVM <b>y·f=0 在边界上</b>：算违反，<b>不是</b>「正确一侧」。</div>
+  <div class="t"><b>宽间隔 ≠ 更好泛化</b>；SVC 的分数<b>不是概率</b>。</div>
+  <div class="t">正规方程要 <b>XᵀX 可逆</b>（X 列满秩/无共线）。</div>
+  <div class="t">系数大小 <span class="ok">≠</span> 特征重要性；只报 R² 不报 RMSE 会扣分。</div>
+</div>
+
+<h2>睡醒 50 分钟 · 走查顺序</h2>
+<ol class="plan">
+  <li><span class="min">[12 分]</span> <b>走这张图</b>：从骨架表看四主题怎么换零件 → 四张卡片各念一遍 → GLM 那根线。合上，能自己复述「T2→T3→T4 各换了什么」就过。</li>
+  <li><span class="min">[10 分]</span> <b>过备考包速查表</b>（公式/SVM 判定/Φ·σ 表/sklearn/英文句库）——只扫你还打结的行。<a href="https://claude.ai/code/artifact/798cca40-8408-4d69-af52-ea42b84b4ceb" target="_blank" rel="noopener">备考包 ↗</a></li>
+  <li><span class="min">[15 分]</span> <b>做 5–8 道模拟选择题</b>（备考包第④区），错的翻回对应卡片。手感 > 数量。</li>
+  <li><span class="min">[8 分]</span> <b>背四步答题模板</b>（报结果→解释→证据→局限），挑 1 道大题在脑子里按四步过一遍。</li>
+  <li><span class="min">[5 分]</span> <b>扫一眼陷阱清单</b>，把最容易栽的 3 条圈出来带进考场。</li>
+</ol>
+
+<div class="foot">
+  <b>开卷提醒</b>：把这张 + 备考包速查表 + 答题模板<b>打印带进去</b>。开卷不是让你现场学，是让你<b>不用背公式、专心推理和写全四步</b>。<br>
+  <b>现在最该做的事：去睡够 8 小时。</b>睡眠比多刷一小时更能巩固记忆——你材料齐、框架清，稳住。加油 💪
+</div>
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeBtn');
+  function sysDark(){return matchMedia('(prefers-color-scheme:dark)').matches;}
+  function cur(){return root.getAttribute('data-theme')||(sysDark()?'dark':'light');}
+  function paint(){btn.textContent=cur()==='dark'?'☀ 亮色':'☾ 暗色';}
+  try{var s=localStorage.getItem('m1fw-theme');if(s)root.setAttribute('data-theme',s);}catch(e){}
+  paint();
+  btn.addEventListener('click',function(){var n=cur()==='dark'?'light':'dark';
+    root.setAttribute('data-theme',n);try{localStorage.setItem('m1fw-theme',n);}catch(e){}paint();});
+})();
+</script>

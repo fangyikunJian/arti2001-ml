@@ -1,0 +1,51 @@
+# 由 _deploy/rules.py 生成，别手改 —— 跑 `python _deploy/apply.py`
+
+# ── 构建产物与本地文件 ──
+__pycache__/
+*.pyc
+*.bak
+*.bak-*
+复习放映厅/源码/media/
+复习放映厅/_备份-修复前/
+M2材料/笔记与阅读.zip
+.claude/
+nul
+**/nul
+.DS_Store
+Thumbs.db
+
+# ── 第三方材料：学校课件 / Tutorial 与官方答案 / 讲师反馈 /
+#    Canvas 讲义原文 / CS229 讲义与字幕 / 幻灯 PDF ──
+#    著作权属于学校与各课作者，本仓库不转载。本地照常用，
+#    公开站上这些链接会被标成「只在本地有」。
+M1材料/课件/
+M2材料/课件/
+M3材料/课件/
+M1材料/Tutorial与Practical/
+M2材料/Tutorial与Practical/
+M3材料/Tutorial与Practical/
+M2材料/Canvas讲义/
+M3材料/Canvas讲义/
+CS229/notes/
+CS229/transcripts/
+精读/slides/
+精读/src/
+其它/
+M2T1_PCA.pdf
+GMM.pdf
+Assessment 2 Revision.pdf
+M1材料/笔记与阅读/Calculating linear regression coefficients.pdf
+M1材料/笔记与阅读/General form and gradient descent.pdf
+M1材料/笔记与阅读/How to train your perceptron.pdf
+M1材料/笔记与阅读/Linear Regression A Probability Interpretation.pdf
+M1材料/笔记与阅读/Logistic Regression A Step Beyond the Perceptron.pdf
+M1材料/笔记与阅读/Other classical machine-learning algorithms.pdf
+M1材料/笔记与阅读/SVM - kernel trick.pdf
+M1材料/笔记与阅读/SVM - margin maximisation via its dual form.pdf
+M1材料/笔记与阅读/SVM - margin.pdf
+
+# ── 含个人信息：从官方 PPT 抽文本时带出了任课老师的邮箱 ──
+复习放映厅/源码/ppt_M1T1_overview.txt
+复习放映厅/源码/ppt_M1T2_LinearRegression.txt
+复习放映厅/源码/ppt_M1T3_Classification.txt
+复习放映厅/源码/ppt_M1T4_SVM.txt

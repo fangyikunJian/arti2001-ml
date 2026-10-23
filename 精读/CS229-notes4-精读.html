@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲义精读 · 学习理论（讲义 Part VI） · 逐页精读</title>
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --panel2:#FAF8F4; --sunken:#EDEAE3;
+  --stage:#E9E6DF; --hover:#F0EDE6;
+  --line:#E3DFD6; --line2:#D2CCC0;
+  --dot:#DDD8CE; --dot2:#B9B1A2; --errdot:#D08A8A;
+  --ink:#23272C; --ink2:#111417; --ink3:#4A525C; --dim:#616973;
+  --acc:#0E7355; --acc2:#845808; --warn:#B23540; --blue:#1C6AA6;
+  --mark:#FFF6DC; --codeink:#17506E; --eqink:#1E2833;
+  --okink:#0B5B43; --noink:#8F2A33; --violet:#6A4BA3; --tintviolet:rgba(106,75,163,.07);
+  --okfill:rgba(14,115,85,.10); --nofill:rgba(178,53,64,.09);
+  --missbg:rgba(245,243,238,.97);
+  --tintacc:rgba(14,115,85,.07); --tintacc2:rgba(14,115,85,.05);
+  --tintblue:rgba(28,106,166,.06); --tintwarn:rgba(178,53,64,.05);
+  --tintwarn2:rgba(178,53,64,.06);
+  --lift:rgba(60,54,44,.022); --lift2:rgba(60,54,44,.028);
+  --scrim:rgba(58,52,42,.40);
+  --shadow:0 1px 2px rgba(40,34,20,.05), 0 6px 18px rgba(40,34,20,.05);
+
+  --cjk:"PingFang SC","Microsoft YaHei","微软雅黑","Deng",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --bar:50px; --strip:36px;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f15; --panel:#121823; --panel2:#0d141c; --sunken:#0a0e14;
+  --stage:#070a0f; --hover:#0d141c;
+  --line:#212c3c; --line2:#2a3b4f;
+  --dot:#18212e; --dot2:#2c3c52; --errdot:#7a3a3a;
+  --ink:#e7eef7; --ink2:#f4f8fd; --ink3:#c3d2e3; --dim:#8b9ab0;
+  --acc:#6fd3bb; --acc2:#f2bd63; --warn:#ff8f8f; --blue:#7fb8ff;
+  --mark:#16202e; --codeink:#cfe3f5; --eqink:#dbe8f7;
+  --okink:#d8fff4; --noink:#ffdede; --violet:#B48BF5; --tintviolet:rgba(180,139,245,.08);
+  --okfill:rgba(111,211,187,.13); --nofill:rgba(255,143,143,.12);
+  --missbg:rgba(10,14,20,.97);
+  --tintacc:rgba(111,211,187,.09); --tintacc2:rgba(111,211,187,.07);
+  --tintblue:rgba(127,184,255,.055); --tintwarn:rgba(255,120,120,.055);
+  --tintwarn2:rgba(255,143,143,.08);
+  --lift:rgba(255,255,255,.022); --lift2:rgba(255,255,255,.025);
+  --scrim:rgba(6,9,13,.82);
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--cjk);font-size:15px;line-height:1.75}
+
+#bar{height:var(--bar);display:flex;align-items:center;gap:11px;padding:0 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+#bar h1{margin:0;font-size:14.5px;font-weight:650;white-space:nowrap}
+#bar h1 span{color:var(--acc)}
+.btn{background:var(--sunken);border:1px solid var(--line);border-radius:7px;color:var(--dim);
+  font:13px var(--cjk);padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{color:var(--acc);border-color:var(--acc)}
+#pnum{width:48px;background:var(--sunken);border:1px solid var(--line);border-radius:7px;
+  color:var(--ink);font:13px var(--mono);text-align:center;padding:5px 0}
+#bar .sp{flex:1}
+#tot{font:12px var(--mono);color:var(--dim)}
+
+#strip{height:var(--strip);display:flex;align-items:center;gap:2px;padding:0 14px;
+  background:var(--sunken);border-bottom:1px solid var(--line);overflow-x:auto}
+#strip::-webkit-scrollbar{height:0}
+#strip b{flex:0 0 auto;width:13px;height:16px;border-radius:3px;background:var(--dot);
+  cursor:pointer;font:0/0 a}
+#strip b.has{background:var(--dot2)}
+#strip b.on{background:var(--acc2)}
+#strip b:hover{background:var(--acc)}
+
+#main{display:flex;height:calc(100% - var(--bar) - var(--strip))}
+/* 左栏 = 一块板，板中央摆一张 4:3 的幻灯片。
+   幻灯片本身就是 363×272（4:3），把框裁成同样比例再用 view=FitH，
+   这一页正好铺满框，下一页落到框外 —— 这样才是「一页」，
+   而不是一个能上下滚、还露出半张下一页的阅读器。 */
+#left{width:50%;min-width:280px;position:relative;background:var(--stage);
+  display:flex;align-items:center;justify-content:center;padding:14px}
+#stage{aspect-ratio:4/3;width:100%;max-width:100%;max-height:100%;
+  border-radius:8px;overflow:hidden;background:#fff;
+  box-shadow:var(--shadow)}
+#stage iframe{width:100%;height:100%;border:0;display:block}
+#drag{width:6px;cursor:col-resize;background:var(--line);flex:0 0 6px}
+#drag:hover{background:var(--acc)}
+#right{flex:1;overflow-y:auto;padding:24px 28px 40px}
+
+.pg{font:11.5px var(--mono);color:var(--bg);background:var(--acc2);border-radius:999px;
+  padding:2px 11px;font-weight:700;display:inline-block;margin-bottom:12px}
+.pg.multi{background:var(--blue)}
+h2{margin:0 0 14px;font-size:21px;font-weight:680;line-height:1.4}
+.one{font-size:16.5px;line-height:1.7;color:var(--ink2);border-left:3px solid var(--acc);
+  padding:9px 0 9px 14px;margin:0 0 16px;
+  background:linear-gradient(90deg,var(--tintacc),transparent)}
+ul{margin:0 0 16px;padding-left:0;list-style:none}
+ul li{margin-bottom:11px;padding-left:22px;position:relative;line-height:1.72}
+ul li::before{content:"";position:absolute;left:6px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--acc)}
+b{font-weight:650;color:var(--ink2)}
+.k{color:var(--acc);font-weight:650}
+.w{color:var(--warn);font-weight:650}
+code{font-family:var(--mono);font-size:.9em;background:var(--mark);padding:1.5px 6px;
+  border-radius:4px;color:var(--codeink)}
+.eq{display:block;text-align:center;background:var(--mark);border-radius:8px;padding:12px 8px;
+  margin:14px 0;font-family:var(--mono);font-size:14px;color:var(--eqink);overflow-x:auto}
+.say{border:1px solid var(--line2);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;background:var(--tintblue);font-size:14px;line-height:1.72}
+.say .t{color:var(--blue);font-weight:700;font-size:12.5px;display:block;margin-bottom:5px;
+  letter-spacing:.5px}
+.tip{border:1px solid var(--line);border-radius:9px;padding:11px 15px;margin:14px 0;
+  background:var(--lift2);font-size:14px;line-height:1.72}
+.tip .t{font-weight:700;color:var(--acc);margin-right:7px}
+.tip.w2{border-color:var(--warnline);background:var(--tintwarn)}
+.tip.w2 .t{color:var(--warn)}
+.star{color:var(--acc2);font-size:14px;margin-left:8px;letter-spacing:1px}
+.nav{display:flex;gap:10px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+.nav .btn{flex:1;text-align:center;padding:9px}
+.empty{color:var(--dim);font-size:14px;padding:36px 0;text-align:center;line-height:2}
+#miss{position:absolute;inset:0;background:var(--missbg);z-index:5;display:none;
+  padding:26px;color:var(--dim);font-size:13.5px;line-height:1.9}
+#miss code{background:var(--mark);padding:2px 6px;border-radius:4px;color:var(--acc2)}
+
+
+.qbadge{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;
+  margin-left:9px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 9px;font:11.5px var(--mono);color:var(--acc);cursor:pointer;
+  background:var(--sunken);transition:border-color .12s}
+.qbadge:hover{border-color:var(--acc)}
+.qbadge.bad{color:var(--warn)}
+#wrongBox .tally{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+#wrongBox .tally span{border:1px solid var(--line);border-radius:8px;padding:5px 11px;
+  font-size:12.5px;color:var(--dim);background:var(--sunken)}
+#wrongBox .tally b{color:var(--ink);font-weight:650}
+#wrongBox .tally b.hot{color:var(--warn)}
+.wrow .h{gap:3px}
+.wrow .h u{display:flex;gap:2px;text-decoration:none;
+  padding-right:7px;margin-right:4px;border-right:1px solid var(--line)}
+.wrow .h u:last-child{border-right:0;padding-right:0;margin-right:0}
+#revChip{display:none;align-items:center;gap:9px;border:1px solid var(--warn);
+  border-radius:8px;padding:5px 11px;font-size:12.5px;color:var(--warn);
+  background:var(--tintwarn2);white-space:nowrap}
+#revChip.on{display:inline-flex}
+#revChip b{font:650 12px var(--mono)}
+#revChip button{background:none;border:0;color:var(--dim);cursor:pointer;
+  font:12px var(--cjk);text-decoration:underline;padding:0}
+#revChip button:hover{color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn:disabled:hover{border-color:var(--line)}
+
+/* ── 自测 ── */
+.quiz{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.quiz>h3{margin:0 0 12px;font-size:13px;color:var(--dim);letter-spacing:.16em;
+  display:flex;align-items:center;gap:8px}
+.quiz>h3 b{color:var(--acc2);font-weight:700}
+.qq{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:11px;
+  background:var(--lift)}
+.qq .t{font-size:14.5px;font-weight:600;margin-bottom:10px;line-height:1.6}
+.opt{display:block;width:100%;text-align:left;background:var(--sunken);border:1px solid var(--line);
+  border-radius:8px;color:var(--ink);font:14px var(--cjk);padding:8px 12px;margin-bottom:7px;
+  cursor:pointer;line-height:1.5;transition:border-color .12s,background .12s}
+.opt:hover:not(:disabled){border-color:var(--acc);background:var(--hover)}
+.opt:disabled{cursor:default}
+.opt.ok{border-color:var(--acc);background:var(--okfill);color:var(--okink)}
+.opt.no{border-color:var(--warn);background:var(--nofill);color:var(--noink)}
+.opt .m{float:right;font-weight:700;margin-left:10px}
+.why{font-size:13.5px;line-height:1.7;color:var(--ink3);border-left:3px solid var(--acc);
+  padding:8px 0 8px 12px;margin-top:9px;background:linear-gradient(90deg,var(--tintacc2),transparent)}
+.qhist{font:11px var(--mono);color:var(--dim);margin-top:8px;display:flex;
+  align-items:center;gap:5px}
+.qhist i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.qhist i.o{background:var(--acc)} .qhist i.x{background:var(--warn)}
+.qagain{background:none;border:0;color:var(--dim);font:12px var(--cjk);cursor:pointer;
+  text-decoration:underline;padding:0;margin-left:auto}
+.qagain:hover{color:var(--acc2)}
+#strip b.err{background:var(--errdot)}
+#strip b.err.on{background:var(--acc2)}
+/* 错题本 */
+#wrongPanel{position:fixed;inset:0;background:var(--scrim);z-index:80;display:none;
+  align-items:center;justify-content:center;padding:28px}
+#wrongPanel.on{display:flex}
+#wrongBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  width:min(760px,100%);max-height:84vh;overflow:auto;padding:22px 24px}
+#wrongBox h3{margin:0 0 4px;font-size:18px}
+#wrongBox .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+.wrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--line);margin-bottom:8px;cursor:pointer;background:var(--sunken)}
+.wrow:hover{border-color:var(--acc2)}
+.wrow .p{font:700 12px var(--mono);color:var(--acc2);flex:0 0 52px}
+.wrow.done{opacity:.5}
+.wrow.done .p{color:var(--acc)}
+.wrow .n2{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.wrow .s{font:11.5px var(--mono);color:var(--dim);flex:0 0 auto}
+.wrow .h{display:flex;gap:3px;flex:0 0 auto}
+.wrow .h i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.wrow .h i.o{background:var(--acc)} .wrow .h i.x{background:var(--warn)}
+#wrongBox .none{color:var(--dim);text-align:center;padding:30px 0;line-height:2}
+#wrongFoot{display:flex;gap:10px;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--line)}
+#wrongFoot .btn{flex:1;text-align:center}
+
+@media (max-width:900px){
+  #main{flex-direction:column} #left{width:100%;height:40%} #drag{display:none}
+  #right{padding:16px 16px 30px}
+}
+
+/* ══ EXTRA_CSS:BEGIN ══ */
+/* ══ 讲解区里的链接兜底 ══
+   ⚠ 2026-10-03 查出来的：原先只给 .ng a 上了色，放在 tip / say / pts / exam 里的链接
+   会退回浏览器默认的 #0000EE —— 浅色下还能看（8.47:1），**暗色下只有 1.95:1**。
+   做 notes2 时第一次往 tip 里放时间码链接就撞上了。这条规则管住所有其它位置。 */
+#card a{color:var(--blue);text-decoration:none;border-bottom:1px solid var(--blue)}
+#card a:hover{opacity:.75}
+
+/* ══ 「从零补基础 · Andrew Ng」栏 ══ */
+.ng{border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintviolet)}
+.ng .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--violet);
+  letter-spacing:.4px;margin-bottom:5px}
+/* ⚠ 要用 #card .ng a 而不是 .ng a —— 上面的兜底规则带了 #card 这个 id，
+   光写 .ng a（0,1,1）会被 #card a（1,0,1）压过去，紫色链接会变蓝。 */
+#card .ng a{color:var(--violet);text-decoration:none;border-bottom:1px solid var(--violet)}
+#card .ng a:hover{opacity:.75}
+.ng .src{display:block;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+:root:not([data-theme="dark"]) .ng{box-shadow:var(--shadow)}
+
+/* ══ 「课件原话」栏：引官方英文 ══ */
+.quote{border-left:3px solid var(--dim);background:var(--lift2);border-radius:0 8px 8px 0;
+  padding:10px 15px;margin:12px 0;font-size:13px;line-height:1.7;color:var(--ink3)}
+.quote .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--dim);
+  letter-spacing:.4px;margin-bottom:5px}
+.quote b{color:var(--ink2)}
+.quote em{font-style:normal;color:var(--ink2);font-weight:560}
+
+/* ══ 笔记表格：对比表 / 情况表 / 数值表 ══ */
+.tw{margin:13px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.tc{font-size:11.5px;font-family:var(--mono);color:var(--dim);letter-spacing:.3px;
+  padding:7px 12px;background:var(--sunken);border-bottom:1px solid var(--line)}
+table.nt{width:100%;border-collapse:collapse;font-size:12.8px;line-height:1.55}
+table.nt th{text-align:left;font-weight:620;font-size:11.5px;color:var(--dim);
+  background:var(--panel2);padding:7px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.nt td{padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.nt tbody tr:last-child td{border-bottom:none}
+table.nt td:first-child{font-weight:560;color:var(--ink2)}
+table.nt b{color:var(--ink2)}
+:root:not([data-theme="dark"]) .tw{box-shadow:var(--shadow)}
+
+/* ══ 「与考试的联系」栏 ══ */
+.exam{border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintacc2)}
+.exam .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--acc2);
+  letter-spacing:.4px;margin-bottom:5px}
+:root:not([data-theme="dark"]) .exam{box-shadow:var(--shadow)}
+
+/* ══ 双主题补丁：浅色下的可读性与质感 ══ */
+html{color-scheme:light dark}
+:root:not([data-theme="dark"]) #right{background:var(--bg)}
+:root:not([data-theme="dark"]) .quiz,
+:root:not([data-theme="dark"]) details,
+:root:not([data-theme="dark"]) .opt{box-shadow:var(--shadow)}
+:root:not([data-theme="dark"]) body{-webkit-font-smoothing:antialiased}
+:root:not([data-theme="dark"]) h2{letter-spacing:-.1px}
+:root:not([data-theme="dark"]) .one{font-weight:520}
+:root:not([data-theme="dark"]) .pg{color:#fff}
+:root:not([data-theme="dark"]) #strip b.on{background:var(--acc2)}
+/* 主题切换按钮 */
+#themeBtn{min-width:34px;text-align:center;font-size:14px;line-height:1}
+/* ══ EXTRA_CSS:END ══ */
+
+</style>
+</head>
+<body data-key="cs234-2019-l01">
+
+<div id="bar">
+  <h1>CS229 讲义精读 · <span>学习理论（讲义 Part VI）</span></h1>
+  <button class="btn" id="prev">← 上一页</button>
+  <input id="pnum" value="1" inputmode="numeric">
+  <span id="tot">/ 11</span>
+  <button class="btn" id="next">下一页 →</button>
+  <div class="sp"></div>
+  <span id="revChip">复习模式 <b></b><button id="revOff">退出</button></span>
+  <button class="btn" id="wrongBtn">错题本</button>
+  <button class="btn" id="themeBtn" title="切换主题">☾</button>
+  <button class="btn" id="help">打不开？</button>
+</div>
+
+<div id="strip"></div>
+
+
+<div id="wrongPanel"><div id="wrongBox">
+  <h3>错题本</h3>
+  <p class="sub">错过的题<b>连着答对两次就毕业</b>，自动从这里和复习模式里退出。<br>
+  还没毕业的排在前面，最近错得多的更靠前。点任意一行跳到那一页重看。</p>
+  <div class="tally" id="wrongTally"></div>
+  <div id="wrongList"></div>
+  <div id="wrongFoot">
+    <button class="btn" id="revOn">只复习这些页</button>
+    <button class="btn" id="wrongClose">关闭</button>
+    <button class="btn" id="wrongReset">清空全部记录</button>
+  </div>
+</div></div>
+
+<div id="main">
+  <div id="left">
+    <div id="stage"><iframe id="pdf" title="原课件"></iframe></div>
+    <div id="miss">
+      <p><b>左边没显示课件？</b></p>
+      <p>本页直接引用同目录下的 <code>slides/cs229-notes4.pdf</code>。</p>
+      <p>确认文件在即可。若浏览器拦本地 iframe 读 PDF，在 <code>精读</code> 目录下执行
+      <code>python -m http.server 8080</code>，再访问
+      <code>http://127.0.0.1:8080/CS229-notes4-精读.html</code>。</p>
+    </div>
+  </div>
+  <div id="drag"></div>
+  <div id="right"><div id="card"></div></div>
+</div>
+
+<script>
+
+/* ══ 主题切换：浅色默认，记住选择 ══ */
+(function(){
+  var KEY = "mlreader-theme";
+  var root = document.documentElement, btn = document.getElementById("themeBtn");
+  function apply(t){
+    root.setAttribute("data-theme", t);
+    if (btn) btn.textContent = (t === "dark" ? "☀" : "☾");
+    if (btn) btn.title = (t === "dark" ? "切到浅色" : "切到暗色");
+  }
+  var saved;
+  try { saved = localStorage.getItem(KEY); } catch(e){}
+  apply(saved === "dark" ? "dark" : "light");
+  if (btn) btn.addEventListener("click", function(){
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next);
+    try { localStorage.setItem(KEY, next); } catch(e){}
+  });
+})();
+
+/* 每页一条。r:[起,止] = 这几页是同一张图的不同阶段，点哪页都显示同一条。
+   one 一句话 · pts 要点 · say CS229 / 讲义补充（课件上没有）· tip 提醒 */
+
+/* ══ 题库。键 = 该单元的起始页；a 是正确项下标；why 是判完给的解释 ══ */
+var Q = {"1": [{"t": "讲义给「偏差」下的定义是什么？", "o": ["训练误差与泛化误差之差", "参数估计值与真值之差", "即使用无限大的训练集去拟合，仍然存在的那部分泛化误差", "模型预测值与真实值的平均差"], "a": 2, "w": "关键在「即使数据无限多也消不掉」，这把偏差和「数据不够」彻底分开了。由此直接推出：高偏差的模型再喂数据也不会变好。"}, {"t": "训练误差和验证误差都很高、而且贴在一起，应该怎么办？", "o": ["加更多训练数据", "加强正则化", "提前停止训练", "这是高偏差（欠拟合），加数据没用，应该加复杂度或加特征"], "a": 3, "w": "偏差按定义就是「数据无限多也剩下的那部分」。本课 M1T1 第 29 页的三区域图里这是左侧区域，处理办法是增加复杂度、加特征、训练更久。"}, {"t": "⚠️ 讲义在脚注里对偏差和方差的定义做了什么保留？", "o": ["它们是等价的两个概念", "它们只适用于深度学习", "它们只在训练集上有意义", "它们对线性回归好定义，但在分类问题上学界至今没有共识"], "a": 3, "w": "原文：there have been several proposals for the definitions of bias and variance for classification, and there is as yet no agreement。所以在分类语境下它们是直觉概念，不是严格定义。"}], "3": [{"t": "联合界 P(A₁∪…∪A_k) ≤ ΣP(Aᵢ) 最关键的性质是什么？", "o": ["k 个事件不必独立", "只对两个事件成立", "必须是互斥事件", "需要事件概率都很小"], "a": 0, "w": "这在学习理论里是关键：不同假设 h 犯错的事件显然不独立（它们看的是同一批数据）。⚠️ 代价是这个放大很松，所以推出来的界通常远比实际保守。"}, {"t": "Hoeffding 不等式 P(|φ−φ̂|>γ) ≤ 2exp(−2γ²n) 里，n 和 γ 的位置说明了什么？", "o": ["γ 越大失手概率越大", "样本越多失手概率指数下降；精度要翻倍（γ 减半）需要四倍样本", "精度和样本数无关", "样本越多失手概率线性下降"], "a": 1, "w": "n 在指数上，γ 是平方。这解释了为什么验证集太小时验证准确率不可信——M1T4 Practical 的验证集只有 72 个点，两个模型差 1 个点就差 1.4%，这种差别没有意义。"}], "4": [{"t": "PAC 框架里最重要的两条假设是什么？", "o": ["训练集必须足够大；特征必须缩放", "训练和测试来自同一分布 D；训练样本是独立抽取的", "模型必须是线性的；数据必须是高斯的", "假设类必须有限；标签必须是二元的"], "a": 1, "w": "讲义在脚注里明说这两条是 PAC 框架里最重要的假设。PAC = probably approximately correct（大概率近似正确）。⚠️ 现实中「同分布」这条经常被违反（数据漂移）。"}, {"t": "ĥ 和 h* 分别指什么？", "o": ["两者是同一个东西", "ĥ 是真实函数，h* 是估计", "ĥ 是 ERM 学出来的（训练误差最小），h* 是 H 里泛化误差最小的", "ĥ 是线性的，h* 是非线性的"], "a": 2, "w": "戴帽子的是「从样本估出来的」，不戴的是「真实的」。两者的区别是后面 2γ 定理的全部骨架：定理证的是「ĥ 不会比 h* 差太多」。"}], "5": [{"t": "一致收敛结果「P(∀h∈H. |ε(h)−ε̂(h)| ≤ γ) ≥ 1 − 2k·exp(−2γ²n)」是怎么得到的？", "o": ["用 VC 维定理", "用中心极限定理", "先对单个 h 用 Hoeffding，再用联合界推广到全体，最后取反", "直接对所有 h 用 Hoeffding"], "a": 2, "w": "三步缺一不可。第一步成立是因为 ε̂(hᵢ) 正好是 n 个 iid 伯努利变量的样本均值，而期望正是 ε(hᵢ)。"}, {"t": "⭐ 讲义专门点出样本复杂度界的「关键性质」是什么？", "o": ["所需样本数与 k 的平方成正比", "所需样本数与 k 无关", "所需样本数与 k 成正比", "所需样本数只是 k 的对数——假设类大一百万倍，样本只需增加约 3 倍"], "a": 3, "w": "n ≥ (1/2γ²)log(2k/δ)。k 从 1000 涨到 10⁹，log k 从 6.9 到 20.7 只变 3 倍；而 γ 减半，1/γ² 直接变 4 倍。所以「提高精度」比「限制模型大小」贵得多。"}, {"t": "为什么必须要「一致」收敛，只对每个固定的 h 有保证为什么不够？", "o": ["ĥ 是看了数据才选出来的，那个「碰巧看起来最好」的 h 恰恰最可能失手", "因为 H 是无限的", "因为 Hoeffding 只对一个变量成立", "因为 h 之间不独立"], "a": 0, "w": "这就是选择偏差的数学版本，也是一致收敛这个概念存在的全部理由。"}], "7": [{"t": "定理 ε(ĥ) ≤ min ε(h) + 2γ 右边两项分别对应什么？", "o": ["两项都是偏差", "第一项是方差，第二项是偏差", "第一项是偏差（H 里最好的也只能这么好），第二项是方差（样本有限的代价）", "两项都是方差"], "a": 2, "w": "换成更大的 H′⊇H：第一项只会变小（偏差下降），但 k 变大使第二项变大（方差上升）。这就是第 1 页那个直觉的数学版本。"}, {"t": "三行不等式里，哪一行用到了「ĥ 是 ERM 选出来的」这个事实？", "o": ["三行都用到了", "第一行", "第二行 ε̂(ĥ) ≤ ε̂(h*)", "第三行"], "a": 2, "w": "因为 ĥ = arg min ε̂，它的训练误差不大于任何其它 h 的，当然也不大于 h* 的。第一行和第三行都是一致收敛。"}, {"t": "⚠️ 这个定理「没有」保证什么？", "o": ["没保证 h* 本身好——如果假设类选错了，ĥ 和 h* 可以一起很烂", "没保证数据是独立同分布的", "没保证算法能跑完", "没保证训练能收敛"], "a": 0, "w": "用线性分类器去分异或数据，H 里最好的 h* 错误率也有 25%，定理照样成立。定理管的是方差，不管偏差——偏差是「你选错了假设类」，数学救不了。"}], "9": [{"t": "「d 个参数 × 64 位 ⇒ k = 2^{64d}」这个论证，讲义为什么说它「不对」？", "o": ["它依赖浮点实现细节，而且依赖 H 的参数化方式——同一个 H 可以写成不同数量的参数", "因为联合界不适用", "因为 64 位不够精确", "因为结论是错的"], "a": 0, "w": "讲义举的反例：线性分类器可以写成 d+1 个参数 θ，也可以令 θᵢ=uᵢ²−vᵢ² 写成 2d+2 个参数，参数个数变了但 H 一模一样。结论是对的，依据站不住。"}, {"t": "H 「打散」点集 S 的定义是什么？", "o": ["H 能把 S 线性分开", "H 里存在某个 h 能把 S 分对", "S 里所有点都是支持向量", "对 S 的任意一种标注方式，H 里都存在某个 h 能完全实现它"], "a": 3, "w": "D 个点有 2^D 种标注方式，每一种都要有 h 实现得了。注意是「任意标注」而不是「能分对」。"}, {"t": "⚠️ 二维线性分类器的 VC 维是 3。下面哪句话是对的？", "o": ["任意四个点都能被打散", "存在三个点能被打散即可；三点共线时就打散不了，但不影响 VC 维是 3", "任意三个点都能被打散", "三点共线时 VC 维变成 2"], "a": 1, "w": "定义要的是「存在至少一个大小为 D 的集合能被打散」。讲义专门举了三点共线的反例。⚠️ 要证 VC(H)≥D 只需找一个例子，要证 VC(H)<D 则要对所有摆法论证。"}], "11": [{"t": "Vapnik 定理的推论是什么？", "o": ["样本数与 VC 维无关", "所需样本数与 VC 维成线性：n = O(D)", "所需样本数与 VC 维的平方成正比", "所需样本数与 VC 维的对数成正比"], "a": 1, "w": "再结合「大多数假设类的 VC 维大致和参数个数成正比」，就得到了流传很广的经验法则：样本数大致要和参数个数成正比。"}, {"t": "VC 维相对「参数个数」这个度量的优势是什么？", "o": ["它只看函数类能实现多少种标注模式，和参数怎么写无关", "它总是比参数个数小", "它更容易计算", "它对神经网络更准确"], "a": 0, "w": "⚠️ 但也别神化它：讲义说对「大多数」假设类，VC 维在合理参数化下也大致和参数个数成正比。VC 维的价值在于让这个结论站得住，而不在于给出不同答案。而且它在深度学习上给不出有意义的界。"}, {"t": "⚠️ 讨论课对 VC 维这一段是怎么处理的？", "o": ["讲了但没给定义", "明确跳过了——只说「这是个挺简单的概念，但今天不讲」", "讲得比讲义还细", "用了一整节课讲"], "a": 1, "w": "原话：there is a concept called VC dimension, which is a pretty simple concept but we won't be going over it today。所以第 9–11 页在视频里没有对应内容，只能读讲义。"}]};
+
+var N = [{"r": [1, 2], "star": 3, "t": "★ 偏差与方差：同样是「泛化差」，病因完全不同", "one": "欠拟合是模型本身不够；过拟合是把训练集里的偶然当成了规律。", "quote": "<em>Both the models in the leftmost and the rightmost figures above have large generalization error. <b>However, the problems that the two models suffer from are very different.</b></em>", "eq": "泛化误差（generalization error）：\n  模型在「不一定出现在训练集里的样本」上的期望误差\n\n偏差 bias：\n  即使拿「无限大」的训练集去拟合，仍然存在的那部分泛化误差\n\n方差 variance：\n  因为拟合了小样本里偶然出现的模式而多出来的那部分误差", "pts": ["⭐ <b>讲义对偏差的定义很特别，值得逐字记</b>：<em>the expected generalization error <b>even if we were to fit it to a very (say, infinitely) large training set</b></em>。<b>关键在「即使数据无限多也消不掉」</b>——这把偏差和「数据不够」彻底分开了。", "<b>方差的来源讲义讲得很具体</b>：训练集里<b>碰巧</b>有一套比平均贵一点的房子、一套比平均便宜一点的房子……五次多项式<b>把这些偶然也拟合了进去</b>。讲义管这叫 <b>spurious patterns（虚假模式）</b>。", "<b>权衡的方向是固定的</b>：模型太简单、参数太少 ⇒ <b>高偏差、低方差</b>；太复杂、参数太多 ⇒ <b>低偏差、高方差</b>。中间那个二次函数两头都不占，所以最好。", "⚠️ <b>讲义在脚注里坦白了一件事</b>：<em>we will not try to formalize the definitions of bias and variance beyond this discussion</em>——对线性回归来说偏差方差好定义，<b>但对分类问题，学界对什么是「正确」的形式化定义「至今没有共识」</b>。<b>所以这两个词在分类语境下是直觉概念，不是严格定义。</b>"], "tbl": [{"cap": "★ 两种病 · 病因与治法（本课 M1T1 第 29 页的正式考点）", "head": ["", "欠拟合 underfitting", "过拟合 overfitting"], "rows": [["别名", "<b>高偏差 high bias</b>", "<b>高方差 high variance</b>"], ["训练表现", "<b>差</b>", "好"], ["未见数据表现", "差", "<b>差很多</b>"], ["加更多数据有用吗", "<b>没用</b>（定义上就消不掉）", "<b>有用</b>"], ["治法", "加复杂度、加特征、训练更久", "降复杂度、加正则化、加数据、早停"]]}], "say": "⭐ <b>表格第四行是这一页最值钱的推论，而且它直接来自偏差的定义</b>：偏差是「数据无限多也剩下的那部分误差」，<b>所以高偏差的模型，再喂数据也不会变好</b>。高方差相反——方差来自「小样本的偶然」，<b>样本变大偶然就被平均掉了</b>。<b>这条结论在实践中极有用</b>：看到训练误差和验证误差都很高且贴在一起，<b>别去收集更多数据，那是浪费</b>，应该换更大的模型或加特征。⚠️ <b>本课 M1T1 第 29 页给的判据是同一件事的操作版</b>：<b>「判断过拟合看的不是训练误差有多低，而是两条线的差距（gap）有多大」</b>——训练误差 1% 听起来很棒，但验证误差 45% 就是灾难。", "ng": "⭐ <b>讨论课给了讲义完全没有的第二种分解</b>（<a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=1991s\" target=\"_blank\">33:11</a>）：<em>sometimes you see the <b>bias-variance decomposition</b> and sometimes you see the <b>estimation-approximation error decomposition</b>. They are somewhat related, <b>they're not exactly the same</b></em>。他还给了一个更细的拆法：<b>总误差 = 近似误差 + 估计误差 + 不可约误差（irreducible error）</b>。⭐ 并解释了两者的来源：<b>偏差是「为什么我们的假设离真实假设远」</b>（可能是假设类太小，<b>也可能是正则化把你拦在了某些假设之外</b>）；<b>方差「几乎总是因为数据少」</b>。<a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=598s\" target=\"_blank\">09:58</a> 还点明 <em>underfitting and overfitting are closely related to bias and variance</em>。<span class=\"src\">CS229/transcripts/DS_LearningTheory.txt · 本地已下载</span>", "exam": "⭐⭐ <b>本课 M1T1 第 29 页「拟合诊断」是核心考点，和这一页逐条对应。</b>课程的方法论只有一句话：<b>「把训练集表现和没见过的数据表现放在一起对比，单看训练集表现完全没用」</b>。课程给的三区域图：<b>左侧两条线都高＝欠拟合 · 中间验证误差最低点＝最佳复杂度 · 右侧训练误差近 0 而验证误差掉头向上＝过拟合</b>。⚠️ 课程还强调<b>这张图必须画在验证集上</b>。<b>这一页提供的是「为什么」，答题仍以课程的操作口径为准。</b>", "tip": {"t": "不可约误差", "v": "讨论课提到但讲义没写的第三项：<b>irreducible error</b>——数据本身的噪声，<b>任何模型都消不掉</b>。⭐ 所以「误差降不到 0」不一定是模型的错。本课 M1T2 第 4 页说的「点不会完全落在任何一条直线上，这就是整门课存在的理由」讲的就是它。"}}, {"r": [3, 3], "star": 2, "t": "两条引理：联合界与 Hoeffding 不等式", "one": "整个学习理论只用这两件工具搭起来。", "quote": "<em>Using <b>just these two lemmas</b>, we will be able to prove some of the deepest and most important results in learning theory.</em>", "eq": "联合界（union bound）：\n  P(A₁ ∪ … ∪ A_k) ≤ P(A₁) + … + P(A_k)\n  （k 个事件<b>不必独立</b>）\n\nHoeffding 不等式（学习理论里也叫 Chernoff bound）：\n  Z₁,…,Z_n ~ iid Bernoulli(φ)，φ̂ = (1/n)ΣZᵢ，任取 γ > 0\n  P( |φ − φ̂| > γ ) ≤ 2 exp( −2γ²n )", "pts": ["⭐ <b>联合界的直觉</b>：「k 件事至少发生一件」的概率，<b>不会超过它们各自概率之和</b>。因为重叠的部分被重复数了。<b>讲义说它通常被当成公理，所以不证。</b>", "⚠️ <b>联合界最有用的一点是「不要求独立」</b>——这在学习理论里是关键，因为不同假设 h 犯错的事件<b>显然不独立</b>（它们看的是同一批数据）。", "⭐ <b>Hoeffding 的直觉讲义给得很好</b>：<b>一枚正面概率为 φ 的偏心硬币，抛 n 次，正面出现的比例就是 φ 的好估计</b>，而且「偏离真值很多」的概率<b>随 n 指数级下降</b>。", "<b>注意 exp 里是 −2γ²n</b>：<b>n 在指数上 ⇒ 样本越多，失手概率下降得极快</b>；<b>γ 是平方 ⇒ 想把精度提高一倍（γ 减半），需要的样本是四倍</b>。", "<b>两个名字指同一个东西</b>：Hoeffding 不等式 = 学习理论里说的 Chernoff bound。"], "tbl": [{"cap": "两条引理各管什么", "head": ["引理", "回答的问题", "在后面用来干什么"], "rows": [["<b>Hoeffding</b>", "<b>一个</b>假设的训练误差准不准", "先搞定单个 h"], ["<b>联合界</b>", "怎么从「一个」推到「所有」", "<b>把 k 个 h 的失手概率加起来</b>"]]}], "say": "⭐ <b>这两条引理的分工，决定了后面整个证明的形状</b>：先用 Hoeffding 证「<b>对某一个固定的 h</b>，训练误差接近泛化误差」，再用联合界把这个结论<b>推广到 H 里所有 h</b>——代价是<b>失手概率要乘以 k</b>（假设的个数）。<b>「乘以 k」这件事就是后面一切「模型越复杂、需要的数据越多」的数学来源</b>。⚠️ <b>联合界是很松的放大</b>（它假设最坏情况下 k 个事件完全不重叠），<b>所以推出来的界通常远比实际保守</b>——讲义后面说的「这不是最好的论证」就包括这一层。<b>学习理论的界主要用来看「谁随谁怎么变」，不是用来算具体数值的。</b>", "ng": "讨论课在 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=2866s\" target=\"_blank\">47:46</a> 讲联合界，<a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=3057s\" target=\"_blank\">50:57</a> 讲 Hoeffding，并说明<b>课上只陈述不证明</b>：<em>We're only going to state the inequality here, there is a supplemental note on the website that actually proves the Hoeffding inequality</em>。⭐ <b>那份补充讲义本地也有</b>：<code>CS229/notes/hoeffding.pdf</code>。他在 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=3197s\" target=\"_blank\">53:17</a> 复述了不等式的含义：<b>「估计出来的 φ 和真实 φ 之间的绝对差超过 γ 的概率」有一个上界</b>。<span class=\"src\">CS229/transcripts/DS_LearningTheory.txt · 本地已下载</span>", "exam": "<b>这两条引理完全不在本课考纲</b>。⭐ <b>但 Hoeffding 的那个结论值得作为直觉带走</b>：<b>「样本越多，用样本比例估计真实概率就越准，而且准确度提升是指数级的」</b>——这解释了本课反复强调的「<b>验证集太小时，验证准确率不可信</b>」。M1T4 Practical 里验证集只有 72 个点，所以<b>所有准确率都是 x/72 的离散值</b>（0.8333=60/72），<b>两个模型差 1 个点就差 1.4%</b>——这种差别没有意义。"}, {"r": [4, 4], "star": 3, "t": "★ 三个必须分清的量：训练误差、泛化误差、假设类", "one": "ERM 最小化的是训练误差，我们真正关心的却是泛化误差——这就是全部问题。", "quote": "<em>it's really <b>generalization error that we care about</b>, but most learning algorithms fit their models to the training set. <b>Why should doing well on the training set tell us anything about generalization error?</b></em>", "eq": "训练误差（经验风险 empirical risk）：\n  ε̂(h) = (1/n) Σᵢ 1{ h(x⁽ⁱ⁾) ≠ y⁽ⁱ⁾ }     ← 训练集上分错的比例\n\n泛化误差：\n  ε(h) = P_{(x,y)~D}( h(x) ≠ y )            ← 新样本上分错的概率\n\n经验风险最小化（ERM）：\n  ĥ = arg min_{h ∈ H} ε̂(h)\n\n假设类 H：学习算法考虑的全部分类器构成的集合\n  线性分类：H = { hθ : hθ(x)=1{θᵀx ≥ 0}, θ ∈ R^{d+1} }", "pts": ["⭐ <b>讲义把全篇要回答的三个问题列了出来</b>：① 能不能把偏差/方差的权衡<b>形式化</b>？② <b>训练集上表现好，凭什么能说明泛化误差也好</b>？③ 有没有条件能让我们<b>证明</b>算法一定有效？", "⚠️ <b>PAC 假设必须记住</b>：训练数据和评估用的数据<b>来自同一个分布 D</b>，而且样本是<b>独立同分布</b>抽的。讲义在脚注里说，这两条是 PAC 框架里<b>最重要</b>的假设。<b>PAC = probably approximately correct（大概率近似正确）</b>。", "⭐ <b>假设类 H 这个抽象很关键</b>：它让我们能<b>抛开「用的是线性分类器还是神经网络」这种细节</b>，只谈「<b>算法能考虑多少种可能的函数</b>」。<b>后面所有的界都只和 H 的「大小」有关。</b>", "<b>ERM 是「最基本」的学习算法</b>：直接挑训练误差最小的那个 h。讲义说<b>逻辑回归等算法可以看成 ERM 的近似</b>。", "⚠️ <b>ε̂ 上的那个「帽子」是统计学的惯例</b>：<b>戴帽子的是「从样本估出来的」，不戴的是「真实的」</b>。ε̂(h) 是估计，ε(h) 是真值；ĥ 是学出来的假设，h* 是最好的假设。<b>全篇都遵守这个约定。</b>"], "tbl": [{"cap": "⚠️ 四个符号，戴不戴帽子差别很大", "head": ["符号", "念作", "含义"], "rows": [["<b>ε̂(h)</b>", "epsilon hat", "<b>训练</b>误差（从样本算出来的）"], ["<b>ε(h)</b>", "epsilon", "<b>泛化</b>误差（真实的，算不出来）"], ["<b>ĥ</b>", "h hat", "<b>ERM 学出来的</b>假设"], ["<b>h*</b>", "h star", "<b>H 里最好的</b>假设（也不知道是谁）"]]}], "say": "⭐ <b>这一页定义的 ĥ 和 h* 的区别，是后面那个 2γ 定理的全部骨架</b>：<b>ĥ 是我们能拿到的（训练误差最小），h* 是我们想要的（泛化误差最小）</b>，而定理要证的是「<b>ĥ 不会比 h* 差太多</b>」。⚠️ <b>注意定理不会证「ĥ 很好」</b>——如果 H 本身就很烂（比如你用线性分类器去分异或数据），<b>h* 也很烂，ĥ 跟着烂</b>。<b>定理保证的是「你没有因为只看了训练集而吃亏太多」，不保证「你选的模型类是对的」</b>。<b>前者是方差，后者是偏差——这两件事在定理里会分别对应到两项。</b>", "ng": "讨论课在 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=1671s\" target=\"_blank\">27:51</a> 和 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=1769s\" target=\"_blank\">29:29</a> 引入经验风险（<em>this is the empirical risk or empirical error</em>），<a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=2696s\" target=\"_blank\">44:56</a> 引入 ERM。⭐ <b>讨论课的叙述顺序比讲义更有层次</b>：开场 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=0s\" target=\"_blank\">00:00</a> 他先给出整节的路线图——<b>「先框定学习问题 → 深入偏差方差权衡 → 什么是经验风险最小化 → 一致收敛 → VC 维」</b>。<b>把这条链记住，这 11 页的结构就清楚了。</b><span class=\"src\">CS229/transcripts/DS_LearningTheory.txt · 本地已下载</span>", "exam": "<b>ERM、PAC、假设类都不在本课考纲</b>。⭐ <b>但「训练误差 ≠ 泛化误差」这个区分是 M1 全程的主线</b>：M1T1 第 29 页的拟合诊断、M1T1 第 30 页的数据泄漏、M1T4 的交叉验证，<b>全都在处理这一件事</b>。⚠️ 本课 M1T1 有一句很精炼的总结可以直接用：<b>「验证集用来做决定，测试集用来交答卷」</b>。"}, {"r": [5, 6], "star": 3, "t": "★★ 一致收敛：从「一个 h」到「所有 h」，代价是乘以 k", "one": "单个假设用 Hoeffding，全体假设用联合界——于是失手概率多了个因子 k。", "quote": "<em>This is called a <b>uniform convergence</b> result, because this is a bound that holds <b>simultaneously for all</b> (as opposed to just one) h ∈ H.</em>", "eq": "单个 hᵢ（直接用 Hoeffding）：\n  P( |ε(hᵢ) − ε̂(hᵢ)| > γ ) ≤ 2 exp(−2γ²n)\n\n全体 h（令 Aᵢ 为「hᵢ 失手」，用联合界）：\n  P( ∃h∈H. |ε(h)−ε̂(h)| > γ ) ≤ Σᵢ P(Aᵢ) ≤ <b>2k exp(−2γ²n)</b>\n\n取反：\n  P( ∀h∈H. |ε(h)−ε̂(h)| ≤ γ ) ≥ 1 − 2k exp(−2γ²n)\n\n三个量互相换算（令 δ = 2k exp(−2γ²n)）：\n  样本复杂度：n ≥ (1/(2γ²)) · log(2k/δ)\n  精度：      |ε̂(h) − ε(h)| ≤ √( (1/(2n)) · log(2k/δ) )", "pts": ["⭐ <b>整段的逻辑只有三步</b>：① 对<b>固定</b>的 hᵢ 用 Hoeffding（因为 ε̂(hᵢ) 正好是 n 个 iid 伯努利变量的均值，均值恰好是 ε(hᵢ)）；② 用<b>联合界</b>把 k 个失手事件加起来；③ <b>取反</b>得到「全体都准」的概率下界。", "<b>第 ① 步的构造要看清</b>：令 Zⱼ = 1{hᵢ(x⁽ʲ⁾) ≠ y⁽ʲ⁾}，则 <b>ε̂(hᵢ) = (1/n)ΣZⱼ 正是样本均值</b>，而 <b>E[Z] = ε(hᵢ) 正是真实均值</b>。<b>于是「训练误差估计泛化误差」就是「样本均值估计期望」，Hoeffding 直接适用。</b>", "⭐ <b>三个量 n、γ、δ 可以互相解</b>：固定两个就能解出第三个。<b>解 n 得到「样本复杂度」</b>——<em>the training set size n that a certain method requires in order to achieve a certain level of performance</em>。", "⭐⭐ <b>讲义专门点出的关键性质</b>：<b>所需样本数只是 k 的「对数」</b>——<em>The key property of the bound above is that the number of training examples needed is <b>only logarithmic in k</b></em>。<b>假设类的大小翻一万倍，需要的样本只增加一点点。</b>", "<b>精度那个式子的形状值得记</b>：γ ∝ <b>√(1/n)</b>——<b>样本翻四倍，误差估计的精度才提高一倍</b>。这和 Hoeffding 里 γ 是平方是同一件事。"], "tbl": [{"cap": "三个量的互相制约（固定两个解第三个）", "head": ["要解的", "公式", "读法"], "rows": [["<b>n（样本复杂度）</b>", "n ≥ (1/2γ²)·log(2k/δ)", "<b>随 log k 增长</b>，随 1/γ² 增长"], ["<b>γ（精度）</b>", "γ = √( log(2k/δ) / (2n) )", "<b>随 1/√n 下降</b>"], ["<b>δ（失手概率）</b>", "δ = 2k·exp(−2γ²n)", "<b>随 n 指数下降</b>"]]}], "say": "⭐ <b>「只对 k 取对数」这件事为什么重要，值得算一遍。</b>假设 H 从 1000 个函数扩大到 10⁹ 个（一百万倍），log k 从 6.9 涨到 20.7——<b>只变成 3 倍</b>。而如果需求是 γ 减半（精度翻倍），1/γ² <b>直接变 4 倍</b>。<b>所以「提高精度」比「限制模型大小」贵得多</b>。⭐ <b>这条也解释了一个实践现象</b>：在模型选择时，<b>候选模型从 5 个加到 50 个，过拟合验证集的风险只增加一点点</b>（log 10 ≈ 2.3）；但如果你在验证集上调了几千次超参，<b>那就是另一回事了</b>——这正是「验证集也会被过拟合、所以需要独立测试集」的理论依据。", "ng": "讨论课在 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=2866s\" target=\"_blank\">47:46</a> 转入一致收敛，并明确说<b>讨论限定在 ERM 上</b>：<em>we're limiting ourselves to empirical risk minimizers</em>。<a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=4202s\" target=\"_blank\">70:02</a> 他把两步合起来：<em>this we showed using Hoeffding's inequality, and you can apply the <b>union bound for unioning across all H</b></em>。⭐ <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=4576s\" target=\"_blank\">76:16</a> 给出样本复杂度这个名字。<b>整条链和讲义完全一致，但课堂把「为什么要对所有 h 都成立」讲得更细</b>——因为 ERM 挑出来的 ĥ <b>是依赖数据的</b>，你事先不知道它是哪一个，<b>所以必须对每一个都有保证。</b><span class=\"src\">CS229/transcripts/DS_LearningTheory.txt · 本地已下载</span>", "exam": "<b>不在本课考纲。</b>⭐ <b>但有一条结论可以直接用在 M1/M3 的「为什么要控制模型复杂度」这类问题上</b>：<b>「可选的函数越多，训练误差就越可能因为运气好而偏低，所以需要更多数据才能相信它」</b>。<b>这比「复杂模型容易过拟合」这种说法更有解释力</b>，因为它说清了机制：<b>不是模型「记住」了数据，而是「候选太多，总有一个碰巧看起来很好」。</b>", "tip": {"t": "为什么必须「一致」", "v": "只对单个 h 有保证<b>不够用</b>，因为 <b>ĥ 是看了数据之后才选出来的</b>——它是个随机变量。<b>如果只保证「每个固定的 h 都大概率准」，那个「碰巧看起来最好」的 h 恰恰是最可能失手的那个</b>。⭐ <b>这就是「选择偏差」的数学版本，也是一致收敛这个概念存在的全部理由。</b>"}}, {"r": [7, 8], "star": 3, "t": "★★ 2γ 定理：三行不等式，把偏差和方差写进了同一个公式", "one": "ε(ĥ) ≤ min ε(h) + 2γ —— 第一项是偏差，第二项是方差。", "quote": "<em>If uniform convergence occurs, then the generalization error of ĥ is <b>at most 2γ worse than the best possible hypothesis in H</b>!</em>", "eq": "三行不等式（设 h* = arg min_{h∈H} ε(h)）：\n  ε(ĥ) ≤ ε̂(ĥ) + γ        ← 一致收敛（ĥ 的训练误差接近泛化误差）\n       ≤ ε̂(h*) + γ        ← <b>ĥ 是训练误差最小的，所以 ε̂(ĥ) ≤ ε̂(h*)</b>\n       ≤ ε(h*) + 2γ       ← 一致收敛（再用一次，这次用在 h* 上）\n\n定理：|H| = k，则以至少 1−δ 的概率\n  ε(ĥ) ≤ ( min_{h∈H} ε(h) ) + 2·√( (1/(2n))·log(2k/δ) )\n              ↑ 第一项：偏差          ↑ 第二项：方差\n\n推论（样本复杂度）：n ≥ (1/(2γ²))·log(2k/δ) = O( (1/γ²)·log(k/δ) )", "pts": ["⭐ <b>三行里只有中间那行用了 ERM 的定义</b>，两头都是一致收敛。<b>这个「夹」的结构很值得学</b>：想比较 ε(ĥ) 和 ε(h*)，但它们都算不出来，<b>于是绕到两个能比较的 ε̂ 上走一趟</b>。", "⚠️ <b>第二行是整段唯一用到「ĥ 是怎么选出来的」的地方</b>。因为 ĥ = arg min ε̂，所以它的训练误差<b>不大于任何其它 h 的训练误差</b>，当然也不大于 h* 的。", "⭐⭐ <b>定理右边两项的解读是这一节的最高点</b>：<b>第一项 min ε(h) 是「H 里最好的也只能做到这么好」= 偏差</b>；<b>第二项 2γ 是「因为只看了有限样本而多付的代价」= 方差</b>。", "<b>于是偏差/方差权衡被形式化了</b>：换成更大的假设类 H′ ⊇ H，<b>第一项只会变小（在更大的集合里取 min）⇒ 偏差下降</b>；但 <b>k 变大 ⇒ 第二项变大 ⇒ 方差上升</b>。<b>这正是第 1 页那个直觉的数学版本。</b>", "<b>推论给的是样本复杂度</b>：要让 ε(ĥ) ≤ min ε(h) + 2γ 以 1−δ 的概率成立，<b>n = O( (1/γ²)·log(k/δ) ) 就够了</b>。"], "tbl": [{"cap": "★ 定理右边两项 ↔ 偏差方差（把直觉和公式对上）", "head": ["项", "是什么", "对应", "换更大的 H 会怎样"], "rows": [["<b>min_{h∈H} ε(h)</b>", "H 里最好的那个能做到多好", "<b>偏差</b>", "<b>只会变小 ✓</b>"], ["<b>2√(log(2k/δ)/2n)</b>", "因样本有限多付的代价", "<b>方差</b>", "<b>k 变大 ⇒ 变大 ✗</b>"]]}], "say": "⭐ <b>这个定理是全篇的目的地，但要看清它「没有」保证什么。</b>它保证的是 <b>ĥ 和 h* 差不多</b>，<b>完全没保证 h* 好</b>。举个极端例子：用线性分类器去分异或（XOR）数据，<b>H 里最好的 h* 错误率也有 25%</b>，定理照样成立——它只是说「你学出来的不会比这个 25% 糟太多」。<b>所以定理管的是方差，不管偏差；偏差是「你选错了假设类」，数学救不了。</b>⭐ <b>这也是为什么实践中第一步永远是「先看训练误差」</b>：<b>训练误差就高 ⇒ 偏差问题 ⇒ 换模型</b>；<b>训练误差低但验证误差高 ⇒ 方差问题 ⇒ 加数据或加正则</b>。<b>本课 M1T1 第 29 页的诊断表就是照这个顺序走的。</b>", "ng": "讨论课在 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=5081s\" target=\"_blank\">84:41</a> 给出收尾结论：<em>the key takeaway from this is that the number of data examples — the sample complexity that you want — is generally of the order of [the complexity of the hypothesis class]</em>。⭐ 更实用的是 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=1991s\" target=\"_blank\">33:11</a> 之后那一段<b>「怎么打偏差、怎么打方差」的问答</b>：对付高偏差的办法之一是 <em>just make your H bigger</em>（把假设类做大）；<b>方差几乎总是因为数据少</b>。<b>这两句和定理右边的两项一一对应。</b><span class=\"src\">CS229/transcripts/DS_LearningTheory.txt · 本地已下载</span>", "exam": "<b>定理本身不考</b>，⭐ <b>但「偏差是 H 的上限、方差是样本不足的代价」这个拆法，是回答本课「怎么改进模型」类问题的最佳框架</b>。标准答法：<b>① 先看训练误差判断是哪一种病；② 高偏差 → 加复杂度/加特征/减正则；③ 高方差 → 加数据/降复杂度/加正则/早停</b>。⚠️ 本课 M1T1 专门提醒过一个高频错误：<b>看到高准确率第一反应应该是怀疑（可能是数据泄漏），不是高兴</b>。"}, {"r": [9, 10], "star": 2, "t": "无限假设类：先给一个「不太对」的论证，再给 VC 维", "one": "64 位浮点那个论证结论是对的，但依赖参数化——于是引出了打散与 VC 维。", "quote": "<em>Let's start by going through something that is <b>not the “right” argument</b>. Better and more general arguments exist, but this will be useful for honing our intuitions.</em>", "eq": "「不太对」的论证：\n  d 个实参数 × 64 位 ⇒ k = 2^{64d} 个不同假设\n  代入推论：n ≥ O( (1/γ²)·log(2^{64d}/δ) ) = O( (d/γ²)·log(1/δ) ) = O_{γ,δ}(d)\n  ⇒ <b>所需样本数至多与参数个数成线性</b>\n\n打散（shatter）：\n  H 能打散点集 S，当且仅当对 S 的<b>任意一种标注方式</b>，\n  H 里都存在某个 h 能完全实现它\n\nVC 维：\n  VC(H) = <b>H 能打散的最大点集的大小</b>\n  （能打散任意大的集合则 VC(H) = ∞）", "pts": ["⭐ <b>讲义自己先声明这个论证「不对」，然后还是讲了一遍</b>——理由是<b>它能磨练直觉</b>。这种写法值得注意：<b>结论是对的，但依据站不住</b>。", "<b>不对在哪</b>：① 依赖「用 64 位浮点表示实数」这种实现细节；② <b>依赖 H 的参数化方式</b>。讲义举了反例：<b>同一个线性分类器类</b>可以写成 d+1 个参数 θ，<b>也可以写成 2d+2 个参数</b>（令 θᵢ = uᵢ²−vᵢ²）。<b>参数个数变了，H 却一模一样。</b>", "⭐ <b>打散的定义要掰开</b>：不是「能分对」，是「<b>任意一种标注都能分对</b>」。D 个点有 2^D 种标注方式，<b>每一种都要有 h 实现得了</b>。", "<b>二维线性分类器的 VC 维是 3</b>：三个不共线的点，<b>八种标注全都能用一条直线实现</b>（讲义画了八张图）；<b>任意四个点都打散不了</b>。", "⚠️ <b>最容易考错的一点</b>：<b>VC 维是 3，不代表「任意三个点都能打散」</b>。讲义举了反例：<b>三点共线</b>时，中间那个标成异类就分不开了。<b>定义要的是「存在至少一个大小为 D 的集合能被打散」</b>。"], "tbl": [{"cap": "⚠️ VC 维定义里最容易搞反的两个量词", "head": ["要证 VC(H) ≥ D", "要证 VC(H) < D"], "rows": [["<b>存在</b>某个大小为 D 的点集能被打散", "<b>任意</b>大小为 D 的点集都打散不了"], ["找出<b>一个</b>例子即可", "要对<b>所有</b>摆法论证"], ["二维线性：找三个不共线的点 ✓", "二维线性：任意 4 点都不行 ⇒ VC=3"]]}], "say": "⭐ <b>VC 维存在的全部理由，就是要摆脱「参数个数」这个不可靠的度量。</b>讲义给的那个反例很说明问题：<b>把 θᵢ 写成 uᵢ²−vᵢ²，参数个数凭空翻倍，但模型的表达能力一点没变</b>。<b>VC 维只看「这个函数类能实现多少种标注模式」，和你怎么写参数无关。</b>⚠️ <b>但也别神化它</b>：讲义第 11 页会说，<b>对「大多数」假设类，VC 维「假设参数化合理」时也大致和参数个数成正比</b>——<b>所以绕了一大圈，实用结论和那个「不太对」的论证一样</b>。<b>VC 维的价值在于它让这个结论站得住，而不在于它给出了不同的答案。</b>⭐ <b>顺带一提：神经网络是 VC 理论解释不了的地方</b>——现代网络参数量远超样本数，VC 界给出的保证完全是空的，<b>但它们泛化得很好</b>。<b>这是学习理论至今的开放问题。</b>", "ng": "⚠️ <b>讨论课明确跳过了 VC 维</b>——<a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=5020s\" target=\"_blank\">83:40</a> 原话：<em>there is a concept called VC dimension, which is a pretty simple concept but <b>we won't be going over it today</b></em>。他只给了一句直觉：<b>VC 维可以理解成「给一个无限大的假设类赋一个大小」</b>。⭐ <b>所以第 9–11 页在视频里没有对应内容，只能读讲义。</b><span class=\"src\">CS229/transcripts/DS_LearningTheory.txt · 本地已下载</span>", "exam": "<b>VC 维不在本课考纲</b>——M1T4 里出现过 VC 这两个字母，但只是在 CS229 式的侧注里一带而过，课件本身没有。⭐ <b>唯一值得带走的一句</b>：<b>「模型的表达能力不能用参数个数来衡量」</b>——这个认识在比较模型时有用，<b>比如决策树的 max_depth 加 1，参数个数翻倍但表达能力翻的是指数</b>。"}, {"r": [11, 11], "star": 2, "t": "Vapnik 定理：样本复杂度与 VC 维成线性", "one": "讲义说这是「许多人认为学习理论里最重要的定理」。", "quote": "<em>The following theorem, due to Vapnik, can then be shown. (This is, <b>many would argue, the most important theorem in all of learning theory</b>.)</em>", "eq": "定理（Vapnik）。令 D = VC(H)，则以至少 1−δ 的概率，对所有 h ∈ H：\n  | ε(h) − ε̂(h) | ≤ O( √( (D/n)·log(n/D) + (1/n)·log(1/δ) ) )\n\n从而：\n  ε(ĥ) ≤ ε(h*) + O( √( (D/n)·log(n/D) + (1/n)·log(1/δ) ) )\n\n推论：要让 |ε(h)−ε̂(h)| ≤ γ 对所有 h 成立（概率 1−δ），\n  <b>n = O_{γ,δ}(D) 就够了</b>", "pts": ["⭐ <b>定理的意义一句话</b>：<b>只要 VC 维有限，一致收敛就会在 n 变大时发生</b>——<em>if a hypothesis class has finite VC dimension, then uniform convergence occurs as n becomes large</em>。<b>反过来：VC 维无限的假设类，再多数据也学不保险。</b>", "<b>注意界的形状</b>：<b>D/n</b> 在根号里——<b>所以关键不是 D 多大、n 多大，而是「D 和 n 的比」</b>。<b>参数多没关系，只要数据更多。</b>", "⭐ <b>推论是最实用的一句</b>：<b>所需样本数与 VC 维成线性</b>。再结合「<b>大多数假设类的 VC 维大致和参数个数成正比</b>」，就得到了那个流传很广的经验法则——", "⭐⭐ <b>讲义的最终结论</b>：<em>the number of training examples needed to achieve generalization error close to that of the optimal classifier is usually <b>roughly linear in the number of parameters</b> of H</em>。<b>「样本数大致要和参数个数成正比」这条经验法则，理论依据就在这里。</b>", "⚠️ <b>但讲义第 9 页提醒过适用范围</b>：这些结果是<b>对 ERM 证的</b>。对<b>非 ERM</b> 的算法，<em>giving good theoretical guarantees is still an area of active research</em>。"], "tbl": [{"cap": "三条结论串起来（从有限 H 到无限 H）", "head": ["情形", "「大小」用什么度量", "样本复杂度"], "rows": [["<b>有限 H</b>", "k = |H|", "<b>n ~ log k</b>"], ["<b>d 个参数（粗糙论证）</b>", "64d 位", "<b>n ~ d</b>"], ["<b>无限 H（Vapnik）</b>", "<b>VC 维 D</b>", "<b>n ~ D</b>"]]}], "say": "⭐ <b>「样本数与参数个数成正比」这条经验法则，是本课能从这 11 页带走的唯一一条实操结论</b>，而且它能立刻用在诊断上：<b>参数远多于样本（d ≫ n）时，高方差几乎是必然的</b>。本课的例子：<b>M1T4 Practical 的验证集只有 72 个点</b>；<b>朴素贝叶斯做文本分类时词表 50000 维但邮件可能只有几千封</b>——<b>后者正是 notes5 里说的「feature selection 在 d ≫ n 时能提高准确率」的理由</b>。⚠️ <b>但这条法则在深度学习上彻底失效</b>：现代网络动辄上亿参数、训练数据可能只有百万级，<b>按 VC 理论应该惨不忍睹，实际却泛化得很好</b>。<b>这不是法则「不准」，是 VC 框架对这类模型给不出有意义的界</b>——<b>学习理论至今没有完全解释这件事。</b>", "ng": "⚠️ <b>这一页在讨论课里没有对应内容</b>（VC 维整段被跳过了，见上一条）。⭐ <b>不过讨论课的收尾 <a href=\"https://www.youtube.com/watch?v=iVOxMcumR4A&t=5081s\" target=\"_blank\">84:41</a> 给的 takeaway 和这一页的结论一致</b>：<b>所需样本数大致是假设类复杂度的量级</b>。<b>课堂省掉了「复杂度怎么度量」这一层，讲义补上的正是它。</b><span class=\"src\">CS229/transcripts/DS_LearningTheory.txt · 本地已下载</span>", "exam": "<b>不在本课考纲。</b>⭐ <b>但「d ≫ n 时容易过拟合」这个判断在本课多处出现</b>：M1T1 讲数据泄漏时、M1T4 讲 C 和 gamma 时、以及 M3 的模型评估。<b>答题时能说出「参数个数相对样本量过大」比只说「模型太复杂」更具体。</b>", "tip": {"t": "这 11 页该怎么读", "v": "<b>第 1–2 页（偏差方差）必读且是本课考点</b>；<b>第 7–8 页的定理结构值得理解</b>（它把偏差方差写进了同一个公式）；<b>第 3–6、9–11 页的证明按「了解」处理即可</b>。⭐ 实在时间紧，<b>只看第 1–2 页加第 8 页那张「两项对应偏差方差」的解读，收益已经拿到八成。</b>"}}];
+
+(function(){
+  var PDF="slides/cs229-notes4.pdf", MAX=11;
+  var frame=document.getElementById("pdf"), card=document.getElementById("card"),
+      pnum=document.getElementById("pnum"), strip=document.getElementById("strip"),
+      right=document.getElementById("right");
+  var cur=0, map={}, cells=[];
+
+  /* 存档键带课程前缀 —— file:// 下所有本地页面共用一个 origin，
+     两门课都用 "cs229-notes4quiz" 会互相覆盖。 */
+  var KEY = document.body.dataset.key;
+  try {                       // 一次性迁移：早期版本用的是不带课程前缀的键
+    if(!localStorage.getItem(KEY+"quiz")){
+      var _old = localStorage.getItem("cs229-notes4quiz");
+      if(_old){
+        localStorage.setItem(KEY+"quiz", _old);
+        var _p = localStorage.getItem("cs229-notes4p");
+        if(_p) localStorage.setItem(KEY+"p", _p);
+      }
+      /* 搬完就把旧键删掉。不删的话它会一直躺在那儿，
+         用户「清空全部记录」之后下次打开又被复活一遍。 */
+      localStorage.removeItem("cs229-notes4quiz");
+      localStorage.removeItem("cs229-notes4p");
+    }
+  } catch(e) {}
+
+  N.forEach(function(n,i){ for(var p=n.r[0];p<=n.r[1];p++) map[p]=i; });
+
+  for(var p=1;p<=MAX;p++){
+    var b=document.createElement("b");
+    b.title="第 "+p+" 页";
+    if(map[p]!=null) b.className="has";
+    b.onclick=(function(x){ return function(){ go(x); }; })(p);
+    strip.appendChild(b); cells.push(b);
+  }
+
+  function navHtml(){
+    return '<div class="nav"><button class="btn" id="p2">← 上一页</button>'+
+           '<button class="btn" id="n2">下一页 →</button></div>';
+  }
+  function bindNav(){
+    var a=document.getElementById("p2"), b=document.getElementById("n2");
+    if(a) a.onclick=function(){ step(-1); };
+    if(b) b.onclick=function(){ step(1); };
+  }
+  function render(p){
+    var i=map[p];
+    if(i==null){
+      card.innerHTML='<div class="empty">这一页没有单独的讲解。<br>'+
+        '它多半是上一页的<b>增量构建</b>——往前翻一页即可。</div>'+navHtml();
+      bindNav(); return;
+    }
+    var n=N[i], multi=n.r[0]!==n.r[1], h="";
+    h+='<span class="pg'+(multi?" multi":"")+'">p'+n.r[0]+(multi?"–"+n.r[1]:"")+'</span>';
+    h+='<h2>'+n.t+(n.star?'<span class="star">'+Array(n.star+1).join("★")+'</span>':'')+
+        qBadge(n.r[0])+'</h2>';
+    if(n.one) h+='<div class="one">'+n.one+'</div>';
+    if(n.quote) h+='<div class="quote"><span class="t">课件原话</span>'+n.quote+'</div>';
+    if(n.eq)  h+='<span class="eq">'+n.eq.replace(/\n/g,"<br>")+'</span>';
+    if(n.pts) h+='<ul>'+n.pts.map(function(x){ return "<li>"+x+"</li>"; }).join("")+'</ul>';
+    if(n.tbl) h+=n.tbl.map(function(T){var s='<div class="tw">'+(T.cap?'<div class="tc">'+T.cap+'</div>':"")+'<table class="nt">';if(T.head) s+='<thead><tr>'+T.head.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead>';s+='<tbody>'+T.rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>';}).join("")+'</tr>';}).join("")+'</tbody></table></div>';return s;}).join("");
+    if(n.say) h+='<div class="say"><span class="t">CS229 / 讲义补充</span>'+n.say+'</div>';
+    if(n.ng) h+='<div class="ng"><span class="t">从零补基础 · Andrew Ng CS229</span>'+n.ng+'</div>';
+    if(n.exam) h+='<div class="exam"><span class="t">与考试的联系</span>'+n.exam+'</div>';
+    if(n.tip) h+='<div class="tip'+(n.tip.w?" w2":"")+'"><span class="t">'+n.tip.t+'</span>'+n.tip.v+'</div>';
+    card.innerHTML=h+quizHtml(n.r[0])+navHtml();
+    bindNav();
+    bindQuiz();
+    bindBadge();
+  }
+  function go(p){
+    p=Math.max(1,Math.min(MAX,parseInt(p,10)||1));
+    if(p===cur) return;
+    cur=p; pnum.value=p;
+    // 只改 #hash 不会让 Chrome 内置 PDF 阅读器翻页 —— 实测 src 已是 #page=49
+    // 而工具栏仍停在 1/78。必须让它认为这是一次**新的导航**，所以加查询参数。
+    frame.src=PDF+"?p="+p+"#page="+p+"&toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    render(p);
+    paintStrip();
+    revPaint();
+    right.scrollTop=0;
+    var on=strip.querySelector("b.on");
+    if(on) on.scrollIntoView({block:"nearest",inline:"center"});
+    try{ localStorage.setItem(KEY+"p",p); }catch(e){}
+  }
+
+
+  /* ══ 自测与错题记录 ══════════════════════════════════════════════
+     记录形状： ST["起始页#题号"] = {n:做过几次, w:错过几次, r:[最近 6 次 1/0]}
+     全部存 localStorage，纯本地。 */
+  var ST = {};
+  try { ST = JSON.parse(localStorage.getItem(KEY+"quiz") || "{}") || {}; } catch(e){ ST = {}; }
+  function save(){ try{ localStorage.setItem(KEY+"quiz", JSON.stringify(ST)); }catch(e){} }
+
+  function rec(key, ok){
+    var d = ST[key] || {n:0, w:0, r:[]};
+    d.n++; if(!ok) d.w++;
+    d.r.push(ok ? 1 : 0);
+    if(d.r.length > 6) d.r = d.r.slice(-6);
+    ST[key] = d; save();
+  }
+  /* 最近错次数 —— 薄弱点排序用的就是它，不是历史总错数：
+     一个月前错过三次但最近三次全对，不该再排在最前面。 */
+  function recentWrong(d){ return (d.r||[]).filter(function(x){ return x===0; }).length; }
+  /* 「还算不算薄弱」：错过、且最近两次没有连对。
+     用连对而不是「最近窗口里没有 0」，是为了让规则能一句话说清楚，
+     用户看得见自己离毕业还差几次；也挡住了蒙对一次就算掌握。 */
+  function isWeak(d){
+    if(!d || !d.w) return false;
+    var r = d.r || [];
+    return !(r.length >= 2 && r[r.length-1] === 1 && r[r.length-2] === 1);
+  }
+  function unitWrong(start){
+    var qs = Q[start] || [], rw = 0, w = 0, n = 0, qw = 0;
+    qs.forEach(function(_,i){
+      var d = ST[start+"#"+i]; if(!d) return;
+      rw += recentWrong(d); w += d.w; n += d.n; if(isWeak(d)) qw++;
+    });
+    // rw 数的是最近错的**次数**（只用来排序，谁更该先复习）；
+    // qw 数的是**还没毕业的题数**（给人看，也决定标红和进不进复习队列）。
+    return {rw:rw, w:w, n:n, qw:qw};
+  }
+  function histHtml(d){
+    var h = "";
+    for(var i=0;i<6;i++){
+      var v = d && d.r ? d.r[d.r.length-6+i] : undefined;
+      h += '<i class="'+(v===1?"o":v===0?"x":"")+'"></i>';
+    }
+    return h;
+  }
+
+  function quizHtml(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var h = '<div class="quiz"><h3>自测 <b>'+qs.length+'</b> 题</h3>';
+    qs.forEach(function(q,i){
+      var key = start+"#"+i, d = ST[key];
+      h += '<div class="qq" data-k="'+key+'" data-a="'+q.a+'">';
+      h += '<div class="t">'+q.q+'</div>';
+      q.o.forEach(function(o,j){
+        h += '<button class="opt" data-j="'+j+'">'+o+'</button>';
+      });
+      h += '<div class="why" style="display:none"></div>';
+      h += '<div class="qhist">'+histHtml(d)+
+           '<span style="margin-left:6px">'+
+           (d ? "做过 "+d.n+" 次 · 错 "+d.w : "还没做过")+'</span>'+
+           '<button class="qagain">重做</button></div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  function bindQuiz(){
+    document.querySelectorAll(".qq").forEach(function(box){
+      var key = box.dataset.k, ans = +box.dataset.a;
+      var why = box.querySelector(".why"), opts = box.querySelectorAll(".opt");
+      var qs = Q[key.split("#")[0]], q = qs[+key.split("#")[1]];
+      opts.forEach(function(b){
+        b.onclick = function(){
+          var j = +b.dataset.j, ok = (j === ans);
+          opts.forEach(function(x){
+            x.disabled = true;
+            if(+x.dataset.j === ans){ x.classList.add("ok"); x.innerHTML += '<span class="m">✓</span>'; }
+          });
+          if(!ok){ b.classList.add("no"); b.innerHTML += '<span class="m">✗</span>'; }
+          why.innerHTML = q.why; why.style.display = "block";
+          rec(key, ok);
+          box.querySelector(".qhist").innerHTML =
+            histHtml(ST[key]) + '<span style="margin-left:6px">做过 '+ST[key].n+
+            ' 次 · 错 '+ST[key].w+'</span><button class="qagain">重做</button>';
+          bindAgain(box); paintStrip(); revSync();
+          var bd = document.querySelector('#card>h2 .qbadge');
+          if(bd) bd.outerHTML = qBadge(+key.split('#')[0]);
+          bindBadge();
+        };
+      });
+      bindAgain(box);
+    });
+  }
+  function bindBadge(){
+    var b = document.querySelector("#card>h2 .qbadge");
+    if(b) b.onclick = function(){
+      var q = document.querySelector(".quiz");
+      if(q) q.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+  }
+  function bindAgain(box){
+    var a = box.querySelector(".qagain");
+    if(a) a.onclick = function(){ render(cur); };
+  }
+
+  /* 页条上标红：这一单元最近还在错 */
+  function paintStrip(){
+    cells.forEach(function(c,k){
+      var i = map[k+1];
+      var cls = (i!=null ? "has" : "");
+      if(i!=null){
+        if(unitWrong(N[i].r[0]).qw > 0) cls += " err";
+      }
+      if(k+1===cur) cls += " on";
+      c.className = cls;
+    });
+  }
+
+
+  /* ── 标题角标：不用滚到底就知道这页有没有题、错没错过 ── */
+  function qBadge(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var st = unitWrong(start);
+    return '<span class="qbadge'+(st.qw?" bad":"")+'" title="跳到自测">'+
+      (st.qw ? "还错 "+st.qw+"/"+qs.length+" 题" : qs.length+" 题")+' ↓</span>';
+  }
+
+  /* ── 复习模式：前进/后退只在「最近还在错」的页之间跳 ──
+     用户要的是「专项针对薄弱部分复习」。光有一张错题清单还得自己一条条点，
+     所以把它接到翻页上：开了之后 ← → 就只在这些页里走。
+     依据是**最近**错次，不是累计——早就改对的题不该再拦路。 */
+  var rev = false, revList = [];
+  function weakPages(){
+    return N.filter(function(n){ return unitWrong(n.r[0]).qw > 0; })
+            .map(function(n){ return n.r[0]; });
+  }
+  function revPaint(){
+    var chip = document.getElementById("revChip");
+    chip.classList.toggle("on", rev);
+    if(!rev) return;
+    var i = revList.indexOf(mapStart(cur));
+    chip.querySelector("b").textContent =
+      (i < 0 ? "?" : (i+1)) + " / " + revList.length + " 页";
+  }
+  function mapStart(p){ var i = map[p]; return i==null ? -1 : N[i].r[0]; }
+
+  function step(d){
+    if(!rev) return go(cur + d);
+    if(!revList.length) return exitRev(true);
+    var here = mapStart(cur), i = revList.indexOf(here);
+    if(i < 0){                       // 当前不在清单里：跳到顺着方向最近的一页
+      var t = null;
+      for(var k=0;k<revList.length;k++){
+        if(d > 0 ? revList[k] > cur : revList[k] < cur){ t = revList[k]; if(d>0) break; }
+      }
+      return go(t == null ? revList[d>0 ? 0 : revList.length-1] : t);
+    }
+    go(revList[(i + d + revList.length) % revList.length]);
+  }
+  function enterRev(){
+    revList = weakPages();
+    if(!revList.length){ alert("没有待复习的页——错过的题都连对两次毕业了。"); return; }
+    rev = true; wp.classList.remove("on");
+    go(revList.indexOf(mapStart(cur)) >= 0 ? cur : revList[0]);
+    revPaint();
+  }
+  function exitRev(done){
+    rev = false; revPaint();
+    if(done) alert("待复习的页都毕业了，已退出复习模式。");
+  }
+  document.getElementById("revOff").onclick = function(){ exitRev(false); };
+
+  /* 答完一题就重算一次清单：刚改对的页当场从复习队列里消失。 */
+  function revSync(){
+    if(!rev) return;
+    revList = weakPages();
+    if(!revList.length) exitRev(true); else revPaint();
+  }
+
+  /* 错题本 */
+  var wp = document.getElementById("wrongPanel");
+  function openWrong(){
+    var list = [];
+    N.forEach(function(n){
+      var st = unitWrong(n.r[0]);
+      if(st.n === 0 || st.w === 0) return;
+      list.push({n:n, rw:st.rw, w:st.w, tot:st.n, qw:st.qw});
+    });
+    // 还没毕业的一律排前面；同样没毕业的，最近错得多的更靠前。
+    list.sort(function(a,b){
+      return (b.qw > 0) - (a.qw > 0) || (b.rw - a.rw) || (b.w - a.w); });
+    var box = document.getElementById("wrongList");
+    if(!list.length){
+      box.innerHTML = '<div class="none">还没有错题。<br>做几道自测再回来看。</div>';
+    } else {
+      box.innerHTML = list.map(function(it){
+        var qs = Q[it.n.r[0]] || [];
+        // 每道题的六格单独成一组，多题的单元才不会连成一片看不出边界
+        var h = qs.map(function(_,i){
+          return "<u>"+histHtml(ST[it.n.r[0]+"#"+i])+"</u>"; }).join("");
+        return '<div class="wrow'+(it.qw ? "" : " done")+'" data-p="'+it.n.r[0]+'">'+
+          '<span class="p">p'+it.n.r[0]+'</span>'+
+          '<span class="n2">'+it.n.t+'</span>'+
+          '<span class="h">'+h+'</span>'+
+          '<span class="s">'+(it.qw ? "还差 "+it.qw+" 题毕业" : "已毕业")+
+          ' · 累计错 '+it.w+'/'+it.tot+'</span></div>';
+      }).join("");
+      box.querySelectorAll(".wrow").forEach(function(r){
+        r.onclick = function(){ wp.classList.remove("on"); go(+r.dataset.p); };
+      });
+    }
+    // 总账。三个数分工明确：做了多少、还有多少没过关、一共栽过几次。
+    var done=0, tot=0, weak=0, wsum=0;
+    Object.keys(Q).forEach(function(k){
+      Q[k].forEach(function(_,i){
+        tot++;
+        var d = ST[k+"#"+i]; if(!d) return;
+        done++; wsum += d.w; if(isWeak(d)) weak++;
+      });
+    });
+    document.getElementById("wrongTally").innerHTML =
+      '<span>做过 <b>'+done+'</b> / '+tot+' 题</span>'+
+      '<span>没毕业 <b class="hot">'+weak+'</b> 题</span>'+
+      '<span>累计错 <b>'+wsum+'</b> 次</span>'+
+      '<span>待复习 <b>'+weakPages().length+'</b> 页</span>';
+    document.getElementById("revOn").disabled = !weakPages().length;
+    wp.classList.add("on");
+  }
+  document.getElementById("wrongBtn").onclick = openWrong;
+  document.getElementById("revOn").onclick = enterRev;
+  document.getElementById("wrongClose").onclick = function(){ wp.classList.remove("on"); };
+  document.getElementById("wrongReset").onclick = function(){
+    if(!confirm("清空全部自测记录？此操作不可撤销。")) return;
+    ST = {}; save(); exitRev(false); paintStrip(); openWrong(); render(cur);
+  };
+  wp.onclick = function(e){ if(e.target === wp) wp.classList.remove("on"); };
+
+  document.getElementById("prev").onclick=function(){ step(-1); };
+  document.getElementById("next").onclick=function(){ step(1); };
+  pnum.addEventListener("change",function(){ go(pnum.value); });
+  pnum.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ go(pnum.value); this.blur(); }
+  });
+  document.addEventListener("keydown",function(e){
+    if(document.activeElement===pnum) return;
+    if(e.key==="ArrowLeft"||e.key==="PageUp"){ step(-1); e.preventDefault(); }
+    if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){ step(1); e.preventDefault(); }
+  });
+
+  var miss=document.getElementById("miss");
+  frame.addEventListener("error",function(){ miss.style.display="block"; });
+  frame.addEventListener("load", function(){ miss.style.display="none"; });
+  document.getElementById("help").onclick=function(){
+    miss.style.display = miss.style.display==="block" ? "none" : "block";
+  };
+
+  var drag=document.getElementById("drag"), left=document.getElementById("left"), dragging=0;
+  drag.addEventListener("mousedown",function(){ dragging=1; document.body.style.userSelect="none"; });
+  document.addEventListener("mouseup",function(){ dragging=0; document.body.style.userSelect=""; });
+  document.addEventListener("mousemove",function(e){
+    if(!dragging) return;
+    left.style.width=Math.max(20,Math.min(78,e.clientX/window.innerWidth*100))+"%";
+  });
+
+  var s=1; try{ s=parseInt(localStorage.getItem(KEY+"p"),10)||1; }catch(e){}
+  go(s);
+})();
+</script>
+
+
+
+
+
+
+<!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
+<style>
+#nopdf{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+#nopdf .in{max-width:380px;text-align:center;font-size:14px;line-height:1.85;
+  color:var(--dim,#6a7686)}
+#nopdf b{color:var(--ink,#23272c)}
+#nopdf code{font-size:12.5px}
+</style>
+<script>
+(function(){
+  /* 公开站上 slides/*.pdf 不在仓库里（著作权）。与其让左栏挂一个空 iframe，
+     不如说清楚它去哪了 —— 右栏的讲解和自测题完全不受影响。
+     本地预览同样加 ?public=1 。*/
+  if (!/\.github\.io$/.test(location.hostname)
+      && !/[?&]public=1\b/.test(location.search)) return;
+  function go(){
+    var stage = document.getElementById("stage");
+    var frame = document.getElementById("pdf");
+    if (!stage) return;
+    if (frame) frame.remove();
+    var d = document.createElement("div");
+    d.id = "nopdf";
+    d.innerHTML = '<div class="in"><p><b>原课件不在公开仓库里。</b></p>'
+      + '<p>课件著作权属于学校与各课作者，本仓库不转载。</p>'
+      + '<p>右栏的逐页讲解与自测题是自己写的，<b>照常可用</b>。</p>'
+      + '<p style="opacity:.75">要让这一栏显示出来：把原 PDF 放回 <code>精读/slides/</code>，'
+      + '用本地静态服务器打开即可。</p></div>';
+    stage.appendChild(d);
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+</script>
+<!-- deploy-public-mode : end -->
+</body></html>

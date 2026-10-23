@@ -1,0 +1,855 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M2 T3 高斯混合与 EM · 精读动画版·深度</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"M2 T3 · 高斯混合与 EM（精读动画版 · 深度）",
+  subtitle:"生成故事 → z 与 r → E 步 M 步 → 似然确实上升 → 选 K · 空格推进 · N 讲解",video:""};
+
+/* ── 一维密度画布。安全带 y∈[140,530] ── */
+function DX(x){return 640+132*x;}
+function DY(v){return 500-620*v;}          /* 密度值 0~0.45 映到 500~221 */
+function dax(t){var t2=t||3.6;
+  link(DX(-t2),DY(0),DX(t2),DY(0));
+  for(var v=-3;v<=3;v++){link(DX(v),DY(0)-5,DX(v),DY(0)+5);note(String(v),DX(v),DY(0)+26,"");}}
+function G(mu,var_,w){var p=[],sd=Math.sqrt(var_);
+  for(var x=-4.2;x<=4.2;x+=0.03){
+    p.push([DX(x),DY((w===undefined?1:w)*Math.exp(-0.5*Math.pow((x-mu)/sd,2))/(sd*Math.sqrt(2*Math.PI)))]);}
+  return p;}
+function MIX(cs){var p=[];
+  for(var x=-4.2;x<=4.2;x+=0.03){var s=0;
+    for(var i=0;i<cs.length;i++){var sd=Math.sqrt(cs[i][2]);
+      s+=cs[i][0]*Math.exp(-0.5*Math.pow((x-cs[i][1])/sd,2))/(sd*Math.sqrt(2*Math.PI));}
+    p.push([DX(x),DY(s)]);}
+  return p;}
+function tick(x,cls,lab){link(DX(x),DY(0)-9,DX(x),DY(0)+9);
+  if(lab)note(lab,DX(x),DY(0)+30,cls||"y");}
+/* 责任度堆叠条 */
+function rbar(x,y,wpx,r1,lab){
+  var h=26;
+  boxNode(x,y,Math.round(wpx*r1),h,"","g");
+  boxNode(x+Math.round(wpx*r1),y,wpx-Math.round(wpx*r1),h,"","b");
+  if(lab)note(lab,x-14,y+18,"","end");}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("M2 T3 · 高斯混合与 EM","精读动画版 · 深度",
+      "PPT 给你公式，这一部讲每个公式为什么长这样");},
+    "这是 <b>Module 2 Topic 3</b> 的深度精读，M2 三个 Topic 的最后一块。素材三层：① Canvas 的 <b>T3-A 到 T3-D 四页讲义</b>加官方 17 页 PPT；② 讲义里的 <b>三个算例全部用 numpy 复算过</b>，片中每个数字都对得上；③ <b>CS229 L13 后半</b>——补上 PPT 完全没有的那一环：<b>为什么 EM 一定不会让似然变差</b>。这一讲最容易出的问题是「公式记住了但不知道为什么」，所以我会把每一步都拆到「它在补哪个缺口」。空格推进，N 开关讲解。");
+});
+KP("1 · GMM 在问什么（与 k-means 对照）",function(){
+  S(0,function(){clearScene();setEq(null);
+   boxNode(140,150,470,86,"K-means 问","b");note("这个点<归哪一簇>？",375,262,"b");
+   boxNode(670,150,470,86,"GMM 问","g");note("这份数据是<从什么分布里抽出来的>？",905,262,"g");
+   note("⇒ 一个求<分组>，一个求<密度>",640,390,"y");
+   note("⚠ GMM 顺带能给分组，但那是<副产品>，不是它的目标",640,455,"r");},"先把问题摆清楚。<b>K-means 问的是「这个点归哪一簇」</b>——它要的是分组。<b>GMM 问的是「这份数据是从什么分布里抽出来的」</b>——它要的是<b>密度</b>。⚠️ 这个区别很关键：<b>GMM 顺带能给出分组（取责任度最大的那个成分），但那是副产品，不是它的目标</b>。把 GMM 只当成「软版 k-means」会漏掉它一大半的能力。");
+  S(0,function(){clearScene();setCap("有了密度，能回答 k-means 回答不了的问题");
+   dax();curve(MIX([[0.6,-1.2,0.5],[0.4,1.4,1.0]]),"fit y");
+   tick(3.1,"r","这里");
+   link(DX(3.1),DY(0),DX(3.1),DY(0.012));
+   note("p(x) 很小 ⇒ 这个观测在当前模型下<很罕见>",640,300,"g");
+   note("k-means 没有密度，问不出这句话",640,360,"r");},"有了密度就能回答 k-means 回答不了的问题：<b>「这个新观测有多罕见？」</b> 图上那个位置的 p(x) 很小，说明<b>在当前拟合出的模型下它很罕见</b>——这就是异常检测。k-means 只会把它硬塞进最近的簇，<s>说不出「罕见」这件事</s>。");
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:5,cols:3,x:180,y:150,cw:300,ch:62,labelCls:"y",label:"三条实质差别",
+     hl:function(i,j){return (i>0&&j===2)?"hl2":"";},
+     cell:function(i,j){return [["","K-means","GMM"],
+       ["给出什么","硬标签","<b>责任度向量</b>＋密度"],
+       ["成分形状","各向同性的球","各自的协方差：可扁可斜"],
+       ["选个数","肘部 / silhouette","<b>AIC / BIC</b>（有似然可用）"],
+       ["目标","最小化 WCSS","<b>最大化似然</b>"]][i][j];}});},"三条实质差别：<b>给出什么</b>——k-means 给硬标签，GMM 给<b>责任度向量</b>加密度；<b>成分形状</b>——k-means 隐含假设各向同性的球，GMM 每个成分有自己的协方差，<b>可以又扁又斜</b>；<b>选个数</b>——k-means 只能靠肘部和 silhouette，GMM <b>有似然，所以能用 AIC/BIC</b>。最后一行是根子：<b>一个最小化 WCSS，一个最大化似然</b>。");
+  SUM(0,1,{h:"GMM 求密度，分组只是副产品",k:"K-means 问「归哪一簇」（分组）；GMM 问「从什么分布抽出来的」（<b>密度</b>）。",m:"有密度就能算「这个观测多罕见」＝异常检测；还能用<b>似然</b>做模型选择（AIC/BIC）。",w:"<s>把 GMM 只当成「软版 k-means」</s>——那漏掉了它一大半能力。",e:"大题问「GMM 比 k-means 多给了什么」：<b>责任度向量 + 完整密度 p(x)</b>，因而能做异常检测与 AIC/BIC 选 K。"});
+  QUIZ(0,1,{t:"GMM 相对 K-means 最根本的不同是？",o:["不需要指定成分个数","一定能找到全局最优","收敛更快","它建模的是数据的概率密度，分组只是副产品"],a:3,w:"K-means 只产出分组；GMM 产出<b>密度 p(x)</b>，因此能回答「这个点多罕见」、能算似然、能用 AIC/BIC。<s>成分个数仍要指定，也不保证全局最优。</s>"});
+});
+KP("2 · ★ 生成故事：两步抽一个点",function(){
+  S(0,function(){clearScene();setEq(null);setCap("想象数据是这样被「生成」出来的");
+   boxNode(130,160,470,76,"第一步：掷一次骰子","b");
+   note("按权重 π 选出一个成分 k",365,278,"b");
+   boxNode(670,160,470,76,"第二步：从第 k 个高斯里抽点","g");
+   note("x ~ N(μ_k, Σ_k)",905,278,"g");
+   note("重复 N 次，就得到你手上这份数据",640,400,"y");
+   note("⚠ 骰子的结果<没有被记下来> —— 这就是全部困难的来源",640,465,"r");},"GMM 的出发点是一个<b>生成故事</b>：每一个观测都是两步抽出来的。<b>第一步</b>，按权重 π 掷一次骰子，选出一个成分 k；<b>第二步</b>，从第 k 个高斯 N(μ_k, Σ_k) 里抽出这个点。重复 N 次就得到你手上的数据。⚠️ <b>关键在于：骰子的结果没有被记下来</b>——你只看到点落在哪，看不到它来自哪个成分。<b>这就是全部困难的来源</b>，后面所有机制都是在补这个缺口。");
+  S(0,function(){clearScene();setCap("两个成分各自抽点，混在一起就分不清了");
+   dax();
+   curve(G(-1.2,0.5,0.6),"fit g");curve(G(1.4,1.0,0.4),"fit b");
+   note("成分 1（π=0.6）",DX(-2.6),DY(0.30),"g");
+   note("成分 2（π=0.4）",DX(2.5),DY(0.17),"b");
+   [-2.0,-1.5,-1.1,-0.7,-0.2].forEach(function(v){tick(v,"g");});
+   [0.5,1.1,1.6,2.2,2.9].forEach(function(v){tick(v,"b");});
+   note("⚠ 交界处那几个点，你根本说不出它来自哪一边",640,300,"r");},"画出来看：两个成分各自抽点。<b>远离交界的点</b>还能猜出来自哪边；但<b>交界处那几个点，你根本说不出它来自哪一个成分</b>。⭐ 请注意——这不是「数据不够好」，而是<b>问题本身的性质</b>：真实的成分归属<em>确实存在</em>（骰子确实掷出了某个值），只是<b>没被观测到</b>。");
+  S(0,function(){clearScene();setEq("$$z^{(i)}\\sim\\text{Multinomial}(\\pi),\\qquad x^{(i)}\\mid z^{(i)}{=}k\\ \\sim\\ \\mathcal{N}(\\mu_k,\\Sigma_k)$$","top");
+   note("z 是<潜变量 latent>：存在，但你看不到它的值",640,400,"v");
+   note("⚠ 和 M1 的 GDA 对照：GDA 里那个变量叫 y，而且<能看到>",640,465,"y");},"写成式子：<b>z⁽ⁱ⁾ 服从多项分布（权重 π）</b>，<b>给定 z⁽ⁱ⁾=k 时 x⁽ⁱ⁾ 服从第 k 个高斯</b>。<b>z 叫潜变量（latent）</b>——存在，但看不到值。⭐ 和你 M1 学的 <b>GDA 对照</b>：GDA 的模型结构<em>一模一样</em>，只不过那个类别变量叫 y 而且<b>在训练集里能看到</b>。<b>GMM 就是把 GDA 的标签藏起来</b>——这是理解整个 T3 最省力的一句话。");
+  SUM(0,2,{h:"★ 生成故事：掷骰子 + 抽点",k:"<b>z ~ Multinomial(π)</b> 选成分，<b>x | z=k ~ N(μ_k, Σ_k)</b> 抽点。重复 N 次。",m:"<b>骰子结果没被记下来</b>（z 是潜变量）——这是全部困难的来源。<b>GMM 就是 GDA 把标签藏起来</b>。",w:"<s>以为成分归属只是「算出来的分组」</s>——在模型里它是<b>真实存在但未被观测</b>的。",e:"常考「GMM 与 GDA 的关系」。答：模型结构相同，差别是 <b>y 可观测而 z 不可观测</b>。"});
+  QUIZ(0,2,{t:"在 GMM 的生成故事里，潜变量 z 指的是什么？",o:["每个观测实际来自哪一个成分——它确实存在，但没有被观测到","成分的均值","每个观测的特征值","混合权重"],a:0,w:"生成过程是「先按 π 掷骰子选成分 k，再从第 k 个高斯抽点」。<b>骰子结果 z 就是潜变量</b>：它在模型里真实存在，但训练数据里看不到。这正是必须用 EM 而不能直接极大似然的原因。"});
+});
+KP("3 · ★★ z 与 r：最容易混的一对",function(){
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:3,cols:3,x:180,y:160,cw:300,ch:72,labelCls:"y",label:"两个都写在「成分归属」名下，但完全不同",
+     hl:function(i,j){return (i===2)?"hl2":"";},
+     cell:function(i,j){return [["","z（潜变量）","r（责任度）"],
+       ["是什么","生成模型里的<b>真实</b>归属","观测到 x 之后的<b>后验概率</b>"],
+       ["取值","one-hot，非 0 即 1","0 到 1 的小数，每行加起来 = 1"]][i][j];}});},"这一页是 T3 最容易混的地方。<b>z 和 r 都叫「成分归属」，但完全不是一回事</b>。<b>z 是潜变量</b>——生成模型里那个<em>真实</em>的归属，是 one-hot 的，非 0 即 1；<b>r 是责任度</b>——你<em>观测到 x 之后</em>算出来的<b>后验概率</b>，是 0 到 1 之间的小数，每个观测的各成分责任度<b>加起来等于 1</b>。");
+  S(0,function(){clearScene();setEq("$$r_{ik}=p\\big(z_{ik}{=}1\\mid x^{(i)}\\big),\\qquad \\sum_{k=1}^{K}r_{ik}=1$$","top");
+   note("⭐ 讲义的原话：观测到 x 之后，我们<不是>把潜变量换成已知标签",640,400,"r");
+   note("而是算一个<后验概率>",640,460,"g");},"⭐ 讲义有一句话说得特别准，值得原样记住：<b>观测到 x 之后，我们并不是把隐藏变量替换成一个已知的标签，而是算一个后验概率</b>。换句话说——<b>EM 从来没有「猜出」z 是多少，它只是算出了 z 的分布</b>。这句话能帮你避开一个常见误解：以为 E 步是在「给每个点贴一个临时标签」。");
+  S(0,function(){clearScene();setCap("同一个点，硬标签丢掉了什么");
+   rbar(240,200,620,0.55,"责任度");
+   note("0.55",240+340,186,"g");note("0.45",240+620-140,186,"b");
+   note("硬标签只会说：「属于成分 1」",640,300,"r");
+   note("⚠ 0.55 / 0.45 意味着<这个点其实很难分> —— 这个信息被丢了",640,365,"y");
+   note("讲义里那个例子：责任度 [0.55, 0.40, 0.05] 说明成分 1 和 2 <重叠严重>",640,435,"v");
+   note("sklearn：predict 丢掉不确定性，predict_proba 保留",640,500,"g");},"为什么这个区别重要？看图：一个点的责任度是 <b>0.55 / 0.45</b>。<b>硬标签只会说「它属于成分 1」</b>——但 0.55 对 0.45 的真实含义是<b>「这个点其实很难分」</b>，这个信息被丢掉了。讲义给的例子是责任度 <b>[0.55, 0.40, 0.05]</b>，它告诉你<b>成分 1 和成分 2 重叠严重</b>。⭐ 对应到代码：<b>predict 丢掉不确定性，predict_proba 保留责任度向量</b>——这是 T3 的高频选择题。");
+  SUM(0,3,{h:"★★ z 是真实归属，r 是后验概率",k:"<b>z</b>：生成模型里的<b>真实</b>归属，one-hot。<b>r_ik = p(z_ik=1 | x_i)</b>：观测后的<b>后验概率</b>，<b>Σ_k r_ik = 1</b>。",m:"讲义原话：观测到 x 后<b>不是把潜变量替换成已知标签</b>，而是算后验。EM 从未「猜出」z，只算出它的分布。",w:"<s>把责任度当成临时硬标签</s>。<s>用 predict 代替 predict_proba</s>——前者<b>丢掉不确定性</b>。",e:"责任度 [0.55, 0.40, 0.05] 这类题：答<b>成分 1 与 2 重叠严重，硬分配会掩盖这一点</b>。"});
+  QUIZ(0,3,{t:"责任度 r_ik 与潜变量 z_ik 的关系是？",o:["z 是 r 四舍五入的结果","z 是模型中真实但未观测的 one-hot 归属；r 是观测到 x 之后算出的后验概率，各成分之和为 1","两者是同一个东西的不同写法","r 是 z 的方差"],a:1,w:"讲义明确区分：<b>z 是生成模型里的真实归属</b>（非 0 即 1，看不到），<b>r_ik = p(z_ik=1 | x_i) 是后验</b>（0~1 的小数，每行和为 1）。EM 不「猜出」z，只算它的分布。"});
+});
+KP("4 · 混合密度：成分数不等于峰数",function(){
+  S(0,function(){clearScene();setEq("$$p(x)=\\sum_{k=1}^{K}\\pi_k\\,\\mathcal{N}(x\\mid\\mu_k,\\Sigma_k),\\qquad \\sum_k \\pi_k=1,\\ \\pi_k\\ge 0$$","top");
+   note("把每个成分的密度<按权重加起来>",640,400,"b");
+   note("权重非负且加起来为 1 —— 否则 p(x) 不是合法密度",640,460,"y");},"<b>混合密度</b>就是把每个成分的密度<b>按权重加起来</b>。两个约束：<b>权重非负、加起来等于 1</b>——否则积分不等于 1，p(x) 就不是合法的概率密度了。这也是为什么 K 个成分只有 <b>K−1 个自由权重</b>（最后一个由前面决定），后面数参数个数时要用到。");
+  S(0,function(){clearScene();setCap("两个成分，明显的双峰");
+   dax();
+   curve(G(-1.5,0.35,0.5),"fit g");curve(G(1.5,0.35,0.5),"fit b");
+   curve(MIX([[0.5,-1.5,0.35],[0.5,1.5,0.35]]),"fit y");
+   note("混合（黄）",DX(0),DY(0.10),"y");
+   note("两峰分得很开 ⇒ 混合确实有两个峰",640,330,"g");},"当两个成分<b>分得很开</b>时，混合密度确实有<b>两个峰</b>——这符合直觉。");
+  S(0,function(){clearScene();setCap("同样是两个成分，却只有一个峰");
+   dax();
+   curve(G(-0.45,0.9,0.5),"fit g");curve(G(0.45,0.9,0.5),"fit b");
+   curve(MIX([[0.5,-0.45,0.9],[0.5,0.45,0.9]]),"fit y");
+   note("混合（黄）—— 只有<一个>峰",DX(0),DY(0.45),"y");
+   note("⚠ 成分数 ≠ 峰数",640,330,"r");
+   note("两个成分靠得近、方差又大 ⇒ 叠出来是单峰",640,390,"y");
+   note("⇒ 看到单峰<不能>断定只有一个成分",640,450,"v");},"⚠️ 但把两个成分<b>挪近、方差调大</b>，叠出来<b>只有一个峰</b>——成分数还是 2。⭐ <b>成分数不等于峰数</b>，这是 T3 爱考的一个点。推论有两个方向：<b>看到单峰不能断定只有一个成分</b>；反过来，<b>K 选大了也未必能从图上看出来</b>。所以选 K 不能靠数峰，得用 AIC/BIC 加验证证据。");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 混合的方差有两个来源");
+   boxNode(130,165,480,64,"来源一","b");note("每个成分<内部>的离散",370,262,"b");
+   boxNode(660,165,480,64,"来源二","g");note("成分<均值之间>的差异",900,262,"g");
+   note("⇒ 混合方差<不等于>各成分方差的加权平均",640,390,"r");
+   note("两个成分各自方差都很小，但中心离得远 ⇒ 混合方差很大",640,455,"y");},"还有一条讲义特意列进「四条收尾警告」的：<b>混合的方差有两个来源</b>——<b>每个成分内部的离散</b>，加上<b>成分均值之间的差异</b>。所以<b>混合方差不等于各成分方差的加权平均</b>。举个极端例子：两个成分各自方差都很小，但中心离得很远，<b>混合的整体方差会很大</b>。这是选择题爱设的陷阱。");
+  SUM(0,4,{h:"混合密度与它的两个陷阱",k:"<b>p(x) = Σ_k π_k N(x | μ_k, Σ_k)</b>，π 非负且和为 1 ⇒ 只有 <b>K−1 个自由权重</b>。",m:"<b>成分数 ≠ 峰数</b>：成分靠近且方差大时，两个成分叠出单峰。",w:"<s>混合方差 = 各成分方差的加权平均</s>——还要加上<b>成分均值之间</b>的差异那一项。",e:"「看到单峰能否断定只有一个成分」是典型选择题，答<b>不能</b>。"});
+  QUIZ(0,4,{t:"两个成分权重各 0.5、各自方差都很小，但中心相距很远。关于混合分布的方差，正确的是？",o:["等于两个成分方差的加权平均，所以很小","会明显大于成分方差的加权平均，因为还有成分均值之间的差异这一项","无法定义","等于两个成分方差之和"],a:1,w:"<b>混合方差有两个来源</b>：成分<b>内部</b>的离散，加上成分<b>均值之间</b>的差异。中心离得远时第二项很大，所以整体方差远超各成分方差的加权平均。"});
+});
+KP("5 · ★ 密度不是概率",function(){
+  S(0,function(){clearScene();setCap("连续变量：p(x) 是密度，不是「取到 x 的概率」");
+   dax();curve(MIX([[0.6,-1.2,0.5],[0.4,1.4,1.0]]),"fit y");
+   tick(0.4,"r");link(DX(0.4),DY(0),DX(0.4),DY(0.20));
+   note("p(0.4) = 0.20",DX(0.4)+16,DY(0.20)-10,"r","start");
+   note("⚠ 这<不是>「恰好取到 0.4 的概率」—— 那个概率是 <0>",640,320,"r");
+   note("概率要对<区间>积分才有：P(a<x<b) = 曲线下那块面积",640,385,"g");
+   note("⇒ 所以密度值<可以大于 1>（只要积分是 1）",640,450,"v");},"讲义四条收尾警告的第一条：<b>密度不是概率</b>。对连续变量，<b>p(x) 是密度值</b>，<s>不是「恰好取到 x 的概率」</s>——那个概率<b>严格等于 0</b>。概率必须对<b>区间</b>才有意义：P(a&lt;x&lt;b) 是曲线下那块<b>面积</b>。⭐ 一个直接推论：<b>密度值可以大于 1</b>（只要整条曲线下的面积是 1 就行）。看到 p(x)=2.5 别以为算错了。");
+  S(0,function(){clearScene();setEq(null);setCap("但责任度是<b>货真价实</b>的概率");
+   boxNode(130,165,480,64,"p(x) 密度","y");note("可以 > 1，对区间积分才是概率",370,262,"y");
+   boxNode(660,165,480,64,"r_ik 责任度","g");note("<永远>在 0 和 1 之间，每行和为 1",900,262,"g");
+   note("为什么？因为责任度是<归一化>过的：分母是 p(x) 本身",640,390,"b");
+   note("⇒ 密度的单位在分子分母上<约掉了>",640,455,"v");},"但要注意对比：<b>责任度 r 是货真价实的概率</b>——永远在 0 和 1 之间，每个观测的各成分之和为 1。<b>为什么它能是概率而密度不能？</b> 因为责任度是<b>归一化</b>过的：分子是 π_k × 密度，分母是 p(x)（所有成分的同类项之和），<b>密度的单位在分子分母上约掉了</b>。这个小观察能帮你记住 E 步公式为什么一定要有那个分母。");
+  SUM(0,5,{h:"★ 密度不是概率，责任度才是",k:"连续变量的 <b>p(x) 是密度</b>，「恰好取到某个值」的概率是 <b>0</b>；概率要对<b>区间积分</b>。<b>密度值可以大于 1</b>。",m:"<b>责任度是真概率</b>（0~1、每行和为 1），因为它被 p(x) <b>归一化</b>过，密度的单位约掉了。",w:"<s>把 p(x)=0.2 读成「20% 的概率」</s>。<s>看到密度 > 1 以为算错</s>。",e:"选择题常考「p(x) 是不是概率」。答<b>不是，是密度</b>，并补一句概率要对区间积分。"});
+  QUIZ(0,5,{t:"某一维 GMM 在 x=0.4 处的 p(x)=1.8。这说明？",o:["该点一定是异常值","计算错误，概率不能大于 1","模型没有收敛","没问题——p(x) 是密度不是概率，只要整条曲线下面积为 1 即可"],a:3,w:"连续变量的 <b>p(x) 是概率密度</b>，取到某个确切值的概率为 0。只要密度函数的<b>积分</b>为 1 就合法，<b>密度值本身完全可以大于 1</b>（分布很集中时就会这样）。"});
+});
+KP("6 · ★★ 对数似然，与为什么不能直接求导",function(){
+  S(0,function(){clearScene();setEq("$$\\ell(\\theta)=\\sum_{i=1}^{N}\\log\\Big[\\sum_{k=1}^{K}\\pi_k\\,\\mathcal{N}(x^{(i)}\\mid\\mu_k,\\Sigma_k)\\Big]$$","top");
+   note("<内层>求和：把一个观测的各成分合起来 = 它的混合密度",640,400,"b");
+   note("<外层>求和：把所有观测合起来",640,460,"g");},"<b>观测数据的对数似然</b>长这样。看清两层求和的分工：<b>内层求和</b>把<em>一个观测</em>的各成分合起来，得到它的混合密度；<b>外层求和</b>把<em>所有观测</em>合起来。这两层不能搞反。");
+  S(0,function(){clearScene();setEq(null);setCap("为什么要取 log");
+   boxNode(140,165,1000,64,"独立观测 ⇒ 似然是各自混合密度的<b>连乘</b>","b");
+   note("log 把<连乘>变成<连加>",640,300,"g");
+   note("⚠ 而且<不改变>哪组参数使它最大（log 单调递增）",640,365,"y");
+   note("好处：避免上百个小数相乘下溢成 0；求导也容易得多",640,435,"v");},"<b>为什么取 log？</b> 因为观测独立，似然是各自混合密度的<b>连乘</b>。<b>log 把连乘变成连加</b>，而且<b>不改变哪组参数使它最大</b>（log 是单调递增的）。实际好处有两个：<b>避免上百个小于 1 的数相乘下溢成 0</b>；求导也容易得多。");
+  S(0,function(){clearScene();setEq(null);setCap("★ 那为什么不能直接求导令零？");
+   boxNode(140,160,1000,62,"因为<b>求和号在 log 的里面</b>","r");
+   note("log(a + b) 没法拆成 log a + log b",640,290,"r");
+   note("⇒ 对 μ_k 求导时，每一项都纠缠着<所有>成分的参数",640,355,"y");
+   note("⇒ 得不到闭式解",640,415,"v");
+   note("⭐ 对照：如果 z 已知，每个点只属于一个成分，log 里就<没有求和号>了",640,480,"g");},"⭐ <b>这是全讲最该想明白的一件事</b>：为什么不能像 M1 那样直接求导令零？<b>因为求和号在 log 的里面</b>——而 <b>log(a+b) 没法拆成 log a + log b</b>。对 μ_k 求导时，每一项都纠缠着<em>所有</em>成分的参数，解不出闭式。⭐ <b>对照着想</b>：如果 z 已知，每个点只属于一个确定的成分，<b>log 里面那个求和号就消失了</b>，立刻能求导解出来——而且解出来的公式就是你 M1 学的 GDA 那套。<b>EM 的全部工作，就是在绕开这个求和号。</b>");
+  SUM(0,6,{h:"★★ 对数似然与它的障碍",k:"<b>ℓ(θ) = Σᵢ log[ Σ_k π_k N(xᵢ | μ_k, Σ_k) ]</b>。内层合成分，外层合观测。取 log 把连乘变连加、不改变最大值点、避免下溢。",m:"⭐ <b>不能直接求导的原因是求和号在 log 里面</b>，log(a+b) 拆不开 ⇒ 无闭式解。<b>若 z 已知，求和号消失，立刻能解（就是 GDA 那套公式）</b>。",w:"<s>把内外两层求和搞反</s>。<s>以为 EM 是「近似」</s>——它是精确的迭代，只是不保证全局最优。",e:"大题若问「为什么 GMM 不能直接用极大似然」，答<b>求和号在 log 内部、无闭式解</b>，再补「若 z 可见则退化为 GDA」。"});
+  QUIZ(0,6,{t:"GMM 无法像 GDA 那样直接求导得到闭式解，根本原因是？",o:["对数似然里求和号在 log 的内部，log(a+b) 无法拆开，各成分参数纠缠在一起","数据量不够","参数太多","高斯密度不可导"],a:0,w:"ℓ(θ)=Σᵢ log[Σ_k π_k N(...)]，<b>内层求和被困在 log 里面</b>。若 z 已知，每个点只对应一个成分，log 内的求和号消失，就能直接解出 GDA 那组公式。EM 正是为绕开这个求和号而设计的。"});
+});
+KP("7 · ★★★ E 步：贝叶斯四步 + 算例",function(){
+  S(0,function(){clearScene();setEq("$$r_{ik}=\\frac{\\pi_k\\,\\mathcal{N}(x^{(i)}\\mid\\mu_k,\\Sigma_k)}{\\sum_{j=1}^{K}\\pi_j\\,\\mathcal{N}(x^{(i)}\\mid\\mu_j,\\Sigma_j)}$$","top");
+   note("后验 = 先验权重 × 成分密度 ÷ 混合密度",640,400,"b");
+   note("⚠ 分母就是 p(x⁽ⁱ⁾) 本身 —— 所以每行自动加起来为 1",640,460,"g");},"<b>E 步</b>就是一次贝叶斯计算：<b>后验 = 先验权重 × 成分密度 ÷ 混合密度</b>。⚠️ 注意<b>分母正是 p(x⁽ⁱ⁾) 本身</b>（所有成分加权密度之和），所以<b>每个观测的各成分责任度自动加起来等于 1</b>——这是个免费的自检，手算时算完一定要核一下。");
+  S(0,function(){clearScene();setEq(null);setCap("讲义给的四个步骤，照着做不会错");
+   boxNode(120,150,1040,52,"① 在<b>同一个</b> x 上，算出<b>每个</b>成分的高斯密度","b");
+   boxNode(120,212,1040,52,"② 每个密度乘以该成分当前的权重 π_k","g");
+   boxNode(120,274,1040,52,"③ 把这些加权密度相加，得到分母 p(x)","y");
+   boxNode(120,336,1040,52,"④ 各自除以这个<b>共同的</b>分母。对每个观测重复","v");
+   note("⚠ 第①步的「同一个 x」是重点：别把不同观测混在一起算",640,430,"r");},"讲义把 E 步拆成四步，照着做不会错：<b>①</b> 在<em>同一个</em> x 上算出<em>每个</em>成分的高斯密度；<b>②</b> 每个密度乘以该成分当前的权重；<b>③</b> 把这些加权密度相加得到分母；<b>④</b> 各自除以这个<b>共同的</b>分母，对每个观测重复。⚠️ 第一步的「<b>同一个 x</b>」是重点——手算时最容易犯的错就是把不同观测的数值串在一起。");
+  S(0,function(){clearScene();setCap("算例：π=(0.7, 0.3)，μ=(−1, 2)，两个方差都是 1，求 x=0 处");
+   dax();
+   curve(G(-1,1,0.7),"fit g");curve(G(2,1,0.3),"fit b");
+   curve(MIX([[0.7,-1,1],[0.3,2,1]]),"fit y");
+   tick(0,"r","x=0");
+   link(DX(0),DY(0),DX(0),DY(0.1856));
+   note("成分 1（π=0.7）",DX(-2.7),DY(0.24),"g");
+   note("成分 2（π=0.3）",DX(2.9),DY(0.09),"b");},"走一遍讲义的算例。<b>π=(0.7, 0.3)，μ=(−1, 2)，两个方差都是 1</b>，问 <b>x=0</b> 处的责任度。图上 x=0 落在两个成分之间，离成分 1 更近。");
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:5,cols:3,x:180,y:150,cw:300,ch:62,labelCls:"y",label:"四步照做",
+     hl:function(i,j){return (i===4)?"hl3":((i===3)?"hl2":"");},
+     cell:function(i,j){return [["步骤","成分 1","成分 2"],
+       ["① 密度 N(0|μ,1)","0.2420","0.0540"],
+       ["② ×权重 π","0.7×0.2420 = 0.1694","0.3×0.0540 = 0.0162"],
+       ["③ 相加 = p(0)","0.1694 + 0.0162 = 0.1856",""],
+       ["④ 归一化 r","0.1694/0.1856 = <b>0.913</b>","0.0162/0.1856 = <b>0.087</b>"]][i][j];}});},"四步的数字：<b>①</b> 两个方差都是 1，公共系数是 1/√(2π)≈0.39894；x=0 到两个均值的平方距离分别是 1 和 4，所以密度是 <b>0.2420</b> 和 <b>0.0540</b>。<b>②</b> 乘权重得 <b>0.1694</b> 和 <b>0.0162</b>。<b>③</b> 相加得 <b>p(0)=0.1856</b>。<b>④</b> 各自除以它，得 <b>r=(0.913, 0.087)</b>。核一下：0.913+0.087=1 ✓。");
+  S(0,function(){clearScene();setEq(null);setCap("为什么成分 1 赢了 —— 两个因素<b>同时</b>起作用");
+   boxNode(130,165,480,64,"先验权重更大","g");note("0.7 vs 0.3",370,262,"g");
+   boxNode(660,165,480,64,"该处密度也更高","g");note("0.2420 vs 0.0540",900,262,"g");
+   note("⇒ 两个因素<同向>，所以 0.913 压倒性",640,390,"y");
+   note("⚠ 但它们可以<反向>：权重大的成分完全可能输",640,455,"r");
+   note("⇒ 别只看权重，也别只看距离 —— 要看<乘积>",640,515,"v");},"讲义特意点出：<b>成分 1 赢，是因为它同时具备更大的先验权重和该处更高的密度</b>——<b>两个因素同向</b>。⚠️ <b>但它们完全可以反向</b>：一个权重很大的成分，如果在该点的密度很低，照样会输。<b>所以判断责任度谁大，既不能只看权重，也不能只看离哪个均值近，要看两者的乘积。</b> 这是选择题最爱设的陷阱。");
+  SUM(0,7,{h:"★★★ E 步：贝叶斯四步",k:"<b>r_ik = π_k N(xᵢ|μ_k,Σ_k) / Σⱼ π_j N(xᵢ|μ_j,Σ_j)</b>。四步：①算每个成分密度 ②乘权重 ③相加得分母 ④各自除。",m:"算例：π=(0.7,0.3)、μ=(−1,2)、σ²=1，x=0 ⇒ 密度 0.2420/0.0540 → 加权 0.1694/0.0162 → p(0)=0.1856 → <b>r=(0.913, 0.087)</b>。",w:"<s>只看权重</s>或<s>只看离哪个均值近</s>——要看<b>权重×密度的乘积</b>，两者可能反向。分母就是 p(x)，每行和必须为 1（自检）。",e:"手算大题必考。写法：列表格，一行一步，最后核「各成分之和 = 1」。"});
+  QUIZ(0,7,{t:"π=(0.2, 0.8)，某点处两成分的密度分别是 0.90 与 0.15。该点对成分 1 的责任度是？",o:["0.8","0.6","0.9","0.2"],a:1,w:"加权密度：0.2×0.90 = <b>0.18</b>，0.8×0.15 = <b>0.12</b>，分母 0.30。r₁ = 0.18/0.30 = <b>0.6</b>。⭐ 注意<b>权重较小的成分赢了</b>——因为它在该点的密度高得多。这说明必须看<b>乘积</b>，不能只看权重。"});
+});
+KP("8 · ★★ 有效计数：0.9 就是 0.9 个",function(){
+  S(0,function(){clearScene();setEq("$$N_k=\\sum_{i=1}^{N}r_{ik},\\qquad \\sum_{k=1}^{K}N_k=N$$","top");
+   note("把某一<列>的责任度全加起来",640,395,"b");
+   note("⚠ 结果通常<不是整数> —— 这是对的，别去凑整",640,455,"r");},"<b>有效计数 N_k</b>：把责任度表某<b>一列</b>全加起来。讲义的解释很到位：<b>如果归属是已知的，每个观测对某成分的贡献要么是 1 要么是 0；而在 GMM 里归属是不确定的，责任度 0.9 就贡献 0.9 个计数</b>。加起来得到的 N_k 是<b>「该成分预期生成了多少个观测」</b>。⚠️ <b>它通常不是整数，这是对的，绝不能凑整。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 三个都是错的理解");
+   boxNode(120,155,1040,54,"✗ 「N_k 是责任度超过 0.5 的点的个数」","r");
+   boxNode(120,215,1040,54,"✗ 「一个观测被物理地拆开了」","r");
+   boxNode(120,275,1040,54,"✗ 「N_k 要四舍五入成整数」","r");
+   note("✓ 正确：N_k 是<期望计数>，Σ_k N_k = N 恒成立",640,370,"g");
+   note("因为每个观测在各成分上的责任度加起来正好是 1",640,435,"y");},"讲义把三种错误理解都点名了：<b>N_k 不是「责任度超过某阈值的点的个数」</b>；<b>不是说一个观测被物理地拆开了</b>；<b>更不能四舍五入成整数</b>。正确的理解是——它是<b>期望计数</b>。而且有个恒等式：<b>Σ_k N_k = N</b>，因为每个观测在各成分上的责任度加起来正好是 1，所以总量守恒。这个恒等式是手算时的第二个自检点。");
+  SUM(0,8,{h:"★★ 有效计数 N_k",k:"<b>N_k = Σᵢ r_ik</b>，责任度 0.9 贡献 <b>0.9 个</b>计数。恒有 <b>Σ_k N_k = N</b>（自检点）。",m:"它是该成分的<b>期望观测数</b>，通常不是整数。",w:"<s>「超过 0.5 的点的个数」</s>、<s>「观测被拆开了」</s>、<s>凑整</s>——讲义把这三种误解都点名了。",e:"手算 M 步第一步就是它。算完立刻核 <b>Σ N_k = N</b>。"});
+  QUIZ(0,8,{t:"三个观测对成分 1 的责任度分别是 0.9、0.6、0.1。成分 1 的有效计数是？",o:["2（四舍五入）","1.6","1（只有一个超过 0.5）","3"],a:1,w:"<b>N₁ = 0.9 + 0.6 + 0.1 = 1.6</b>。它是<b>期望计数</b>，不是「超过阈值的点数」，也<b>不能凑整</b>。同时 N₂ = 0.1+0.4+0.9 = 1.4，两者相加 = 3 = N ✓。"});
+});
+KP("9 · ★★★ M 步三步：顺序不能错",function(){
+  S(0,function(){clearScene();setEq(null);setCap("整个 M 步里，E 步算出的责任度<b>保持不动</b>");
+   boxNode(120,155,1040,54,"① 有效计数　N_k = Σᵢ r_ik","b");
+   boxNode(120,215,1040,54,"② 权重与均值　π_k = N_k/N　μ_k = (1/N_k) Σᵢ r_ik xᵢ","g");
+   boxNode(120,275,1040,54,"③ 协方差 —— <b>用刚算出的新均值</b>","y");
+   note("⚠ 顺序不能错：先计数 → 再权重与均值 → 最后协方差",640,370,"r");
+   note("⚠ 协方差必须围绕<新>均值算，不是旧均值",640,435,"r");
+   note("⚠ 整个过程中责任度<不重算>（重算是下一轮 E 步的事）",640,500,"v");},"<b>M 步三步，顺序不能错</b>：<b>①</b> 有效计数；<b>②</b> 权重和均值；<b>③</b> 协方差——<b>用刚算出的新均值</b>。三条纪律：<b>顺序不能颠倒</b>；<b>协方差必须围绕新均值算</b>，不是旧均值；<b>整个 M 步里责任度保持不动</b>，重算是下一轮 E 步的事。⚠️ 讲义用大写强调了这几点，说明是常见失分处。");
+  S(0,function(){clearScene();setEq("$$\\pi_k=\\frac{N_k}{N},\\qquad \\mu_k=\\frac{1}{N_k}\\sum_i r_{ik}x^{(i)},\\qquad \\Sigma_k=\\frac{1}{N_k}\\sum_i r_{ik}\\,(x^{(i)}-\\mu_k^{\\text{new}})^2$$","top");
+   note("新权重 = 该成分<占整份数据的比例>",640,395,"b");
+   note("新均值 = 责任度<加权>平均　新协方差 = 围绕新均值的<加权>离散",640,450,"g");
+   note("⚠ 分母都是 N_k，<不是 N>，也<不是 N_k − 1>",640,510,"r");},"用文字读一遍：<b>新权重是该成分占整份数据的比例</b>；<b>新均值是责任度加权的平均</b>；<b>新协方差是围绕新均值的、责任度加权的离散</b>。⚠️ <b>三个分母都是 N_k</b>——不是 N（那样就变成普通平均了），<b>也不是 N_k−1</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 为什么是 N_k 而不是 N_k − 1");
+   boxNode(130,165,480,64,"N_k − 1","r");note("<无偏>样本方差的公式",370,262,"r");
+   boxNode(660,165,480,64,"N_k","g");note("<极大似然>估计的公式",900,262,"g");
+   note("EM 做的是极大似然 ⇒ 分母就是 N_k",640,385,"y");
+   note("⚠ 数值差距很大：本页算例里 1.93 vs 5.16、2.88 vs 10.09",640,450,"r");
+   note("⇒ 错一个分母，整题全毁",640,510,"v");},"<b>为什么是 N_k 不是 N_k−1？</b> 因为 <b>N_k−1 是无偏样本方差的公式，而 EM 做的是极大似然估计</b>——极大似然的分母就是 N_k。⚠️ 这不是吹毛求疵：我用下一页那个算例实际算过，<b>正确答案是 1.93 和 2.88，误用 N_k−1 会得到 5.16 和 10.09</b>——差了两三倍，整题全毁。");
+  SUM(0,9,{h:"★★★ M 步三步与三条纪律",k:"<b>① N_k = Σᵢ r_ik ② π_k = N_k/N，μ_k = (1/N_k)Σᵢ r_ik xᵢ ③ Σ_k = (1/N_k)Σᵢ r_ik (xᵢ − μ_k^new)²</b>。",m:"三条纪律：<b>顺序不能颠倒</b>；<b>协方差用新均值</b>；<b>整个 M 步责任度不动</b>。",w:"<s>分母用 N</s>（那是普通平均）· <s>分母用 N_k−1</s>（那是无偏方差，EM 做的是极大似然）· <s>协方差用旧均值</s>。",e:"手算大题的主体。误用 N_k−1 在本讲算例里会把 1.93/2.88 变成 5.16/10.09。"});
+  QUIZ(0,9,{t:"M 步更新协方差时，分母应当是？",o:["N_k − 1","N（观测总数）","N_k（该成分的有效计数）","K（成分个数）"],a:2,w:"<b>分母是 N_k</b>，因为这是责任度<b>加权</b>的平均，N_k 正是被平均的总权重。<s>用 N 就变成普通平均了</s>；<s>N_k−1 是无偏样本方差的公式</s>，而 EM 做的是<b>极大似然</b>估计。"});
+});
+KP("10 · ★★★ M 步完整算例（背下来）",function(){
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:4,cols:4,x:230,y:155,cw:200,ch:58,labelCls:"y",label:"给定：3 个观测，2 个成分，E 步责任度已算好",
+     hl:function(i,j){return (j===3)?"hl":"";},
+     cell:function(i,j){return [["x_i","r_i1","r_i2","行和"],
+       ["−2","0.9","0.1","1"],
+       ["0","0.6","0.4","1"],
+       ["3","0.1","0.9","1"]][i][j];}});
+   note("⚠ 每一<行>加起来必须是 1（这是责任度的性质）",640,420,"r");},"讲义算例 2，<b>建议整个背下来</b>。给定三个观测 <b>−2、0、3</b>，两个成分，E 步的责任度已经算好。先核对：<b>每一行加起来都是 1</b> ✓——这是责任度的性质，拿到表先检查这个。");
+  S(0,function(){clearScene();setEq(null);setCap("第 1 步：按<b>列</b>相加，得有效计数");
+   matrix({rows:4,cols:3,x:280,y:150,cw:220,ch:56,labelCls:"b",label:"注意方向：这次是竖着加",
+     hl:function(i,j){return (i===3)?"hl2":"";},
+     cell:function(i,j){return [["x_i","成分 1","成分 2"],
+       ["−2","0.9","0.1"],["0","0.6","0.4"],
+       ["N_k =","<b>1.6</b>","<b>1.4</b>"]][i][j];}});
+   note("（表中省略 x=3 那行：0.1 与 0.9）",640,400,"");
+   note("N₁ = 0.9+0.6+0.1 = 1.6　N₂ = 0.1+0.4+0.9 = 1.4",640,455,"g");
+   note("⚠ 自检：1.6 + 1.4 = 3 = N ✓",640,515,"y");},"<b>第 1 步</b>：注意方向变了——责任度是<em>按行</em>加等于 1，有效计数是<b>按列</b>加。<b>N₁ = 0.9+0.6+0.1 = 1.6</b>，<b>N₂ = 0.1+0.4+0.9 = 1.4</b>。⚠️ 立刻自检：<b>1.6 + 1.4 = 3 = N</b> ✓。讲义特意说：成分 1 的总归属权重<em>相当于</em> 1.6 个完全归属的观测，<b>但实际观测仍然只有 3 个</b>。");
+  S(0,function(){clearScene();setEq("$$\\pi_1=\\frac{1.6}{3}\\approx 0.5333,\\qquad \\pi_2=\\frac{1.4}{3}\\approx 0.4667$$","top");
+   note("第 2 步：有效计数除以 N",640,400,"b");
+   note("⚠ 自检：两个权重加起来 = 1 ✓",640,460,"y");},"<b>第 2 步</b>：权重就是有效计数除以 N。<b>π₁ = 1.6/3 ≈ 0.5333</b>，<b>π₂ = 1.4/3 ≈ 0.4667</b>。自检：加起来等于 1 ✓。注意讲义补的一句：<b>这是成分层面的权重，各个观测的责任度在下一轮 E 步之前不变</b>。");
+  S(0,function(){clearScene();setEq("$$\\mu_1=\\frac{0.9(-2)+0.6(0)+0.1(3)}{1.6}=\\frac{-1.5}{1.6}=-0.9375$$","top");
+   note("第 3 步：责任度加权平均",640,390,"b");
+   note("μ₂ = (0.1(−2)+0.4(0)+0.9(3)) / 1.4 = 2.5/1.4 ≈ 1.785714",640,450,"g");
+   note("⚠ 除以 1.6 而不是 3 —— 这是加权平均，不是普通平均",640,510,"r");},"<b>第 3 步</b>：均值是责任度加权平均。<b>μ₁ = (0.9×(−2) + 0.6×0 + 0.1×3) / 1.6 = −1.5/1.6 = −0.9375</b>；<b>μ₂ = 2.5/1.4 ≈ 1.785714</b>。⚠️ <b>除以 1.6 而不是 3</b>——讲义原话是「<b>除以 3 是错的，因为这是加权平均不是普通平均</b>」。还有个细节：<b>x=0 那个观测对分子贡献 0，但它的责任度仍然算进了分母</b>，所以它照样影响结果。");
+  S(0,function(){clearScene();setEq(null);setCap("第 4 步：围绕<b>新</b>均值算方差");
+   matrix({rows:5,cols:3,x:200,y:148,cw:280,ch:56,labelCls:"y",label:"成分 1：新均值 −0.9375",
+     hl:function(i,j){return (i===4)?"hl3":"";},
+     cell:function(i,j){return [["x_i","x_i − μ₁","r×(差)²"],
+       ["−2","−1.0625","0.9×1.12890625 = 1.016016"],
+       ["0","0.9375","0.6×0.87890625 = 0.527344"],
+       ["3","3.9375","0.1×15.50390625 = 1.550391"],
+       ["合计 ÷ N₁","3.093750 / 1.6","<b>σ₁² = 1.933594</b>"]][i][j];}});},"<b>第 4 步</b>：方差围绕<b>新</b>均值 −0.9375 算。三个差值是 −1.0625、0.9375、3.9375，各自平方后乘责任度得 1.016016、0.527344、1.550391，<b>合计 3.09375 除以 N₁=1.6，得 σ₁² = 1.933594</b>。同理 <b>σ₂² ≈ 2.882653</b>（算它时要用<b>未四舍五入</b>的 μ₂ = 2.5/1.4）。⚠️ 讲义特意提醒：<b>全程保留完整精度，只在最后显示时才四舍五入</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("第 5 步：⚠ 方差不是标准差");
+   boxNode(130,165,480,64,"σ² 方差","b");note("1.933594　和　2.882653",370,262,"b");
+   boxNode(660,165,480,64,"σ 标准差","g");note("1.391　和　1.698（开根号）",900,262,"g");
+   note("⚠ 本课的一维高斯记号用<方差>作第二个参数",640,385,"r");
+   note("而 NumPy 的 random.normal 用的是<标准差>",640,445,"y");
+   note("⇒ 看到一个数先问：这是 σ 还是 σ²？",640,505,"v");},"<b>第 5 步</b>是个容易翻车的地方：<b>方差不是标准差</b>。σ₁² = 1.933594，开根号才是 <b>σ₁ ≈ 1.391</b>；σ₂ ≈ 1.698。⚠️ 讲义点名了这个坑：<b>本课的一维高斯记号用方差作第二个参数</b>，而 <b>NumPy 的 random.normal 用的是标准差</b>。<b>看到一个数先问自己：这是 σ 还是 σ²？</b>");
+  SUM(0,10,{h:"★★★ M 步算例（建议背下来）",k:"x=(−2,0,3)，r=(0.9/0.1, 0.6/0.4, 0.1/0.9) ⇒ <b>N=(1.6, 1.4)</b> → <b>π=(0.5333, 0.4667)</b> → <b>μ=(−0.9375, 1.785714)</b> → <b>σ²=(1.933594, 2.882653)</b> → σ=(1.391, 1.698)。",m:"责任度<b>按行</b>加是 1，有效计数<b>按列</b>加。x=0 对分子贡献 0，但责任度仍进分母。",w:"<s>均值除以 N=3</s>（要除 N_k）· <s>方差用旧均值</s> · <s>用四舍五入后的 μ₂ 算方差</s> · <s>把 σ² 当成 σ</s>。",e:"这就是手算大题的原型。每个数字我都用 numpy 复算过，和讲义完全一致。"});
+  QUIZ(0,10,{t:"x=(−2, 0, 3)，成分 1 的责任度为 (0.9, 0.6, 0.1)。新均值 μ₁ 是？",o:["−0.5（普通平均）","−0.9375","0.9375","−1.5"],a:1,w:"<b>μ₁ = (0.9×(−2) + 0.6×0 + 0.1×3) / (0.9+0.6+0.1) = −1.5 / 1.6 = −0.9375</b>。分母是<b>有效计数 1.6</b>，不是观测数 3——这是加权平均。注意 x=0 对分子贡献 0，但它的责任度 0.6 仍然计入分母。"});
+});
+KP("11 · ★★★ 完整一轮：似然确实上升了",function(){
+  S(0,function(){clearScene();setCap("最小的完整例子：x = −1 和 1，两个成分，完全对称");
+   dax(2.6);
+   curve(G(-1,1,0.5),"fit g");curve(G(1,1,0.5),"fit b");
+   tick(-1,"r","x₁");tick(1,"r","x₂");
+   note("初始：π=(0.5,0.5)　μ=(−1,1)　σ²=(1,1)",640,300,"y");},"讲义算例 3：<b>最小的完整例子</b>。两个观测 <b>x=−1 和 x=1</b>，两个成分，初始 <b>π=(0.5,0.5)、μ=(−1,1)、σ²=(1,1)</b>——完全对称。走一整轮，然后<b>验证似然真的上升了</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("E 步");
+   matrix({rows:3,cols:4,x:230,y:160,cw:200,ch:60,labelCls:"b",label:"对称 ⇒ 两行互为镜像",
+     hl:function(i,j){return (j===3)?"hl":"";},
+     cell:function(i,j){return [["x_i","成分 1","成分 2","行和"],
+       ["−1","0.880797","0.119203","1"],
+       ["1","0.119203","0.880797","1"]][i][j];}});
+   note("N(−1|−1,1)=0.398942　N(−1|1,1)=0.053991",640,410,"g");
+   note("r₁₁ = 0.5(0.398942) / [0.5(0.398942)+0.5(0.053991)] ≈ 0.880797",640,470,"y");},"<b>E 步</b>：在 x=−1 处，两个成分的密度是 <b>0.398942</b> 和 <b>0.053991</b>。权重相同所以直接归一化：<b>r₁₁ ≈ 0.880797</b>，r₁₂ ≈ 0.119203。x=1 处由对称性<b>左右对调</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("M 步");
+   boxNode(120,150,1040,50,"N₁ = 0.880797 + 0.119203 = <b>1</b>　　N₂ = <b>1</b>　⇒　π 仍是 (0.5, 0.5)","b");
+   boxNode(120,208,1040,50,"μ₁ = [0.880797(−1) + 0.119203(1)] / 1 = <b>−0.761594</b>　μ₂ = <b>+0.761594</b>","g");
+   boxNode(120,266,1040,50,"σ₁² = [0.880797(−0.238406)² + 0.119203(1.761594)²] / 1 = <b>0.419974</b>","y");
+   note("⭐ 均值<向内移动>：每个成分对另一个点也分了一点权重",640,360,"v");
+   note("⭐ 方差<变小>：加权离散比初始的 1 要小",640,420,"v");
+   note("⚠ 权重仍是 0.5 —— 数据和参数完全对称，有效计数各是 1",640,485,"r");},"<b>M 步</b>：有效计数各是 1，所以<b>权重仍是 (0.5, 0.5)</b>。均值变成 <b>∓0.761594</b>——<b>向内移动了</b>，因为每个成分对另一个点也分了一点权重。方差变成 <b>0.419974</b>——<b>变小了</b>，因为加权后的离散比初始的 1 要小。⚠️ 讲义的自检问题很好：<b>为什么责任度变了、权重却没变？</b> 答：<b>数据和参数完全对称，两个成分的有效计数始终各是 1</b>，尽管单个点的归属变得更有把握了。");
+  S(0,function(){clearScene();setEq(null);setCap("★ 验算：对数似然真的上升了");
+   var LX=function(i){return 430+250*i;},LY=function(v){return 470+118*(v+2.2);};
+   link(LX(0)-60,LY(-3.15),LX(1)+80,LY(-3.15));
+   dots([[LX(0),LY(-2.9703)],[LX(1),LY(-2.4394)]],"a",11);
+   curve([[LX(0),LY(-2.9703)],[LX(1),LY(-2.4394)]],"fit g");
+   note("ℓ_old = −2.9703",LX(0),LY(-2.9703)+34,"");
+   note("ℓ_new = −2.4394",LX(1),LY(-2.4394)-24,"g");
+   note("更新前",LX(0),LY(-3.15)+26,"");note("更新后",LX(1),LY(-3.15)+26,"");
+   note("⇒ 变得<不那么负>了 = 上升了 ✓",640,300,"g");},"<b>最关键的验算</b>：更新前每个观测的混合密度是 0.226467，所以 <b>ℓ_old = 2×log(0.226467) ≈ −2.9703</b>；用新参数算得 <b>ℓ_new ≈ −2.4394</b>。<b>对数似然变得不那么负了——上升了 ✓</b>。⭐ 这正是 EM 的核心保证。⚠️ 提醒：对数似然是<b>负数</b>，比较大小时别被负号搞晕，<b>−2.4394 > −2.9703</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 新的责任度属于<b>下一轮</b>");
+   boxNode(140,165,1000,64,"用新参数重算：x=−1 处 r ≈ (0.974090, 0.025910)","b");
+   note("对比上一轮的 (0.880797, 0.119203) ⇒ 归属变得<更有把握>",640,300,"g");
+   note("⚠ 但这组数字属于<下一轮 E 步>",640,370,"r");
+   note("⚠ <绝不>能把它混进刚做完的那次更新里",640,435,"r");
+   note("⇒ 讲义的 Study check 问的就是这个：M 步之后为什么必须重算责任度",640,500,"v");},"最后一步：用新参数重算责任度，x=−1 处变成 <b>(0.974090, 0.025910)</b>——比上一轮的 (0.880797, 0.119203) <b>更有把握</b>了。⚠️ <b>但这组数字属于下一轮 E 步，绝不能混进刚做完的那次更新里</b>。讲义的 Study check 问的正是这个：<b>M 步更新完参数之后，为什么必须重算责任度？</b> 答：<b>责任度是由参数算出来的，参数变了它就过期了</b>。");
+  SUM(0,11,{h:"★★★ 完整一轮 + 似然验算",k:"x=(−1,1)、初始 π=(0.5,0.5)/μ=(−1,1)/σ²=(1,1) ⇒ E 步 r=<b>0.880797</b>/0.119203 ⇒ M 步 π 不变、μ=<b>∓0.761594</b>、σ²=<b>0.419974</b> ⇒ <b>ℓ: −2.9703 → −2.4394（上升）</b>。",m:"均值<b>向内移</b>（各给对方点分了权重）、方差<b>变小</b>；权重不变是因为<b>对称，有效计数各为 1</b>。",w:"<s>把下一轮的责任度 (0.974090, 0.025910) 混进本轮</s>。<s>被负号搞晕</s>——−2.4394 比 −2.9703 <b>大</b>。",e:"若大题要求「验证这一轮确实改进了」，就是算 ℓ 前后两次并比较。"});
+  QUIZ(0,11,{t:"某轮 EM 前后对数似然为 −2.9703 与 −2.4394。这说明？",o:["似然上升了（变得不那么负），符合 EM 的理论保证","似然下降了，EM 出错","无法判断","两者相等"],a:0,w:"<b>−2.4394 > −2.9703</b>，对数似然<b>上升</b>了。EM 的理论保证就是每轮<b>不会降低</b>观测数据的对数似然。比较负数时别被符号误导。"});
+});
+KP("12 · ★★ 为什么 EM 一定不会变差（CS229 补）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 这一节来自 CS229，你们 PPT 没有");
+   boxNode(140,170,1000,66,"讲义只说「EM 不会降低似然」，没说<b>为什么</b>","y");
+   note("评估文档也写明：详细的收敛证明<不在考核范围>",640,310,"r");
+   note("但理解它能让你答「局限」那一步时说得准",640,375,"g");
+   note("⇒ 这一节看懂就行，不用背推导",640,440,"v");},"⚠️ 先说清楚定位：<b>讲义只说「EM 不会降低似然」，没说为什么</b>；而且评估文档明确写了<b>详细的收敛证明不在考核范围</b>。所以<b>这一节你看懂就行，不用背推导</b>。但理解它有实际好处——答「局限」那一步时你能说准「保证的是什么、不保证的是什么」。");
+  S(0,function(){clearScene();setCap("CS229 的图像：用一条绿曲线托住蓝曲线");
+   var LX=function(x){return 640+120*x;},LY=function(y){return 470-150*y;};
+   var f=function(x){return 1.35+0.42*Math.sin(1.15*x)-0.055*x*x;};
+   var t0=-1.2,h0=f(t0),m=0.483*Math.cos(1.15*t0)-0.11*t0,a=0.14;
+   var g=function(x){return h0+m*(x-t0)-a*Math.pow(x-t0,2);};
+   var tn=t0+m/(2*a);
+   var blue=[],green=[];
+   for(var x=-3.0;x<=3.0;x+=0.04){blue.push([LX(x),LY(f(x))]);
+     if(g(x)>=0.02) green.push([LX(x),LY(g(x))]);}
+   curve(blue,"fit b");curve(green,"fit g");
+   dots([[LX(t0),LY(h0)]],"c",10);dots([[LX(tn),LY(f(tn))]],"b",10);
+   link(LX(t0),LY(0),LX(t0),LY(h0));link(LX(tn),LY(0),LX(tn),LY(f(tn)));
+   link(LX(-3.1),LY(0),LX(3.1),LY(0));
+   note("旧 θ",LX(t0),LY(0)+26,"");note("新 θ",LX(tn),LY(0)+26,"y");
+   note("蓝 = 对数似然　绿 = E 步造的下界",LX(1.4),LY(1.72),"","start");},"CS229 给的图像是这样：<b>蓝曲线是对数似然</b>，<b>E 步造出绿曲线</b>。绿曲线有两条性质：<b>① 处处在蓝曲线下方</b>（是个下界）；<b>② 在当前 θ 处恰好和蓝曲线相等</b>（图上那个点两条线碰头）。然后 <b>M 步最大化绿曲线</b>——不是蓝曲线，因为绿曲线好优化、<b>有闭式解</b>（就是你刚学的那三条 M 步公式）。");
+  S(0,function(){clearScene();setEq(null);setCap("★ 三段不等式，串起来就证完了");
+   boxNode(140,158,1000,60,"新 θ 的蓝　≥　新 θ 的绿　≥　旧 θ 的绿　=　旧 θ 的蓝","g");
+   note("第一个 ≥：绿<处处>在蓝下方（性质①）",640,285,"b");
+   note("第二个 ≥：新 θ 是绿曲线的<最大值点>（这就是 M 步）",640,350,"v");
+   note("那个 = ：绿在旧 θ 处<与蓝相等>（性质②）",640,415,"y");
+   note("⇒ ℓ(θ_new) ≥ ℓ(θ_old)，<似然永不下降>",640,485,"g");},"⭐ <b>三段不等式串起来就证完了</b>：<b>新 θ 处的蓝 ≥ 新 θ 处的绿</b>（绿处处在蓝下方）<b>≥ 旧 θ 处的绿</b>（新 θ 是绿的最大值点，这就是 M 步干的）<b>= 旧 θ 处的蓝</b>（绿在旧 θ 处与蓝相等）。于是 <b>ℓ(θ_new) ≥ ℓ(θ_old)</b>。⚠️ 注意<b>性质②（相切）不可少</b>——如果绿曲线在旧 θ 处严格低于蓝，最后那个等号就断了，整条链串不起来。");
+  S(0,function(){clearScene();setEq(null);setCap("★ 顺带回答：E 步为什么偏偏算后验？");
+   boxNode(140,165,1000,64,"要让绿在当前 θ 处<b>碰到</b>蓝，就得让 Jensen 不等式<b>取等</b>","y");
+   note("Jensen 取等的条件：那个随机变量是<常数>",640,300,"g");
+   note("把这个条件解出来，得到的<恰好>就是后验 p(z | x; θ)",640,370,"b");
+   note("⭐ 所以 E 步算责任度<不是约定，是被取等条件逼出来的唯一选择>",640,440,"v");
+   note("⇒ 这就是「E 步为什么长这样」的完整答案",640,505,"g");},"⭐ <b>最后一环，也是最漂亮的一环</b>：E 步为什么偏偏要算<b>后验概率</b>？因为要让绿曲线在当前 θ 处<b>碰到</b>蓝曲线，就得让 <b>Jensen 不等式取等</b>；而 Jensen 取等的条件是<b>那个随机变量为常数</b>。把这个条件解出来，得到的<b>恰好就是后验 p(z | x; θ)</b>。⭐ <b>所以 E 步算责任度不是一个约定，是被取等条件逼出来的唯一选择。</b>");
+  SUM(0,12,{h:"★★ EM 单调不降的论证",k:"E 步造绿曲线：<b>①处处 ≤ 似然　②在当前 θ 处相切</b>。M 步<b>最大化绿曲线</b>（有闭式解）。",m:"三段不等式 <b>ℓ(θ_new) ≥ g(θ_new) ≥ g(θ_old) = ℓ(θ_old)</b> ⇒ <b>似然永不下降</b>。相切那一条不可少。",w:"<s>以为 M 步在最大化似然本身</s>——它最大化的是<b>下界</b>。<s>以为 E 步的后验是人为规定</s>——是 <b>Jensen 取等条件</b>解出来的。",e:"⚠️ 评估文档写明<b>详细收敛证明不在考核范围</b>，看懂即可、不必背。但「保证不降、不保证全局最优」这句必须会写。"});
+  QUIZ(0,12,{t:"EM 的 M 步实际最大化的是什么？",o:["E 步构造出的那个下界","责任度","成分个数 K","观测数据的对数似然本身"],a:0,w:"对数似然直接优化很难（求和号困在 log 里）。<b>E 步先造一个下界</b>——处处不超过似然、且在当前 θ 处与之相等——<b>M 步最大化这个下界</b>（有闭式解）。三段不等式即可推出似然永不下降。"});
+});
+KP("13 · ★ 保证什么、不保证什么",function(){
+  S(0,function(){clearScene();setEq(null);
+   boxNode(130,155,480,64,"✓ 保证","g");note("每轮<不降低>观测数据的似然",370,252,"g");
+   boxNode(660,155,480,64,"✗ 不保证","r");note("找到<全局>最优",900,252,"r");
+   note("⇒ EM 可能停在<局部最优>",640,370,"y");
+   note("应对：多次合理的初始化，比较最终似然",640,435,"g");
+   note("sklearn：n_init=10　⚠ 是<10 次初始化>，不是 10 轮迭代",640,500,"r");},"把边界说清楚。<b>保证的</b>：每一轮<b>不降低</b>观测数据的似然。<b>不保证的</b>：找到<b>全局</b>最优——<b>EM 可能停在局部最优</b>。应对办法和 k-means 一样：<b>多次合理的初始化，比较最终似然</b>。⚠️ sklearn 里是 <b>n_init=10</b>，讲义特意大写强调：<b>这是十次初始化，不是十轮 EM 迭代</b>（迭代次数是 max_iter）。这个坑和 T2 的 k-means 是同一个。");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 两个数值陷阱");
+   boxNode(120,155,1040,54,"① 某个成分的总责任度接近 0 ⇒ 除以 N_k <b>不稳定</b>","r");
+   boxNode(120,215,1040,54,"② 成分<b>坍缩</b>到一个点上，方差趋近 0 ⇒ 似然可以趋向无穷大","r");
+   note("⇒ 所以实现里会加<协方差正则化>（sklearn 的 reg_covar）",640,320,"g");
+   note("和合理的初始化",640,380,"g");
+   note("⭐ 讲义的原话：<高似然本身并不保证模型有用>",640,450,"y");
+   note("⚠ 讲义还提醒：两个点配两个自由高斯，反复拟合就会坍缩",640,510,"v");},"两个数值陷阱：<b>①</b> 某成分的总责任度接近 0 时，<b>除以 N_k 会不稳定</b>；<b>②</b> 更严重的是<b>成分坍缩</b>——一个成分收缩到单个点上，方差趋近 0，<b>似然可以趋向无穷大</b>。所以实现里会加<b>协方差正则化</b>（sklearn 的 reg_covar）和合理的初始化。⭐ 讲义那句话值得记：<b>高似然本身并不保证模型有用</b>。顺带一提，上一页那个「两个点配两个自由高斯」的例子，讲义明说<b>反复拟合就会坍缩</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 成分标签是任意的");
+   boxNode(140,165,1000,64,"把两个成分的编号对调，混合密度<b>一点都不变</b>","y");
+   note("⇒ 两次运行的「成分 1」可能不是同一个东西",640,300,"r");
+   note("⇒ 要通过<估计出的参数>和<它描述的那些观测>来解释一个成分",640,370,"g");
+   note("⚠ 不能靠编号",640,435,"r");
+   note("⭐ 这和 T2 里「比成员不比标签号」是同一件事",640,500,"v");},"还有一条：<b>成分标签是任意的</b>。把两个成分的编号对调，<b>混合密度一点都不变</b>。所以<b>两次运行里的「成分 1」可能根本不是同一个东西</b>。正确做法是：<b>通过估计出的参数和它描述的那些观测来解释一个成分，不能靠编号</b>。⭐ 注意——<b>这和 T2 里「比较稳定性要比成员不比标签号」是同一件事</b>，两个 Topic 在这里是相通的。");
+  SUM(0,13,{h:"★ 保证不降，不保证最优",k:"<b>保证</b>：每轮不降低似然。<b>不保证</b>：全局最优 ⇒ 可能停在<b>局部最优</b>，需多次初始化。<b>n_init=10 是十次初始化，不是十轮迭代</b>。",m:"两个数值陷阱：<b>N_k≈0 不稳定</b>、<b>成分坍缩</b>（方差→0，似然→∞）⇒ 用 reg_covar 与合理初始化。<b>高似然不保证模型有用</b>。",w:"<s>靠编号解释成分</s>——标签任意，对调不改变密度（同 T2 的「比成员不比标签」）。",e:"「两次运行结果不同说明什么」：答<b>似然非凸、EM 只保证局部最优</b>，且<b>成分编号本就任意</b>。"});
+  QUIZ(0,13,{t:"sklearn 的 GaussianMixture 中 n_init=10 表示？",o:["保留 10 个成分","最多迭代 10 轮","用 10 组不同的初始化各拟合一次，保留最优的那次结果","最多 10 个特征"],a:2,w:"讲义大写强调：<b>n_init 是初始化的次数，不是 EM 迭代次数</b>（后者由 max_iter 控制）。多次初始化是应对<b>局部最优</b>的标准手段——和 k-means 里的 n_init 完全同理。"});
+});
+KP("14 · ★★ 选 K：AIC / BIC 与参数个数",function(){
+  S(0,function(){clearScene();setEq("$$\\mathrm{AIC}=-2\\log L+2p,\\qquad \\mathrm{BIC}=-2\\log L+p\\log N$$","top");
+   note("p = <拟合参数的个数>　N = 观测个数　L = 最大化后的似然",640,395,"b");
+   note("⚠ 两者都是<越小越好>",640,455,"g");
+   note("⚠ 这里的 p 是「参数个数」，<不是>密度 p(x)",640,515,"r");},"<b>为什么需要 AIC/BIC？</b> 因为<b>训练似然总是偏向更复杂的模型</b>——成分越多拟合越好。AIC 和 BIC 给参数个数<b>加罚</b>。<b>p 是拟合参数的个数，N 是观测个数，L 是最大化后的似然</b>，<b>两者都是越小越好</b>。⚠️ 讲义特意提醒：<b>这里的 p 是「参数个数」，不是密度 p(x)</b>，同一个字母两个意思。");
+  S(0,function(){clearScene();setEq(null);setCap("两者的区别在罚项");
+   boxNode(130,165,480,64,"AIC 的罚项","b");note("2p —— 与样本量<无关>",370,262,"b");
+   boxNode(660,165,480,64,"BIC 的罚项","g");note("p·log N —— 样本越多罚得<越狠>",900,262,"g");
+   note("N > 7 时 log N > 2 ⇒ BIC 通常比 AIC 更保守",640,390,"y");
+   note("⇒ 常见现象：BIC 选出的成分数<比 AIC 少>",640,455,"v");
+   note("两者不一致时，要用其它证据（稳定性、领域意义）来判",640,515,"g");},"两者的差别<b>只在罚项</b>：<b>AIC 是 2p，与样本量无关</b>；<b>BIC 是 p·log N，样本越多罚得越狠</b>。当 N 大于约 7 时 log N 就超过 2，所以 <b>BIC 通常比 AIC 更保守</b>，<b>选出的成分数往往比 AIC 少</b>。⚠️ 两者不一致时不要硬选一个，要用<b>其它证据</b>（稳定性、领域意义）来判。");
+  S(0,function(){clearScene();setEq("$$p=\\underbrace{(K-1)}_{\\text{权重}}+\\underbrace{K}_{\\text{均值}}+\\underbrace{K}_{\\text{方差}}=3K-1$$","top");
+   note("⚠ 这是<一维、每成分一个方差>的情形",640,395,"r");
+   note("为什么权重只有 K−1 个？因为它们必须加起来等于 1",640,455,"y");
+   note("K=2 ⇒ p = 5　K=3 ⇒ p = 8",640,515,"g");},"<b>参数个数怎么数</b>——这是必考的计算：一维、每个成分一个方差时，<b>p = (K−1) + K + K = 3K−1</b>。⭐ <b>为什么权重只有 K−1 个？</b> 因为它们<b>必须加起来等于 1</b>，最后一个由前面决定，不是自由参数。这一点和前面讲混合密度时说的约束是同一回事。<b>K=2 时 p=5，K=3 时 p=8</b>。");
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:3,cols:4,x:200,y:160,cw:250,ch:64,labelCls:"y",label:"讲义给的数字（300 个观测，两成分）",
+     hl:function(i,j){return (i===2)?"hl2":"";},
+     cell:function(i,j){return [["K","p = 3K−1","log L","BIC / AIC"],
+       ["2","5","−516.30","1061.12 / 1042.60"],
+       ["3","8","略有改善","<b>改善不足以抵消多出的参数</b>"]][i][j];}});
+   note("⇒ 结论选 K=2",640,420,"g");
+   note("⚠ 「最小值是模型选择的<证据>，不是「确实存在这么多自然分组」的<证明>」",640,490,"r");},"讲义给的实际数字：300 个观测，<b>K=2 时 p=5、log L≈−516.30，算得 BIC≈1061.12、AIC≈1042.60</b>（我复算过，完全对得上）。<b>K=3 时拟合略有改善，但不足以抵消多出的三个参数</b>，所以选 <b>K=2</b>。⚠️ 最后那句必须记住：<b>最小值是模型选择的证据，不是「确实存在这么多自然分组」的证明</b>——这就是你答题第四步「说出局限」的现成句子。");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 为什么不能只看似然");
+   boxNode(140,160,1000,62,"参数约束兼容时，<b>加成分不会降低</b>最好的训练似然","r");
+   note("因为更大的模型<能表示>更小的模型",640,290,"y");
+   note("⇒ 「似然最大」永远指向「成分最多」，毫无信息",640,355,"r");
+   note("⚠ 另一条：不同 EM 运行可能落进<不同局部最优>",640,420,"v");
+   note("⇒ 所以<实际拟合出的>似然未必随 K 单调上升 —— 那不是 bug",640,485,"g");},"最后两条边界，和 T2 的 inertia 完全平行。<b>第一</b>：参数约束兼容时，<b>加成分不会降低最好的训练似然</b>，因为<b>更大的模型能表示更小的模型</b>——所以「似然最大」永远指向「成分最多」，毫无信息。<b>第二条更细</b>：<b>不同的 EM 运行可能落进不同的局部最优</b>，所以<b>你实际拟合出的似然未必随 K 单调上升</b>——看到这种情况<s>不是 bug</s>。这也是为什么必须用 AIC/BIC 或验证证据，而不是似然本身。");
+  SUM(0,14,{h:"★★ 选 K：AIC / BIC",k:"<b>AIC = −2logL + 2p，BIC = −2logL + p·logN</b>，都是<b>越小越好</b>。一维每成分一方差时 <b>p = 3K−1</b>（权重只有 K−1 个自由）。",m:"BIC 的罚项随 N 增长 ⇒ 通常<b>比 AIC 保守、选出的 K 更少</b>。讲义数字：300 obs、K=2、p=5、logL=−516.30 ⇒ <b>BIC 1061.12 / AIC 1042.60</b>。",w:"<s>只看似然选 K</s>——加成分不会降低最好训练似然。<s>把 p 当成密度 p(x)</s>。<s>以为实际似然必随 K 单调上升</s>——局部最优会破坏单调。",e:"必写句：<b>最小值是模型选择的证据，不是「确实存在这么多自然分组」的证明</b>。"});
+  QUIZ(0,14,{t:"一维 GMM，每个成分一个方差，K=4。自由参数个数 p 是？",o:["11","8","12","10"],a:0,w:"<b>p = (K−1) + K + K = 3K − 1 = 3×4 − 1 = 11</b>。⭐ 权重只有 <b>K−1 = 3</b> 个自由，因为它们必须加起来等于 1；再加 4 个均值和 4 个方差。"});
+});
+KP("15 · sklearn：读输出而不是写代码",function(){
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:6,cols:2,x:220,y:145,cw:420,ch:58,labelCls:"y",label:"常考的属性与方法",
+     hl:function(i,j){return (i===4||i===5)?"hl2":"";},
+     cell:function(i,j){return [["写法","含义"],
+       ["weights_","各成分的混合权重 π"],
+       ["means_ / covariances_","各成分的均值与协方差"],
+       ["score_samples(X)","<b>对数</b>混合密度（注意是对数）"],
+       ["predict(X)","责任度最大的那个成分 —— <b>丢掉不确定性</b>"],
+       ["predict_proba(X)","<b>完整的责任度向量</b>（每行和为 1）"]][i][j];}});},"sklearn 部分考的是<b>读输出</b>不是写代码。要分清的几个：<b>weights_</b> 是权重 π；<b>means_ / covariances_</b> 是均值和协方差；<b>score_samples</b> 给的是<b>对数</b>混合密度（⚠️ 是对数，不是密度本身）；<b>predict</b> 返回责任度最大的那个成分——<b>丢掉了不确定性</b>；<b>predict_proba</b> 保留<b>完整的责任度向量</b>。讲义的 Study check 就问：<b>predict 代替 predict_proba 时丢失了什么信息？</b> 答：<b>软归属的不确定性</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("covariance_type：四个取值");
+   matrix({rows:5,cols:2,x:250,y:145,cw:380,ch:58,labelCls:"b",label:"成分的协方差被允许长什么样",
+     cell:function(i,j){return [["取值","含义"],
+       ["full","每个成分<b>各自</b>完整的协方差（可扁可斜）"],
+       ["tied","所有成分<b>共用</b>同一个协方差"],
+       ["diag","各自对角 —— 允许不同尺度，但轴对齐"],
+       ["spherical","各自一个标量方差 —— 球形"]][i][j];}});
+   note("⚠ 一维数据上，full 就是「每个成分一个方差」",640,430,"y");
+   note("⭐ 这组选项正是 CS229 里 Ng 说的「也可以强制它们相同」",640,495,"v");},"<b>covariance_type</b> 控制成分的协方差被允许长什么样：<b>full</b> 每成分各自完整的协方差（可扁可斜）；<b>tied</b> 所有成分共用一个；<b>diag</b> 各自对角（允许不同尺度但轴对齐）；<b>spherical</b> 各自一个标量方差（球形）。⚠️ <b>一维数据上，full 就是「每个成分一个方差」</b>。⭐ 顺带说一句：这组选项正是 CS229 里 Ng 提到的「<em>按约定每个高斯有自己的 Σ，但你想强制它们相同也可以</em>」——限制越强，参数越少，AIC/BIC 的罚项也越小。");
+  SUM(0,15,{h:"sklearn 要点",k:"<b>predict_proba</b> 给完整责任度向量；<b>predict</b> 取 argmax、<b>丢掉不确定性</b>；<b>score_samples</b> 是<b>对数</b>混合密度。",m:"<b>covariance_type</b>：full（各自完整）/ tied（共用）/ diag（各自对角）/ spherical（各自标量）。一维下 full = 每成分一个方差。",w:"<s>以为 score_samples 返回密度本身</s>——是<b>对数</b>密度。<s>用 predict 汇报软归属</s>。",e:"读输出型选择题。记住 predict vs predict_proba 的差别与 covariance_type 的四个取值。"});
+  QUIZ(0,15,{t:"用 predict 代替 predict_proba 会丢失什么？",o:["观测的原始特征","软归属的不确定性——只剩最大责任度对应的那个成分编号","成分的均值","混合权重"],a:1,w:"<b>predict 返回责任度最大的成分并丢弃其余信息</b>。像 [0.55, 0.45] 这样「其实很难分」的情况，被压成一个确定的标签后就看不出来了。<b>predict_proba 保留完整的责任度向量</b>。"});
+});
+KP("16 · 三个算法横向对比 + 答题四步",function(){
+  S(0,function(){clearScene();setEq(null);
+   matrix({rows:5,cols:4,x:140,y:145,cw:255,ch:60,labelCls:"y",label:"M2 三个 Topic 一张表",
+     hl:function(i,j){return (i===0)?"":(j===0?"hl":"");},
+     cell:function(i,j){return [["","K-means","DBSCAN","GMM"],
+       ["要给的参数","k","ε 与 min_samples","K（＋协方差类型）"],
+       ["输出","硬标签","硬标签＋噪声","<b>责任度＋密度</b>"],
+       ["几何假设","紧凑凸形","连通稠密区","各成分可扁可斜的高斯"],
+       ["选个数","肘部 / silhouette","不用给","<b>AIC / BIC</b>"]][i][j];}});},"把 M2 三个 Topic 并排放。<b>GMM 那一列的独特之处</b>：唯一输出<b>责任度和密度</b>的；唯一能用 <b>AIC/BIC</b> 选个数的（因为有似然）；几何上比 k-means 灵活（<b>各成分可扁可斜</b>），但比 DBSCAN 死板（<b>仍然假设高斯</b>，处理不了弯月形）。<b>这张表就是 Q3 型「该选哪个」大题的骨架。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("讲义列的 GMM 三大优势");
+   boxNode(120,155,1040,54,"① <b>概率输出</b>：不是硬标签，而是每成分一个后验责任度","g");
+   boxNode(120,215,1040,54,"② <b>成分形状灵活</b>：Σ_k 可表示不同的离散程度与朝向","g");
+   boxNode(120,275,1040,54,"③ <b>密度估计</b>：不止聚类，还能建模高维概率密度","g");
+   note("⚠ 代价：要假设高斯、要给 K、可能坍缩、只到局部最优",640,375,"r");
+   note("⇒ 答题时优势与代价<成对>写，才拿得到分",640,440,"y");},"讲义明确列的<b>三大优势</b>：<b>①概率输出</b>——每成分一个后验责任度，而不是硬标签；<b>②成分形状灵活</b>——Σ_k 可以表示不同的离散程度与朝向；<b>③密度估计</b>——不止用于聚类，还能建模高维概率密度。⚠️ <b>但答题时优势要和代价成对写</b>：要假设高斯、要给 K、可能坍缩、只到局部最优。<b>只写优势不写代价，拿不到「说出局限」那一步的分。</b>");
+  S(0,function(){clearScene();setEq(null);
+   boxNode(120,140,1040,56,"① 报出结果：责任度 / 更新后的参数 / BIC 数值","b");
+   boxNode(120,204,1040,56,"② 解释它说明什么：在当前模型与特征下代表什么","g");
+   boxNode(120,268,1040,56,"③ 用可见证据支撑：算式、似然前后对比、AIC/BIC 表、稳定性","v");
+   boxNode(120,332,1040,56,"④ 说出局限：它<b>不能</b>证明什么","r");
+   note("110 分钟：选择 30 · 大题 60 · 检查 20　⚠ 每页都要写全名",640,430,"y");
+   note("T3 优先练两样手算：<E 步算责任度> 与 <M 步三步>",640,495,"g");},"收尾还是那个四步：<b>① 报结果 → ② 解释它说明什么 → ③ 用可见证据支撑 → ④ 说出局限</b>。T3 的「局限句」备选：报了责任度 → 补「这是<b>当前拟合模型下的后验</b>，不是真实类别归属的已验证概率」；报了 BIC 最小 → 补「这是<b>模型选择的证据，不是存在这么多自然分组的证明</b>」；报了一次拟合 → 补「<b>EM 只保证不降、可能是局部最优</b>」。<b>考务</b>：110 分钟，建议选择 30 / 大题 60 / 检查 20，<b>每一页都要写全名</b>。T3 优先练两样手算：<b>E 步算责任度</b>和 <b>M 步三步</b>。");
+  SUM(0,16,{h:"三算法对比 + 答题四步",k:"GMM 独特之处：<b>唯一输出责任度与密度</b>、<b>唯一能用 AIC/BIC</b>；比 k-means 灵活（可扁可斜），比 DBSCAN 死板（<b>仍假设高斯</b>）。",m:"讲义三大优势：<b>概率输出 / 成分形状灵活 / 密度估计</b>。答题时优势与代价<b>成对</b>写。",w:"<s>只写优势</s>。T3 的局限句：责任度是<b>当前模型下的后验</b>、BIC 最小是<b>证据不是证明</b>、一次拟合<b>可能是局部最优</b>。",e:"110 分钟：选择 30 / 大题 60 / 检查 20。<b>每页写全名</b>。优先练 E 步算责任度、M 步三步。"});
+  QUIZ(0,16,{t:"大题算出「BIC 在 K=2 处最小」之后，最该补上的一句是？",o:["这是模型选择的证据，并不证明数据里确实存在两个自然分组","应该改用 AIC","再算一遍确认","把计算器型号写上"],a:0,w:"评分公式是<b>报结果→解释→证据→局限</b>四步。BIC 最小只完成前两步，必须补上边界——讲义原话就是<b>「最小值是模型选择的证据，不是这么多自然分组确实存在的证明」</b>。"});
+});
+KP("完 · 一条线收束",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("M2 T3 · 高斯混合与 EM · 完","生成故事 → z 与 r → E 步 M 步 → 似然上升 → 选 K","M2 三个 Topic 到此齐了");},
+    "T3 的完整主线：<b>数据被想象成「先掷骰子选成分、再从那个高斯抽点」，而骰子结果 z 没被记下来——这是全部困难的来源；观测之后我们不把 z 换成标签，而是算后验责任度 r，它每行加起来是 1；混合密度是各成分按权重相加，成分数不等于峰数，混合方差还多一项成分均值之间的差异；对数似然里求和号困在 log 内部，拆不开、解不出闭式，所以才要 EM——E 步用贝叶斯四步算责任度，M 步按「有效计数 → 权重与均值 → 用新均值算协方差」三步更新，分母一律是 N_k；走完一轮似然确实从 −2.9703 升到 −2.4394，而它之所以永不下降，是因为 E 步造了一个处处在似然下方、且在当前 θ 处相切的下界，M 步最大化它，三段不等式一串就证完了；但只保证不降、不保证全局最优，还可能成分坍缩；选 K 用 AIC/BIC，一维时 p = 3K−1，而最小值只是证据不是证明。</b> 答题记住四步：<b>报结果 → 解释 → 证据 → 局限</b>。M2 三个 Topic 到这里就齐了，接下来该做整轮模拟和考前走查。");
+});
+window.__startProjector(CFG);
+})();
+</script>

@@ -1,0 +1,494 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maximum Likelihood</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   Reusable "Projector" teaching template  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  A reusable frame for turning any topic into a shot-by-shot animated lesson.
+  Everything below the content script -- projector loop, caption layer, summary
+  card, mandatory quiz, SVG drawing toolbox, caption-collision handling -- is
+  already built. You only ever edit one place:
+
+     the LAST <script> in the file, between the "content starts / ends" markers
+
+  ── How to use it ─────────────────────────────────────────────────────────
+  1. Edit CFG: title, subtitle, optional video link.
+  2. Build each concept out of four calls, always in this order:
+        KP("concept name", function(){
+          S(seconds, sceneFn, "narration paragraph (optional, toggled with N)");
+          SUM(seconds, conceptNo, {h:heading, k:result, m:mechanism,
+                                   w:misreading, e:relevance to assessment});
+          QUIZ(seconds, conceptNo, {t:question, o:[options...], a:correctIndex,
+                                    w:explanation});
+        });
+     A concept may have many S() shots; it ends with exactly one SUM and one QUIZ.
+  3. Drawing toolbox available inside a scene function:
+        clearScene()                     clear the canvas
+        setTitle(eyebrow, h1, sub)       title card
+        setBig(big, small)               centred display text (a number, a verdict)
+        setCap(html)                     one line at the top (<b><i><em><s> allowed)
+        setEq("$$...$$", "top")          MathJax formula ("top" = align to top)
+        flip("...<span data-id=x>..")    term-level morph animation between formulas
+        T(id, text, "hl/res/ded")        a token for flip() to track
+        note(text, x, y, "g/y/b/r/v", anchor)   label on the canvas
+        dots([[x,y]...], "a/b/c", r)     scatter points
+        curve(points, "fit/fit g/...")   polyline or curve (draws itself on)
+        boxNode(x, y, w, h, label, cls)  a labelled box
+        link(x1, y1, x2, y2)             a connector
+        matrix({rows,cols,cw,ch,x,y,cell,dim,hl,label,labelCls})  table or matrix
+        The canvas is 1280x720 (16:9), origin at the top left.
+        Layout rule: keep every drawn element within y = 90..470. Below that is
+        where the caption band sits, and a long narration grows upward into it.
+  4. Colour semantics (keep them consistent -- learners come to rely on them):
+        blue   = model / input        yellow = attention / conclusion
+        green  = correct / answer     coral  = error / failure
+        violet = emphasis
+  5. Interaction (built in, nothing to change): SPACE or arrow-right advances,
+     arrow-left goes back, number keys jump to a concept, N toggles the narration.
+     A quiz must be answered before the film continues. Summary cards and quizzes
+     deliberately carry no narration -- the card is the message.
+
+  ── Three worked concepts are included below as a live example of the format.
+     Replace that whole block with your own.
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+/* lifted out of the caption band: the layer centres it, 9% puts it in the upper middle */
+#big{margin-bottom:9%}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:34%;overflow-y:auto;margin-bottom:44px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12px,1.02vw,14.5px);font-weight:400;line-height:1.6;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1180px,94%);width:100%;max-height:96%;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:16px 26px 16px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(16.5px,1.7vw,22px);font-weight:800;margin:0 0 9px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:6px}
+#sum .row{border-left:3px solid #3C4A61;padding:7px 15px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#9EABBE;margin:0 0 2px;line-height:1.3}
+#sum .rv{font-size:clamp(13px,1.05vw,15.5px);font-weight:400;line-height:1.5;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;min-width:0;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;right:6px;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .3s,background .3s}
+.kpbar:hover .kplbl{right:auto;overflow:visible;z-index:3;color:var(--ink);background:var(--bg);padding-right:6px}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.link.r{stroke:var(--coral);stroke-width:2.2} .link.g{stroke:var(--green);stroke-width:2.2}
+.link.y{stroke:var(--yellow);stroke-width:2.2} .link.b{stroke:var(--blue);stroke-width:2.2}
+.link.d{stroke-dasharray:7 6}
+.link.q{stroke:#4A5A75;stroke-width:2}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: an .off panel must become invisible immediately */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="Previous shot"></button>
+<button class="navbtn" id="next" aria-label="Next shot"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">SPACE advance · ← back · N narration</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ ENGINE (no need to edit) ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2,cls){gS.append("path").attr("class","link "+(cls||"")).attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","The result"],["m","Why it works"],["w","Common misreading"],["e","In your exam"]];
+  sumEl.innerHTML='<p class="sh">Concept '+kp+' · Summary</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">Concept '+kp+' · Check yourself</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  SPACE to continue";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* expose the engine to the content script */
+function axes(P){gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ PROJECTOR (no need to edit) ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  answer first":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="SPACE advance · ← back · N "+(narrOn?"narration":"show narration");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"Where least squares comes from · maximum likelihood",
+  subtitle:"noise model → likelihood → log → the squares fall out · SPACE to advance",video:""};
+
+/* the same four points as the fitting film, now with their least-squares line y = 2.3x */
+var PX=[1,2,3,4], PY=[2,6,5,10];
+var AX={l:380,r:920,t:196,b:385};
+function px(x){return 420+(x-1)*140;}
+function py(y){return 385-(y-2)*22;}
+function FIT(x){return 2.3*x;}
+function plot(){ axes(AX);
+  note("x",934,382,"");note("y",368,190,"");
+  var p=[];for(var i=0;i<4;i++)p.push([px(PX[i]),py(PY[i])]);
+  return p; }
+function fitline(){ curve([[px(0.9),py(FIT(0.9))],[px(4.25),py(FIT(4.25))]],"fit"); }
+/* a sideways gaussian hugging the vertical line x = x0: the noise around one prediction */
+function bell(x0,cls,amp){ var X=px(x0),Y=py(FIT(x0)),b=[];
+  for(var t=-64;t<=64;t+=2) b.push([X+(amp||72)*Math.exp(-t*t/1352), Y+t]);
+  curve(b,cls||"fit g"); return [X,Y]; }
+
+KP("Opening",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("Where least squares comes from","Maximum likelihood",
+      "We chose to square the errors. Was that arbitrary?");},
+    "In the fitting film we squared the residuals because signs cancel and squares are smooth. Both true, and both a little unsatisfying: <b>they are reasons to prefer squares, not a derivation of them.</b> This film gives the derivation. We make one honest assumption about how the data was generated, ask which parameters make the data we actually saw most probable, and <b>the sum of squared errors falls out on its own</b> -- nobody chooses it. Along the way the assumption becomes visible, which is the real prize: once you can see it, you can see when it fails and what to use instead. Press N to toggle this narration.");
+});
+KP("1 · An honest model of the noise",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);var p=plot();dots(p,"a",5);fitline();setCap("<b>The points do not sit on the line. So say something about how they miss it.</b>");},"Real data never lies on a line, and until now we treated that as an inconvenience to be minimised. <b>Maximum likelihood treats it as information.</b> Instead of asking which line passes closest to the points, we write down a story for how the points were produced: a straight-line relationship, plus a random disturbance for everything the model does not capture -- measurement error, omitted variables, ordinary noise. Once that story is written as a formula we can ask a much sharper question: <em>which line makes the data we actually observed the most probable?</em>");
+  S(0,function(){clearScene();setEq("$$y^{(i)}=\\theta^{\\top}x^{(i)}+\\varepsilon^{(i)},\\qquad \\varepsilon^{(i)}\\sim\\mathcal{N}(0,\\sigma^2)$$","top");var p=plot();dots(p,"a",5);fitline();bell(3,"fit g");note("the noise around one prediction",790,286,"g","start");},"Here is the story in symbols. Each observation is the line's value plus a disturbance drawn from a <b>normal distribution centred on zero</b>. The bell drawn sideways at x = 3 is that distribution: the line gives the mean, and the noise scatters the observation above or below it. Two conditions come attached. <b>Zero mean</b> says the model is not systematically high or low. <b>The same &sigma; for every point, drawn independently</b>, says the noise does not grow with x and that one point's error tells you nothing about the next one's.");
+  S(0,function(){clearScene();setEq(null);setBig("Why a normal distribution?","many small independent effects add up");note("the central limit theorem makes it the natural default -- not a law of nature",640,392,"y");},"Why normal, of all the distributions available? The honest answer is <b>convenience backed by a theorem</b>. The central limit theorem says that a sum of many small independent effects tends towards a normal distribution, and \"everything I left out of the model\" is often exactly such a sum. That makes it a reasonable default. <s>It is not a law of nature</s>, and the assumption is testable: plot the residuals and look. If they fan out as x grows, or a few sit absurdly far out, the story is wrong and the method built on it will mislead you.");
+  SUM(0,1,{h:"An honest model of the noise",k:"Write down how the data was <b>generated</b>: y = &theta;&#7488;x + &epsilon; with &epsilon; drawn from <b>N(0, &sigma;&sup2;)</b>, independently and with the same &sigma; for every point.",m:"Zero mean says the model is not systematically high or low; a shared &sigma; says the noise does not grow with x; independence says one point's error predicts nothing about the next. The normal shape is justified by the central limit theorem -- many small independent effects add up.",w:"<s>This is an assumption, not a fact.</s> It is testable: plot the residuals and look for fanning-out or extreme outliers.",e:"Everything that follows is a consequence of this line. Change the noise distribution and you change the loss function."});
+  QUIZ(0,1,{t:"What does the assumption &epsilon; ~ N(0, &sigma;&sup2;) with the same &sigma; for all i actually claim?",o:["That the data lies exactly on a straight line","<b>That the noise is centred on zero, equally spread at every x, and independent across observations</b>","That &theta; is a random variable with a normal distribution","That the residuals must sum to exactly zero"],a:1,w:"The three claims are <b>zero mean</b> (no systematic bias), <b>constant variance</b> (spread does not change with x -- called homoscedasticity), and <b>independence</b>. Note what it does <em>not</em> say: &theta; is treated as a fixed unknown constant, not a random variable. Treating &theta; as random is the Bayesian move, and it leads somewhere different -- to MAP estimation and regularisation."});
+});
+KP("2 · ★ Likelihood: the same formula read backwards",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(105,150,470,104,"probability","b");boxNode(700,150,470,104,"likelihood","y");link(575,202,700,202);note("θ fixed, data varies",340,290,"b");note("data fixed, θ varies",935,290,"y");note("one formula, two readings -- and only one of them is a probability",640,352,"");},"Now the move that gives the method its name, and the one place people reliably get lost. <b>We have a single formula, and we read it two different ways.</b> Read with &theta; fixed and the data varying, it is a probability: it tells you how likely various datasets are. Read with <b>the data fixed at what we actually observed and &theta; varying</b>, it becomes a function of the parameters -- the likelihood. Same expression, opposite roles. The data has already happened; the parameters are what we are searching over.");
+  S(0,function(){clearScene();setEq("$$L(\\theta)=\\prod_{i=1}^{m}\\frac{1}{\\sqrt{2\\pi}\\,\\sigma}\\exp\\!\\left(-\\frac{(y^{(i)}-\\theta^{\\top}x^{(i)})^2}{2\\sigma^2}\\right)$$","top");setCap("<b>Independence is what lets us multiply. Every point contributes a factor.</b>");note("a parameter that explains every point well makes this product large",640,340,"g");},"Because the points are assumed independent, the probability of seeing all of them together is the <b>product</b> of the individual probabilities -- that is exactly what independence buys us. Look at what each factor rewards: the exponent contains the squared residual with a minus sign, so <em>a point the line explains well contributes a factor close to its maximum, and a badly explained point contributes a tiny one</em>. Maximising this product means finding the &theta; under which the observed data is least surprising.");
+  S(0,function(){clearScene();setEq(null);setBig("L(θ) is not a probability","the data has happened; θ is not random here");note("it does not integrate to one over θ, and asking P(θ | data) needs a prior",640,392,"r");},"One correction worth making early, because it stays with you. <b>L(&theta;) is not a probability distribution over &theta;.</b> It does not integrate to one over the parameters, and a value of 0.03 does not mean \"a 3% chance this &theta; is right\". It is a <em>score</em>: how well each candidate &theta; accounts for the data we hold. The question \"what is the probability of &theta; given the data?\" is a perfectly good question, but answering it requires a prior over &theta; and Bayes' rule -- a different framework, which we will meet at the end of this film.");
+  SUM(0,2,{h:"★ Likelihood: one formula, read backwards",k:"The same expression is a <b>probability</b> when &theta; is fixed and the data varies, and a <b>likelihood</b> when the data is fixed and &theta; varies. Independence lets us multiply one factor per observation.",m:"Each factor holds exp(&minus;residual&sup2;/2&sigma;&sup2;), so a well-explained point contributes a large factor and a badly explained one contributes almost nothing. Maximising the product finds the &theta; that makes the observed data least surprising.",w:"<s>L(&theta;) is not a probability over &theta;.</s> It does not integrate to one, and P(&theta; | data) is a different object that needs a prior.",e:"\"Likelihood\" always means: data fixed, parameters varying. Say it that way and the rest of the derivation stays clear."});
+  QUIZ(0,2,{t:"Which statement about the likelihood L(&theta;) is correct?",o:["It is the probability that &theta; is the true parameter","<b>It is the probability of the observed data, viewed as a function of &theta;</b>","It is always between 0 and 1 and integrates to 1 over &theta;","It can only be computed once &theta; is known"],a:1,w:"L(&theta;) evaluates the probability of the data we <em>already have</em>, for each candidate &theta;. <b>It says nothing directly about the probability of &theta; itself</b> -- that would be P(&theta; | data), which requires a prior and Bayes' rule. And it need not lie in [0,1]: with continuous data these are probability <em>densities</em>, which can exceed 1."});
+});
+KP("3 · Why we take the logarithm",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(130,148,440,92,"product of m factors","r");boxNode(710,148,440,92,"sum of m terms","g");link(570,194,710,194,"g");note("log",640,180,"g");note("multiply 1000 numbers near 0.01 and a 64-bit float returns exactly 0",640,300,"r");note("sums are also far easier to differentiate",640,352,"");},"Products are awkward for two separate reasons, and the logarithm fixes both. <b>Numerically</b>, multiplying a thousand small densities underflows to exactly zero in floating point, and a gradient of zero tells you nothing. <b>Analytically</b>, the derivative of a product of m factors is a mess, while the derivative of a sum is the sum of derivatives. Taking the log turns the product into a sum and both problems disappear. This is not a trick special to this derivation -- <em>working with log-probabilities is standard practice everywhere in machine learning</em>.");
+  S(0,function(){clearScene();setEq(null);setBig("log is strictly increasing","so the maximiser does not move");note("if a > b then log a > log b -- the ranking of every θ is preserved exactly",640,392,"g");},"But is it legitimate? Yes, and the reason is worth stating precisely. <b>The logarithm is strictly increasing</b>, so if one parameter gives a higher likelihood than another, it also gives a higher log-likelihood. The <em>ranking of every candidate &theta; is preserved exactly</em>, and therefore so is the winner. Note carefully what is and is not preserved: <s>the value changes</s> -- the maximum of log L is not the maximum of L -- but the <b>location</b> of the maximum, which is the only thing we want, does not move.");
+  S(0,function(){clearScene();setEq("$$\\ell(\\theta)=m\\log\\frac{1}{\\sqrt{2\\pi}\\sigma}-\\frac{1}{2\\sigma^{2}}\\sum_{i=1}^{m}\\big(y^{(i)}-\\theta^{\\top}x^{(i)}\\big)^{2}$$","top");setCap("<b>Two pieces: a constant, and something we have already met.</b>");note("the first term has no θ in it at all",640,320,"");note("look hard at the second one",640,372,"y");},"Taking the log of the product gives this. It has exactly two pieces, and the first one <b>contains no &theta;</b> -- it depends only on m and &sigma;, so as far as our search is concerned it is a constant, and adding a constant never moves a maximum. That leaves the second piece to do all the work. Look at what is inside the sum: <em>the squared difference between each observation and the line's prediction</em>. We did not put that there. It arrived from the exponent of the normal density.");
+  SUM(0,3,{h:"Why the logarithm is safe and useful",k:"The log turns the <b>product</b> into a <b>sum</b>: it prevents floating-point underflow, and it makes differentiation tractable.",m:"It is legitimate because <b>log is strictly increasing</b>, so the ranking of every candidate &theta; -- and therefore the location of the maximum -- is preserved exactly. Working in log-probabilities is standard practice throughout the subject.",w:"<s>The value of the maximum does change.</s> Only its <b>location</b> is preserved, and location is all we are after.",e:"After the log, the expression splits into a &theta;-free constant plus a term containing the sum of squared residuals."});
+  QUIZ(0,3,{t:"Why is maximising log L(&theta;) equivalent to maximising L(&theta;)?",o:["Because log L and L have the same value at the maximum","<b>Because log is strictly increasing, so it preserves the ranking of every &theta;</b>","Because the logarithm removes the &sigma; term","It is not equivalent; it is an approximation that works well in practice"],a:1,w:"A strictly increasing transformation cannot change which input is largest, so <b>the argmax is identical</b> -- this is exact, not an approximation. The <em>values</em> differ, of course: log of the maximum is not the maximum. Removing constants is a separate, also-exact simplification: adding or dropping a term with no &theta; in it cannot move the maximiser either."});
+});
+KP("4 · ★★ The squares fall out",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(88,150,430,96,"maximise  ℓ(θ)","g");boxNode(600,150,150,96,"⇔","");boxNode(830,150,362,96,"minimise  J(θ)","y");note("drop the constant, flip the minus sign, and the σ² only rescales",640,304,"");note("a positive rescaling cannot move a minimiser",640,356,"g");},"Now put the pieces together. The first term of the log-likelihood has no &theta;, so drop it. The second carries a minus sign, so <b>maximising the log-likelihood is minimising what follows it</b>. And what follows it is the sum of squared residuals divided by 2&sigma;&sup2; -- but &sigma;&sup2; is a fixed positive number, and dividing an objective by a positive constant <em>rescales its height without moving its minimiser</em>. Strip all of that away and what remains is precisely the cost function we invented earlier.");
+  S(0,function(){clearScene();setEq("$$\\arg\\max_{\\theta}\\ \\ell(\\theta)\\;=\\;\\arg\\min_{\\theta}\\ \\tfrac{1}{2}\\sum_{i=1}^{m}\\big(y^{(i)}-\\theta^{\\top}x^{(i)}\\big)^{2}$$","top");setCap("<b>Least squares is maximum likelihood under Gaussian noise. Not a coincidence.</b>");note("the same θ solves both -- and it is the normal-equations solution",640,340,"g");},"There it is. <b>Least squares is not an arbitrary choice; it is the maximum-likelihood estimator for a linear model with Gaussian noise.</b> Squaring the residuals was never really a decision about arithmetic convenience -- it was, implicitly, a decision about the noise. And notice that &sigma; has vanished entirely from the right-hand side: <em>the fitted line does not depend on how noisy you think the data is</em>. That is a genuinely useful fact. You do not need to know &sigma; to fit the line, though you do need it to say how uncertain the fit is.");
+  S(0,function(){clearScene();setEq(null);setBig("Squaring is a noise model","made before you knew you were making it");note("choose a different noise distribution and a different loss function appears",640,392,"y");},"This is the idea worth carrying out of the film. <b>Every loss function is a noise assumption in disguise.</b> When you reached for squared error you were assuming Gaussian noise, whether or not you knew it. That reframing is what makes the next step obvious rather than mysterious: if the noise is <em>not</em> Gaussian, running the same derivation with the correct density produces a different loss -- and using squared error anyway is not merely suboptimal, it is answering a question about a different dataset than the one you have.");
+  SUM(0,4,{h:"★★ Least squares = maximum likelihood",k:"Drop the &theta;-free constant, flip the sign, and note that 1/2&sigma;&sup2; is a positive rescaling: <b>maximising the Gaussian log-likelihood is exactly minimising the sum of squared residuals</b>.",m:"&sigma; disappears from the argmax entirely, so <b>the fitted line does not depend on how noisy you believe the data to be</b> -- though &sigma; is still needed to quantify uncertainty in the fit.",w:"<s>Squaring the errors was never a neutral choice.</s> It is a Gaussian noise assumption, made implicitly the moment you write down squared error.",e:"Say it in one line: least squares is the MLE for a linear model with independent Gaussian noise of constant variance."});
+  QUIZ(0,4,{t:"In the step from log-likelihood to least squares, why can the factor 1/2&sigma;&sup2; be dropped?",o:["Because &sigma; is assumed to equal 1","<b>It is a fixed positive constant, and rescaling an objective does not move its minimiser</b>","Because the logarithm has already removed it","It cannot be dropped; least squares is only an approximation to the MLE"],a:1,w:"Multiplying an objective by any positive constant <b>changes its height but not the location of its optimum</b> -- the same reasoning that justified the &frac12; in the original cost function. So &sigma; drops out of the fitting problem entirely and the equivalence is <em>exact</em>. &sigma; still matters, but for confidence intervals, not for the fitted line."});
+});
+KP("5 · ★ Change the noise, change the loss",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);matrix({rows:3,cols:3,cw:352,ch:60,x:88,y:150,cell:function(i,j){var t=[["assumed noise","resulting loss","behaviour"],["Gaussian","squared error","outliers dominate"],["Laplace (heavy tails)","absolute error","outliers tolerated"]];return t[i][j];},hl:function(i,j){return i===0?"hl":"";},dim:function(i,j){return i===0;}});note("the loss is a consequence of the noise model, never an independent choice",640,368,"y");},"Run the derivation again with a different density and watch the loss change. If the noise follows a <b>Laplace distribution</b> -- same bell-like shape but with heavier tails, so extreme values are far less surprising -- its density carries the absolute residual in the exponent rather than the squared one. The very same three steps then produce <b>minimise the sum of absolute errors</b>. Not because someone decided robustness would be nice, but because that is what the assumption implies.");
+  S(0,function(){clearScene();setEq(null);setBig("Robustness, defined","how surprised the model is by a far-off point");note("under a Gaussian, a 10σ point is astronomically unlikely -- so it drags the fit",640,392,"r");},"This gives \"robust\" a definition sharper than the everyday one. <b>A Gaussian assigns vanishingly small probability to a point ten standard deviations out</b>, so the estimator will bend the line a long way rather than accept such an observation -- one bad reading can pull the whole fit. Under heavier tails the same point is merely unusual, and the fit barely moves. <em>Sensitivity to outliers is not a flaw in least squares; it is the correct behaviour under an assumption that says outliers essentially do not happen.</em>");
+  S(0,function(){clearScene();setEq(null);setBig(null);boxNode(120,148,450,96,"residual plot fans out","r");boxNode(710,148,450,96,"σ is not constant","y");link(570,196,710,196);note("the fix is weighted least squares, or a transform of y -- not a bigger model",640,300,"");note("plotting residuals against x is the cheapest diagnostic in the subject",640,352,"g");},"The practical payoff is a diagnostic that costs nothing. <b>Plot the residuals against x and look at the shape.</b> A shapeless horizontal band is what the assumption predicts. If the spread widens as x grows, the constant-&sigma; assumption is violated, and the answer is <em>weighted least squares</em> -- giving noisier observations less influence -- or a transformation such as modelling log y. If the residuals show a curve, the linear part of the model is wrong. <s>Adding more features is the wrong reflex</s> when the residual plot is telling you the noise model, not the mean model, is at fault.");
+  SUM(0,5,{h:"★ Every loss is a noise assumption",k:"Re-run the derivation with a different density and a different loss appears: <b>Gaussian &rarr; squared error</b>, <b>Laplace &rarr; absolute error</b>. The loss is a consequence, never an independent choice.",m:"A Gaussian treats a far-off point as almost impossible, so the fit bends to accommodate it -- outlier sensitivity is <em>correct behaviour</em> under that assumption. Heavier tails find the same point merely unusual and the fit barely moves.",w:"<s>A fanning residual plot is not a sign of missing features.</s> Non-constant &sigma; calls for weighted least squares or a transform of y, not a bigger model.",e:"Plot residuals against x: a flat band supports the assumptions, a widening band breaks constant variance, a curve breaks linearity."});
+  QUIZ(0,5,{t:"Residuals form a clear widening funnel as x increases. What is the right reading?",o:["The model needs more features","<b>The constant-variance assumption is violated -- consider weighted least squares or a transform of y</b>","The learning rate is too large","The data contains outliers that should simply be deleted"],a:1,w:"A funnel is the signature of <b>heteroscedasticity</b>: the noise grows with x, which the model assumed it would not. The fix targets the <em>noise</em> model -- weight each observation by its precision, or model log y instead. A <b>curved</b> residual pattern would be the one indicating a wrong mean model, and that is when more or better features help."});
+});
+KP("6 · ★★ Adding a prior: from MLE to ridge",function(){
+  S(0,function(){clearScene();setEq("$$p(\\theta\\mid \\text{data})\\;\\propto\\;p(\\text{data}\\mid\\theta)\\;p(\\theta)$$","top");setCap("<b>Treat &theta; as uncertain too, and Bayes' rule gives you one extra factor.</b>");note("MLE keeps only the first factor on the right",640,320,"");note("the prior says what we believed about θ before seeing any data",640,372,"v");},"Return to the objection raised in concept 2: likelihood scores parameters but says nothing about the probability <em>of</em> a parameter. <b>Bayes' rule closes that gap, at the cost of one extra ingredient -- a prior.</b> Maximum likelihood keeps only the first factor on the right and ignores the second, which amounts to treating every value of &theta; as equally plausible beforehand. Choosing the &theta; that maximises the whole right-hand side instead is called <b>MAP</b> estimation: maximum a posteriori.");
+  S(0,function(){clearScene();setEq("$$\\min_{\\theta}\\ \\tfrac{1}{2}\\sum_i\\big(y^{(i)}-\\theta^{\\top}x^{(i)}\\big)^{2}+\\lambda\\lVert\\theta\\rVert^{2}$$","top");setCap("<b>A Gaussian prior on &theta; turns MAP into ridge regression.</b>");note("λ = σ²/τ²  ·  noisy data or a tight prior both pull θ towards zero",640,344,"g");},"Put a normal prior centred at zero on &theta; itself, take logs of both factors, and the result is remarkable in its ordinariness: <b>the familiar least-squares term plus a penalty on the size of &theta;</b>. That is ridge regression, also known as L2 regularisation, and it was not designed -- it fell out. The penalty weight is &lambda; = &sigma;&sup2;/&tau;&sup2;, the ratio of noise variance to prior variance, which reads exactly as it should: <em>noisy data, or a confident prior that &theta; is small, both pull the estimate towards zero</em>.");
+  S(0,function(){clearScene();setEq(null);setBig("A penalty is a prior","just as a loss function is a noise model in disguise");note("L2 penalty ⇔ normal prior.   L1 penalty ⇔ Laplace prior, which produces zeros.",640,392,"v");},"The film closes where it opened, one level up. <b>A loss function encodes an assumption about the noise; a regularisation term encodes an assumption about the parameters.</b> Swapping the normal prior for a Laplace prior turns the L2 penalty into an L1 penalty and yields the lasso, whose defining behaviour -- <em>driving coefficients exactly to zero</em> -- traces directly back to the sharp peak of the Laplace density at the origin. None of these pieces are arbitrary. Each one is a modelling belief written in a compact notation, and knowing which belief you have written down is what lets you tell when it is wrong.");
+  SUM(0,6,{h:"★★ From MLE to MAP: where regularisation comes from",k:"Bayes' rule multiplies the likelihood by a <b>prior</b> on &theta;. Maximising that product is <b>MAP</b> estimation; MLE is the special case that ignores the prior.",m:"A zero-centred Gaussian prior on &theta; adds &lambda;&Vert;&theta;&Vert;&sup2; to the least-squares objective -- <b>ridge regression falls out</b>, with &lambda; = &sigma;&sup2;/&tau;&sup2;. Noisy data or a tight prior both shrink &theta; towards zero.",w:"<s>Regularisation is not an ad-hoc trick to stop overfitting.</s> It is a prior belief about the parameters, written in the objective.",e:"L2 penalty &harr; normal prior; L1 penalty &harr; Laplace prior, whose sharp peak at zero is why the lasso produces exact zeros."});
+  QUIZ(0,6,{t:"Adding &lambda;&Vert;&theta;&Vert;&sup2; to a least-squares objective corresponds to what, in the probabilistic reading?",o:["Assuming the noise is Laplace rather than Gaussian","<b>Placing a zero-centred Gaussian prior on &theta; and doing MAP instead of MLE</b>","Increasing the assumed noise variance &sigma;&sup2;","Nothing probabilistic; it is a purely numerical device"],a:1,w:"The L2 penalty is the log of a <b>zero-centred normal prior on the parameters</b>, so ridge is MAP estimation under that prior. A Laplace <em>noise</em> model would change the loss term to absolute error, not add a penalty; a Laplace <em>prior</em> would give the L1 penalty and the lasso. Larger &sigma;&sup2; does increase &lambda; = &sigma;&sup2;/&tau;&sup2;, but the penalty's origin is the prior."});
+});
+KP("End · the chain",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("Maximum likelihood · complete","One assumption, three steps, a familiar answer",
+      "noise model → likelihood → log → least squares → and back out again");},
+    "The chain, end to end. <b>(1)</b> Assume a generating story: y = &theta;&#7488;x + &epsilon; with independent Gaussian noise of constant variance. <b>(2)</b> Read that story with the data fixed and the parameters varying -- the <b>likelihood</b>, a product of one factor per observation, and <em>not</em> a probability over &theta;. <b>(3)</b> Take the logarithm, which is safe because it is strictly increasing and useful because it turns the product into a sum. <b>(4)</b> Drop the &theta;-free constant and the positive scaling, and what is left is exactly the least-squares cost -- so <b>least squares is the MLE under Gaussian noise</b>, and &sigma; never enters the fitted line. <b>(5)</b> Change the noise and the loss changes with it: Laplace gives absolute error, and outlier sensitivity turns out to be correct behaviour under a Gaussian rather than a defect. <b>(6)</b> Multiply in a prior over &theta; and MAP replaces MLE: a normal prior yields ridge, a Laplace prior yields the lasso. Every loss is a noise model, and every penalty is a prior.");
+});
+window.__startProjector(CFG);
+})();
+</script>

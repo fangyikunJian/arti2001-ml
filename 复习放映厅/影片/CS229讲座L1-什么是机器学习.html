@@ -1,0 +1,746 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 第一讲 放映厅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#77849A; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#big{font-family:var(--mono);font-size:clamp(34px,6.4vw,92px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(82ch,93%);width:100%;max-height:38vh;overflow-y:auto;margin-bottom:58px;display:flex;flex-direction:column;align-items:center;pointer-events:auto;-webkit-mask-image:none}
+#cap{text-align:center;font-size:clamp(14px,1.62vw,23px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:1.05em 0 0;max-width:min(76ch,100%);text-align:left;
+  font-size:clamp(11.5px,1.15vw,16px);font-weight:300;line-height:1.78;color:#93A1B5;
+  border-top:1px solid #1E2634;padding-top:.9em;transition:opacity .4s ease}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+/* ── summary card ── */
+#sumL{pointer-events:none}
+#sum{max-width:min(96ch,92%);max-height:84vh;overflow:auto;
+  background:rgba(13,18,26,.93);border:1px solid #253044;border-radius:14px;
+  padding:26px 30px 24px;transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;
+  color:var(--green);margin:0 0 5px}
+#sum h3{font-size:clamp(19px,2.3vw,30px);font-weight:800;margin:0 0 16px;letter-spacing:-.02em;line-height:1.2}
+#sum .rows{display:grid;gap:12px}
+@media(min-width:900px){#sum .rows{grid-template-columns:1fr 1fr;gap:13px 26px}}
+#sum .row{border-left:2px solid #2A3546;padding-left:13px}
+#sum .rk{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim);margin:0 0 3px}
+#sum .rv{font-size:clamp(12px,1.16vw,16px);font-weight:300;line-height:1.72;color:#C3CEDD;margin:0}
+#sum .rv b{color:#F0F4FA;font-weight:600}
+#sum .rv i{font-style:normal;color:var(--blue)}
+#sum .rv em{font-style:normal;color:var(--green)}
+#sum .rv s{text-decoration:none;color:var(--coral)}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+/* ── quiz ── */
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(70ch,90%);pointer-events:auto;background:rgba(13,18,26,.94);
+  border:1px solid #253044;border-radius:14px;padding:24px 28px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;
+  color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(14px,1.6vw,22px);font-weight:600;margin:0 0 16px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:8px}
+#quiz button{font-family:var(--sans);font-size:clamp(12px,1.26vw,17px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:11px 16px;cursor:pointer;text-align:left;line-height:1.5;
+  transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:16px 0 0;font-size:clamp(12px,1.2vw,16px);font-weight:300;
+  color:#93A1B5;line-height:1.72;border-top:1px solid #1E2634;padding-top:13px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(28px,5.2vw,74px);font-weight:800;letter-spacing:-.045em;margin:0;
+  line-height:1.05;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.4vw,19px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.2vw,15px);color:var(--blue);
+  letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+#strip{position:fixed;z-index:6;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30}
+.pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218}
+.pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8.5px;color:var(--dimmer);
+  letter-spacing:.08em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;
+  text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);
+  letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)} .pt.d{fill:var(--violet)}
+.pt.q{fill:none;stroke:var(--yellow);stroke-width:2.6;stroke-dasharray:4 4}
+.fit{stroke:var(--blue);stroke-width:3.4;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 10px rgba(84,169,247,.5))}
+.bnd{stroke:var(--yellow);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 10px rgba(255,211,110,.5))}
+.hull{fill-opacity:.09;stroke-width:1.6;stroke-dasharray:5 4}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+
+/* ── caption placement: P cycles bottom / top / side ──────────────────────
+   The caption block carries a translucent backdrop so it stays readable even
+   when it lands on top of the artwork; side mode also shifts the scene left
+   so the two never fight for the same pixels. */
+#capWrap{background:rgba(8,11,17,.74);backdrop-filter:blur(7px);
+  -webkit-backdrop-filter:blur(7px);border-radius:13px;padding:13px 20px 15px}
+#capL.pos-top{align-items:flex-start}
+#capL.pos-top #capWrap{margin-bottom:0;margin-top:3.4vh}
+#capL.pos-side{align-items:center;justify-content:flex-end}
+#capL.pos-side #capWrap{margin-bottom:0;margin-right:2vw;max-width:min(44ch,36%);align-items:flex-start}
+#capL.pos-side #cap{text-align:left}
+#capL.pos-side #narr{max-width:100%}
+/* Percentage translations on an SVG element resolve unreliably, so side mode
+   narrows the canvas instead: preserveAspectRatio re-centres the artwork
+   inside the smaller box, which moves it clear of the caption panel. */
+svg#scene{transition:width .5s cubic-bezier(.2,.7,.3,1)}
+body.scene-shift svg#scene{width:64%;right:auto}
+#posHint{position:fixed;left:50%;top:16px;transform:translateX(-50%);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--yellow);background:rgba(8,11,17,.86);padding:5px 13px;border-radius:20px;
+  opacity:0;transition:opacity .3s ease;pointer-events:none;z-index:9}
+#posHint.show{opacity:1}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer" id="sumL"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解 · P 字幕位置</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var VID="https://www.youtube.com/watch?v=jGwO_UgTS7I&t=";
+var svg=d3.select("#scene"), gS=svg.append("g"), gN=svg.append("g");
+function tr(s,d,dl){return FAST?s:s.transition().duration(d==null?DUR:d).delay(dl||0);}
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();}
+
+/* ── scene builders ── */
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1); else e.attr("opacity",0).transition().duration(500).delay(250).attr("opacity",1);}
+function frame(o){
+  var P=o.P||{l:380,r:900,t:150,b:500};
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.r).attr("y1",P.b).attr("y2",P.b);
+  gS.append("line").attr("class","axline").attr("x1",P.l).attr("x2",P.l).attr("y1",P.t).attr("y2",P.b);
+  if(o.xlab)note(o.xlab,P.r,P.b+34,"","end");
+  if(o.ylab)note(o.ylab,P.l-8,P.t-14,"","end");
+  return P;
+}
+function dots(pts,cls,r){
+  var s=gS.selectAll(null).data(pts).enter().append("circle")
+    .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||8); else s.attr("r",0).transition().duration(DUR)
+    .delay(function(d,i){return i*45;}).attr("r",r||8);
+}
+function poly(pts,cls){
+  var p=gS.append("path").attr("class","fit "+(cls||""))
+    .attr("d","M"+pts.map(function(q){return q[0]+","+q[1];}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(1000).attr("stroke-dashoffset",0);}
+}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y)
+    .attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");
+}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link")
+  .attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+
+/* seeded scatter so every replay draws the same picture */
+function rng(seed){return function(){seed=(seed*9301+49297)%233280;return seed/233280;};}
+function housing(){var r=rng(7),p=[];
+  for(var i=0;i<14;i++){var x=400+i*34+r()*18, y=470-(i*20+r()*70);p.push([x,y]);}return p;}
+function tumor1D(){var r=rng(3),a=[],b=[];
+  for(var i=0;i<8;i++)a.push([420+r()*170,400]);
+  for(var j=0;j<8;j++)b.push([650+r()*200,400]);return[a,b];}
+function tumor2D(){var r=rng(11),a=[],b=[];
+  for(var i=0;i<11;i++)a.push([430+r()*180,220+r()*150]);
+  for(var j=0;j<11;j++)b.push([620+r()*200,300+r()*160]);return[a,b];}
+function blobs(){var r=rng(23),g=[[520,240],[720,400],[480,430]],out=[];
+  g.forEach(function(c,k){var arr=[];
+    for(var i=0;i<10;i++)arr.push([c[0]+(r()-.5)*130,c[1]+(r()-.5)*120]);out.push(arr);});
+  return out;}
+
+/* ── text layers ── */
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  if(FAST){cap.innerHTML=h;cap.classList.remove("off");return;}
+  cap.classList.add("off");setTimeout(function(){cap.innerHTML=h;cap.classList.remove("off");},160);}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+a+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;
+  if(FAST){narrEl.innerHTML=t;narrEl.classList.remove("off");return;}
+  narrEl.classList.add("off");
+  setTimeout(function(){narrEl.innerHTML=t;narrEl.classList.remove("off");},160);}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var order=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    order.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';
+    }).join("")+'</div>';
+  sumEl.hidden=false;
+  if(FAST){sumEl.classList.remove("off");return;}
+  sumEl.classList.add("off");
+  setTimeout(function(){sumEl.classList.remove("off");},60);
+}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;
+  setTimeout(function(){quizEl.classList.remove("off");},50);
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");
+      x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;
+    locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";
+  });});
+}
+
+/* ═══════════ THE FILM ═══════════ */
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){
+  var from=SHOTS.length; build();
+  KPS.push({name:name,from:from,len:SHOTS.length-from});
+}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){
+  clearScene();setBig(null);setCap(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){
+  clearScene();setBig(null);setCap(null);noTitle();}});}
+
+/* ── 0 · 开场 ── */
+KP("开场",function(){
+S(0,function(){clearScene();setTitle("Stanford CS229 · Lecture 1","什么是机器学习","12 个知识点 · 每个都有总结与检验 · 空格推进");},
+  null);
+S(1999,function(){noTitle();clearScene();
+  setBig("35 分钟","这一讲真正的教学内容");
+  setCap("<b>先说实话</b>：这一讲有一半以上是课程行政——先修要求、评分、项目、选课答疑。<br>真正的机器学习内容<i>从 0:33 开始</i>。这部片子只做那 35 分钟。");},
+  "第一讲的定位是<b>建立地图</b>，不是教算法。它要回答的问题是：机器学习到底在解决哪几类问题？这些问题之间的界线在哪？为什么要分成监督、无监督、强化学习三类？<s>这些恰恰是你课程 T1 的核心考点</s>——ARTI2001 的 T1 讲的就是「什么是机器学习」和「机器学习流程」，和这一讲高度重合。");
+});
+
+/* ── 1 · 机器学习的定义 ── */
+KP("1 · 定义",function(){
+S(2000,function(){clearScene();setBig(null);
+  boxNode(340,300,240,110,"显式编程","b");
+  boxNode(700,300,240,110,"从数据学习","g");
+  link(580,355,700,355);
+  note("人写规则",460,440,"b");note("机器找规律",820,440,"g");
+  setCap("机器学习的起点是一个反问：<br><b>能不能让计算机在没有被明确编程的情况下学会做事？</b>");},
+  "这是 Arthur Samuel 1959 年提出的问题。传统编程里，程序员必须<b>穷举所有规则</b>——但很多任务根本写不出规则。比如「识别手写数字 7」，你没法写出一条覆盖所有人笔迹的判据。机器学习换了个思路：<i>不写规则，给例子</i>，让算法自己从例子里把规则找出来。");
+S(2050,function(){clearScene();setBig(null);
+  boxNode(520,180,240,90,"跳棋程序","y");
+  boxNode(520,320,240,90,"自己跟自己下","");
+  boxNode(520,460,240,90,"超过作者水平","g");
+  link(640,270,640,320);link(640,410,640,460);
+  setCap("Samuel 写了一个下跳棋的程序，让它<b>自己跟自己下几万盘</b>。<br>最后<em>它下得比 Samuel 本人还好</em>。");},
+  "这个结果在当年被认为很震撼，因为它打破了一个直觉：<b>程序怎么可能超过写它的人</b>？关键在于 Samuel 没有教它「怎么下」，只给了它一个评估局面好坏的框架，让它<i>从大量对局中自己积累经验</i>。这正是「学习」和「执行指令」的分界——程序获得了创造者本人不具备的能力。");
+S(2150,function(){clearScene();setBig(null);
+  boxNode(230,300,220,100,"经验 E","b");
+  boxNode(530,300,220,100,"任务 T","y");
+  boxNode(830,300,220,100,"度量 P","g");
+  note("看过的数据",340,440,"b");note("要做的事",640,440,"y");note("好坏的标准",940,440,"g");
+  setCap("后来 Tom Mitchell 给了一个更严格的定义：<br>程序从<i>经验 E</i> 中学习<b>任务 T</b>，用<em>度量 P</em> 衡量，<br>如果 P 随 E 增加而提升，就说它在学习。");},
+  "这个定义的价值在于它<b>逼你把问题说清楚</b>。做任何机器学习项目，先回答三件事：E 是什么（有哪些数据）、T 是什么（要预测什么）、P 是什么（用什么指标算成功）。<s>P 定错是最常见的失败</s>——比如类别极不平衡时还用准确率，模型全预测多数类也能拿高分。你课程反复强调的「必须和多数类基线比较」，本质就是 P 选得对不对的问题。");
+});
+SUM(2150,1,{h:"机器学习 = 不写规则，给例子",
+ k:"传统编程要人<b>穷举规则</b>；机器学习让算法<b>从数据中归纳规则</b>。Mitchell 的定义把它拆成三件事：<i>经验 E</i>、<i>任务 T</i>、<i>度量 P</i>——P 随 E 增长而提升，才叫学习。",
+ m:"Samuel 的跳棋程序能超过作者，是因为他没有教「怎么下」，只给了<b>评估局面的框架 + 大量自我对弈</b>。算法在其中积累的经验远超任何人能手写的规则量。这是「学习」区别于「执行指令」的本质。",
+ w:"<s>误解一</s>：机器学习就是让程序自己写代码。<b>不是</b>——模型结构和优化目标仍然是人定的，学的只是<i>参数</i>。<s>误解二</s>：数据越多一定越好。数据要有<b>代表性</b>，喂进大量同质或有偏的数据只会强化偏差。",
+ e:"T1 会考「AI 与机器学习的区别」。标准答法：AI 是更大的范畴，包括基于规则的系统；<b>机器学习是其中「从数据中学习规律而非显式编码规则」的那一支</b>。定义 E/T/P 的思路也直接对应大题里「明确任务类型、区分输入特征与目标变量」那一问。"});
+QUIZ(2150,1,{t:"下面哪一项<b>不属于</b>机器学习？",
+ o:["用历史成交数据预测房价","根据一万张标注图片训练模型识别猫",
+    "写一段 if-else 判断闰年：能被 4 整除且不能被 100 整除，或能被 400 整除",
+    "让程序自己跟自己下棋、逐步提高棋力"],
+ a:2,
+ w:"闰年判定是<b>显式编程</b>：规则由人完全写死，程序执行它但不会因为「见过更多年份」而变得更准。按 Mitchell 的定义，<em>没有 P 随 E 提升</em>，就不是学习。<br><br>这也是 T1 高频考点的核心区分——<s>并非所有自动化都是机器学习</s>。"});
+
+/* ── 2 · 监督学习与回归 ── */
+KP("2 · 监督学习",function(){
+S(2374,function(){clearScene();var P=frame({xlab:"房屋面积",ylab:"价格"});
+  dots(housing());
+  setCap("<b>监督学习</b>：给算法的每个样本，都<i>附带正确答案</i>。<br>这里每个点是一套房子——面积已知，成交价也已知。");},
+  "「监督」这个词的来源就是这个<b>正确答案</b>。就像有个老师站在旁边，对每道题都告诉你标准答案，算法的任务是从这些「题目—答案」配对中<i>总结出映射关系</i>。这些答案在术语里叫<b>标签</b>（label）或<b>目标变量</b>（target）。<s>没有标签的数据无法做监督学习</s>——这是划分监督与无监督的唯一标准。");
+S(2434,function(){clearScene();var P=frame({xlab:"房屋面积",ylab:"价格"});
+  dots(housing());poly([[400,468],[900,196]]);
+  setCap("拟合一条线。<br>新来一套房子，<b>用这条线读出估价</b>。");},
+  "拟合出来的这条线（或曲线）就是<b>假设函数 h</b>。它的作用是把「见过的样本」外推到「没见过的输入」。注意选直线还是曲线是<i>你的建模决定</i>，不是数据告诉你的——直线更简单不易过拟合，曲线更灵活但可能把噪声也学进去。这个权衡就是<b>偏差—方差</b>问题，贯穿整门课。");
+S(2574,function(){clearScene();var P=frame({xlab:"房屋面积",ylab:"价格"});
+  dots(housing());poly([[400,468],[900,196]]);
+  dots([[790,290]],"q",11);note("新房子 → 读出估价",790,255,"y");
+  setBig(null);
+  setCap("因为要预测的<b>价格是连续的数</b>，<br>这类监督学习问题叫<em>回归</em>（regression）。");},
+  "<b>回归的判定标准只有一条：输出是不是连续量</b>。价格、温度、销量、学习时长都是回归。要小心一个陷阱——<s>输出是数字不等于是回归</s>：如果用 1、2、3 编码「北京、上海、广州」，那是分类不是回归，因为这些数字之间的大小和距离没有意义。你课程 T2 整个 Topic 讲的就是回归。");
+});
+SUM(2574,2,{h:"监督学习：每个样本都带答案",
+ k:"监督学习的数据是<b>(输入, 正确答案)</b> 的配对。算法从这些配对中学出一个映射 h，用来预测<i>没见过的输入</i>。当要预测的目标是<b>连续量</b>时，这个问题叫<em>回归</em>。",
+ m:"拟合出的 h 本质是一次<b>外推</b>：用见过的区域推断没见过的点。这也意味着 h 只在<i>训练数据覆盖的范围内</i>可信——远超这个范围的预测叫<b>外推</b>，很可能荒谬。",
+ w:"<s>误解</s>：输出是数字就是回归。<b>错</b>。判据是这些数字之间的<i>大小与距离是否有实际意义</i>。用 1/2/3 编码三个城市，输出虽是数字，但那是分类问题。",
+ e:"T1、T2 都会考。大题常见问法是「明确区分输入特征与目标变量、指出任务类型」——答题时要<b>点名是回归还是分类，并说明依据是目标变量连续还是离散</b>。外推那一条也是选择题常客。"});
+QUIZ(2574,2,{t:"下面哪个任务<b>是回归</b>？",
+ o:["判断一封邮件是不是垃圾邮件","预测某学生下周会学习多少小时",
+    "把新闻自动分成体育、财经、娱乐三类","识别一张图里是猫还是狗"],
+ a:1,
+ w:"「学习多少小时」是<b>连续量</b>——可以是 3.5 小时、7.2 小时，数值之间的大小和差距都有意义，所以是<em>回归</em>。<br><br>其余三个的输出都是<s>离散类别</s>，属于分类。注意第三个虽然可以编号成 1/2/3，但类别之间没有大小关系，仍是分类。<br><br>这道题的原型就是你课程 T1 那道大题：<b>预测学生下周学习时长</b>。"});
+
+/* ── 3 · 分类 ── */
+KP("3 · 分类",function(){
+S(2599,function(){clearScene();var P=frame({P:{l:380,r:900,t:250,b:420},xlab:"肿瘤大小"});
+  var t=tumor1D();dots(t[0],"c");dots(t[1],"b");
+  note("良性",500,370,"g");note("恶性",750,370,"r");
+  setCap("换一个问题：给定肿瘤大小，判断它是<em>良性</em>还是<s>恶性</s>。<br>输出只有<b>两个可能</b>，不是连续的数。");},
+  "这类问题叫<b>分类</b>（classification），输出是<i>离散的类别标签</i>。两个类别的情形叫<b>二分类</b>，多于两个叫多分类。医疗诊断是分类的典型场景，也是最能说明「<s>不同错误代价不同</s>」的场景——把恶性误判为良性（漏诊）的后果，远比把良性误判为恶性（虚惊一场）严重得多。");
+S(2660,function(){clearScene();var P=frame({P:{l:380,r:900,t:250,b:420},xlab:"肿瘤大小"});
+  var t=tumor1D();dots(t[0],"c");dots(t[1],"b");
+  poly([[625,270],[625,410]],"bnd");note("分界点",625,250,"y");
+  dots([[600,400]],"q",11);
+  setCap("算法要找的是一个<b>分界</b>。<br>新病人的肿瘤落在分界哪一侧，就归为哪一类。");},
+  "在一维情形下，「分界」就是<b>一个数</b>；二维是<i>一条线</i>；三维是一个平面；更高维叫<b>超平面</b>。整个 Module 1 的 T3 和 T4——感知机、逻辑回归、SVM——做的都是同一件事：<em>找这个分界面</em>。它们的区别只在于「怎么定义好的分界」和「怎么找到它」。");
+S(2660,function(){clearScene();
+  boxNode(230,240,300,110,"回归","b");
+  boxNode(750,240,300,110,"分类","y");
+  note("输出：连续的数",380,400,"b");note("输出：离散的类别",900,400,"y");
+  note("价格 · 温度 · 时长",380,435,"");note("良性/恶性 · 猫/狗",900,435,"");
+  setCap("<b>监督学习的两大分支</b>，唯一的分水岭是<br><em>目标变量是连续的还是离散的</em>。");},
+  "记住这条判据就够用了。实践上还有个细节值得知道：<b>逻辑回归虽然叫「回归」，做的却是分类</b>——它输出的是「属于正类的概率」（连续），再用阈值切成类别（离散）。这个命名上的历史遗留问题是考试里的经典陷阱，你课程 T3 会专门讲它。");
+});
+SUM(2599,3,{h:"分类：输出是离散的类别",
+ k:"分类问题的目标变量是<b>离散标签</b>。算法要找的是一个<em>分界</em>——一维是一个点，二维是一条线，高维是超平面。新样本落在哪一侧就归为哪一类。",
+ m:"Module 1 后半段的三个算法都在找这个分界面：<i>感知机</i>用错误驱动的更新规则找、<i>逻辑回归</i>用概率与交叉熵找、<i>SVM</i> 用最大间隔找。<b>目标相同，判据和方法不同</b>。",
+ w:"<s>陷阱一</s>：逻辑回归的名字里有「回归」，但它做的是<b>分类</b>。<s>陷阱二</s>：分类问题里不同错误的代价往往<i>极不对称</i>——医疗漏诊远比虚惊严重，所以不能只看准确率。",
+ e:"T1 会考回归与分类的区分，T3、T4 整个都在讲分类器。大题里若出现医疗、欺诈这类场景，<b>务必主动指出错误代价不对称、准确率会掩盖问题</b>——这是你课程 practical feedback 明确点名的得分点。"});
+QUIZ(2660,3,{t:"某医院的肿瘤筛查数据里，只有 4% 的病例是恶性。一个模型报告<b>96% 的准确率</b>。最该做的判断是？",
+ o:["模型表现优秀，可以部署","准确率必须和 <b>96% 的多数类基线</b>比较——这个结果可能等于「全部预测良性」",
+    "应该改用回归模型","准确率高说明数据质量好"],
+ a:1,
+ w:"类别极不平衡时，<b>准确率会被多数类主导</b>。全部预测「良性」就能拿到 96%，却<s>一个恶性病例都查不出来</s>——在筛查场景里这是灾难性的。<br><br>正确做法是报告<em>多数类基线</em>、查看<em>召回率</em>（恶性病例被找出的比例）和混淆矩阵。<br><br>这条几乎必考：你课程四份 practical feedback 里反复出现同一句话——<b>准确率必须相对于类别不平衡来解读</b>。"});
+
+/* ── 4 · 多特征与高维 ── */
+KP("4 · 多特征",function(){
+S(2883,function(){clearScene();var P=frame({xlab:"肿瘤大小",ylab:"年龄"});
+  var t=tumor2D();dots(t[0],"c");dots(t[1],"b");
+  note("良性",470,540,"g");note("恶性",800,540,"r");
+  setCap("只看肿瘤大小往往不够。<br><b>加上年龄</b>，每个病人就成了平面上的一个点。");},
+  "增加特征等于<b>增加描述每个样本的维度</b>。一个特征时样本排在一条线上，两个特征时排在平面上，n 个特征时排在 n 维空间里。加特征的好处是<i>原本混在一起的两类可能被分开</i>——在一维上重叠的良性与恶性，在二维平面上可能泾渭分明。这正是特征工程的意义。");
+S(2883,function(){clearScene();var P=frame({xlab:"肿瘤大小",ylab:"年龄"});
+  var t=tumor2D();dots(t[0],"c");dots(t[1],"b");
+  poly([[420,470],[880,200]],"bnd");
+  setCap("于是分界从一个<i>点</i>变成一条<em>线</em>。<br>算法要做的还是同一件事：<b>把两类分开</b>。");},
+  "这条线在数学上写作 <b>wᵀx + b = 0</b>——你课程 T3 和 T4 全部围绕它展开。线的一侧 wᵀx+b > 0 判为一类，另一侧判为另一类。<i>维度再高道理也一样</i>：三维是平面，更高维叫超平面，虽然画不出来，但代数形式完全相同。这也是为什么线性代数是这门课的先修要求。");
+S(3017,function(){clearScene();setBig("∞","特征可以有多少个");
+  setCap("Ng 提到一个反直觉的事实：<br>有些算法能处理<b>无穷多个特征</b>，而且还算得动。");},
+  "这里预告的就是 <b>SVM 的核技巧</b>。直觉上特征越多计算越贵，无穷维应该完全不可能。但核方法绕开了这个问题——它<i>从不显式构造那些特征</i>，只计算它们的内积。你课程 T4 Tutorial Q3 考的正是这一点：<em>核技巧避免的是「构造特征」，不是「计算量」</em>。这个区分很容易答错，务必记准。");
+});
+SUM(2883,4,{h:"加特征 = 升维，分界面跟着升维",
+ k:"每增加一个特征，样本所在的空间就多一维。分界面随之从<b>点 → 线 → 平面 → 超平面</b>，但代数形式始终是 <i>wᵀx + b = 0</i>。加特征的价值在于：<em>低维分不开的两类，升维后可能分得开</em>。",
+ m:"分类器判断新样本时算 f(x) = wᵀx + b，<b>看它的符号</b>落在分界面哪一侧。这个式子在 T3 的感知机、逻辑回归和 T4 的 SVM 里完全一致，区别只在于 w 和 b 是怎么被求出来的。",
+ w:"<s>误解</s>：特征越多越好。特征过多会带来<b>过拟合</b>和<i>维度灾难</i>，而且冗余特征会让 XᵀX 不可逆。另外——高维空间画不出来<b>不代表数学上有困难</b>，公式形式并不改变。",
+ e:"T3、T4 的所有计算题都建立在 f(x) = wᵀx + b 上。<b>务必练熟代入求值</b>。核技巧那条（避免构造特征而非降低计算量）是 T4 Tutorial Q3 的原题，属于必背。"});
+QUIZ(3017,4,{t:"关于 SVM 的<b>核技巧</b>，下面哪句最准确？",
+ o:["它保证了在超大数据集上训练依然很快",
+    "它<b>直接计算变换后空间里的内积</b>，从而避免显式构造高维特征；但<s>不保证</s>训练便宜",
+    "它把非线性问题变成了线性回归问题","它让特征数量自动减少"],
+ a:1,
+ w:"核技巧省掉的是「<b>把 φ(x) 真的写出来</b>」这一步，让无穷维特征空间变得可操作。<br><br>但它<em>不降低计算量</em>——样本量增大时，成对的核函数求值依然很贵。<br><br>你课程 T4 Tutorial Q3 第 3 问问的就是「kernel trick 精确避免了什么？它保证大数据集上训练便宜吗？」标准答案正是：<b>避免显式构造特征，但不保证训练便宜</b>。"});
+
+/* ── 5 · 真实应用：自动驾驶 ── */
+KP("5 · 应用",function(){
+S(3104,function(){clearScene();
+  boxNode(220,290,260,110,"摄像头图像","b");
+  boxNode(560,290,200,110,"学习算法","");
+  boxNode(840,290,220,110,"方向盘角度","g");
+  link(480,345,560,345);link(760,345,840,345);
+  note("输入 x",350,440,"b");note("输出 y",950,440,"g");
+  setCap("一个 1980 年代的例子：<b>让车自己开</b>。<br>输入是前方图像，输出是<em>该打多少度方向盘</em>。");},
+  "这个系统叫 ALVINN。它的训练方式非常朴素：<b>让人先开一段，同时记录「看到什么图像」和「人打了多少方向」</b>，这些配对就是训练数据。然后算法学习从图像到转向角的映射。注意<i>转向角是连续量</i>，所以严格说这是一个<b>回归</b>问题，只不过输入是高维图像。");
+S(3200,function(){clearScene();
+  boxNode(340,180,600,90,"人类先开车 · 同时记录图像和转向角","y");
+  boxNode(340,320,600,90,"算法学习「图像 → 转向角」的映射","");
+  boxNode(340,460,600,90,"松开方向盘 · 车自己开","g");
+  link(640,270,640,320);link(640,410,640,460);
+  setCap("训练方式朴素得惊人：<b>人开一段，机器在旁边看</b>。<br>然后接管。");},
+  "这种做法叫<b>行为克隆</b>（behavioural cloning），是模仿学习最简单的形式。它的<s>致命弱点</s>值得记住：算法只见过<i>人开得好的情况</i>，一旦车偏离到人类从没开到过的位置（比如快撞护栏了），它<b>不知道该怎么办</b>——因为训练数据里没有这种局面。这正是你课程强调的<em>数据分布偏移</em>问题的一个经典案例。");
+});
+SUM(3104,5,{h:"真实系统：把任务翻译成「x → y」",
+ k:"自动驾驶被拆解成一个标准的监督学习问题：<b>x 是前方图像，y 是方向盘角度</b>，训练数据来自人类驾驶时的记录。因为 y 连续，这是<i>回归</i>问题。",
+ m:"这种「记录专家行为再模仿」的方法叫<b>行为克隆</b>。它把复杂任务化归成配对数据的拟合，工程上非常直接——<em>只要能收集到 (x, y) 配对，就能套用监督学习</em>。",
+ w:"<s>弱点</s>：算法只见过人开得好的局面。一旦车漂移到训练数据从未覆盖的状态，模型的输出<b>没有任何保证</b>。这就是<i>数据分布偏移</i>——部署环境与训练数据不一致。",
+ e:"T1 的大题非常可能考「<b>部署后性能下降</b>怎么办」。标准答法是：先<em>调查输入分布发生了什么变化</em>、收集有代表性的新数据、必要时重训并重新评估。<s>不能</s>用模型自己的预测当标签继续训练。"});
+QUIZ(3200,5,{t:"一个训练于 2020–2023 年数据的模型，代码未改，2026 年准确率明显下降。最恰当的第一步是？",
+ o:["继续使用，因为它当初的训练准确率很高","在原始训练集上重新评估，确认它还能用",
+    "<b>调查输入数据发生了什么变化</b>，收集有代表性的近期样本，必要时重训并重新评估",
+    "用模型自己的预测给新数据打标签，然后继续训练"],
+ a:2,
+ w:"这是典型的<b>数据分布偏移</b>（data shift）。<br><br>选项 A 把「过去的表现」当成「现在的保证」；选项 B 在原始数据上评估<s>什么问题都发现不了</s>，因为问题恰恰出在新数据上；选项 D 用模型预测当标签，会把模型自己的错误<em>固化并放大</em>。<br><br>你课程 T1 的示例选择题原题就是这个，答案是 B 选项对应的思路。"});
+
+/* ── 6 · 系统化的工程方法 ── */
+KP("6 · 工程方法",function(){
+S(3547,function(){clearScene();
+  boxNode(250,200,340,90,"凭直觉换模型","");
+  boxNode(250,330,340,90,"再加点数据试试","");
+  boxNode(250,460,340,90,"调调超参数","");
+  boxNode(720,330,300,90,"六个月过去了","y");
+  link(590,245,720,360);link(590,375,720,375);link(590,505,720,390);
+  setCap("Ng 讲了一个他反复见到的现象：<br>连一流团队也常常<b>在错误的方向上耗掉半年</b>。");},
+  "问题不在于技术能力，而在于<b>缺少诊断</b>。团队凭直觉猜「大概是数据不够」或「换个模型试试」，然后花几个月验证一个没有依据的假设。这和写代码时不做性能分析就盲目优化是同一个错误——<i>你优化的地方可能根本不是瓶颈</i>。");
+S(3768,function(){clearScene();
+  boxNode(340,180,600,90,"先诊断：瓶颈到底在哪","g");
+  boxNode(340,320,600,90,"再针对瓶颈改进","");
+  boxNode(340,460,600,90,"用留出数据验证是否真的改善了","y");
+  link(640,270,640,320);link(640,410,640,460);
+  setCap("正确的做法是<b>先诊断，再动手</b>。<br>就像优化程序前<em>先跑性能分析</em>，而不是凭感觉重写。");},
+  "这套思路就是后来 Ng 反复讲的<b>误差分析</b>。具体做法是：把模型答错的样本抽出来<i>人工看一遍</i>，统计各类错误占比，然后<b>只解决占比最大的那一类</b>。这能把「花半年做了没用的事」的概率大幅降低。它也解释了为什么你课程的 practical feedback 反复要求「<em>把每个建模选择和证据挂钩</em>」——没有证据的改动就是在赌。");
+});
+SUM(3547,6,{h:"先诊断，再动手",
+ k:"机器学习项目最常见的浪费，是<b>凭直觉选改进方向</b>。正确顺序是：先诊断瓶颈在哪 → 针对瓶颈改进 → 用<i>留出数据</i>验证是否真的改善。",
+ m:"诊断的具体手段是<b>误差分析</b>：把模型答错的样本抽样人工检查，统计各类错误的占比，<em>只攻占比最大的那一类</em>。这和优化代码前先做性能分析是同一个道理。",
+ w:"<s>误区</s>：出问题就加数据、换更大的模型。这两招有时有效，但如果瓶颈是<b>标签有噪声</b>或<b>特征缺失关键信息</b>，加多少数据、换多大模型都没用。",
+ e:"这条直接对应你课程 practical feedback 里反复出现的要求：<b>报告输出 → 与相关备选比较 → 解释指标含义 → 只下证据支持的结论</b>。大题里「识别机器学习流程中的问题」那一类，考的就是这套诊断思维。"});
+QUIZ(3768,6,{t:"模型在训练集上准确率 <b>1.00</b>，在测试集上只有 0.62。最该做的是？",
+ o:["继续训练更多轮，让测试准确率也升上去","这是<b>过拟合</b>：模型记住了训练数据。应简化模型、加正则化或增加数据",
+    "把测试集并入训练集，数据变多就好了","降低学习率"],
+ a:1,
+ w:"训练完美、测试很差，是<b>过拟合</b>的教科书信号——模型记住了训练样本（包括噪声），而没有学到可泛化的规律。<br><br>对策：简化模型、加正则化（SVM 里就是<i>减小 C</i>、<i>减小 γ</i>）、增加训练数据、做特征选择。<br><br><s>选项 C 是严重错误</s>：把测试集并入训练集会让你<em>再也无法评估泛化能力</em>，这是数据泄漏。<br><br>T1 大题「训练表现很好但测试很差，诊断并给出两个改进方向」问的就是这个。"});
+
+/* ── 7 · 无监督学习 ── */
+KP("7 · 无监督",function(){
+S(3892,function(){clearScene();var P=frame({});
+  var b=blobs();dots(b[0]);dots(b[1]);dots(b[2]);
+  setCap("现在换一种数据：<b>只有样本，没有标签</b>。<br>没人告诉你哪个点属于哪一类。");},
+  "这就是<b>无监督学习</b>。它和监督学习的唯一区别就是<i>有没有标签</i>——数据本身可能完全一样。问题随之改变：监督学习问「给定 x 预测 y」，无监督学习问「<b>这堆数据本身有什么结构</b>」。现实中无标签数据远比有标签数据多，因为打标签需要人力，而原始数据往往免费。");
+S(3947,function(){clearScene();var P=frame({});
+  var b=blobs();dots(b[0],"c");dots(b[1],"b");dots(b[2],"d");
+  note("算法自己分出来的组",640,560,"y");
+  setCap("算法能做的是：<b>看看这些点自己聚成了几堆</b>。<br>这叫<em>聚类</em>（clustering）。");},
+  "注意<b>算法并不知道每一组「是什么」</b>——它只知道「这些点彼此靠近，那些点是另一堆」。给每个簇起名字（这是体育新闻、那是财经新闻）仍然要靠人。这一点是无监督学习评估困难的根源：<s>没有标准答案</s>，所以没法像分类那样算准确率。你课程 Module 2 有专门一页讲无监督学习怎么评估。");
+S(4000,function(){clearScene();
+  boxNode(200,200,320,100,"上千篇新闻","b");
+  boxNode(200,340,320,100,"没有任何分类标签","");
+  boxNode(760,270,320,100,"自动聚成若干主题","g");
+  link(520,250,760,320);link(520,390,760,390);
+  setCap("Ng 举的例子：几千条来自不同来源的新闻，<br>算法<b>自动把报道同一件事的归到一起</b>。");},
+  "这类应用叫<b>话题聚类</b>。它的价值在于：如果要人工给几千条新闻打标签，成本极高；而聚类<i>完全不需要标签</i>。同样的思路可以用在客户分群（找出行为相似的用户群）、异常检测（不属于任何簇的点可疑）。你课程 Module 2 的 K-means 和 DBSCAN 就是两种具体的聚类算法。");
+});
+SUM(3892,7,{h:"无监督学习：只有数据，没有答案",
+ k:"无监督学习的数据<b>没有标签</b>。问题从「给定 x 预测 y」变成「<i>这堆数据本身有什么结构</i>」。<em>聚类</em>是最常见的形式——让算法自己找出数据聚成了几堆。",
+ m:"聚类依据的是<b>相似度</b>（通常是距离）：彼此近的归一组。<s>但算法不知道每组「是什么」</s>——给簇命名仍然要靠人。这也意味着聚类结果的好坏没有唯一标准答案。",
+ w:"<s>误解一</s>：无监督学习比监督学习简单。恰恰相反，<b>没有标准答案让评估变得很难</b>。<s>误解二</s>：聚类数量由算法决定。K-means 的 K 需要<i>你来指定</i>，选多少是个独立的问题。",
+ e:"这是你课程 <b>Module 2</b> 的全部内容——K-means、DBSCAN、GMM、PCA。M1 的 T1 会考监督与无监督的区分，判据只有一条：<em>训练数据有没有标签</em>。"});
+QUIZ(3947,7,{t:"下面哪个任务属于<b>无监督学习</b>？",
+ o:["用带标注的一万张 X 光片训练模型识别肺炎","根据历史房价数据预测新房的成交价",
+    "把没有任何标签的一万条用户行为记录<b>自动分成若干群体</b>","用带标签的邮件训练垃圾邮件过滤器"],
+ a:2,
+ w:"判据只有一条：<b>训练数据有没有标签</b>。<br><br>A、B、D 都提供了正确答案（诊断结果、成交价、是否垃圾），属于<em>监督学习</em>；只有 C 完全没有标签，算法要自己发现结构，属于<s>无监督学习</s>中的聚类。<br><br>注意「有没有标签」看的是<i>训练时</i>是否提供答案，而不是任务看起来难不难。"});
+
+/* ── 8 · 鸡尾酒会问题 ── */
+KP("8 · 盲源分离",function(){
+S(4120,function(){clearScene();
+  boxNode(200,180,240,90,"说话人 A","b");
+  boxNode(200,320,240,90,"说话人 B","g");
+  boxNode(540,250,200,90,"两个麦克风","y");
+  boxNode(860,180,240,90,"分离出 A","b");
+  boxNode(860,320,240,90,"分离出 B","g");
+  link(440,225,540,280);link(440,365,540,310);
+  link(740,280,860,225);link(740,310,860,365);
+  setCap("<b>鸡尾酒会问题</b>：两个人同时说话，<br>两个麦克风各录到一段<i>混合</i>的声音。<br>能不能把两个人的声音<em>分开</em>？");},
+  "这是<b>盲源分离</b>问题。「盲」的意思是：你<i>既不知道原始信号，也不知道它们是怎么混合的</i>，只有混合后的结果。听起来像不可能完成的任务，但只要麦克风数量不少于声源数量，而且各声源在统计上相互独立，就有办法还原。用到的算法叫<b>独立成分分析</b>（ICA）。");
+S(4180,function(){clearScene();setBig("1 行","解决问题的代码量");
+  setCap("Ng 的点是：这个听起来很魔幻的问题，<br>核心算法<b>可以写成一行代码</b>。<br><span style='color:#77849A'>难的从来不是写代码，是知道该写哪一行</span>");},
+  "这句话是第一讲的一个主题：<b>机器学习的门槛不在编程</b>。调库谁都会，难的是理解<i>问题该被建模成什么样</i>、<i>为什么这个算法适用</i>、<i>结果该怎么解读</i>。这也正是你课程考试的取向——<s>明确说了不要求手写 Python</s>，但会考函数、参数、工作流的<em>概念理解</em>。");
+});
+SUM(4120,8,{h:"盲源分离：从混合信号里还原来源",
+ k:"鸡尾酒会问题的设定是：多个声源同时发声，多个麦克风各录到一段<b>混合信号</b>；在<i>既不知道原始信号也不知道混合方式</i>的情况下把它们分开。使用的算法是<em>独立成分分析</em>（ICA）。",
+ m:"能还原的前提是两条：<b>麦克风数量不少于声源数量</b>，且各声源在统计上<b>相互独立</b>。算法利用的正是这种独立性——找到一组分离方向，使得分出来的信号尽可能互相独立。",
+ w:"<s>误解</s>：这属于监督学习。<b>不是</b>——没有任何「正确的分离结果」作为标签，算法完全靠数据自身的统计结构，因此属于<i>无监督学习</i>。",
+ e:"ICA 本身不在你的 M1 考纲内（CS229 在 L16 才讲）。这一段对你的价值是那句结论：<b>机器学习的难点不在写代码，在建模判断与结果解读</b>——这恰好是你课程「不考写码、只考概念理解」的取向。"});
+QUIZ(4180,8,{t:"你的课程明确说明「<b>不要求手写 Python 代码</b>」，但会考 Python 库的概念理解。下面哪种准备方式最对路？",
+ o:["把 sklearn 的源码读一遍","背下所有函数的完整参数列表",
+    "理解每个函数<b>在流程中的位置和作用</b>——比如为什么 StandardScaler 必须放进 Pipeline、<i>.decision_function</i> 返回的为什么不是概率",
+    "把练习里的代码全部默写下来"],
+ a:2,
+ w:"考纲原文是：<b>会考函数、参数、属性或工作流的目的</b>。<br><br>所以要理解的是「<em>为什么这样做</em>」而不是「怎么敲」。典型考点：<br>· <b>StandardScaler 放进 Pipeline</b>——防止预处理泄漏<br>· <b>.decision_function 不是概率</b>——它是原始得分，不在 0–1 之间<br>· <b>.n_support_</b>——支持向量个数，用来比较模型复杂度<br><br>背源码和默写代码都用不上。"});
+
+/* ── 9 · 从文本学语义 ── */
+KP("9 · 词嵌入",function(){
+S(4212,function(){clearScene();
+  note("man",420,300,"b");note("woman",420,420,"g");
+  note("king",840,300,"b");note("queen",840,420,"g");
+  gS.append("path").attr("class","link").attr("d","M470,300L790,300");
+  gS.append("path").attr("class","link").attr("d","M470,420L790,420");
+  gS.append("path").attr("class","link").attr("d","M420,320L420,400");
+  gS.append("path").attr("class","link").attr("d","M840,320L840,400");
+  note("同一个「性别」方向",630,270,"y");
+  setCap("从<b>没有任何标注</b>的大量文本里，<br>算法学出了这样的结构：<em>man 之于 woman，如同 king 之于 queen</em>。");},
+  "这是<b>词嵌入</b>（word embedding）：把每个词表示成一个高维向量，语义相近的词向量也相近。惊人之处在于<i>向量之间的差</i>竟然编码了语义关系——king − man + woman ≈ queen。而这一切<b>不需要任何人工标注</b>，只需要大量文本。它是现代自然语言处理（包括今天的大语言模型）的基础思想之一。");
+});
+SUM(4212,9,{h:"从无标注文本里长出语义结构",
+ k:"词嵌入把每个词映射成一个<b>高维向量</b>，语义相近的词在空间里也相近。更进一步，<i>向量的差</i>编码了语义关系——这就是 king − man + woman ≈ queen 这个著名类比的来源。",
+ m:"训练完全<b>不需要人工标注</b>，只利用「<i>相似的词出现在相似的上下文里</i>」这一统计规律。因此它属于<em>无监督学习</em>（或自监督学习）。这也是它能规模化的原因——互联网上的文本是免费的。",
+ w:"<s>注意</s>：词向量会<b>忠实地学到训练语料里的偏见</b>。如果语料中「医生」多与男性共现，向量空间就会反映这种关联。这是 AI 伦理里的经典案例。",
+ e:"词嵌入不在 M1 考纲内，但它体现的思想会在 <b>Module 2 的 PCA</b>（降维、用低维向量表示高维对象）和 <b>Module 3 的神经网络</b>里再次出现。现在知道有这回事即可。"});
+QUIZ(4212,9,{t:"词嵌入训练时<b>不需要人工标注</b>，只需要大量文本。按照标签的有无划分，它属于？",
+ o:["监督学习，因为有正确答案","无监督学习（自监督）——<b>没有人工提供的标签</b>，规律来自数据自身的统计结构",
+    "强化学习，因为有奖励信号","不属于机器学习"],
+ a:1,
+ w:"划分监督与无监督的判据始终只有一条：<b>训练数据里有没有人工提供的标签</b>。<br><br>词嵌入利用的是「相似的词出现在相似上下文」这一<em>数据自身的统计规律</em>，没有任何人去标注「这两个词该有多近」，所以属于<s>无监督</s>（更精确的说法是<i>自监督</i>——标签是从数据本身自动构造出来的）。"});
+
+/* ── 10 · 强化学习 ── */
+KP("10 · 强化学习",function(){
+S(4380,function(){clearScene();
+  boxNode(230,290,240,100,"智能体","b");
+  boxNode(800,290,240,100,"环境","g");
+  gS.append("path").attr("class","link").attr("d","M470,320L800,320");
+  gS.append("path").attr("class","link").attr("d","M800,360L470,360");
+  note("动作",635,308,"b");note("奖励 / 惩罚",635,385,"y");
+  setCap("第三类问题：<b>没有正确答案，只有好坏反馈</b>。<br>这就是<em>强化学习</em>。");},
+  "强化学习和监督学习的关键区别在于<b>反馈的性质</b>。监督学习告诉你「正确答案是 3」；强化学习只说「<i>你刚才那步不错</i>」或「<i>那步很糟</i>」，<s>但不告诉你正确的应该是什么</s>。这个差别很大——算法必须自己通过反复尝试去找出好的策略，这叫<b>探索</b>。");
+S(4432,function(){clearScene();
+  boxNode(340,190,600,90,"狗做了个动作","");
+  boxNode(340,320,600,90,"你说「好狗」或「坏狗」","y");
+  boxNode(340,450,600,90,"狗逐渐学会哪些行为带来夸奖","g");
+  link(640,280,640,320);link(640,410,640,450);
+  setCap("Ng 用<b>训狗</b>打比方：<br>你不会给狗演示标准动作，<br>只是在它做对时说「好狗」。");},
+  "这个比方点出了强化学习的<b>三个要素</b>：<i>状态</i>（狗当前的处境）、<i>动作</i>（它做了什么）、<i>奖励</i>（你的反馈）。算法要学的是一个<b>策略</b>——在每个状态下该采取什么动作，使得<em>长期累积奖励最大</em>。注意是「长期」：有时候眼前吃亏的动作，长远看反而更好，这让强化学习比监督学习复杂得多。");
+S(4477,function(){clearScene();
+  boxNode(140,270,300,110,"监督学习","b");
+  boxNode(490,270,300,110,"无监督学习","g");
+  boxNode(840,270,300,110,"强化学习","y");
+  note("每个样本都给答案",290,430,"b");
+  note("只有数据，没有答案",640,430,"g");
+  note("只有好坏反馈",990,430,"y");
+  setCap("三类学习问题的<b>全景</b>。<br>区分它们的是<em>你能拿到什么样的反馈</em>。");},
+  "这张图是第一讲最该带走的东西。<b>判据是「反馈的形式」</b>：给出完整正确答案 → 监督学习；什么都不给 → 无监督学习；只给好坏评价 → 强化学习。你课程的三个 Module 正好对应前两类：<i>Module 1 是监督学习</i>（回归与分类），<i>Module 2 是无监督学习</i>（降维与聚类），Module 3 的神经网络则是一种<b>模型</b>而非一类问题——它既能做监督也能做无监督。");
+});
+SUM(4380,10,{h:"强化学习：只有好坏，没有答案",
+ k:"强化学习的反馈是<b>奖励信号</b>——只告诉你刚才那步好还是坏，<s>不告诉你正确动作是什么</s>。算法要学的是一个<em>策略</em>：在每个状态下选什么动作，使<b>长期累积奖励</b>最大。",
+ m:"三要素是<i>状态</i>、<i>动作</i>、<i>奖励</i>。因为没有标准答案，算法必须靠<b>反复尝试</b>去发现好策略，这叫探索。又因为目标是长期回报，<em>眼前吃亏的动作可能是对的</em>——这让它比监督学习复杂得多。",
+ w:"<s>误解</s>：奖励信号就是标签。不是。标签给出<b>正确答案</b>，奖励只给出<b>评价</b>。同样一个动作在不同状态下可能好也可能坏，而且奖励往往<i>延迟</i>出现（下棋要到终局才知道输赢）。",
+ e:"强化学习<b>不在你的三个 Module 里</b>。这一段的考试价值在于三分法本身：T1 会考监督/无监督的区分，<em>判据是能拿到什么形式的反馈</em>——完整答案、什么都没有、还是只有好坏评价。"});
+QUIZ(4477,10,{t:"划分监督、无监督、强化学习三类问题，最本质的判据是？",
+ o:["用的算法复杂不复杂","数据量的大小",
+    "<b>能拿到什么形式的反馈</b>：完整正确答案 / 什么都没有 / 只有好坏评价",
+    "输出是连续的还是离散的"],
+ a:2,
+ w:"三分法的依据是<b>监督信号的形式</b>：<br><br>· <i>监督学习</i>——每个样本都有<em>完整的正确答案</em>（标签）<br>· <i>无监督学习</i>——<s>完全没有答案</s>，只能挖掘数据自身结构<br>· <i>强化学习</i>——只有<b>好坏评价</b>，且往往延迟出现<br><br>选项 D 是<em>回归与分类</em>的判据，那是监督学习<b>内部</b>的二次划分，层级不同，别混。"});
+
+/* ── 11 · 全景与你的课程 ── */
+KP("11 · 对照你的课程",function(){
+S(4500,function(){clearScene();
+  boxNode(120,160,330,90,"Module 1 · 监督学习","b");
+  boxNode(120,300,330,90,"Module 2 · 无监督学习","g");
+  boxNode(120,440,330,90,"Module 3 · 神经网络","v");
+  note("回归 · 感知机 · 逻辑回归 · SVM",760,205,"b");
+  note("PCA · K-means · DBSCAN · GMM",760,345,"g");
+  note("计算图 · 激活与损失 · 模型评估",760,485,"v");
+  link(450,205,600,205);link(450,345,600,345);link(450,485,600,485);
+  setCap("把这一讲的地图<b>叠到你的课程上</b>。<br>前两个 Module 正好对应监督与无监督。");},
+  "注意一个层级差异：<b>Module 3 的神经网络不是第四类问题，而是一种模型</b>。它既能做监督学习（分类、回归），也能做无监督学习（自编码器）。所以「监督/无监督/强化」是按<i>问题类型</i>分的，「线性回归/SVM/神经网络」是按<i>模型</i>分的——<s>这两个维度别混在一起</s>。考试里若问「这属于哪类学习问题」，答的是前者。");
+S(4533,function(){clearScene();
+  boxNode(340,150,600,88,"① 问题定义 · 明确 T 和 P","y");
+  boxNode(340,258,600,88,"② 数据收集与准备","");
+  boxNode(340,366,600,88,"③ 划分 train / validation / test","g");
+  boxNode(340,474,600,88,"④ 训练 · 选模型 · 评估一次","");
+  boxNode(340,582,600,88,"⑤ 部署 · 监控 · 必要时重训","b");
+  [238,346,454,562].forEach(function(y){link(640,y,640,y+20);});
+  setCap("最后把它落到<b>机器学习流程</b>上——<br>这是你 T1 的核心考点。");},
+  "这条流程是 T1 大题最常见的骨架。要点：<b>划分必须发生在任何预处理之前</b>（否则预处理泄漏）；<b>验证集选超参、测试集只用一次</b>（否则选择泄漏）；<b>部署后要监控输入分布</b>（否则 data shift 悄悄发生）。你课程 T4 practical 的 Q3 和 Q5 考的就是第 ③④ 步，而 feedback PDF 里那句「<em>重复查看测试结果会把测试集变成第二个验证集</em>」是必背的答题句。");
+});
+SUM(4500,11,{h:"把地图叠到你的课程上",
+ k:"CS229 第一讲的三分法，正好对应你课程的前两个 Module：<b>M1 是监督学习</b>（回归、感知机、逻辑回归、SVM），<b>M2 是无监督学习</b>（PCA、聚类、GMM）。M3 的神经网络是一种<i>模型</i>，不是第四类问题。",
+ m:"两个划分维度不能混：「监督/无监督/强化」按<b>问题类型</b>分，「线性回归/SVM/神经网络」按<b>模型</b>分。同一个模型可以用于不同类型的问题——<em>神经网络既能做监督也能做无监督</em>。",
+ w:"<s>易错</s>：把「神经网络」当成与监督学习并列的一类。考试若问「这属于哪类学习问题」，要答<b>监督/无监督/强化</b>，而不是答模型名字。",
+ e:"T1 必考<b>机器学习流程</b>。三条铁律：<i>划分先于任何预处理</i>、<i>验证集选超参而测试集只用一次</i>、<i>部署后监控输入分布</i>。大题里「识别流程中的问题」考的就是这三条被违反的情形。"});
+QUIZ(4533,11,{t:"某团队的流程是：① 用全部数据 fit StandardScaler → ② 切分 train/test → ③ 在测试集上比较 8 组超参、选最好的 → ④ 报告该测试准确率 0.97 作为「新数据上的预期表现」。这里有<b>几处</b>关键错误？",
+ o:["没有错误","一处：只是超参调得不够细",
+    "<b>至少两处</b>：预处理泄漏（切分前 fit scaler）+ 用测试集选超参导致估计乐观偏高",
+    "一处：应该用更大的测试集"],
+ a:2,
+ w:"两个独立的泄漏同时发生：<br><br>① <b>预处理泄漏</b>——scaler 的均值和标准差用到了测试数据，模型间接「见过」留出集。正确做法是<em>先切分</em>，再把 scaler 装进 Pipeline 只在训练折上 fit。<br><br>② <b>选择泄漏</b>——在测试集上比较 8 组设置并取最优，等于把测试集当成了第二个验证集。8 次评估里的最大值本身就<s>系统性偏高</s>。<br><br>修正：切分成 train/validation/test，用<i>验证集</i>选超参，锁定后在 train+validation 上重拟合，测试集<b>只用一次</b>。<br><br>这就是你课程 T4 Practical Q3、Q5 的原型，也是模拟卷 Q23 的原题。"});
+
+/* ── 收尾 ── */
+KP("完",function(){
+S(4513,function(){clearScene();setBig(null);setCap(null);
+  setTitle("第一讲 · 完","地图画完了","下一讲开始动手：线性回归与梯度下降");},
+  null);
+});
+
+/* ── projector ── */
+var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+KPS.forEach(function(k,ki){
+  var bar=document.createElement("div");bar.className="kpbar";
+  var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+  for(var i=0;i<k.len;i++){var p=document.createElement("span");
+    var sh=SHOTS[k.from+i];
+    p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));
+    bar.appendChild(p);pipEls[k.from+i]=p;}
+  bar.addEventListener("click",function(){go(k.from,true);});
+  kpsEl.appendChild(bar);
+});
+function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+  return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+function go(n,force){
+  n=Math.max(0,Math.min(SHOTS.length-1,n));
+  if(n===cur)return;
+  if(locked&&n>cur&&!force)return;
+  FAST=true;clearScene();
+  for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+  FAST=false;
+  cur=n;clearQuiz();clearSum();
+  var sh=SHOTS[n];
+  if(sh.enter)sh.enter();
+  setNarr(sh.n);
+  if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+  if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+  pipEls.forEach(function(p,i){if(!p)return;
+    var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+    p.className=base+(i===n?" now":(i<n?" seen":""));});
+  var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+  [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+  document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+  var tc=document.getElementById("tc");
+  tc.textContent="▶ "+hhmmss(sh.t);tc.href=VID+Math.round(sh.t)+"s";
+}
+window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+window.addEventListener("keydown",function(e){
+  if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+  else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+  else if(e.key==="Home"){e.preventDefault();go(0,true);}
+  else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+    var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+    document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}
+});
+go(0);
+
+/* ── caption placement ─────────────────────────────────────────────────── */
+var CAP_POS=["bottom","top","side"],CAP_LABEL={bottom:"字幕 · 底部",top:"字幕 · 顶部",side:"字幕 · 侧栏"};
+var capIdx=0;
+try{var _cp=localStorage.getItem("filmCapPos");if(_cp!==null)capIdx=Math.max(0,Math.min(2,+_cp));}catch(e){}
+var posHint=document.createElement("div");posHint.id="posHint";document.body.appendChild(posHint);
+var _hintT=null;
+function applyCapPos(announce){
+  var L=document.getElementById("capL"),p=CAP_POS[capIdx];
+  L.classList.remove("pos-top","pos-side");
+  if(p!=="bottom")L.classList.add("pos-"+p);
+  document.body.classList.toggle("scene-shift",p==="side");
+  try{localStorage.setItem("filmCapPos",String(capIdx));}catch(e){}
+  if(announce){
+    posHint.textContent=CAP_LABEL[p];posHint.classList.add("show");
+    if(_hintT)clearTimeout(_hintT);
+    _hintT=setTimeout(function(){posHint.classList.remove("show");},1400);
+  }
+}
+window.addEventListener("keydown",function(e){
+  if(e.key==="p"||e.key==="P"){e.preventDefault();capIdx=(capIdx+1)%CAP_POS.length;applyCapPos(true);}
+});
+applyCapPos(false);
+})();
+</script>

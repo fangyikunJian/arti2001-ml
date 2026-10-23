@@ -1,0 +1,891 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L10 · 神经网络入门</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L10 · 神经网络入门",
+  subtitle:"从一个神经元到一张网 · 每个术语先解释再用 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=MfIjxPh6Pys&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+function layer(cx,ys,cls,r){ys.forEach(function(y){dots([[cx,y]],cls||"a",r||15);});}
+function wire(x1,ys1,x2,ys2){ys1.forEach(function(a){ys2.forEach(function(b){
+  link(x1+16,a,x2-16,b);});});}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L10","神经网络入门",
+      "从你已经会的逻辑回归开始搭");},
+    "这一讲开始讲神经网络。<b>⭐ 好消息是：它的起点就是你已经学过的逻辑回归</b>——<b>一个神经元，拆开看就是「一次加权求和 + 一个激活函数」，和逻辑回归一模一样</b>。<br>这一讲会把这条路走完：<b>一个神经元 → 一层里放好几个 → 层叠起来变成网络 → 输出层怎么设计 → 一批样本怎么一起算 → 最后怎么训练它</b>。<br><b>这一版是重做的</b>：旧版 15 个知识点、27 个讲解镜，80 分钟的课压得偏紧，而且「架构」「全连接」「广播」「隐藏层」这些词都是直接拿来用。<b>这一版每个词先讲清楚再用。</b><br><b>⚠ 一句预告</b>：这一讲最后会卡在一个地方——<b>梯度没法正着算</b>。那正是下一讲（反向传播）要解决的。");
+});
+KP("1 · 先解决一个最朴素的问题：一张图怎么喂给模型",function(){
+  S(90,function(){clearScene();setEq(null);setCap("模型只吃「一串数」，可图片是二维的");
+   matrix({rows:3,cols:3,cw:95,ch:55,x:250,y:215,
+     cell:function(i,j){var t=[["12","37","95"],["80","14","60"],["23","71","48"]];
+       return t[i][j];}});
+   note("一张小图：每个格子一个亮度值",390,395,"d");
+   boxNode(700,250,420,70,"[ 12, 37, 95, 80, 14, 60, 23, 71, 48 ]","b");
+   note("⭐ 把它一行行拼成一长串 —— 这叫「展平」",910,350,"y");},"<b>先解决一个很实际的问题：一张图片怎么变成模型能吃的东西？</b><br><b>模型只吃「一串数」</b>（一个向量），可图片是<b>二维排布</b>的格子，每个格子一个亮度值。<br><b>办法朴素到有点好笑：一行行拼接起来，接成一长串。</b>这个操作叫<b>「展平」（flatten）</b>。<br><b>⚠ 注意展平丢掉了什么：原本「上下相邻」的两个像素，展平后可能隔得很远。</b><b>也就是说，位置关系的信息被丢掉了</b>——模型得自己从数据里重新把它学回来。<b>（后来的卷积网络就是为了解决这个问题，但那不在这一讲。）</b>");
+  S(90,function(){clearScene();
+   setEq("$$64 \\times 64 \\times 3 = 12288$$");
+   setCap("一张不大的彩色图，展平之后就有一万多个数");
+   boxNode(230,215,290,80,"64 × 64 像素","b");
+   boxNode(560,215,230,80,"× 3 个颜色","g");
+   boxNode(830,215,290,80,"= 12288 个数","y");
+   link(520,255,560,255); link(790,255,830,255);
+   note("红、绿、蓝各一层",675,170,"d");
+   note("⭐ 所以神经网络的输入层动辄上万维 —— 这是常态",640,276,"y");},"<b>给个具体的数感受一下规模。</b>一张 <b>64×64</b> 的彩色图片——<b>这已经很小了</b>——每个像素有<b>红绿蓝三个值</b>，所以总共是 <b>64 × 64 × 3 = 12288 个数</b>。<br><b>⭐ 请记住这个数量级</b>：神经网络的输入层<b>动辄上万维，这是常态而不是特例</b>。<br><b>⚠ 这也解释了为什么神经网络的参数会那么多</b>：光是输入层到第一层，<b>每个输入都要连到每个神经元</b>，参数个数一下就是上万乘以几百。<b>后面讲权重形状时会算这笔账。</b>");
+  SUM(90,1,{h:"图像进网络：展平成一长串数",k:"模型只吃一串数，<b>图片要「展平」</b>——一行行拼接成长向量。<b>64×64 彩色图 = 64×64×3 = 12288 个数。</b>",m:"⚠ <b>展平丢掉了位置关系</b>：原本上下相邻的像素，展平后可能隔得很远，模型得自己重新学回来。",w:"⭐ 神经网络的输入层<b>动辄上万维，这是常态</b>。",e:"⚠ 这也解释了参数为什么那么多——<b>每个输入都要连到每个神经元</b>。"});
+  QUIZ(90,1,{t:"一张 64×64 的彩色图片展平后有多少个数？",o:["4096","12288（64×64×3，三个颜色通道）","192","64"],a:1,w:"<b>64×64×3 = 12288。</b>⚠ 展平的代价是<b>丢掉了位置关系</b>——相邻像素展平后可能隔得很远。"});
+});
+KP("2 · ★★ 一个神经元，拆开看就是你学过的东西",function(){
+  S(683,function(){clearScene();setEq(null);setCap("两道工序，没有第三道");
+   says("11:23","This is actually a neuron");
+   boxNode(160,215,290,82,"① 加权求和 → z","b");
+   boxNode(530,215,290,82,"② 过激活函数 → a","g");
+   boxNode(900,215,230,82,"输出","y");
+   link(450,256,530,256); link(820,256,900,256);
+   note("z = w₁x₁ + w₂x₂ + … + b",305,335,"d");
+   note("比如 a = sigmoid(z)",665,335,"d");
+   note("⭐ 这两步合起来，就是逻辑回归",640,392,"y");},"<b>⭐ 这是这一讲最重要的一句：一个神经元，拆开看就是你已经学过的逻辑回归。</b>Ng 在课上讲到这里时就是这么说的——<b>这其实就是一个神经元</b>。<br><b>它只有两道工序</b>：<br><b>① 加权求和</b>：把所有输入乘上各自的权重，加起来，再加一个偏置 b。结果记作 <b>z</b>。<br><b>② 过激活函数</b>：把 z 送进一个函数（比如 sigmoid），得到 <b>a</b>。<br><b>就这两步，没有第三道工序。</b>而这两步合起来<b>正是逻辑回归在做的事</b>。<br><b>⚠ 所以别被「神经元」这个生物学名字唬住——它在数学上就是一个逻辑回归单元。</b>");
+  S(683,function(){clearScene();setEq(null);setCap("两个零件，各干各的活");
+       boxNode(140,206,450,74,"线性部分：z = wᵀx + b","b");
+       boxNode(730,206,450,74,"激活部分：a = σ(z)","g");
+       link(590,243,730,243);
+       note("把输入加权求和",365,326,"d");
+       note("把结果压成 0 到 1",960,326,"d");
+       note("⚠ 这两个零件后面会被拆开单独称呼：z 和 a，满篇都是",640,374,"y");
+       note("⭐ 没有第二个零件的话，整个网络会塌回线性回归",640,404,"g");},"一个神经元就两个零件，<b>把它们拆开命名，是后面一切记号的基础</b>。<br><b>线性部分</b>：把输入加权求和再加偏置，结果记作 <b>z</b>。<b>激活部分</b>：把 z 压一下，结果记作 <b>a</b>。<br><b>⚠ 这两个名字必须现在就记住</b>：后面讲层、讲矩阵形状、讲反向传播，<b>满篇都是 z 和 a</b>。<br><b>⭐ 而且第二个零件不是可有可无的装饰</b>：<b>如果去掉激活，一层套一层算下来还是线性的，再深也等于一个线性回归</b>。<b>这一点下一讲会专门证一遍。</b>");
+  SUM(683,2,{h:"★★ 神经元 ＝ 加权求和 + 激活函数",k:"<b>两道工序</b>：① 加权求和得 <b>z</b>（w₁x₁+…+b）；② 过激活函数得 <b>a</b>。<b>没有第三道。</b>",m:"⭐ <b>这两步合起来正是逻辑回归</b>。Ng 原话：<em>This is actually a neuron</em>。",w:"⚠ <b>别被「神经元」这个生物学名字唬住</b>——它在数学上就是一个逻辑回归单元。",e:"⭐ 这是整个神经网络的起点。<b>说清「神经元就是逻辑回归」能让后面所有内容都好懂。</b>"});
+  QUIZ(683,2,{t:"一个神经元里做了哪两件事？",o:["① 把输入加权求和得到 z；② 把 z 过一个激活函数得到 a——这两步合起来就是逻辑回归","降维和升维","归一化和分类","前向传播和反向传播"],a:0,w:"⭐ Ng 原话：<em>This is actually a neuron</em>。<b>别被生物学名字唬住，它就是一个逻辑回归单元。</b>"});
+});
+KP("3 · 一层里放好几个神经元",function(){
+  S(906,function(){clearScene();setEq(null);setCap("同一批输入，喂给好几个神经元");
+   layer(330,[215,290,365],"b",15);
+   layer(760,[215,290,365],"g",17);
+   wire(330,[215,290,365],760,[215,290,365]);
+   note("输入",330,395,"b");
+   note("三个神经元，各算各的",760,395,"g");
+   note("⭐ 它们看的是同一批输入，但各自有自己的一套权重",640,170,"y");},"<b>一个神经元能力有限，那就并排放好几个。</b><br><b>⭐ 关键在于：这几个神经元看的是同一批输入，但各自有自己的一套权重。</b>所以虽然输入相同，<b>它们算出来的 z 和 a 各不相同</b>——每个神经元可以去关注输入里不同的方面。<br><b>这样一组并排的神经元，就叫一「层」。</b><br><b>⚠ 注意同一层里的神经元之间没有连线</b>：它们互不通信，<b>各算各的，并行就能算完</b>。");
+  S(906,function(){clearScene();setEq(null);setCap("三个神经元，三套各自独立的参数");
+       layer(330,[240,300,360],"a",16);
+       note("神经元 1：w₁, b₁",620,246,"b");
+       note("神经元 2：w₂, b₂",620,306,"g");
+       note("神经元 3：w₃, b₃",620,366,"y");
+       note("⚠ 它们共享的是「输入」，不是「参数」",640,186,"d");
+       note("⭐ 所以参数个数直接乘以 3 —— 一层加一个神经元，参数就多一整套",640,404,"y");},"一层里放三个神经元，<b>最容易误会的是它们之间共享了什么</b>。<br><b>⚠ 它们共享的是「输入」，不是「参数」。</b>同样那张图喂给三个神经元，<b>但每个神经元都有自己的一整套 w 和 b</b>。<br><b>⭐ 所以参数个数是直接乘以 3 的</b>——一层里加一个神经元，<b>就要多出一整套权重向量加一个偏置</b>。<br><b>⚠ 也正因为互不通信，这三个神经元其实可以完全独立地训练</b>——<b>把它们看成「三个并排摆着的逻辑回归」，现阶段完全没错。</b><b>下一节会讲为什么这样还不算「网络」。</b>");
+  SUM(906,3,{h:"一层 ＝ 并排的一组神经元",k:"几个神经元<b>看同一批输入</b>，但<b>各自有自己的一套权重</b> ⇒ 算出不同的结果，各自关注输入的不同方面。",m:"⚠ <b>同一层里的神经元之间没有连线</b>，互不通信，<b>各算各的、并行就能算完</b>。",w:"这样一组并排的神经元就叫一「层」。",e:"⭐ 「同一输入、不同权重」是理解「为什么要多个神经元」的关键。"});
+  QUIZ(906,3,{t:"同一层里的几个神经元有什么关系？",o:["它们必须输出相同的值","它们串联，前一个的输出喂给后一个","它们共享同一套权重","它们看同一批输入，但各自有自己的权重，互相之间没有连线、各算各的"],a:3,w:"⭐ <b>同一输入、不同权重</b>，所以能各自关注输入的不同方面。⚠ 同层之间<b>没有连线</b>，可以并行算。"});
+});
+KP("4 · ★ 全连接：每个输入都连到每个神经元",function(){
+  S(2903,function(){clearScene();setEq(null);setCap("Ng 说实践中用的就是这种");
+   says("48:23","we use a fully-connected layer");
+   layer(330,[205,275,345,415],"b",13);
+   layer(830,[240,310,380],"g",15);
+   wire(330,[205,275,345,415],830,[240,310,380]);
+   note("4 个输入",330,170,"b");
+   note("3 个神经元",830,170,"g");
+   note("⭐ 连线数 = 4 × 3 = 12，一根都不少",640,395,"y");},"<b>输入和神经元之间怎么连？最简单也最常用的方式是：全连。</b><br><b>「全连接层」（fully-connected layer）的意思就是：每一个输入都连到每一个神经元，一根都不少。</b>Ng 说<b>实践中用的就是这种</b>。<br><b>⭐ 连线的数量很容易数：输入个数 × 神经元个数。</b>图上 4 个输入、3 个神经元，就是 12 根线——<b>而每根线上有一个权重</b>。<br><b>⚠ 现在把前面那个 12288 代进来感受一下</b>：如果第一层有 100 个神经元，<b>光这一层就有 12288 × 100 ≈ 123 万个权重</b>。<b>神经网络「参数多」就是这么来的。</b>");
+  S(2903,function(){clearScene();setEq(null);setCap("「全连接」这个名字是对着谁说的");
+       boxNode(130,206,470,74,"全连接：每个都连","g");
+       boxNode(740,206,440,74,"卷积层：只连附近一小块","b");
+       note("不假设输入之间有结构",365,326,"d");
+       note("利用「图像上相邻像素相关」",960,326,"d");
+       note("⚠ 这一讲只讲全连接，但要知道它只是其中一种接法",640,374,"d");
+       note("⭐ 全连接 ＝ 不做任何假设 ⇒ 最通用，也最费参数",640,404,"y");},"「全连接」这个词之所以要特地取个名字，<b>是因为还有别的接法。</b><br><b>全连接的含义是：不对输入之间的关系做任何假设</b>，所以每个输入都连到每个神经元。<b>代价就是参数巨多。</b><br><b>而卷积层</b>（后面的课会讲）<b>只连附近一小块</b>，因为它用上了一条先验知识：<b>图像上相邻的像素才相关，隔很远的两个像素八竿子打不着</b>。<br><b>⭐ 对照着记就很清楚：全连接最通用、最费参数；卷积用假设换参数。</b><br><b>⚠ 这又是那条贯穿全课的尺子——假设越强越省，但假设得对。</b>");
+  SUM(2903,4,{h:"★ 全连接：每个输入连到每个神经元",k:"<b>一根都不少。</b>连线数 ＝ <b>输入个数 × 神经元个数</b>，每根线上一个权重。",m:"Ng：<b>实践中用的就是全连接层。</b>",w:"⚠ 代入实际数字：<b>12288 个输入 × 100 个神经元 ≈ 123 万个权重</b>，光第一层就这么多。",e:"⭐ <b>「神经网络参数多」就是这么来的</b>——全连接的代价。"});
+  QUIZ(2903,4,{t:"「全连接层」是什么意思？",o:["所有神经元输出相同的值","相邻层之间只有一根连线","每一个输入都连到每一个神经元，连线数＝输入个数×神经元个数","每一层神经元个数相同"],a:2,w:"⚠ 代价很直观：<b>12288 个输入 × 100 个神经元 ≈ 123 万个权重</b>——这就是神经网络参数多的来源。"});
+});
+KP("5 · ⚠ 但三个神经元摆在一起，还不算「网络」",function(){
+  S(906,function(){clearScene();setEq(null);setCap("少了关键的一步");
+   layer(330,[215,290,365],"b",15);
+   layer(760,[215,290,365],"g",17);
+   wire(330,[215,290,365],760,[215,290,365]);
+   note("三个神经元各算各的 ⇒ 三个独立的逻辑回归",640,395,"r");
+   note("⚠ 它们之间没有任何「接力」",640,170,"r");},"<b>⚠ 这里要破一个容易产生的误解。</b><br>把三个神经元并排放好、全连上输入——<b>这还不算一个「神经网络」。</b>因为此刻它们<b>只是三个各算各的逻辑回归</b>，彼此之间<b>没有任何接力关系</b>。<br><b>⭐ 真正让它成为「网络」的，是把一层的输出当成下一层的输入。</b><b>一层算完的 a，送进下一层继续加权求和、继续激活</b>——这样一层接一层，才叫网络。<br><b>而「深度」这个词说的就是层数：层叠得越多，网络越「深」。</b>");
+  S(906,function(){clearScene();setEq(null);setCap("关键差别：后一层吃的是前一层的输出");
+       layer(260,[250,310,370],"a",15);
+       layer(620,[280,340],"a",15);
+       layer(960,[310],"a",15);
+       wire(260,[250,310,370],620,[280,340]);
+       wire(620,[280,340],960,[310]);
+       note("第 1 层",260,196,"b");
+       note("第 2 层",620,196,"g");
+       note("输出层",960,196,"y");
+       note("⭐ 第 2 层的输入不是 x，而是第 1 层算出来的 a —— 这才叫「网络」",640,404,"y");},"把三个神经元并排摆着，和把它们连成网络，<b>差别只有一件事。</b><br><b>并排摆着时，每个神经元吃的都是原始输入 x</b>，彼此毫无关系。<b>连成网络之后，第 2 层吃的不再是 x，而是第 1 层算出来的 a。</b><br><b>⭐ 就这一个改动，让后面的层可以在前面层的结果之上再加工</b>——<b>这正是「网络」这个词的含义，也是深度学习威力的来源。</b><br><b>⚠ 同时它也带来了一个麻烦</b>：既然层层相依，<b>算梯度时就得把这条依赖链整个走一遍</b>——<b>这就是这一讲最后要撞上的那堵墙。</b>");
+  SUM(906,5,{h:"⚠ 并排 ≠ 网络；要层层接力才是",k:"三个神经元并排 ＝ <b>三个各算各的逻辑回归</b>，彼此没有接力关系。",m:"⭐ <b>真正成为「网络」的关键：把一层的输出当成下一层的输入。</b>一层算完的 a 送进下一层继续加权求和、继续激活。",w:"<b>「深度」说的就是层数</b>，层叠得越多越「深」。",e:"⚠ 常见误解是「神经元多就是网络」。<b>关键在「层层接力」，不在数量。</b>"});
+  QUIZ(906,5,{t:"什么才让一组神经元成为「网络」？",o:["使用了全连接","把一层的输出当成下一层的输入，层层接力","神经元的个数足够多","加上了偏置项"],a:1,w:"⚠ 并排的三个神经元只是<b>三个各算各的逻辑回归</b>。⭐ <b>「深度」说的就是层数</b>。"});
+});
+KP("6 · 先分清两个词：架构 和 参数",function(){
+  S(531,function(){clearScene();setEq(null);setCap("模型 = 架构 + 参数");
+       boxNode(170,205,440,84,"架构","b");
+       boxNode(700,205,440,84,"参数","g");
+       note("几层、每层几个神经元、用什么激活",390,325,"d");
+       note("每条连线上的权重 w 和偏置 b",920,325,"d");
+       note("⭐ 架构是你定的；参数是训练出来的",640,392,"y");},"<b>这两个词会一直混用，先分清楚。</b><br><b>「架构」</b>说的是网络的<b>骨架</b>：<b>几层、每层几个神经元、用什么激活函数</b>。<b>这些是你（设计者）定的</b>，训练过程中不会变。<br><b>「参数」</b>说的是<b>每条连线上的权重 w 和每个神经元的偏置 b</b>。<b>这些是训练出来的</b>——训练的全部内容就是把它们调好。<br><b>⭐ 所以一句话：模型 ＝ 架构 ＋ 参数。架构你定，参数它学。</b><br><b>⚠ 「超参数」这个词说的就是架构这类你要自己定的东西</b>（还包括学习率、批量大小等）——<b>它们没法靠梯度下降学出来，只能靠试</b>。");
+  S(531,function(){clearScene();setEq(null);setCap("动手前先把这两件事分开定");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","架构","参数"],
+           ["谁来定","你定","训练出来"],
+           ["什么时候定","训练开始之前","训练过程中不断变"],
+           ["例子","几层、每层几个、用什么激活","W 和 b 里的每一个数"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⭐ 一句话记法：架构是「盒子的形状」，参数是「盒子里装的数」",640,396,"y");},"这两个词在作业和论文里天天出现，<b>混了就看不懂别人在说什么</b>。<br><b>架构是你定的</b>：几层、每层几个神经元、用什么激活函数。<b>它在训练开始之前就定死，训练过程中一个字都不会变。</b><br><b>参数是训练出来的</b>：W 和 b 里的每一个数，<b>梯度下降每走一步它们就变一次</b>。<br><b>⭐ 一句话记法：架构是「盒子的形状」，参数是「盒子里装的数」。</b><br><b>⚠ 架构的那些选择也有个名字，叫超参数</b>——<b>它们没法靠梯度下降学出来，只能靠在验证集上多试几组。</b>");
+  SUM(531,6,{h:"★ 模型 ＝ 架构 ＋ 参数",k:"<b>架构</b>：几层、每层几个神经元、什么激活函数——<b>你定的</b>，训练中不变。<br><b>参数</b>：每条连线的 w 和每个神经元的 b——<b>训练出来的</b>。",m:"⭐ <b>架构你定，参数它学。</b>训练的全部内容就是把参数调好。",w:"⚠ <b>「超参数」说的就是架构这类要你自己定的东西</b>（还有学习率、批量大小），<b>没法靠梯度下降学出来，只能试</b>。",e:"⭐ 答题时把「架构」和「参数」分清，是显示理解的基本功。"});
+  QUIZ(531,6,{t:"「架构」和「参数」的区别是什么？",o:["架构是参数的一部分","参数是你定的，架构是学出来的","两者都是训练出来的","架构（几层、每层几个神经元、什么激活）是你定的；参数（权重 w 和偏置 b）是训练出来的"],a:3,w:"⭐ <b>架构你定，参数它学。</b>⚠ 「超参数」指的就是架构这类要自己定的东西——<b>只能靠试，没法靠梯度学</b>。"});
+});
+KP("7 · ★ 权重矩阵的形状怎么定",function(){
+  S(363,function(){clearScene();setEq(null);setCap("Ng 在课上直接问了这个问题");
+       says("6:03","can someone tell me what's the shape of w?");
+       layer(300,[215,275,335,395],"b",13);
+       layer(760,[245,305,365],"g",15);
+       wire(300,[215,275,335,395],760,[245,305,365]);
+       note("上一层 4 个",300,170,"b");
+       note("本层 3 个",760,170,"g");
+       note("⭐ 权重矩阵是 3 × 4 ——「本层个数 × 上一层个数」",640,392,"y");},"<b>Ng 在课上直接向学生提了这个问题：权重 w 的形状是什么？</b><b>这个问题值得你也先想一秒再往下看。</b><br><b>答案是：本层神经元个数 × 上一层神经元个数。</b>图上上一层 4 个、本层 3 个，<b>所以权重矩阵是 3 × 4</b>。<br><b>⚠ 注意顺序别记反</b>：是「<b>本层在前、上一层在后</b>」。");
+  S(363,function(){clearScene();
+       setEq("$$z^{[l]} = W^{[l]} a^{[l-1]} + b^{[l]}$$");
+       setCap("为什么必须是这个顺序");
+       note("a⁽ˡ⁻¹⁾ 是上一层的输出：4 × 1 的列向量",640,170,"b");
+       note("要让矩阵乘法成立：(3 × 4) × (4 × 1) = 3 × 1",640,203,"g");
+       note("⭐ 中间的 4 必须对上，结果正好是本层的 3 个 z",640,237,"y");
+       note("⚠ 记反了就乘不动 —— 形状本身会告诉你对不对",640,265,"r");},"<b>⭐ 为什么必须是这个顺序？用矩阵乘法的规则一验就清楚了。</b><br>上一层的输出 a 是一个 <b>4 × 1</b> 的列向量。要让 <b>W × a</b> 算得通，<b>W 的列数必须等于 4</b>。而我们希望结果是本层的 3 个 z，<b>所以 W 的行数是 3</b>。<br><b>合起来：(3 × 4) × (4 × 1) = 3 × 1。中间那个 4 对上了，结果正好是 3 个数。</b><br><b>⚠ 这里有个很实用的技巧：形状本身会告诉你写对没写对。</b>如果你把顺序记反写成 4 × 3，<b>矩阵乘法根本乘不动，程序会直接报错</b>——<b>所以与其死记，不如每次用形状验一遍。</b>");
+  SUM(363,7,{h:"★ 权重形状 ＝ 本层个数 × 上一层个数",k:"上一层 4 个、本层 3 个 ⇒ <b>W 是 3 × 4</b>。顺序是<b>本层在前、上一层在后</b>。",m:"⭐ <b>用矩阵乘法验</b>：(3×4) × (4×1) = 3×1。<b>中间的 4 必须对上</b>，结果正好是本层的 3 个 z。",w:"⚠ <b>记反了乘不动，程序会直接报错</b>——<b>与其死记顺序，不如每次用形状验一遍</b>。",e:"⭐ 这是写代码时最常犯的错之一。<b>「形状对不上」是最容易发现的 bug，也是最好的自检手段。</b>"});
+  QUIZ(363,7,{t:"若上一层有 4 个神经元、本层有 3 个，权重矩阵 W 的形状是？",o:["3 × 4（本层个数 × 上一层个数）","4 × 4","4 × 3","3 × 3"],a:0,w:"⭐ 用矩阵乘法验：<b>(3×4) × (4×1) = 3×1</b>，中间的 4 对上了。⚠ <b>记反了乘不动，程序会报错</b>——这反而是最好的自检。"});
+});
+KP("8 · 输出层怎么设计：看你的标注方式",function(){
+  S(2203,function(){clearScene();setEq(null);setCap("同一堆图片，三种不同的问法");
+       matrix({rows:4,cols:3,cw:290,ch:56,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["你的问题","标注长什么样","输出层"],
+           ["是不是猫","0 或 1","1 个神经元 + sigmoid"],
+           ["是猫/狗/鸟哪一种","三选一","3 个神经元 + softmax"],
+           ["图里有猫吗？有狗吗？","可以同时为真","3 个神经元 + 各自 sigmoid"]];
+           return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2?"hl":"";}});
+       note("⭐ 不是先定网络再想问题 —— 是问题决定输出层长什么样",640,382,"y");},"<b>⭐ 输出层不是随便定的，它由你的标注方式决定。</b>同一堆图片，三种不同的问法会导出三种不同的输出层：<br><b>「是不是猫」</b>——标注是 0 或 1 ⇒ <b>1 个神经元 + sigmoid</b>（输出一个 0 到 1 的概率）。<br><b>「是猫、狗、鸟中的哪一种」</b>——三选一，<b>只能是其中一个</b> ⇒ <b>3 个神经元 + softmax</b>。<br><b>「图里有猫吗？有狗吗？有鸟吗？」</b>——<b>可以同时为真</b>（一张图里既有猫又有狗）⇒ <b>3 个神经元，各自过 sigmoid</b>。<br><b>⚠ 第二种和第三种最容易混</b>：区别在于<b>「只能选一个」还是「可以多个同时成立」</b>。<b>下一节讲这个差别在数学上长什么样。</b>");
+  S(2203,function(){clearScene();setEq(null);setCap("先看一眼标注本身长什么样");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["图里有什么","多标签的标注","多分类的标注"],
+           ["只有一只猫","(1, 0, 0)","(1, 0, 0)"],
+           ["猫和狮子都有","(1, 1, 0)","✗ 写不出来"],
+           ["标注加起来","可以是 0、1、2、3","必须恰好是 1"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 看第 2 行就够了：一张图能不能同时属于好几类",640,396,"y");},"要分清这两种，<b>不用看网络，看标注就够了</b>。<br><b>只有一只猫时两种写法一样</b>，都是 (1, 0, 0)。<b>差别出在第二行：图里猫和狮子都有。</b><br><b>多标签可以写 (1, 1, 0)</b>；<b>多分类写不出来</b>——它要求标注加起来恰好等于 1。<br><b>⭐ 所以判据就一句话：一张图能不能同时属于好几类。</b>能，就是多标签、各自 sigmoid；不能，就是多分类、用 softmax。<br><b>⚠ 下一节会讲一个更要紧的问题：如果标注和输出层配错了，会发生什么。</b>");
+  SUM(2203,8,{h:"★ 标注方式决定输出层",k:"<b>二分类</b>（0/1）⇒ 1 个神经元 + sigmoid。<b>多选一</b>（猫/狗/鸟）⇒ 3 个 + softmax。<b>多个可同时成立</b> ⇒ 3 个各自 sigmoid。",m:"⭐ <b>不是先定网络再想问题，是问题决定输出层长什么样。</b>",w:"⚠ <b>后两种最容易混</b>：区别在于<b>「只能选一个」还是「可以多个同时成立」</b>。",e:"⭐ 实际建模时这是第一个要想清楚的问题。<b>搞错了后面全错。</b>"});
+  QUIZ(2203,8,{t:"「判断图里有没有猫、有没有狗、有没有鸟（可以同时有）」应该用什么输出层？",o:["3 个神经元，不加激活","1 个神经元 + sigmoid","3 个神经元，各自过 sigmoid（因为它们可以同时成立）","3 个神经元 + softmax"],a:2,w:"⚠ 关键是<b>「可以同时成立」</b>。softmax 会强制它们加起来等于 1（只能选一个），<b>这里不适用</b>。"});
+});
+KP("9 · ★ softmax：强行让几个数加起来等于 1",function(){
+  S(1965,function(){clearScene();setEq(null);setCap("Ng 用两组数做了对照");
+       says("32:45","the sum of these entries is equal to 1");
+       matrix({rows:4,cols:3,cw:290,ch:56,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["","各自 sigmoid","softmax"],
+           ["猫","0.9","0.70"],
+           ["狗","0.8","0.26"],
+           ["合计","1.7 ← 不是 1","1.00 ← 正好是 1"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 「只能是其中一个」这件事，是靠「和为 1」表达的",640,382,"y");},"<b>Ng 用两组数做了一个很清楚的对照。</b><br><b>左边：各自过 sigmoid。</b>猫 0.9、狗 0.8——<b>加起来是 1.7，不是 1</b>。这没问题，因为它表达的是「有猫吗？有狗吗？」两个<b>独立</b>的判断。<br><b>右边：softmax。</b>猫 0.70、狗 0.26……<b>加起来正好是 1</b>。<br><b>⭐ 这就是 softmax 的全部意义：它强行让几个输出加起来等于 1，从而表达「这几个选项里只能是其中一个」。</b><br><b>⚠ 所以选 sigmoid 还是 softmax，不是风格问题，是语义问题</b>——<b>你要表达的是「各自独立」还是「互斥的多选一」。</b>");
+  S(1965,function(){clearScene();
+       setEq("$$P(y=k) = \\frac{e^{z_k}}{\\sum_j e^{z_j}}$$");
+       setCap("它是怎么做到和为 1 的");
+       note("分子：把这个分数取指数（保证为正）",640,170,"b");
+       note("分母：所有分数取指数后加起来",640,200,"g");
+       note("⭐ 每个都除以同一个总和 ⇒ 加起来必然是 1",640,235,"y");
+       note("⚠ exp 的作用：把分数上的差距放大成倍数关系",640,265,"r");},"<b>softmax 怎么做到「和为 1」的？两步。</b><br><b>第一步，每个分数取指数。</b>这保证了结果<b>都是正数</b>（概率不能是负的）。<br><b>第二步，每个都除以「所有指数的总和」。</b><b>既然大家除的是同一个数，而分子加起来正好等于那个数，所以加完必然是 1。</b><br><b>⭐ 顺带说一下 exp 起的另一个作用：它把分数上的差距放大成倍数关系。</b>分数差 1，<b>概率大约差 e 倍（约 2.7 倍）</b>。<b>所以 softmax 不只是归一化，它还会「拉开差距」，让最高分更突出。</b>");
+  SUM(1965,9,{h:"★★ softmax：强行让输出加起来等于 1",k:"<b>各自 sigmoid</b>：0.9 + 0.8 = 1.7（两个独立判断）。<b>softmax</b>：0.70 + 0.26 + … = 1.00。",m:"做法两步：<b>① 取指数（保证为正）；② 除以所有指数的总和</b>。大家除同一个数，分子之和正好等于它 ⇒ <b>必然加到 1</b>。",w:"⭐ <b>exp 还会把分数差距放大成倍数关系</b>——分数差 1，概率约差 e 倍。所以它不只是归一化，还会<b>拉开差距</b>。",e:"⚠ <b>选 sigmoid 还是 softmax 是语义问题不是风格问题</b>：各自独立 vs 互斥多选一。"});
+  QUIZ(1965,9,{t:"softmax 是怎么保证输出加起来等于 1 的？",o:["把每个数都减去平均值","把最大的那个设为 1，其余设为 0","先取指数（保证为正），再除以所有指数的总和——大家除同一个数，而分子之和正好等于它","对输出做截断"],a:2,w:"⭐ exp 还有个副作用：<b>把分数差距放大成倍数关系</b>（差 1 ≈ 差 e 倍），所以它会<b>拉开差距</b>让最高分更突出。"});
+});
+KP("10 · ⭐ 哪个神经元学会检测猫，是你的标注顺序决定的",function(){
+  S(943,function(){clearScene();setEq(null);setCap("调换标注顺序，学会检测猫的就换一个神经元");
+       says("15:43","this neuron is naturally going to be there to detect cats");
+       boxNode(130,206,470,74,"标注写成 (猫, 狮, 鬣蜥)","b");
+       boxNode(740,206,440,74,"标注写成 (狮, 猫, 鬣蜥)","g");
+       note("⇒ 第 1 个神经元学会认猫",365,326,"d");
+       note("⇒ 第 2 个神经元学会认猫",960,326,"d");
+       note("⭐ 网络自己不知道哪一位是「猫」—— 它只是去对上你给的那一列数",640,396,"y");},"这是个很能说明问题的小实验。<br><b>你把标注的第一位定成「有没有猫」，训练完之后，第 1 个神经元自然就成了猫检测器</b>。<b>可要是你把顺序换成「狮、猫、鬣蜥」，训练完之后变成第 2 个神经元去认猫。</b><br><b>⭐ 网络自己完全不知道哪一位代表什么</b>——<b>它看到的只是一张图和一串 0/1，它要做的就是把输出对上那串数</b>。<br><b>⚠ 所以「这个神经元负责什么」不是设计出来的，是标注方式安排出来的。</b><b>这也提醒我们：标注一旦定下来就不能中途改，改了等于换了个任务。</b>");
+  S(1233,function(){clearScene();setEq(null);setCap("好处：你不用把道理都讲给它听");
+       says("20:33","you don't need to tell them everything");
+       boxNode(130,206,470,74,"你没告诉它「哪一位是猫」","b");
+       boxNode(740,206,440,74,"数据够多，它自己能对上","g");
+       link(600,243,740,243);
+       note("也没告诉它猫长什么样",365,326,"d");
+       note("猫单独出现、和狮子同框…各种组合都见过",960,326,"d");
+       note("⭐ 这是监督学习的常态：给够例子，规则让它自己总结",640,396,"y");},"顺着上一镜，Ng 点出了一条神经网络的性质：<b>你不需要把道理都讲给它听。</b><br>你既没告诉它第一位代表猫，<b>也没告诉它猫长什么样</b>。<b>但只要数据够多——猫单独出现的、猫和狮子同框的、狮子单独出现的……各种组合都见过——它自己就能把对应关系总结出来。</b><br><b>⭐ 原话大意是：如果你有足够的数据，它们会自己搞明白。</b><br><b>⚠ 请注意那个前提：「数据够多」。</b><b>数据不够时，这条性质就不成立了——这正是 L5 里那条通则的另一面。</b>");
+  SUM(943,10,{h:"⭐ 神经元的「分工」是标注顺序决定的",k:"把标注第一位定成「有没有猫」⇒ 第 1 个神经元成为猫检测器；<b>换个顺序，换一个神经元</b>。",m:"网络看到的只是<b>一张图 + 一串 0/1</b>，它不知道哪一位代表什么，只是去对上那串数。",w:"⭐ Ng：<b>你不用把什么都告诉它，数据够多它自己会搞明白</b>。",e:"⚠ 前提是<b>数据够多</b>；也意味着<b>标注方案定下来就不能中途改</b>，改了等于换任务。"});
+  QUIZ(943,10,{t:"多标签网络里，为什么第 1 个神经元会变成「猫检测器」？",o:["因为第 1 个神经元的参数最先被初始化","因为你把标注的第一位定成了「有没有猫」—— 换个顺序就换一个神经元","因为 softmax 会自动把最常见的类排在第一位","因为猫是最容易识别的类别"],a:1,w:"⭐ 网络只看到<b>图 + 一串 0/1</b>，分工完全由<b>标注顺序</b>安排。⚠ 所以标注方案定下来就不能中途改。"});
+});
+KP("11 · ⚠ 类别极不平衡：那个神经元几乎训不起来",function(){
+  S(1460,function(){clearScene();setEq(null);setCap("Ng 的动物园例子");
+       says("24:20","This guy will never train almost");
+       boxNode(110,206,290,74,"几千只猫","g");
+       boxNode(470,206,290,74,"几千头狮子","g");
+       boxNode(830,206,330,74,"只有 1 只鬣蜥","r");
+       note("样本充足",255,326,"d");
+       note("样本充足",615,326,"d");
+       note("几乎没有正例可学",995,326,"r");
+       note("⭐ 第 3 个神经元几乎永远得不到训练 —— 它一直输出「不是」也能拿高分",640,396,"y");},"Ng 举了个很形象的例子：<b>一个动物园里有几千只猫、几千头狮子，鬣蜥只有一只。</b><br><b>这时第 3 个神经元几乎训不起来。</b>原因很直接：<b>它几乎看不到正例</b>，<b>而且只要一直输出「不是鬣蜥」，它在训练集上的表现就已经近乎完美了</b>——<b>梯度根本不会推着它去学鬣蜥长什么样</b>。<br><b>⭐ 这是类别不平衡最典型的后果：准确率很高，但那个罕见类一个都认不出来。</b><br><b>⚠ 而且总的损失也发现不了这件事，因为那一项在总和里占的比重太小。</b>");
+  S(1934,function(){clearScene();setEq(null);setCap("从损失函数上看是怎么回事");
+       says("32:14","is not going to help this neuron train");
+       boxNode(130,206,470,74,"总损失 ＝ 三项相加","b");
+       boxNode(740,206,440,74,"罕见类那一项几乎不动","r");
+       link(600,243,740,243);
+       note("每个神经元贡献一项",365,326,"d");
+       note("它对总梯度的影响被淹没了",960,326,"d");
+       note("⭐ 常见对策：给罕见类更大的权重，或者重新采样",640,396,"y");},"从损失函数看，这件事的机制就很清楚了。<br><b>多标签网络的总损失，是三个神经元各自损失的简单相加。</b><b>罕见类那一项，因为正例极少，几乎一直是个很小的数</b>——<b>它对总梯度的贡献被另外两项彻底淹没了</b>。Ng 的原话是：<b>如果鬣蜥的样本不多，这一项帮不了那个神经元训练</b>。<br><b>⭐ 常见对策有两类：给罕见类的那一项乘一个更大的权重，或者对数据重新采样（少数类过采样、多数类欠采样）。</b><br><b>⚠ 评价指标也得跟着换</b>：<b>这种情况下看准确率毫无意义，要看那个类的查准率和查全率。</b>");
+  SUM(1460,11,{h:"⚠ 类别极不平衡 ⇒ 那个神经元几乎训不起来",k:"动物园里只有 1 只鬣蜥：<b>第 3 个神经元几乎看不到正例</b>，<b>一直输出「不是」也能拿高分</b>。",m:"机制：总损失是三项相加，<b>罕见类那一项对总梯度的贡献被淹没</b>。",w:"⭐ 对策：<b>给罕见类加权</b>，或<b>重新采样</b>（少数类过采样 / 多数类欠采样）。",e:"⚠ 指标也要换：<b>这种情况下准确率毫无意义，要看查准率和查全率</b>。"});
+  QUIZ(1460,11,{t:"训练集里某一类极其罕见，对应的那个输出神经元会怎样？",o:["它几乎训不起来 —— 一直输出「不是」就已经近乎完美，梯度推不动它","它会因为样本少而过拟合到那几个样本","softmax 会自动补偿这个不平衡","它会抢走其它神经元的梯度"],a:0,w:"⭐ 根子在<b>总损失里那一项太小、被淹没了</b>。⚠ 所以要<b>加权或重采样</b>，并且<b>别再看准确率</b>。"});
+});
+KP("12 · ⚠ 标注和输出层配错了会怎样",function(){
+  S(1965,function(){clearScene();setEq(null);setCap("拿 (1,1,0) 去喂一个 softmax 网络");
+       says("32:45","you will never be able to match the output");
+       boxNode(130,206,470,74,"标注 (1, 1, 0) 加起来 ＝ 2","r");
+       boxNode(740,206,440,74,"softmax 输出加起来恒 ＝ 1","b");
+       link(600,243,740,243);
+       note("你想说「有猫也有狮子」",365,326,"d");
+       note("它永远凑不出 2",960,326,"d");
+       note("⭐ 不是「训得不好」，是「数学上根本对不上」",640,396,"y");},"上一节讲了标注决定输出层，<b>这一节看看配错了会发生什么</b>——Ng 当场演示了这个。<br><b>你想表达「图里既有猫又有狮子」，于是标注写成 (1, 1, 0)，加起来等于 2。</b><b>可 softmax 的输出加起来恒等于 1</b>，<b>它永远凑不出 2</b>。<br><b>⭐ 请注意这不是「训得不够好」，而是数学上根本对不上</b>——<b>再多的数据、再久的训练都没用</b>。<br><b>⚠ 更麻烦的是它不会报错</b>：程序照跑，损失也在降，<b>只是永远降不到该有的水平。</b>");
+  S(1965,function(){clearScene();setEq(null);setCap("它最后会输出什么");
+       boxNode(130,206,470,74,"真正想要的 (1, 1, 0)","g");
+       boxNode(740,206,440,74,"实际学出来 ≈ (0.5, 0.5, 0)","r");
+       link(600,243,740,243);
+       note("两个都在，都该是 1",365,326,"d");
+       note("把那个 1 对半分给了两类",960,326,"d");
+       note("⭐ 看起来「两类都不太确定」，其实是约束把它逼成这样的",640,374,"y");
+       note("⚠ 排查口诀：先检查标注加起来等于几，再看输出层用的是什么",640,404,"d");},"那它最后会学成什么样？<b>Ng 给了答案：大概是 (0.5, 0.5, 0)。</b><br><b>因为总和被锁死成 1，网络只能把这一份额度对半分给猫和狮子。</b><br><b>⚠ 这个结果最有欺骗性的地方在于：它看起来像是「模型对两类都不太确定」</b>，<b>其实是被输出层的约束逼成这样的，和模型有没有学会毫无关系</b>。<br><b>⭐ 所以记一句排查口诀：先检查标注加起来等于几，再看输出层用的是什么。</b><b>标注和为 1 用 softmax，标注和可以不是 1 就用各自的 sigmoid。</b>");
+  SUM(1965,12,{h:"⚠ 标注和输出层必须配套，配错了数学上就对不上",k:"拿 <b>(1,1,0)（和为 2）</b>去喂 softmax（输出和恒为 1）⇒ <b>永远凑不出来</b>。",m:"结果：网络把额度对半分，学出 <b>≈ (0.5, 0.5, 0)</b>，看起来像「都不确定」。",w:"⚠ 最坑的是<b>不会报错</b>：照跑、损失也降，只是永远降不到该有的水平。",e:"⭐ 排查口诀：<b>先看标注加起来等于几，再看输出层是什么</b>。和为 1 ⇒ softmax；可以不为 1 ⇒ 各自 sigmoid。"});
+  QUIZ(1965,12,{t:"用 softmax 输出层，却把标注写成 (1, 1, 0)，会发生什么？",o:["softmax 会自动归一化标注，所以没影响","程序会报错，提示标注格式不对","模型会过拟合到这些样本","数学上就对不上（输出和恒为 1，标注和为 2），网络大概学成 (0.5, 0.5, 0)"],a:3,w:"⚠ <b>不会报错</b>，这才是最坑的地方 —— 照跑、损失也降，只是永远降不到位。⭐ 排查时<b>先看标注加起来等于几</b>。"});
+});
+KP("13 · 「隐藏层」的「隐藏」到底指什么",function(){
+  S(2676,function(){clearScene();setEq(null);setCap("中间那些层，没有人告诉它们该输出什么");
+       layer(260,[215,275,335],"b",14);
+       layer(560,[230,300,370],"d",14);
+       layer(860,[265,335],"d",14);
+       layer(1120,[300],"y",16);
+       wire(260,[215,275,335],560,[230,300,370]);
+       wire(560,[230,300,370],860,[265,335]);
+       wire(860,[265,335],1120,[300]);
+       note("输入：看得见",260,170,"b");
+       note("输出：有标准答案",1120,170,"y");
+       note("中间这些：没有任何标注告诉它们该输出什么",710,395,"r");},"<b>「隐藏层」这个名字常被误解，澄清一下。</b><br><b>它不是说「看不见这些数」</b>——你当然可以把中间层的数值打印出来看。<br><b>⭐ 「隐藏」的确切含义是：没有任何标注告诉这些层该输出什么。</b><br>输入是给定的，输出层有标准答案（标签），<b>但中间那些层输出什么才算「对」，没有人知道，也没有人规定</b>。<b>它们完全是网络自己在训练中摸索出来的。</b><br><b>⚠ 这正是神经网络又强大又难解释的根源：中间层学到了什么，连设计者也说不清。</b>");
+  S(2676,function(){clearScene();setEq(null);setCap("「隐藏」不是神秘，是「没人给它标答案」");
+       boxNode(110,206,290,74,"输入层","b");
+       boxNode(470,206,290,74,"隐藏层","y");
+       boxNode(830,206,330,74,"输出层","g");
+       link(400,243,470,243); link(760,243,830,243);
+       note("你给的，看得见",255,326,"d");
+       note("没人规定它该是多少",615,326,"d");
+       note("有标注，对得上答案",995,326,"d");
+       note("⭐ 「隐藏」＝ 训练数据里没有它的目标值，不是「藏起来不给看」",640,396,"y");},"「隐藏层」这个名字容易让人想歪，<b>它跟「保密」一点关系都没有</b>。<br><b>输入层是你给的，看得见；输出层有标注，对得上答案。</b><b>而中间那些层，训练数据里根本没有它们的目标值</b>——<b>没人规定第 1 层第 2 个神经元应该输出多少</b>。<br><b>⭐ 「隐藏」说的就是这件事：它不在监督信号里。</b><br><b>⚠ 想看的话随时能打印出来</b>，<b>只是打印出来你也不知道那一串数该是多少才算「对」</b>。<br><b>这正是神经网络又强大又难解释的根源——下一节讲它到底学到了什么。</b>");
+  SUM(2676,13,{h:"★ 「隐藏」＝ 没有标注告诉它该输出什么",k:"<b>不是「看不见数值」</b>（你当然可以打印出来）。<b>「隐藏」指的是：没有任何标注规定这些层该输出什么。</b>",m:"输入给定、输出层有标签，<b>但中间层输出什么才算「对」，没人知道</b>——完全是网络自己摸索的。",w:"⚠ <b>这正是神经网络又强大又难解释的根源</b>：中间层学到了什么，连设计者也说不清。",e:"⭐ 这个辨析能让你把「可解释性」这个话题讲清楚。"});
+  QUIZ(2676,13,{t:"「隐藏层」的「隐藏」指的是什么？",o:["这些层的数值无法查看","这些层没有参数","没有任何标注告诉这些层该输出什么——它们输出什么才算「对」，是网络自己摸索的","这些层不参与训练"],a:2,w:"⚠ 不是「看不见」——数值当然可以打印。⭐ <b>这正是神经网络难解释的根源。</b>"});
+});
+KP("14 · ★ 那隐藏层到底学到了什么？",function(){
+  S(2676,function(){clearScene();setEq(null);setCap("Ng 用猫分类举的例子");
+       says("44:36","the first layers are going to und...");
+       boxNode(150,220,250,76,"第 1 层","b");
+       boxNode(470,220,250,76,"中间层","g");
+       boxNode(790,220,250,76,"后面的层","y");
+       link(400,258,470,258); link(720,258,790,258);
+       note("边缘、明暗变化",275,330,"d");
+       note("眼睛、耳朵这类部件",595,330,"d");
+       note("整只猫的样子",915,330,"d");
+       note("⭐ 从简单到复杂，一层层搭上去 —— 而且没人教它这么分工",640,392,"y");},"<b>Ng 用猫分类举了个很有画面感的例子：如果你拿大量猫的图片去训练这个网络，你会发现——</b><br><b>第一层学到的是最基础的东西</b>：<b>边缘、明暗变化</b>这类低层特征。<br><b>中间的层开始组合这些边缘</b>，学到<b>眼睛、耳朵</b>这类部件。<br><b>更后面的层再把部件组合起来</b>，学到<b>整只猫的样子</b>。<br><b>⭐ 请注意最关键的一点：没有任何人教它这么分工。</b>你只给了它「这是猫 / 这不是猫」这一个信号，<b>这种「从简单到复杂、层层搭建」的结构，完全是它自己为了完成任务而演化出来的。</b>");
+  S(2676,function(){clearScene();setEq(null);setCap("层层递进：从边缘到部件到整体");
+       boxNode(110,206,290,74,"浅层","b");
+       boxNode(470,206,290,74,"中层","y");
+       boxNode(830,206,330,74,"深层","g");
+       link(400,243,470,243); link(760,243,830,243);
+       note("边缘、色块",255,326,"d");
+       note("眼睛、耳朵这类部件",615,326,"d");
+       note("整张脸、整只猫",995,326,"d");
+       note("⚠ 这是人们事后可视化出来的规律，不是谁设计进去的",640,374,"d");
+       note("⭐ 它完全是网络为了完成任务自己演化出来的",640,404,"y");},"人们用可视化的办法去看隐藏层到底学了什么，<b>发现了一个相当漂亮的规律</b>。<br><b>浅层学到的是边缘和色块</b>；<b>中层把边缘拼成眼睛、耳朵这类部件</b>；<b>深层才拼出整张脸、整只猫</b>。<br><b>⭐ 关键在于：没有任何人规定过这个分工。</b>训练数据里只有「是猫 / 不是猫」这一个信号，<b>这种「从简单到复杂、层层搭建」的结构完全是网络自己演化出来的</b>。<br><b>⚠ 但也别把这条规律当成定律</b>：<b>它是在图像任务上事后观察到的，换个任务未必长这样。</b>");
+  SUM(2676,14,{h:"★★ 隐藏层：从边缘到部件到整体",k:"Ng 的猫分类例子：<b>第一层学边缘、明暗</b>；<b>中间层组合成眼睛耳朵等部件</b>；<b>后面的层组合成整只猫</b>。",m:"⭐ <b>没有任何人教它这么分工</b>。你只给了「是猫/不是猫」一个信号，<b>这种层层搭建的结构是它自己演化出来的</b>。",w:"<b>这就是「深度」的意义</b>：层数提供了「从简单到复杂逐级组合」的空间。",e:"⭐ 「神经网络为什么要深」可以这么答：<b>深度提供了逐级组合特征的空间</b>。"});
+  QUIZ(2676,14,{t:"按 Ng 的说法，用大量猫的图片训练网络后，第一层通常学到什么？",o:["图片的文件格式","边缘、明暗变化这类最基础的低层特征","整只猫的轮廓","猫的品种"],a:1,w:"⭐ 层级是<b>边缘 → 部件（眼睛耳朵）→ 整体</b>。<b>而没有人教它这么分工</b>——你只给了「是猫/不是猫」一个信号。"});
+});
+KP("15 · ⭐ 由此带来的最大改变：不用手工设计特征了",function(){
+  S(2676,function(){clearScene();setEq(null);setCap("两种做法的分工完全不同");
+       boxNode(170,205,440,84,"传统做法","y");
+       boxNode(700,205,440,84,"神经网络","g");
+       note("人来想：该提取什么特征",390,325,"d");
+       note("网络自己学：该提取什么特征",920,325,"d");
+       note("⚠ 代价：你也不知道它学了什么 —— 可解释性变差",640,392,"r");},"<b>⭐ 上一节那件事带来的改变非常大。</b><br><b>传统做法</b>：<b>人来想该提取什么特征</b>。做猫分类就得有人坐下来琢磨「猫有尖耳朵、有胡须、瞳孔是竖的……」然后手工写代码去提取这些。<b>这既费人力，又受限于设计者的想象力。</b><br><b>神经网络</b>：<b>把「该提取什么特征」这件事也交给它自己学。</b>你只负责给数据和标签。<br><b>⚠ 但这不是白来的，代价是可解释性</b>：<b>你不知道它学了什么</b>，也就很难解释它为什么做出某个判断。<b>上一讲（L12 的那套诊断方法）之所以重要，一部分原因就在这里。</b>");
+  S(2676,function(){clearScene();setEq(null);setCap("换来的代价：三样东西都变贵了");
+       boxNode(110,206,290,74,"要的数据多","r");
+       boxNode(470,206,290,74,"要的算力多","r");
+       boxNode(830,206,330,74,"出了问题难查","r");
+       note("特征得自己从数据里长出来",255,326,"d");
+       note("参数动辄百万起",615,326,"d");
+       note("看不出哪一层出了错",995,326,"d");
+       note("⭐ 所以「不用手工设计特征」不是白给的 —— 它是拿这三样换来的",640,396,"y");},"「不用手工设计特征」听起来全是好处，<b>但它是拿东西换来的。</b><br><b>第一，要的数据多</b>：特征得让网络自己从数据里长出来，<b>数据不够它就长不出来</b>。<b>第二，要的算力多</b>：参数动辄上百万。<b>第三，出了问题难查</b>：传统模型你能看每个特征的系数，<b>神经网络看不出是哪一层出了错</b>。<br><b>⭐ 所以这不是「新方法全面胜出」，而是一笔交易：用数据和算力，换掉人的领域知识。</b><br><b>⚠ 数据少的时候，手工特征 + 简单模型往往反而更稳</b>——<b>这正是 L5 里那条通则：数据越少，写进去的假设越关键。</b>");
+  SUM(2676,15,{h:"⭐ 从「人设计特征」到「网络自己学特征」",k:"<b>传统</b>：人来想该提取什么特征（费人力，且受限于设计者的想象力）。<b>神经网络</b>：把这件事也交给它自己学。",m:"你只负责给<b>数据和标签</b>。",w:"⚠ <b>代价是可解释性</b>：你不知道它学了什么，很难解释它为什么这么判断。",e:"⭐ 这正是「为什么需要那一整套诊断方法」的部分原因（见 L12）。"});
+  QUIZ(2676,15,{t:"神经网络相比传统做法最大的改变是什么？",o:["参数更少","计算速度更快","不需要标签","把「该提取什么特征」这件事也交给网络自己学，人只负责给数据和标签——代价是可解释性变差"],a:3,w:"⚠ <b>不是白来的</b>：你不知道它学了什么，很难解释它的判断。⭐ 这正是那套诊断方法重要的原因之一。"});
+});
+KP("16 · ⭐ 「端到端」和「黑箱」这两个说法从哪来",function(){
+  S(2903,function(){clearScene();setEq(null);setCap("房价的例子：人来设计特征是什么样");
+       says("48:23","we will let the network figure these out");
+       boxNode(110,206,290,74,"面积、卧室数","b");
+       boxNode(470,206,290,74,"→ 能住多大一家人","y");
+       boxNode(830,206,330,74,"→ 房价","g");
+       link(400,243,470,243); link(760,243,830,243);
+       note("原始输入",255,326,"d");
+       note("人想出来的中间概念",615,326,"d");
+       note("最终目标",995,326,"d");
+       note("⭐ 全连接的做法是把中间那一格空出来，让网络自己填",640,396,"y");},"Ng 用房价这个例子，把「端到端」解释得特别清楚。<br><b>人来设计特征是这样的</b>：面积和卧室数合起来，<b>能告诉你这房子住得下多大一家人</b>；邮编能告诉你周边方不方便走路。<b>这些中间概念比原始数字更能预测房价</b>——这就是人把领域知识喂给模型。<br><b>⭐ 而全连接的做法，是把中间那一格直接空出来，让网络自己去填。</b>原话是<b>「我们让网络自己把这些弄明白」</b>。<br><b>⚠ Ng 还补了一句很实在的：很多时候网络找出来的特征比人想出来的更好。</b>");
+  S(3030,function(){clearScene();setEq(null);setCap("两个名字，说的是同一件事的两面");
+       says("50:30","we are just training based on the input and the output");
+       boxNode(130,206,470,74,"端到端：只给输入和答案","g");
+       boxNode(740,206,440,74,"黑箱：中间那层说不清","r");
+       link(600,243,740,243);
+       note("中间不加任何约束",365,326,"d");
+       note("这条边对应什么？没人知道",960,326,"d");
+       note("⭐ 同一件事的两面：不管中间，才换来「不用设计特征」",640,396,"y");},"这里有两个常听到的名字，<b>其实说的是同一件事的两面。</b><br><b>「端到端学习」是从做法上讲的</b>：<b>我们只给输入和最终答案，中间不加任何约束</b>，让它自己学。<br><b>「黑箱模型」是从结果上讲的</b>：正因为中间不加约束，<b>训完之后你也说不清某一条边、某一个神经元到底对应什么</b>。<br><b>⭐ 所以它们是一笔交易的两面：你放弃了对中间过程的掌控，换来的是不用手工设计特征。</b><br><b>⚠ 在医疗、信贷这类必须讲清理由的场合，这个代价可能是付不起的。</b>");
+  SUM(2903,16,{h:"⭐ 端到端 ＝ 只给输入和答案；黑箱 ＝ 中间说不清",k:"房价例子：人会设计「能住多大一家人」这类中间概念；<b>全连接把中间那格空出来让网络自己填</b>。",m:"<b>端到端</b>说做法（中间不加约束）；<b>黑箱</b>说结果（说不清某条边对应什么）——<b>同一件事的两面</b>。",w:"⭐ Ng：<b>很多时候网络找出来的特征比人想出来的更好</b>。",e:"⚠ 医疗、信贷这类<b>必须讲清理由</b>的场合，这个代价可能付不起。"});
+  QUIZ(2903,16,{t:"为什么说神经网络是「端到端」的？",o:["因为我们只提供输入和最终答案，对中间层不加任何约束，让它自己学","因为它的输入和输出维度相同","因为它从第一层算到最后一层","因为它不需要训练数据"],a:0,w:"⭐ 「端到端」和「黑箱」是<b>同一笔交易的两面</b>：放弃对中间过程的掌控，换来不用手工设计特征。"});
+});
+KP("17 · 先铺词：一批样本怎么一起算",function(){
+  S(3465,function(){clearScene();setEq(null);setCap("小写 = 一个样本，大写 = 一批");
+       says("57:45","denote the equivalent of the lowercase letters but for a batch of input");
+       boxNode(170,210,440,84,"x  一个样本","b");
+       boxNode(700,210,440,84,"X  一批样本","g");
+       note("一个列向量",390,330,"d");
+       note("把很多列并排拼成一个矩阵",920,330,"d");
+       note("⭐ 于是一次矩阵乘法就把整批算完了",640,392,"y");},"<b>实际训练时不会一个样本一个样本地算，而是一批一起算。记号上要有个约定。</b><br><b>Ng 的约定是：小写字母表示一个样本，大写字母表示一批。</b><br><b>怎么拼？</b>一个样本 x 是一个<b>列向量</b>；<b>把很多个这样的列并排拼起来，就成了一个矩阵 X</b>。<br><b>⭐ 好处很直接：原本要循环很多次的计算，现在一次矩阵乘法就全算完了。</b>而<b>显卡最擅长的就是大矩阵乘法</b>——这是神经网络能训得动的工程基础。");
+  S(3465,function(){clearScene();setEq(null);setCap("一个样本 vs 一批样本：形状怎么变");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","单个样本","一批 m 个"],
+           ["输入","x 是 n × 1","X 是 n × m"],
+           ["第一层的 z","z 是 3 × 1","Z 是 3 × m"],
+           ["W 的形状","3 × n","3 × n（不变）"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 看最后一行：W 的形状完全不变 —— 变的只是「列数 ＝ 这一批有几个」",640,396,"y");},"从一个样本变成一批样本，<b>只有一件事在变</b>。<br><b>输入从 n×1 的列向量变成 n×m 的矩阵</b>（每一列是一个样本）；<b>算出来的 z 也跟着从 3×1 变成 3×m</b>。<br><b>⭐ 但最后一行才是重点：W 的形状完全不变。</b>它永远是「本层神经元数 × 上层神经元数」，<b>和一次喂几个样本毫无关系</b>。<br><b>⚠ 这一条是排查形状错误的第一把钥匙</b>：<b>发现 W 的形状里出现了批量大小 m，那一定是写错了。</b><br><b>把「列数就是样本数」记牢，后面广播那一节会轻松很多。</b>");
+  SUM(3465,17,{h:"小写＝一个样本，大写＝一批",k:"<b>一个样本 x 是列向量；把很多列并排拼起来就是矩阵 X。</b>",m:"⭐ <b>原本要循环很多次的计算，一次矩阵乘法就算完了。</b>",w:"<b>显卡最擅长大矩阵乘法</b>——这是神经网络能训得动的工程基础。",e:"⚠ 看公式时先看字母大小写，<b>就知道当前在讲单个样本还是一批</b>。"});
+  QUIZ(3465,17,{t:"把一批样本拼成矩阵 X 的主要好处是什么？",o:["原本要循环很多次的计算变成一次矩阵乘法，而显卡最擅长大矩阵乘法","避免过拟合","减少内存占用","让梯度更准确"],a:0,w:"⭐ 这是<b>工程基础</b>：神经网络之所以训得动，很大程度上靠显卡对大矩阵乘法的并行能力。"});
+});
+KP("18 · 记号：方括号是「第几层」，圆括号是「第几个样本」",function(){
+  S(3402,function(){clearScene();setEq(null);setCap("两套上标，别搞混");
+       says("56:42","square brackets for the layer, round brackets");
+       boxNode(130,206,470,74,"a[2] —— 第 2 层","b");
+       boxNode(740,206,440,74,"x(5) —— 第 5 个样本","g");
+       note("方括号：层的编号",365,326,"d");
+       note("圆括号：样本的编号",960,326,"d");
+       note("⚠ 两者都写在右上角，位置一样，只有括号形状不同",640,374,"r");
+       note("⭐ a[2](5) ＝ 第 5 个样本在第 2 层的输出",640,404,"y");},"这一讲开始，式子的右上角会同时出现两种括号，<b>先把它们分清楚</b>。<br><b>方括号表示层的编号</b>：a 上标方括号 2，是<b>第 2 层</b>的输出。<b>圆括号表示样本的编号</b>：x 上标圆括号 5，是<b>第 5 个样本</b>。<br><b>⚠ 麻烦在于两者都写在右上角、位置完全一样，只有括号形状不同</b>——<b>读式子时必须留意是方的还是圆的</b>。<br><b>⭐ 两个一起用时就是这样：a 上标[2](5)，表示第 5 个样本在第 2 层的输出。</b><br>再加上右下角的下标（层内第几个神经元），<b>一个符号最多带三个编号。</b>");
+  S(3402,function(){clearScene();setEq(null);setCap("三个编号，各管一个维度");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["位置","形状","管的是"],
+           ["右上方括号 [l]","a[2]","第几层"],
+           ["右上圆括号 (i)","x(5)","第几个样本"],
+           ["右下下标 j","a₃","层内第几个神经元"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 看不懂一个式子时，先把这三个编号对上号，多半就通了",640,396,"y");},"把三个编号摆成一张表，<b>以后看不懂式子就回来对一遍</b>。<br><b>右上角的方括号管「第几层」，右上角的圆括号管「第几个样本」，右下角的下标管「这一层里的第几个神经元」。</b><br><b>⭐ 这三个编号互不相干，各管一个维度。</b><br><b>⚠ 向量化之后，样本那个编号通常会消失</b>——因为<b>整批样本被塞进了矩阵的列里，不用再一个一个点名</b>。所以你会看到大写的 X、Z、A，<b>它们是「一整批」的意思</b>。<br><b>记住这一条，下一节的广播就很好理解了。</b>");
+  SUM(3402,18,{h:"记号：[层] 用方括号，(样本) 用圆括号，下标是层内第几个",k:"<b>右上方括号 ＝ 第几层</b>；<b>右上圆括号 ＝ 第几个样本</b>；<b>右下下标 ＝ 层内第几个神经元</b>。",m:"合起来：<b>a[2](5) ＝ 第 5 个样本在第 2 层的输出</b>。",w:"⚠ 两种括号<b>都写在右上角、位置一样</b>，只有形状不同，读式子时要留意。",e:"⭐ 向量化之后<b>样本编号会消失</b>（整批塞进矩阵的列里），所以会看到大写的 X、Z、A。"});
+  QUIZ(3402,18,{t:"式子里 a 的右上角写着方括号 2、圆括号 5，表示什么？",o:["第 2 轮训练的第 5 个批次","第 2 层第 5 个神经元的输出","第 2 个样本在第 5 层的输出","第 5 个样本在第 2 层的输出"],a:3,w:"⭐ <b>方括号 ＝ 层，圆括号 ＝ 样本</b>。⚠ 层内第几个神经元是写在<b>右下角</b>的下标，别和右上角混。"});
+});
+KP("19 · ★ 广播：形状对不上时自动「复制」",function(){
+  S(3576,function(){clearScene();setEq(null);setCap("偏置 b 只有一列，可 WX 有很多列");
+       says("59:36","It's a technique called broadcasting");
+       boxNode(180,215,260,80,"W X","b");
+       note("3 × 100（一批 100 个样本）",310,330,"d");
+       boxNode(560,215,200,80,"+ b","g");
+       note("3 × 1",660,330,"d");
+       note("⚠ 形状对不上 —— 怎么加？",640,392,"r");},"<b>这里有个实现上的细节，Ng 专门讲了。</b><br>算 <b>z = WX + b</b> 的时候：<b>WX 的形状是「3 × 100」</b>（一批 100 个样本，每个有 3 个 z），<b>而偏置 b 只有「3 × 1」</b>（每个神经元一个偏置）。<br><b>⚠ 形状对不上，严格来说这两个矩阵没法相加。</b>");
+  S(3576,function(){clearScene();setEq(null);setCap("广播：自动把它复制 100 列");
+       boxNode(180,215,260,80,"3 × 100","b");
+       boxNode(560,215,200,80,"3 × 1","g");
+       boxNode(880,215,280,80,"自动变成 3 × 100","y");
+       link(760,255,880,255);
+       note("⭐ 同一个偏置，复制给每一个样本用",640,330,"y");
+       note("这完全符合语义 —— 偏置本来就该对所有样本一样",640,392,"g");},"<b>⭐ 解决办法叫「广播」（broadcasting）：当形状对不上时，自动把少的那个复制成需要的份数。</b>这里就是<b>把那一列偏置复制 100 份，每个样本一份</b>。<br><b>⭐ 关键在于这完全符合语义</b>：<b>偏置本来就应该对所有样本都一样</b>——同一个神经元，不管处理哪个样本，它的偏置都是那一个数。<b>所以「复制」不是凑合，而是正确的做法。</b><br><b>⚠ 但广播也是 bug 的温床</b>：有时候你以为形状对不上会报错，<b>结果它悄悄广播了，算出一个形状对但含义全错的结果</b>。<b>所以写代码时要习惯把形状打印出来确认。</b>");
+  SUM(3576,19,{h:"★ 广播：形状对不上时自动复制",k:"<b>WX 是 3×100，b 是 3×1</b>，严格说不能相加。<b>广播</b>＝自动把少的那个复制成需要的份数（这里把 b 复制 100 列）。",m:"⭐ <b>这完全符合语义</b>：同一个神经元的偏置，不管处理哪个样本都是那一个数。<b>「复制」不是凑合，是正确做法。</b>",w:"⚠ <b>但广播是 bug 的温床</b>：你以为形状不对会报错，结果它悄悄广播了，<b>算出一个形状对但含义全错的结果</b>。",e:"⭐ 写代码时<b>习惯把形状打印出来确认</b>——这是最省事的自检。"});
+  QUIZ(3576,19,{t:"「广播」在 z = WX + b 中起什么作用？",o:["把 W 和 X 对齐","加快矩阵乘法","b 只有一列而 WX 有很多列，广播会自动把 b 复制成需要的份数——这符合「偏置对所有样本都一样」的语义","把结果归一化"],a:2,w:"⚠ <b>广播也是 bug 的温床</b>：你以为形状不对会报错，<b>结果它悄悄广播了</b>，算出形状对但含义全错的结果。"});
+});
+KP("20 · 输入归一化：让各维站在同一起跑线",function(){
+  S(4205,function(){clearScene();setEq(null);setCap("各维尺度差太远会怎样");
+       matrix({rows:3,cols:3,cw:290,ch:56,x:190,y:210,
+         cell:function(i,j){var t=[
+           ["特征","取值范围","对 z 的影响"],
+           ["像素亮度","0 – 255","很大"],
+           ["某个比例","0 – 1","很小"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⚠ 取值大的那一维会「盖过」其它维",640,330,"r");
+       note("⭐ 做法：每一维减去均值、除以标准差 —— 但统计量只能来自训练集",640,392,"y");},"<b>训练之前通常还要做一步：输入归一化。</b><br><b>为什么？</b>看这张表：如果一维是 0–255 的像素亮度，另一维是 0–1 的某个比例，<b>那加权求和时，取值大的那一维会「盖过」其它维</b>——不是因为它更重要，<b>纯粹因为它的数值天生更大</b>。<br><b>做法：每一维减去自己的均值、除以自己的标准差</b>，让各维都变成「均值 0、标准差 1」。<br><b>⚠ 最关键的一条纪律：均值和标准差必须只从训练集上算</b>，测试集要用<b>训练集算出来的那组数</b>。<b>在测试集上重算就是数据泄漏——这和 PCA 那边的规矩是同一条。</b>");
+  S(4205,function(){clearScene();setEq(null);setCap("不归一化会怎样：一个具体的例子");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["特征","取值范围","归一化前的麻烦"],
+           ["房间数","1 ~ 5","权重再大也推不动 z"],
+           ["面积（平方英尺）","500 ~ 5000","稍微一动 z 就爆掉"],
+           ["像素值","0 ~ 255","z 很大 ⇒ 激活直接饱和"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 两维差一千倍时，同一个学习率没法同时照顾它们",640,396,"y");},"为什么各维必须站在同一起跑线？<b>举个具体的例子就清楚了。</b><br><b>房间数在 1 到 5 之间，面积在 500 到 5000 之间——差了一千倍。</b><br><b>⚠ 麻烦有两层。</b>第一层是<b>激活饱和</b>：面积这一维算出来的 z 很大，<b>sigmoid 直接压到 1，梯度几乎为 0</b>。第二层是<b>学习率没法同时照顾两维</b>：<b>步子适合面积那一维，对房间数那一维就小得几乎不动；反过来则会把面积那一维直接震飞。</b><br><b>⭐ 归一化之后两维尺度一致，同一个学习率才能同时管好它们。</b>");
+  SUM(4205,20,{h:"输入归一化：每维减均值、除标准差",k:"<b>各维尺度差太远时，取值大的那维会「盖过」其它维</b>——不是因为更重要，纯粹因为数值天生大。",m:"做法：<b>每一维减去自己的均值、除以自己的标准差</b>，变成均值 0、标准差 1。",w:"⚠⚠ <b>均值和标准差只能从训练集算</b>，测试集用训练集那组数。<b>在测试集上重算就是数据泄漏</b>。",e:"⭐ 这条纪律和 PCA 那边<b>完全一样</b>（特征向量只在训练集上定一次）。"});
+  QUIZ(4205,20,{t:"做输入归一化时，均值和标准差应该从哪里算？",o:["从测试集算","只从训练集算；测试集要用训练集算出来的那组数","从全部数据（训练+测试）算","每个批次各自算"],a:1,w:"⚠ 在测试集上重算就是<b>数据泄漏</b>。⭐ 这条纪律和 PCA 那边<b>完全一样</b>。"});
+});
+KP("21 · 训练就是重复一件事：算梯度，往下走一步",function(){
+  S(4401,function(){clearScene();
+       setEq("$$W^{[l]} := W^{[l]} - \\alpha\\,\\frac{\\partial J}{\\partial W^{[l]}}$$");
+       setCap("每一层的每个参数都这么更新一次");
+       note("α 是学习率：一步迈多大",640,170,"b");
+       note("偏置 b 也是同样的式子",640,201,"g");
+       note("⭐ 整个训练就是把这一步重复很多很多次",640,237,"y");
+       note("⚠ 唯一的难题是：那个导数怎么算出来",640,265,"r");},"<b>训练的循环其实很简单：算出每个参数的导数，然后朝「让损失变小」的方向挪一小步。</b><br><b>式子就是这个</b>：新的参数 ＝ 旧的参数 − 学习率 × 导数。<b>α 叫学习率，控制一步迈多大</b>。<b>偏置 b 用的是同样的式子。</b><br><b>⭐ 整个训练过程，就是把这一步重复很多很多次。</b><br><b>⚠ 所以唯一真正的难题只剩一个：那个导数到底怎么算出来？</b>网络有好几层、上百万个参数，<b>每个参数的导数都要算。这就是下一节要碰的墙。</b>");
+  S(4401,function(){clearScene();setEq(null);setCap("循环里到底在重复哪四步");
+       boxNode(90,206,250,66,"① 前向","b");
+       boxNode(380,206,230,66,"② 算损失","g");
+       boxNode(650,206,250,66,"③ 算梯度","y");
+       boxNode(940,206,250,66,"④ 更新","r");
+       link(340,239,380,239); link(610,239,650,239); link(900,239,940,239);
+       link(1065,272,1065,320); link(1065,320,215,320); link(215,320,215,272);
+       note("算出 ŷ",215,368,"d");
+       note("ŷ 和 y 差多少",495,368,"d");
+       note("⚠ 这一步最难，下一讲专讲",775,368,"y");
+       note("θ ← θ − α·梯度",1065,368,"d");
+       note("⭐ 四步一轮，重复成千上万轮 —— 训练就只有这一件事",640,404,"g");},"训练听起来复杂，<b>其实就是四步在循环</b>。<br><b>① 前向</b>：把数据喂进去，一层层算到 ŷ。<b>② 算损失</b>：看 ŷ 和真答案 y 差多少。<b>③ 算梯度</b>：求出每个参数该往哪调。<b>④ 更新</b>：参数减去学习率乘梯度。然后回到第 ①步。<br><b>⭐ 就这四步，重复成千上万轮，训练的全部内容就是它。</b><br><b>⚠ 而四步里真正难的只有第 ③ 步。</b>①②④ 都是照着式子算，<b>只有「几十万个参数的导数怎么一次算完」这件事需要一整讲来解决</b>——<b>那就是下一讲的反向传播。</b>");
+  SUM(4401,21,{h:"训练循环：算梯度，走一步，重复",k:"<b>新参数 ＝ 旧参数 − 学习率 × 导数。</b>α 控制一步迈多大，偏置 b 同理。",m:"⭐ <b>整个训练就是把这一步重复很多很多次。</b>",w:"⚠ <b>唯一真正的难题：那个导数怎么算出来</b>——好几层、上百万个参数，每个都要算。",e:"⭐ 下一节就是这堵墙，<b>也是下一讲（反向传播）存在的理由</b>。"});
+  QUIZ(4401,21,{t:"神经网络训练循环里真正困难的部分是什么？",o:["读取数据","初始化参数","把每个参数的导数算出来——网络有好几层、上百万个参数","选择学习率"],a:2,w:"⭐ 更新式本身很简单（<b>旧参数 − 学习率 × 导数</b>）。<b>难的是那个导数</b>——这正是下一讲反向传播存在的理由。"});
+});
+KP("22 · ★★ 这一讲最后撞上的那堵墙：梯度没法正着算",function(){
+  S(4553,function(){clearScene();setEq(null);setCap("先看一个容易算的");
+       says("75:53","the derivative of z3 with respect to w2 is super easy, it's just a2 transpose");
+       boxNode(230,215,380,82,"z₃ 对 w₃ 求导","g");
+       boxNode(760,215,380,82,"＝ a₂ 的转置","g");
+       link(610,256,760,256);
+       note("因为 z₃ = w₃ · a₂ + b₃",640,330,"d");
+       note("⭐ 对 w₃ 求导，就剩下 a₂ —— Ng 说这个「超级简单」",640,392,"y");},"<b>先看一个好算的。</b>因为 <b>z₃ ＝ w₃ · a₂ + b₃</b>，<b>所以 z₃ 对 w₃ 求导，结果就是 a₂</b>（的转置）。Ng 说这个<b>「超级简单」</b>。<br><b>⭐ 为什么简单？因为 w₃ 和 z₃ 是直接相连的——中间没有隔着任何东西。</b>");
+  S(4773,function(){clearScene();setEq(null);setCap("⚠ 但往前一层就卡住了");
+       says("79:33","You cannot compute derivative of w2 with respect to a1");
+       boxNode(150,215,250,82,"w₂","r");
+       boxNode(430,215,230,82,"z₂","d");
+       boxNode(690,215,230,82,"a₂","d");
+       boxNode(950,215,230,82,"损失 J","y");
+       link(400,256,430,256); link(660,256,690,256); link(920,256,950,256);
+       note("⚠ w₂ 要穿过好几层才影响到 J",640,330,"r");
+       note("⭐ 而「穿过的那几层」的影响，你还没算过",640,392,"r");},"<b>⚠ 但要算前面那层的 w₂ 就卡住了。</b>Ng 在课上直接说了：<b>你没法这么算。</b><br><b>为什么？</b>因为 <b>w₂ 并不直接影响损失 J</b>——它要先影响 z₂，z₂ 影响 a₂，a₂ 再往后影响好几层，<b>最后才影响到 J</b>。<b>按链式法则，你得把这一整条链上的每一环都乘起来</b>。<br><b>⚠ 而麻烦在于：这条链后半截的影响，你还没算过。</b>于是你得先去算后面那层，<b>而算后面那层时又会发现要先算更后面的</b>……<b>正着算就是会卡住。</b><br><b>⭐ 这正是下一讲「反向传播」要解决的问题：倒过来算，从损失出发往回走，每一步都能直接用上一步的结果。</b>");
+  SUM(4773,22,{h:"★★ 正着算会卡住 ⇒ 下一讲讲反向传播",k:"<b>最后一层好算</b>：z₃ = w₃·a₂+b₃ ⇒ z₃ 对 w₃ 求导就是 a₂（Ng：「超级简单」），因为<b>两者直接相连</b>。",m:"⚠ <b>但前面层的 w₂ 不直接影响 J</b>：它要穿过 z₂ → a₂ → 后面好几层才到 J，按链式法则要把整条链乘起来。",w:"⚠ <b>而这条链后半截你还没算过</b> ⇒ 要先算后面的，算后面时又要先算更后面的 ⇒ <b>正着算会卡住</b>（Ng 原话）。",e:"⭐ <b>这正是下一讲反向传播的全部动机</b>：倒过来算，每一步都能直接用上一步的结果。"});
+  QUIZ(4773,22,{t:"为什么前面层的参数梯度「没法正着算」？",o:["因为导数太大会溢出","前面层的参数要穿过后面好几层才影响到损失，按链式法则要乘整条链；而这条链后半截还没算过，于是层层依赖、卡住","因为参数太多算不完","因为激活函数不可导"],a:1,w:"对比：<b>最后一层直接相连所以「超级简单」</b>。⭐ <b>这正是下一讲反向传播的全部动机</b>——倒过来算，每步都能复用上一步的结果。"});
+});
+KP("完 · 从一个神经元到一张网",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L10 · 完","神经网络入门","下一讲解决「梯度怎么算」");},
+    "收一下。<b>这一讲从你已经会的逻辑回归出发，一路搭到完整的网络。</b><br><b>起点</b>：图片要<b>展平</b>成一长串数（64×64 彩色图就是 12288 个数，⚠ 代价是丢掉了位置关系）。<b>⭐ 一个神经元拆开看就是「加权求和 + 激活函数」，也就是逻辑回归</b>——别被生物学名字唬住。<br><b>搭起来</b>：一层里并排放几个神经元（<b>看同一批输入、各有各的权重</b>）；<b>全连接</b>＝每个输入连到每个神经元。<b>⚠ 但并排不等于网络</b>——<b>要把一层的输出当成下一层的输入，层层接力才叫网络</b>，「深度」说的就是层数。<br><b>怎么定</b>：<b>模型 ＝ 架构（你定）＋ 参数（它学）</b>。<b>权重形状是「本层个数 × 上一层个数」</b>——⭐ 与其死记顺序，不如<b>用矩阵乘法的形状验一遍</b>，记反了根本乘不动。<b>输出层由标注方式决定</b>：二分类用 sigmoid，<b>互斥多选一用 softmax</b>（它靠「取指数再除以总和」强行让输出加到 1），<b>可同时成立的多标签则各自 sigmoid</b>。<br><b>隐藏层</b>：<b>「隐藏」不是看不见数值，而是没有标注告诉它该输出什么</b>。Ng 的猫分类例子：<b>第一层学边缘、中间层学眼睛耳朵、后面的层学整只猫——而没人教它这么分工</b>。⭐ 由此带来最大的改变：<b>不用再手工设计特征了</b>，代价是<b>可解释性</b>。<br><b>工程</b>：<b>小写是一个样本、大写是一批</b>，拼成矩阵一次算完；<b>广播</b>会在形状对不上时自动复制（⚠ 符合语义，但也是 bug 的温床）；<b>输入归一化的统计量只能来自训练集</b>（和 PCA 那边同一条纪律）。<br><b>⚠ 最后撞上的墙</b>：更新式本身很简单（旧参数 − 学习率 × 导数），<b>但前面层的参数要穿过好几层才影响到损失，正着算会卡住</b>（Ng 原话）。<b>⭐ 这正是下一讲「反向传播」的全部动机——倒过来算，每一步都能直接用上一步的结果。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

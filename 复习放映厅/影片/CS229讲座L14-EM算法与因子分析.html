@@ -1,0 +1,873 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L14 · EM 算法与因子分析</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L14 · EM 算法与因子分析",
+  subtitle:"样本比维度还少怎么办 · 每个术语先解释再用 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=tw6cmL5STuY&t="};
+
+/* ── Ng 原话：画面顶部一行，摘自 L14 字幕 ── */
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 椭圆等高线 ── */
+function ell(cx,cy,rx,ry,rot,cls){
+  var p=[],t,r=rot*Math.PI/180;
+  for(t=0;t<=360;t+=6){
+    var a=t*Math.PI/180,x=rx*Math.cos(a),y=ry*Math.sin(a);
+    p.push([cx+x*Math.cos(r)-y*Math.sin(r), cy+x*Math.sin(r)+y*Math.cos(r)]);}
+  curve(p,cls||"a");}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L14","EM 算法与因子分析",
+      "当样本数比维度还少的时候");},
+    "这一讲做两件事。<b>前半段</b>把上一讲推的 EM 一般式和混合高斯的 E/M 两步对上号；<b>后半段</b>讲一个新模型：<b>因子分析</b>。<br><b>⭐ Ng 开场说了他为什么要讲因子分析，两个理由</b>：一是<b>它本身就是个有用的算法</b>；二是——这个理由对你更重要——<b>它能把 EM 练扎实</b>。混合高斯的 EM 可以靠直觉糊过去，<b>因子分析的不行</b>，必须真的搞懂每一步在干什么。这一讲最后会出现一个陷阱，<b>Ng 称之为「推导 EM 时最常见的错误」</b>，那是本片最该带走的东西。<br><b>这一版是重做的。</b>上一版只有 11 个知识点，而且<b>协方差矩阵、奇异、行列式、边缘分布、条件分布、二阶矩这些词全是直接拿来就用</b>。这一版的规矩是：<b>每个术语先花一整节说清「它是什么、为什么需要它」，再往下走。</b>");
+});
+KP("1 · 先回顾：EM 的两步在干什么",function(){
+  S(851,function(){clearScene();setEq(null);setCap("E 步造一条贴着 ℓ 的下界，M 步爬到它的顶");
+   says("1:06","I want to talk about factor analysis for two reasons");
+   var i,p1=[],p2=[];
+   for(i=0;i<=60;i++){var x=250+i*12;
+     p1.push([x,395-160*Math.exp(-Math.pow((x-680)/230,2))]);}
+   curve(p1,"b");
+   for(i=0;i<=60;i++){var x=250+i*12;
+     p2.push([x,395-112*Math.exp(-Math.pow((x-510)/150,2))]);}
+   curve(p2,"g");
+   dots([[510,288]],"y",8);
+   note("ℓ(θ)：真正想最大化的对数似然",900,205,"b");
+   note("绿线：E 步造出来的下界",790,360,"g");
+   note("当前的 θ",510,318,"y");},"先把上一讲的结论摆出来，<b>因为这一讲后半段要反复用</b>。<br>我们想最大化<b>对数似然 ℓ(θ)</b>（蓝线）——它衡量「这组参数解释现有数据的能力有多强」。但它不好直接爬：求导之后解不出来。<b>EM 的办法是绕一下</b>：<b>E 步在当前位置造一条绿色的「下界」</b>，它有两条性质——<b>处处不高过蓝线</b>，而且<b>在当前这个 θ 处和蓝线正好相碰</b>；<b>M 步就去爬这条绿线，爬到它的顶点</b>，那里就是新的 θ。<br><b>⭐ 因为绿线在当前点贴着蓝线，爬到绿线的顶，蓝线必然也跟着上去了。</b>这就是 EM 保证「似然不下降」的全部道理。");
+  S(851,function(){clearScene();setEq(null);setCap("两步各按住一半");
+   boxNode(210,200,250,74,"E 步","b");
+   boxNode(210,300,250,74,"M 步","g");
+   boxNode(610,200,480,74,"参数按住不动，算隐变量的后验","b");
+   boxNode(610,300,480,74,"后验按住不动，用加权平均更新参数","g");
+   link(460,237,610,237); link(460,337,610,337);
+   note("⭐ 和 k-means 的「分配 ↔ 更新」是同一个结构",640,395,"y");},"<b>具体地说</b>：<b>E 步把参数按住不动，去算隐变量的后验分布</b>（在混合高斯里，那就是每个点的「责任度」——这个点有几成像第 j 个高斯）；<b>M 步反过来，把后验按住不动，用它当权重去更新参数</b>。<br><b>⭐ 注意这个结构和 k-means 一模一样</b>：那边也是「分配」和「更新」轮流来，各按住一半、优化另一半。<b>区别只在于 k-means 是硬分配（非 0 即 1），EM 是软分配（0.7 / 0.3）。</b><br><b>这一讲后半段会看到同样两步落在因子分析上长什么样——而且会冒出一个混合高斯那里遇不到的陷阱。</b>");
+  SUM(851,1,{h:"EM 两步：造下界，爬下界",k:"<b>E 步</b>在当前 θ 处造一条「处处不高过 ℓ、且在当前点与 ℓ 相碰」的下界；<b>M 步</b>爬到这条下界的顶。因为相碰，<b>ℓ 必然跟着上去</b>。",m:"<b>E 步</b>：参数按住，算隐变量的后验；<b>M 步</b>：后验按住，用加权平均更新参数。",w:"⭐ 和 k-means 的「分配↔更新」同构，区别只在<b>硬分配 vs 软分配</b>。",e:"M2 T3 考 GMM 的 E/M 手算。<b>这一讲让你看到同样两步在另一个模型上长什么样。</b>"});
+  QUIZ(851,1,{t:"EM 的 E 步和 M 步各自「按住」什么不动？",o:["两步都按住隐变量","E 步按住参数去算隐变量的后验；M 步按住后验去更新参数","E 步按住后验，M 步按住参数","E 步按住数据，M 步按住参数"],a:1,w:"<b>各按住一半、优化另一半。</b>⭐ 这和 k-means「分配时质心不动、更新时归属不动」是<b>同一个结构</b>。"});
+});
+KP("2 · 先认识一个词：协方差矩阵 Σ",function(){
+  S(1713,function(){clearScene();setEq(null);setCap("它是一张表，装着「数据的形状」");
+   matrix({rows:3,cols:3,cw:280,ch:62,x:220,y:200,
+     cell:function(i,j){var t=[
+       ["","身高","体重"],
+       ["身高","身高自己的方差","身高与体重的协方差"],
+       ["体重","体重与身高的协方差","体重自己的方差"]];return t[i][j];},
+     dim:function(i,j){return i===0||j===0;},
+     hl:function(i,j){return (i===j&&i>0)?"hl":"";}});
+   note("对角线：每一维自己有多散",640,395,"b");},"后面会一直用到「协方差矩阵」这个词，<b>先把它讲清楚</b>。<br><b>它其实就是一张表。</b>假设每个样本有身高和体重两个数，那这张表是 2×2 的：<br><b>对角线上</b>放的是<b>每一维自己的方差</b>——身高有多散、体重有多散。（方差就是「这堆数离它们的平均值有多远」的平均。）<br><b>非对角线上</b>放的是<b>两维之间的协方差</b>——身高和体重是不是「一起变大变小」。");
+  S(1713,function(){clearScene();setEq(null);setCap("协方差这个数在说什么");
+   axes({x0:230,x1:600,y0:385,y1:185});
+   dots([[280,365],[330,338],[380,310],[430,282],[480,252],[540,215]],"g",8);
+   note("一起变大 ⇒ 协方差为正",415,395,"g");
+   axes({x0:700,x1:1070,y0:385,y1:185});
+   dots([[750,228],[800,258],[860,288],[910,318],[960,348],[1020,372]],"r",8);
+   note("一个大另一个小 ⇒ 协方差为负",885,395,"r");},"<b>协方差这个数在说什么？</b>看两张图就懂了。<br><b>左边</b>：一个量大的时候另一个也大（身高高的人体重通常也大）——<b>协方差为正</b>。<br><b>右边</b>：一个大的时候另一个反而小——<b>协方差为负</b>。<br><b>如果两者毫无关系，协方差就接近 0。</b><br><b>⭐ 所以整张表合起来，完整描述了这朵点云的「形状」</b>：它在各个方向上有多散、哪两维是联动的。<b>⚠ 但它不包含「点云在哪儿」的信息</b>——那是均值的事。<b>协方差只管形状，不管位置。</b>");
+  SUM(1713,2,{h:"★ 协方差矩阵 ＝ 描述点云「形状」的一张表",k:"<b>对角线</b>：每一维自己的方差（这一维有多散）。<b>非对角线</b>：两维之间的协方差（是否一起变大变小）。",m:"<b>协方差为正</b>＝一起变大；<b>为负</b>＝一个大另一个小；<b>接近 0</b>＝没关系。",w:"⚠ <b>它只管形状，不管位置</b>——「点云在哪儿」是均值的事，不在协方差矩阵里。",e:"⭐ 这个词后面会反复出现，<b>记住「它是一张描述形状的表」就够往下走</b>。"});
+  QUIZ(1713,2,{t:"协方差矩阵的对角线和非对角线分别装什么？",o:["对角线装每一维自己的方差，非对角线装两维之间的协方差","两者装的是同一个东西","对角线装均值，非对角线装方差","对角线装样本数，非对角线装相关系数"],a:0,w:"⚠ 它<b>只描述形状、不描述位置</b>——「点云在哪儿」是均值的事。"});
+});
+KP("3 · 再认识两个词：可逆、奇异",function(){
+  S(1314,function(){clearScene();setEq(null);setCap("「可逆」＝ 这个变换能原路退回去");
+   boxNode(180,200,300,74,"原来的向量","b");
+   boxNode(620,200,300,74,"乘上矩阵 A","y");
+   boxNode(1030,200,180,74,"结果","g");
+   link(480,237,620,237); link(920,237,1030,237);
+   curve([[1030,295],[640,335],[300,295]],"g");
+   note("能找到一个 A⁻¹ 把它变回去 ⇒ A 可逆",640,368,"g");},"还有两个词要先铺：<b>可逆</b>和<b>奇异</b>。<br><b>「可逆」的意思很直白：这个变换能原路退回去。</b>你拿矩阵 A 把一个向量变过去了，<b>如果存在另一个矩阵（记作 A⁻¹）能把它一模一样地变回来</b>，那 A 就是可逆的。<br><b>日常类比</b>：乘以 3 是可逆的（除以 3 就回来了）；<b>但乘以 0 不可逆</b>——所有数都被压成了 0，你再也不知道原来是几。");
+  S(1314,function(){clearScene();setEq(null);setCap("「奇异」就是「不可逆」—— Ng 专门挑明了这点");
+   says("21:54","singular just means - non-invertible");
+   dots([[320,250],[390,295],[280,335],[430,232],[360,352]],"b",9);
+   curve([[250,382],[560,232]],"d");
+   note("原来是一片二维的点",400,195,"b");
+   dots([[800,305],[850,282],[900,258],[950,235],[1000,212]],"r",9);
+   curve([[760,325],[1040,192]],"r");
+   note("被压到一条线上 ⇒ 退不回去了",900,368,"r");},"<b>「奇异」（singular）这个词听起来玄，其实就是「不可逆」。</b>Ng 在课上专门停下来挑明了这一点。<br><b>什么时候会不可逆？</b>当这个变换<b>把高维的东西压扁了</b>的时候。图上原来是一片二维分布的点，<b>被压到了一条线上</b>——现在你只看那条线，<b>再也分不出哪些点原来在上面、哪些在下面</b>。<b>信息丢了，就退不回去了。</b><br><b>⭐ 把这个画面记住：奇异 ＝ 被压扁了 ＝ 退不回去。</b>");
+  SUM(1314,3,{h:"★ 可逆 ＝ 能原路退回；奇异 ＝ 不可逆",k:"<b>可逆</b>：存在 A⁻¹ 能把变换撤销。<b>奇异（singular）就是不可逆</b>——Ng 在课上专门挑明了这个等价。",m:"<b>什么时候不可逆：当变换把高维的东西「压扁」了。</b>压到低维后信息丢了，就退不回去。",w:"日常类比：乘以 3 可逆（除以 3 回来）；<b>乘以 0 不可逆</b>（所有数都变 0，不知道原来是几）。",e:"⭐ 记住画面：<b>奇异 ＝ 被压扁了 ＝ 退不回去</b>。下一节就要用。"});
+  QUIZ(1314,3,{t:"矩阵「奇异」是什么意思？",o:["矩阵的元素都是整数","矩阵里有很大的数","矩阵不是方阵","就是不可逆——这个变换把高维的东西压扁了，信息丢失，无法原路退回"],a:3,w:"Ng 原话：<em>singular just means non-invertible</em>。⭐ 记住画面：<b>被压扁了 ⇒ 退不回去</b>。"});
+});
+KP("4 · 第三个词：行列式，以及它为什么会变成 0",function(){
+  S(1395,function(){clearScene();setEq(null);setCap("行列式 ＝ 这个变换把「体积」放大了几倍");
+   boxNode(230,210,220,150,"","b");
+   note("原来：面积 1",340,395,"d");
+   boxNode(700,210,330,150,"","g");
+   note("变换后：面积 3 ⇒ 行列式 = 3",865,395,"g");
+   link(450,285,700,285);
+   note("乘上矩阵 A",575,258,"y");},"第三个词：<b>行列式</b>，写作 |Σ|。<b>它衡量的是：这个矩阵把「体积」放大了几倍。</b><br>看图：原来是一个面积为 1 的方块，<b>乘上矩阵 A 之后变成了面积为 3 的平行四边形</b>——那 A 的行列式就是 3。<b>（高维里「面积」换成「体积」，道理一样。）</b>");
+  S(1395,function(){clearScene();setEq(null);setCap("压扁了，体积就是 0");
+   says("23:15","when a covariance matrix is singular, then this determinant term will be 0");
+   boxNode(230,215,220,145,"","b");
+   note("原来：面积 1",340,395,"d");
+   curve([[700,295],[1030,295]],"r");
+   note("变换后：压成一条线 ⇒ 面积 = 0 ⇒ 行列式 = 0",865,368,"r");
+   link(450,288,700,293);
+   note("奇异矩阵",575,258,"r");},"<b>⭐ 现在把上一节的画面接上</b>：如果这个矩阵<b>把东西压扁了</b>（也就是奇异），那变换之后的「体积」是多少？<b>一条线的面积是 0。</b><br><b>所以——奇异 ⟺ 行列式为 0。</b>这两件事说的是同一回事，只是换了个角度看。Ng 在课上也是这么说的。<br><b>⚠ 记住这个连锁关系，下一节马上就要用：被压扁 ⇒ 不可逆（没有 Σ⁻¹）⇒ 行列式为 0（|Σ| = 0）。</b>");
+  SUM(1395,4,{h:"★ 行列式 ＝ 体积放大倍数；奇异 ⟺ 行列式为 0",k:"<b>行列式 |Σ| 衡量「这个变换把体积放大了几倍」</b>。面积 1 的方块变成面积 3 ⇒ 行列式是 3。",m:"⭐ <b>压扁了，体积就是 0</b> ⇒ <b>奇异 ⟺ 行列式为 0</b>。两者说的是同一回事。",w:"<b>连锁关系</b>：被压扁 ⇒ 不可逆（没有 Σ⁻¹）⇒ 行列式为 0（|Σ|=0）。<b>下一节就用它。</b>",e:"⚠ 可逆 / 奇异 / 行列式是<b>同一件事的三种说法</b>，混着用时别被绕晕。"});
+  QUIZ(1395,4,{t:"为什么奇异矩阵的行列式一定是 0？",o:["因为奇异矩阵的元素都是 0","这只是一个约定","行列式衡量体积放大倍数；奇异意味着把东西压扁了，压扁后的体积就是 0","因为奇异矩阵不是方阵"],a:2,w:"⭐ <b>可逆 / 奇异 / 行列式</b>是同一件事的三种说法。连锁：<b>被压扁 ⇒ 不可逆 ⇒ 行列式为 0</b>。"});
+});
+KP("5 · ★ 根源：样本比维度还少的时候，Σ 必然奇异",function(){
+  S(1488,function(){clearScene();setEq(null);setCap("几个点在高维空间里，最多撑起多大一片？");
+       dots([[430,250],[500,300],[455,340]],"y",10);
+       note("3 个点",455,205,"y");
+       note("最多撑起一个 2 维的平面",760,250,"d");
+       note("（2 个点只能撑起一条线，1 个点只是一个点）",760,300,"d");
+       note("⭐ 一般地：n 个点最多撑起 n−1 维",760,360,"g");},"现在讲这一讲真正的问题。<b>先建立一个几何直觉。</b><br><b>一个点</b>——就是一个点，0 维。<b>两个点</b>——能连成一条线，1 维。<b>三个点</b>——能撑起一个平面，2 维。<br><b>⭐ 规律很清楚：n 个点最多能撑起一个 n−1 维的「片」。</b><br>这个「片」在数学上叫<b>仿射子空间</b>，但你不用管这个名字，<b>就想成「这些点能摊开成多大的一片」。</b>");
+  S(1488,function(){clearScene();setEq(null);setCap("如果维度 d 比样本数 n 还大呢？");
+       note("比如：d = 100 维，n = 30 个样本",640,205,"y");
+       note("30 个点最多撑起 29 维的片",640,258,"d");
+       note("⚠ 可空间有 100 维 —— 剩下 71 个方向上，数据一点变化都没有",640,318,"r");
+       note("⭐ 没有变化 ⇒ 那些方向上的方差 = 0 ⇒ Σ 把空间压扁了 ⇒ 奇异",640,380,"r");},"<b>⚠ 现在看 d ≫ n 的情形。</b>Ng 举的数就是：<b>100 维的数据，只有 30 个样本</b>。<br><b>30 个点最多撑起 29 维的片</b>，可空间有整整 100 维——<b>剩下那 71 个方向上，你的数据一点变化都没有。</b><br><b>⭐ 而「没有变化」就意味着「那个方向上的方差是 0」</b>。于是协方差矩阵 Σ 在这些方向上<b>把空间压扁了</b>——按前面讲的，<b>压扁 ＝ 奇异 ＝ 不可逆 ＝ 行列式为 0</b>。<br><b>这不是估计不准，是结构决定的。</b>");
+  SUM(1488,5,{h:"★★ d ≫ n ⇒ Σ 必然奇异",k:"<b>n 个点最多撑起 n−1 维的片。</b>若维度 d 比 n 大，<b>剩下的方向上数据毫无变化 ⇒ 方差为 0 ⇒ Σ 把空间压扁 ⇒ 奇异</b>。",m:"Ng 举的数：<b>100 维数据、30 个样本</b>。30 个点撑起 29 维，<b>剩下 71 个方向全是「零变化」</b>。",w:"⭐ 串起前面三节：<b>压扁 ⇒ 不可逆（无 Σ⁻¹）⇒ 行列式为 0</b>。",e:"M2 的 PCA 也会碰到样本少于维度（基因、图像）。<b>能一句话说清原因是加分点。</b>"});
+  QUIZ(1488,5,{t:"当维度 d 远大于样本数 n 时，协方差矩阵为什么必然奇异？",o:["因为均值估计不准","n 个点最多撑起 n−1 维，剩下的方向上数据毫无变化、方差为 0，于是 Σ 把空间压扁了","因为计算时的舍入误差累积","因为数据没有标准化"],a:1,w:"⭐ <b>这是结构决定的，不是算得不准。</b>Ng 的例子：100 维、30 个样本 ⇒ <b>71 个方向上零变化</b>。"});
+});
+KP("6 · 奇异带来的后果：高斯密度直接写不出来",function(){
+  S(1425,function(){clearScene();
+       setEq("$$p(x)=\\frac{1}{(2\\pi)^{d/2}\\,|\\Sigma|^{1/2}}\\exp\\!\\Big(-\\tfrac12 (x-\\mu)^\\top \\Sigma^{-1}(x-\\mu)\\Big)$$");
+       setCap("这个式子里有两处会同时失效");
+       note("这里要 |Σ| 开根号 —— 奇异时 |Σ| = 0 ⇒ 分母为 0",640,170,"r");
+       note("这里要 Σ 的逆 —— 奇异时根本不存在",640,215,"r");
+       note("⚠ 不是「精度差一点」，是「算不出来」",640,265,"y");},"<b>Σ 奇异为什么是灾难？</b>看多元高斯的密度公式，<b>它有两个地方同时需要 Σ 是「好」的</b>：<br><b>归一化那部分需要 |Σ| 开根号</b>——奇异时 |Σ| = 0，<b>分母成了 0</b>。<br><b>指数那部分需要 Σ 的逆</b>——奇异时<b>它根本不存在</b>。<br><b>⚠ 两个地方一起废。</b>所以这不是「估计得不太准」，而是<b>你连这个高斯的密度都写不出来</b>——模型根本定义不了。");
+  S(1425,function(){clearScene();setEq(null);setCap("⚠ 一个常见误解");
+       boxNode(170,205,440,80,"❌ 以为是数值精度问题","r");
+       boxNode(700,205,440,80,"✓ 其实是结构性的","g");
+       note("「加个小扰动、提高精度就好了」",390,320,"d");
+       note("算得再精确也一样奇异",920,320,"d");
+       note("⭐ 因为那些方向上数据「真的」没有任何变化",640,382,"y");},"<b>⚠ 这里有个常见误解要破掉。</b>很多人以为「矩阵奇异」是<b>数值精度</b>的问题——加个小扰动、用更高精度算就好了。<br><b>不是的。</b>只要 d ≫ n，<b>无论你用多高的精度，Σ 都一定奇异</b>。<b>因为那些方向上，数据是「真的」没有任何变化</b>，不是「变化很小被精度吃掉了」。<br><b>⭐ 所以解法不能是「调精度」，必须换一个参数更少的模型。</b>这就是接下来几节要做的事。");
+  SUM(1425,6,{h:"奇异 ⇒ 高斯密度写不出来",k:"密度公式<b>同时</b>需要 <b>|Σ|^(1/2)</b>（归一化）和 <b>Σ⁻¹</b>（指数项）。奇异时<b>前者为 0、后者不存在</b>，两处一起废。",m:"⇒ 不是「估得不准」，是<b>模型根本定义不了</b>。",w:"⚠ <b>常见误解</b>：以为是数值精度问题。<b>不是</b>——那些方向上数据「真的」没变化，算多精确都一样奇异。",e:"⭐ 所以解法是<b>换一个参数更少的模型</b>，不是调精度。"});
+  QUIZ(1425,6,{t:"Σ 奇异对高斯密度公式的影响是什么？",o:["只影响指数项","只是精度下降，仍能计算","只影响归一化常数，指数项不受影响","公式同时需要 |Σ|^(1/2) 和 Σ⁻¹，奇异时前者为 0、后者不存在，两处一起失效"],a:3,w:"⚠ <b>两处一起废</b>，所以是「写不出密度」而不是「算得不准」。而且这是<b>结构性的</b>，提高精度没用。"});
+});
+KP("7 · 办法一：把 Σ 限制成对角矩阵",function(){
+  S(1648,function(){clearScene();setEq(null);setCap("只留对角线，非对角线全置 0");
+       says("27:28","one thing you could do is constrain Sigma to be diagonal");
+       matrix({rows:3,cols:3,cw:230,ch:60,x:300,y:205,
+         cell:function(i,j){var t=[["σ₁²","0","0"],["0","σ₂²","0"],["0","0","σ₃²"]];
+           return t[i][j];},
+         hl:function(i,j){return i===j?"hl":"";}});
+       note("只剩 d 个参数（原来要 d(d+1)/2 个）",640,395,"g");},"既然满协方差估不动，<b>最直接的办法：限制它的形状。</b><br><b>第一招：只留对角线，非对角线全部置 0。</b>于是<b>参数个数从 d(d+1)/2 降到 d</b>——d = 100 时，从 5050 个降到 100 个。<br><b>剩下的对角元是什么？</b>就是<b>每一维自己的样本方差</b>，各维各算各的，互不干涉。<b>这么少的参数，30 个样本绰绰有余。</b>");
+  S(1713,function(){clearScene();setEq(null);setCap("几何上这意味着什么");
+       ell(400,285,145,80,28,"b"); ell(400,285,95,52,28,"b");
+       note("满 Σ：椭圆可以斜着",400,395,"b");
+       ell(880,285,145,80,0,"g"); ell(880,285,95,52,0,"g");
+       note("对角 Σ：椭圆必须正着放",880,395,"g");
+       note("⭐ 可以胖可以瘦，但不能歪",880,195,"y");},"<b>几何上看得更清楚。</b>高斯密度的等高线是椭圆。<br><b>满协方差</b>：椭圆可以<b>任意朝向</b>，爱怎么斜就怎么斜。<br><b>对角协方差</b>：椭圆的主轴<b>必须和坐标轴平行</b>——<b>可以胖可以瘦，但不能歪</b>。<br><b>⭐ 为什么不能歪？</b>因为「歪」正是由非对角线上的协方差决定的——<b>而我们把它们全置成 0 了</b>。");
+  SUM(1648,7,{h:"办法一：对角 Σ（参数 d 个）",k:"<b>只留对角线，非对角线置 0</b>。参数从 <b>d(d+1)/2</b> 降到 <b>d</b>（d=100 时 5050 → 100）。对角元就是各维自己的样本方差。",m:"<b>几何上</b>：等高线椭圆的主轴<b>必须与坐标轴平行</b>——可以胖可以瘦，<b>但不能歪</b>。",w:"⭐ 「歪」正是由非对角线的协方差决定的，<b>置 0 就歪不了了</b>。",e:"⚠ 对应 sklearn GMM 的 <code>covariance_type='diag'</code>。"});
+  QUIZ(1648,7,{t:"把 Σ 限制成对角矩阵，在几何上意味着什么？",o:["等高线椭圆的主轴必须与坐标轴平行——可以胖可以瘦，但不能歪","等高线变成正圆","等高线退化成一个点","等高线可以任意朝向"],a:0,w:"⭐ 「歪」是由<b>非对角线的协方差</b>决定的，置 0 就歪不了。⚠ 「正圆」是更狠的那一招（σ²I）。"});
+});
+KP("8 · 办法二：更狠一点，Σ = σ²I",function(){
+  S(1713,function(){clearScene();setEq("$$\\Sigma = \\sigma^2 I$$");
+       setCap("不仅对角，而且对角元全部相等");
+       ell(400,290,110,110,0,"y"); ell(400,290,70,70,0,"y");
+       note("等高线退化成正圆",400,265,"y");
+       note("参数只剩 1 个",880,170,"g");
+       note("n ≥ 2 就能估",880,204,"d");
+       note("⚠ 但它认为「所有方向一样散」",880,240,"r");},"<b>第二招更狠：不仅对角，而且对角元全部相等</b>，写成 Σ = σ²I。<br><b>此时参数只剩 1 个</b>（就是那个 σ²），<b>2 个样本就能估</b>。<br><b>几何上</b>，等高线退化成了<b>正圆</b>（高维里是球）。<br><b>⚠ 但代价也最大</b>：它等于宣称<b>所有方向上数据都一样散</b>——这显然很少是真的。");
+  S(1713,function(){clearScene();setEq(null);setCap("三种形式对照");
+       matrix({rows:4,cols:4,cw:225,ch:56,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["形式","参数个数","等高线","能表达相关性"],
+           ["满 Σ","d(d+1)/2","任意朝向","能"],
+           ["对角 Σ","d","正着放","不能"],
+           ["σ²I","1","正圆","不能"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i>=2&&j===3)?"hl":"";}});
+       note("⭐ 参数越少越好估，但表达力也越弱 —— 一枚硬币的两面",640,381,"y");},"<b>三种形式放一起对照</b>。<br><b>⭐ 规律很清楚：参数越少越好估，但表达力也越弱。</b>这是一枚硬币的两面。满 Σ 表达力最强但要 n ≥ d+1 才估得动；σ²I 两个样本就够但几乎什么形状都表达不了。<br><b>⚠ 注意最后一列：对角 Σ 和 σ²I 都「不能表达相关性」。</b><b>这正是下一节要讲的致命代价。</b>");
+  S(1779,function(){clearScene();setEq(null);setCap("Ng 举的例子：房间里的温度计");
+       says("29:39","if you have temperature sensors in this room, it's just not a good assumption");
+       dots([[300,300],[360,288],[420,296],[480,284],[540,292]],"b",8);
+       note("同一个房间里的几个温度计",420,246,"b");
+       note("✗ 假设它们互相独立",420,352,"r");
+       note("✓ 实际：靠得近的读数必然接近",990,240,"g");
+       boxNode(820,266,330,70,"真实世界里，\u201c独立\u201d几乎总是假的","y");
+       note("⭐ 把 Σ 限制成对角，等于硬说这些传感器互不相干",640,398,"y");},"Ng 用了一个很具体的例子来说这个代价：<b>房间里装了好几个温度计。</b><br><b>把 Σ 限制成对角矩阵，数学上就等于宣称：这些温度计的读数互相独立。</b>可<b>房间里靠得近的两个点，温度必然接近</b>——这个假设明显不成立。<br><b>⭐ 所以这两个办法省参数的代价是统一的：它们都把「变量之间的关联」整个抹掉了。</b><br><b>⚠ 而很多时候，你真正想建模的恰恰就是那些关联。</b><b>这正是因子分析要来解决的问题——它想既省参数、又留住相关性。</b>");
+  SUM(1713,8,{h:"办法二：σ²I（参数 1 个，等高线正圆）",k:"<b>对角元全部相等</b>，参数只剩 1 个，<b>n ≥ 2 就能估</b>。等高线退化成<b>正圆</b>（高维是球）。",m:"<b>参数越少越好估，表达力也越弱</b>——一枚硬币的两面。满 Σ 要 n ≥ d+1，σ²I 要 n ≥ 2。",w:"⚠ 它等于宣称<b>所有方向上数据一样散</b>，这很少是真的。",e:"对应 sklearn 的 <code>covariance_type='spherical'</code>。"});
+  QUIZ(1713,8,{t:"Σ = σ²I 对应的等高线是什么形状？",o:["一条直线","任意朝向的椭圆","正圆（高维里是球）","轴对齐但可胖可瘦的椭圆"],a:2,w:"对角元<b>全部相等</b> ⇒ 各方向一样散 ⇒ <b>正圆</b>。⚠ 和「对角 Σ」区分开：那个<b>可以胖瘦不同</b>，只是不能歪。"});
+});
+KP("9 · ⚠ 两个办法共同的致命代价：相关性没了",function(){
+  S(1713,function(){clearScene();setEq(null);setCap("对角 ⇒ 宣称各维互不相关");
+       axes({x0:250,x1:600,y0:385,y1:190});
+       dots([[290,360],[340,332],[390,305],[440,278],[490,250],[545,218]],"b",8);
+       note("真实数据：两维明显联动",420,395,"b");
+       ell(880,290,120,120,0,"r");
+       dots([[840,320],[880,290],[920,262],[960,235],[800,348]],"r",8);
+       note("对角模型眼里：它们毫无关系",880,395,"r");
+       note("⚠ 模型「看不见」这条斜线",880,195,"r");},"<b>⚠ 现在说这两招共同的致命代价。</b><br><b>把 Σ 限制成对角，等价于宣称「各维互不相关、互相独立」</b>（高斯分布下这两者是一回事）。<br>看图：<b>左边是真实数据</b>，两维明显联动——一个大另一个也大。<b>右边是对角模型眼里的世界</b>：它只知道各维各自有多散，<b>完全看不见那条斜线</b>。<br><b>⭐ 可问题是：数据里的相关结构，往往正是我们最想看出来的东西。</b>哪些特征是联动的、背后有没有共同的驱动因素——<b>把 Σ 限制成对角，等于先把要找的东西扔掉，再去找。</b>");
+  SUM(1713,9,{h:"⚠ 代价：对角化把相关性整个丢掉了",k:"<b>Σ 对角 ⟺ 宣称各维互不相关、互相独立</b>（高斯下两者等价）。",m:"模型只知道各维各自有多散，<b>完全看不见「两维联动」这件事</b>。",w:"⭐ <b>而相关结构往往正是我们最想看的东西</b>——把 Σ 限成对角，<b>等于先把要找的东西扔掉再去找</b>。",e:"⭐ 「为什么不直接用对角 Σ」是好问的概念题。<b>答：丢了相关性。</b>"});
+  QUIZ(1713,9,{t:"把 Σ 限制成对角矩阵，最主要的代价是什么？",o:["计算变慢","会让 Σ 仍然奇异","等价于宣称各维互不相关，数据中的相关结构被整个丢掉","只能用于低维数据"],a:2,w:"⭐ 对角化<b>确实解决了奇异</b>（n≥2 就能估），<b>但代价是丢了相关性</b>——而那往往正是我们想找的东西。"});
+});
+KP("10 · 先铺词：什么是「边缘分布」",function(){
+  S(3462,function(){clearScene();setEq(null);setCap("只关心其中一部分，把其余的「加和掉」");
+       matrix({rows:4,cols:3,cw:260,ch:54,x:250,y:205,
+         cell:function(i,j){var t=[
+           ["","晴天","雨天"],
+           ["带伞","0.1","0.3"],
+           ["没带伞","0.5","0.1"],
+           ["合计（边缘）","0.6","0.4"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 不管带没带伞，只问天气 ⇒ 把那一列加起来",640,378,"y");},"接下来要用「边缘分布」和「条件分布」这两个词，<b>先用一张日常的表讲清楚。</b><br>表里是「天气 × 带不带伞」的联合概率。<b>「边缘分布」就是：我只关心其中一个变量，另一个不管了。</b><br>比如我只想知道<b>天气的分布</b>——那就<b>不管带没带伞，把那一列的数字加起来</b>：晴天 0.1+0.5 = 0.6，雨天 0.3+0.1 = 0.4。<br><b>⭐ 「边缘」这个名字就来自这里：加和的结果写在表格的边上。</b>");
+  S(3462,function(){clearScene();setEq(null);setCap("什么是「条件分布」");
+       matrix({rows:3,cols:3,cw:260,ch:56,x:250,y:215,
+         cell:function(i,j){var t=[
+           ["已知下雨","带伞","没带伞"],
+           ["联合概率","0.3","0.1"],
+           ["条件概率","0.3/0.4 = 0.75","0.1/0.4 = 0.25"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 已知一个变量的值，再看另一个的分布",640,339,"y");
+       note("做法：只看那一行/列，再除以它的合计让它重新加到 1",640,398,"d");},"<b>「条件分布」是另一回事：已经知道了一个变量的值，再问另一个的分布。</b><br>比如<b>已知今天下雨</b>，那带伞的概率是多少？<b>做法是：只看「雨天」那一列（0.3 和 0.1），再除以这一列的合计 0.4，让它重新加起来等于 1</b>——得到 0.75 和 0.25。<br><b>⭐ 注意「已知下雨」这个信息起了作用</b>：原本带伞的总概率是 0.1+0.3 = 0.4，<b>知道下雨之后，它涨到了 0.75</b>。<b>信息改变了分布，这就是「条件」的意义。</b>");
+  SUM(3462,10,{h:"★ 边缘分布 ＝ 加和掉；条件分布 ＝ 已知一个再看另一个",k:"<b>边缘</b>：只关心一个变量，<b>把其余的加和掉</b>（名字来自「结果写在表格边上」）。",m:"<b>条件</b>：已知一个变量的值，<b>只看那一行/列，再除以合计让它重新加到 1</b>。",w:"⭐ 例子里：带伞的边缘概率是 0.4，<b>已知下雨后涨到 0.75</b>——<b>信息改变了分布</b>，这就是「条件」的意义。",e:"⚠ 这两个词下一节就要用在高斯上。<b>先在这张小表上弄明白，后面不会卡。</b>"});
+  QUIZ(3462,10,{t:"「边缘分布」是怎么算出来的？",o:["取最大的那个概率","只关心其中一个变量，把其余变量的所有可能加和掉","除以总数取平均","把所有概率相乘"],a:1,w:"<b>加和掉</b>。⭐ 名字来自「加和结果写在表格的边上」。⚠ 和<b>条件分布</b>区分：那个是<b>已知一个值，再除以合计重新归一</b>。"});
+});
+KP("11 · ★ 高斯的边缘与条件：两条公式",function(){
+  S(3462,function(){clearScene();setEq("$$x_1 \\sim N(\\mu_1,\\ \\Sigma_{11})$$","top");
+       setCap("边缘分布：整块取出来，不用任何修正");
+       says("57:42","compute marginal and conditional distributions of Gaussians",168);
+       matrix({rows:3,cols:3,cw:200,ch:52,x:360,y:196,
+         cell:function(i,j){var t=[
+           ["Σ =","","" ],
+           ["","Σ₁₁","Σ₁₂"],
+           ["","Σ₂₁","Σ₂₂"]];return t[i][j];},
+         dim:function(i,j){return j===0||i===0;},
+         hl:function(i,j){return (i===1&&j===1)?"hl":"";}});
+       note("⭐ 要 x₁ 的边缘分布？把左上那块取出来就行",640,382,"g");},"<b>现在把这两个概念用在高斯上。</b>把变量分成两组 x₁ 和 x₂，协方差矩阵也跟着分成四块。<br><b>边缘分布最省事</b>：想知道 x₁ 的边缘分布？<b>答案是 N(µ₁, Σ₁₁)</b>——<b>把对应的那一块整个取出来就行，不用做任何修正。</b><br><b>⭐ 这个「省事」是有道理的</b>：边缘分布是「不管 x₂ 了」，<b>而 x₁ 自己的均值和自己的协方差，本来就不依赖 x₂ 是什么</b>。");
+  S(3462,function(){clearScene();
+       setEq("$$\\mu_{1|2} = \\mu_1 + \\Sigma_{12}\\Sigma_{22}^{-1}(x_2-\\mu_2)$$");
+       setCap("条件分布：均值要做一次修正");
+       note("µ₁ ：原本对 x₁ 的猜测",640,170,"d");
+       note("(x₂ − µ₂) ：x₂ 比它自己的均值高出了多少",640,200,"b");
+       note("Σ₁₂Σ₂₂⁻¹ ：两者关联有多强（相当于回归系数）",640,230,"y");
+       note("⭐ 合起来：x₂ 带来的信息，按关联强度折算后去修正对 x₁ 的猜测",640,265,"g");},"<b>条件分布就要干活了。</b>看条件均值的结构：<b>它是「原本的猜测 µ₁」加上「一个修正项」</b>。<br><b>修正项怎么读？</b>拆成两半：<b>(x₂ − µ₂) 是「x₂ 比它自己的平均值高出了多少」</b>；<b>Σ₁₂Σ₂₂⁻¹ 是「这两组变量关联有多强」</b>。<br><b>⭐ 合起来的意思就是：x₂ 带来的信息，按关联强度折算之后，用来修正我对 x₁ 的猜测。</b><br><b>这个形状其实就是「用 x₂ 线性预测 x₁」——也就是回归。</b>在高斯的世界里，<b>条件期望永远是线性的</b>。");
+  SUM(3462,11,{h:"★ 边缘取块；条件要修正",k:"<b>边缘</b>：x₁ ~ N(µ₁, Σ₁₁)，<b>整块取出，不用任何修正</b>。<br><b>条件</b>：µ₁|₂ = µ₁ + Σ₁₂Σ₂₂⁻¹(x₂−µ₂)。",m:"修正项读法：<b>(x₂−µ₂)</b> ＝ x₂ 比自己的均值高多少；<b>Σ₁₂Σ₂₂⁻¹</b> ＝ 关联强度（相当于回归系数）。",w:"⭐ 这个形状就是<b>用 x₂ 线性预测 x₁</b>。<b>高斯世界里条件期望永远是线性的。</b>",e:"⚠ <b>E 步会直接套这两条公式</b>，值得背。"});
+  QUIZ(3462,11,{t:"高斯条件均值 µ₁ + Σ₁₂Σ₂₂⁻¹(x₂−µ₂) 中，修正项在做什么？",o:["把「x₂ 比它自己均值高出多少」按两者的关联强度折算，用来修正对 x₁ 的猜测","把均值归一化","消除 x₂ 的影响","保证协方差非负"],a:0,w:"⭐ 这个形状就是<b>用 x₂ 线性预测 x₁</b>，Σ₁₂Σ₂₂⁻¹ 相当于<b>回归系数</b>。高斯下<b>条件期望永远线性</b>。"});
+});
+KP("12 · ⚠ 条件协方差：是「减」，而且里面没有 x",function(){
+  S(3462,function(){clearScene();
+       setEq("$$\\Sigma_{1|2} = \\Sigma_{11} - \\Sigma_{12}\\Sigma_{22}^{-1}\\Sigma_{21}$$");
+       setCap("两个容易丢分的细节");
+       ell(520,290,160,105,0,"b");
+       ell(520,290,95,60,0,"g");
+       note("边缘 Σ₁₁",520,170,"b");
+       note("条件 Σ₁|₂",520,233,"g");
+       note("减掉的那一项非负定",930,207,"d");
+       note("⇒ 条件方差 ≤ 边缘方差",930,234,"g");
+       note("⚠ 而且式子里完全没有 x₂",930,265,"r");},"<b>条件协方差有两个细节特别容易在考试里丢分。</b><br><b>细节一：中间是「减」，不是加。</b>减掉的那一项是非负定的，所以<b>条件方差永远不大于边缘方差</b>。<b>这很合直觉：多知道一条信息，不可能让你更糊涂。</b><br><b>⚠ 细节二：这个式子里完全没有出现 x₂。</b>也就是说——<b>条件分布的「中心」会随 x₂ 移动（因为均值公式里有 x₂），但它的「离散程度」对所有 x₂ 都一模一样。</b><br><b>⭐ 记住这一条，这一讲最后那个陷阱就靠它。</b>");
+  S(3142,function(){clearScene();setEq(null);setCap("为什么是「减」：知道得越多，剩下的不确定越少");
+       says("52:22","factor analysis can take very high dimensional data, say, 100 dimensional data");
+       boxNode(150,210,440,72,"什么都不知道时的方差","b");
+       boxNode(740,210,420,72,"已经知道 x 之后的方差","g");
+       link(590,246,740,246);
+       note("Σ_zz",370,326,"d");
+       note("Σ_zz − Σ_zx Σ_xx⁻¹ Σ_xz",950,326,"g");
+       note("⭐ 减掉的那一块，正是「x 已经替你说明了的部分」",640,394,"y");},"这个公式为什么是「减」，想一层就通了。<br><b>Σ_zz 是你对 z 什么都不知道时的不确定度。</b>一旦看见了 x，<b>x 里关于 z 的那部分信息就不用再猜了</b>——<b>所以要从原来的不确定度里把它减掉。</b><br><b>⭐ 减掉的那一块 Σ_zx Σ_xx⁻¹ Σ_xz，正是「x 已经替你说明了的部分」。</b><br><b>⚠ 由此也能理解为什么式子里没有 x</b>：<b>减多少只取决于「x 和 z 有多相关」，而不取决于你这次具体看到的 x 是几。</b>");
+  SUM(3462,12,{h:"⚠ 条件协方差是「减」，而且不含 x",k:"<b>Σ₁|₂ = Σ₁₁ − Σ₁₂Σ₂₂⁻¹Σ₂₁</b>。减掉的项非负定 ⇒ <b>条件方差 ≤ 边缘方差</b>（多一条信息不会让你更糊涂）。",m:"⚠ <b>式子里没有 x₂</b> ⇒ 条件分布的<b>中心</b>随 x₂ 移动，但<b>离散程度对所有 x₂ 都一样</b>。",w:"⭐ 第二条是这一讲最后那个陷阱的伏笔。",e:"⚠ <b>把减号写成加号是常见失分点。</b>"});
+  QUIZ(3462,12,{t:"关于高斯的条件协方差 Σ₁|₂，下面哪句正确？",o:["它总是大于边缘协方差","它随 x₂ 的取值而变化","它一定是对角矩阵","它不含 x₂——条件分布的中心随 x₂ 移动，但离散程度对所有 x₂ 都相同；且它不大于边缘协方差"],a:3,w:"<b>减</b>掉的项非负定 ⇒ 条件方差 ≤ 边缘方差。⚠ <b>式子里没有 x₂</b>——这一条是后面那个陷阱的伏笔。"});
+});
+KP("13 · 先铺词：什么叫「数据躺在低维子空间上」",function(){
+  S(3142,function(){clearScene();setEq(null);setCap("一张「薄片」");
+       says("52:22","factor analysis can take very high dimensional data, say, 100 dimensional data");
+       curve([[300,330],[700,230],[1000,290],[600,390],[300,330]],"g");
+       dots([[420,320],[520,295],[620,278],[720,272],[820,285],[500,340],[700,318]],"b",8);
+       note("三维空间里的一张薄片",640,205,"d");
+       note("⭐ 点都贴在这张片上 —— 虽然身处三维，自由度只有二维",640,398,"y");},"讲模型之前，还要铺一个说法：<b>「数据躺在低维子空间上」</b>。<br><b>想象三维空间里的一张薄片</b>（就像一张纸）。<b>如果所有数据点都贴在这张纸上</b>，那么——虽然每个点名义上要三个坐标来描述，<b>但你只要知道「它在这张纸上的哪个位置」，两个数就够了</b>。<br><b>⭐ 这就是「身处高维，自由度却很低」。</b>Ng 的说法是：因子分析能把<b>比如 100 维的数据，建模成「大致躺在一个低维子空间上」</b>的样子。");
+  S(3271,function(){clearScene();setEq(null);setCap("⚠ 但如果数据不在低维片上呢？");
+       says("54:31","It does not work as well if the data's not lying on low dimensional subspace");
+       dots([[400,250],[470,320],[350,350],[520,260],[430,390],[560,340],
+             [380,290],[500,370],[450,230],[540,300]],"b",8);
+       note("数据在三维里「鼓」成一团",455,205,"d");
+       note("⚠ 找不到一张能贴住它们的薄片",900,265,"r");
+       note("⭐ Ng 明说：数据不在低维子空间上时，因子分析不灵",900,340,"r");},"<b>⚠ 但这个模型有个前提，Ng 专门说了：如果数据本来就不躺在低维子空间附近，因子分析就不灵。</b><br>看图：这些点在三维空间里<b>鼓成了一团</b>，<b>你找不到一张薄片能把它们都贴住</b>。硬要用因子分析去套，<b>就会套错</b>。<br><b>⭐ 这是判断「该不该用这个模型」的关键一问。</b>它和前面所有模型一样——<b>模型自带假设，假设不成立结果就不可信</b>。");
+  SUM(3271,13,{h:"★ 低维子空间 ＝ 高维空间里的一张「薄片」",k:"三维里的一张纸：点都贴在上面 ⇒ <b>虽然名义上要 3 个坐标，实际只要 2 个数</b>（在纸上的位置）。",m:"Ng：因子分析能把<b>100 维数据建模成「大致躺在低维子空间上」</b>的样子。",w:"⚠ <b>前提</b>：Ng 明说——<b>数据本来就不在低维子空间附近时，因子分析不灵</b>。",e:"⭐ 「模型自带假设，假设不成立结果就不可信」——这是贯穿整门课的判断方式。"});
+  QUIZ(3271,13,{t:"因子分析在什么情况下「不灵」？",o:["样本数太多时","数据有噪声时","数据本来就不躺在低维子空间附近时（Ng 明确说过）","特征维数太低时"],a:2,w:"⭐ <b>模型自带假设。</b>因子分析假设数据大致贴在一张低维「薄片」上；若数据在高维里鼓成一团，<b>硬套就会套错</b>。"});
+});
+KP("14 · ★ 因子分析模型：生成故事三步",function(){
+  S(2955,function(){clearScene();
+       setEq("$$z \\sim N(0,I),\\quad \\epsilon \\sim N(0,\\Psi),\\quad x = \\mu + \\Lambda z + \\epsilon$$");
+       setCap("每个数据点是这样「造」出来的");
+       says("49:15","The Zs are latent random variables");
+       boxNode(170,215,250,76,"① 抽一个 z","b");
+       boxNode(500,215,280,76,"② 算 µ + Λz","g");
+       boxNode(860,215,250,76,"③ 加噪声 ε","y");
+       link(420,253,500,253); link(780,253,860,253);
+       note("k 维，标准正态",295,218,"d");
+       note("落到那张「薄片」上",640,218,"d");
+       note("把点从薄片上踢开一点",985,218,"d");},"<b>现在看模型本体。它描述的是「每个数据点是怎么被造出来的」，分三步：</b><br><b>① 先抽一个 z</b>——它是 <b>k 维</b>的，服从标准正态。<b>k 比 d 小得多</b>，这就是「低维」的来源。<br><b>② 算 µ + Λz</b>——这一步<b>把低维的 z 送到高维空间里的那张「薄片」上</b>。<br><b>③ 再加一个噪声 ε</b>——<b>把点从薄片上踢开一点点</b>，所以数据是「大致」贴在片上，而不是严丝合缝。<br><b>⚠ 关键在于：z 是看不见的。</b>Ng 说得很明白——<b>这些 z 是隐变量</b>。你只看得到最后造出来的 x。");
+  S(2509,function(){clearScene();setEq(null);setCap("三步走成一条流水线");
+       says("41:49","So given Z, X is computed as Mu plus Lambda Z");
+       boxNode(120,206,300,70,"① 抽一个低维的 z","v");
+       boxNode(500,206,300,70,"② 映上去：µ + Λz","g");
+       boxNode(880,206,300,70,"③ 加噪声 ε","r");
+       link(420,241,500,241); link(800,241,880,241);
+       note("z ~ N(0, I)，维数很低",270,322,"d");
+       note("Λ 把低维拉成高维",650,322,"d");
+       note("ε ~ N(0, Ψ)，Ψ 对角",1030,322,"d");
+       note("⭐ 只有第 ③ 步的结果 x 看得见 —— ① 和 ② 全在暗处",640,394,"y");},"把这三步画成一条流水线，模型就不抽象了。<br><b>① 先抽一个低维的 z</b>（比如 2 维），它服从标准正态；<b>② 用 Λ 把它拉到高维，再加上 µ</b>——Ng 的原话就是「给定 z，x 由 µ + Λz 算出来」；<b>③ 最后加上一点噪声 ε</b>。<br><b>⭐ 关键在于：这条流水线上只有最后那个 x 是你看得见的。</b>z 在暗处，Λ 在暗处。<br><b>⚠ 所以「拟合因子分析」这件事，是要从一堆 x 反推出整条流水线</b>——<b>这正是需要 EM 的原因。</b>");
+  SUM(2955,14,{h:"★ 生成三步：抽 z → 映到薄片 → 加噪声",k:"<b>① z ~ N(0,I)，k 维；② µ + Λz 把它送到高维的「薄片」上；③ 加噪声 ε 把点踢开一点。</b>",m:"<b>k ≪ d</b>，这是「低维」的来源。<b>噪声 ε 让数据「大致」贴片，而不是严丝合缝。</b>",w:"⚠ <b>z 是看不见的隐变量</b>（Ng：<em>The Zs are latent random variables</em>）。你只看得到造出来的 x。",e:"⭐ 「写出因子分析的生成过程」是标准问法，<b>三步要齐，并说明 z 与 ε 独立</b>。"});
+  QUIZ(2955,14,{t:"因子分析的生成过程是怎样的？",o:["从每个类别各抽一个样本","先抽一个低维的 z，用 µ+Λz 把它映到高维的低维子空间上，再加一个噪声 ε","直接从一个高维高斯里抽样","先抽噪声再抽 z"],a:1,w:"⚠ 关键是 <b>z 看不见</b>（隐变量）。<b>k ≪ d</b> 是「低维」的来源，<b>噪声让数据「大致」贴片而非严丝合缝</b>。"});
+});
+KP("15 · 三个参数各管什么，以及 Ψ 为什么必须对角",function(){
+  S(2087,function(){clearScene();setEq(null);setCap("模型里有三个要学的参数");
+       matrix({rows:4,cols:3,cw:290,ch:56,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["参数","形状","职责"],
+           ["µ","d 维向量","数据整体在哪儿"],
+           ["Λ","d×k 矩阵","低维到高维的映射 —— 相关性的来源"],
+           ["Ψ","d×d，必须对角","各维独立的噪声"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===2||i===3)?"hl":"";}});
+       note("⚠ z 本身没有参数 —— 它被写死成 N(0,I)",640,381,"y");},"<b>要学的参数有三个。</b><br><b>µ</b>：数据整体在哪儿，就是样本均值。<br><b>Λ（叫「载荷矩阵」）</b>：<b>d×k 的矩阵，把低维的 z 映到高维</b>。<b>相关性全靠它</b>——后面会看到为什么。<br><b>Ψ</b>：噪声的协方差，<b>而且必须是对角的</b>。<br><b>⚠ 注意 z 本身没有参数</b>：它被写死成 N(0,I)。<b>为什么不让 z 也有均值和协方差？</b>因为那样会和 µ、Λ 重复——<b>你可以把 z 的均值挪到 µ 里，把 z 的协方差吸收进 Λ 里</b>，结果完全一样。<b>同一个分布对应无穷多组参数，模型就「不可辨识」了。</b>");
+  S(2087,function(){clearScene();setEq(null);setCap("⚠ Ψ 为什么必须对角");
+       says("34:47","it takes away the non-invertible matrix problem");
+       boxNode(170,215,440,80,"如果允许 Ψ 是满矩阵","r");
+       boxNode(700,215,440,80,"它自己就能装下全部协方差","r");
+       link(610,255,700,255);
+       note("⇒ Λ 彻底没事干了",640,330,"r");
+       note("⇒ 模型退化回「估一个满 Σ」⇒ 开头那个奇异的毛病原样复发",640,382,"r");},"<b>⚠ 为什么 Ψ 必须是对角的？这个问题值得想清楚。</b><br><b>假设允许 Ψ 是满矩阵</b>——那它自己就能装下全部的协方差结构，<b>Λ 就彻底没事干了</b>。模型于是退化回「估一个满 Σ」，<b>开头那个「d ≫ n 时必然奇异」的毛病原样复发。</b><br><b>⭐ 所以分工必须钉死：ΛΛᵀ 负责装相关性，Ψ 负责保证可逆。</b>Ng 在课上就是这么点破 Ψ 的作用的——<b>它正是用来消掉「不可逆」这个问题的</b>。<b>下一节就把这个分工写成式子。</b>");
+  SUM(2087,15,{h:"三个参数；⚠ Ψ 必须对角",k:"<b>µ</b>（整体位置）、<b>Λ</b>（d×k，低维→高维，<b>相关性的来源</b>）、<b>Ψ</b>（<b>必须对角</b>的噪声协方差）。",m:"<b>z 本身没有参数</b>（写死 N(0,I)）——否则 z 的均值可挪进 µ、协方差可吸进 Λ，<b>模型不可辨识</b>。",w:"⚠ <b>Ψ 若允许满矩阵，它自己就能装下全部协方差 ⇒ Λ 失去作用 ⇒ 退化回估满 Σ ⇒ 奇异的毛病复发。</b>",e:"⭐ 分工要能说清：<b>ΛΛᵀ 装相关性，Ψ 保可逆。</b>"});
+  QUIZ(2087,15,{t:"因子分析为什么要求噪声协方差 Ψ 必须是对角的？",o:["为了保证 Ψ 可逆","为了加快计算","因为噪声一定是独立的","若 Ψ 可以是满矩阵，它自己就能装下全部协方差结构，Λ 将失去作用，模型退化回估计满 Σ"],a:3,w:"⭐ <b>分工必须钉死</b>：ΛΛᵀ 装相关性、Ψ 保可逆。若 Ψ 可满，分工就垮了，<b>开头那个奇异的毛病原样复发</b>。"});
+});
+KP("16 · ★★ 全片最该记的式子：Σ = ΛΛᵀ + Ψ",function(){
+  S(2087,function(){clearScene();setEq("$$x \\sim N(\\mu,\\ \\Lambda\\Lambda^\\top + \\Psi)$$");
+       setCap("低秩的那块装相关，对角的那块保可逆");
+       boxNode(250,210,330,82,"ΛΛᵀ","b");
+       boxNode(700,210,330,82,"Ψ","g");
+       note("秩最多 k —— 低秩",415,170,"b");
+       note("对角、正定",865,170,"g");
+       note("职责：装相关性",415,273,"b");
+       note("职责：保证可逆",865,273,"g");},"<b>把生成过程推一下，x 的分布就出来了：N(µ, ΛΛᵀ + Ψ)。⭐ 这个式子是全片的成果。</b><br><b>看两块的分工</b>：<b>ΛΛᵀ</b>——因为 Λ 是 d×k 的，所以<b>这一块的秩最多是 k，是「低秩」的</b>。它负责<b>装相关性</b>。<b>Ψ</b>——对角且正定，它负责<b>让整个矩阵可逆</b>。<br><b>⭐ 为什么这个组合能解决开头的问题？</b>因为<b>低秩那块本身是奇异的（它把空间压扁了），但加上一个对角正定的 Ψ 之后，整体就不奇异了</b>——相当于在每个方向上都垫了一点厚度。");
+  S(2087,function(){clearScene();setEq(null);setCap("缺哪一块都不行");
+       boxNode(170,210,440,80,"拿掉 ΛΛᵀ","r");
+       boxNode(700,210,440,80,"拿掉 Ψ","r");
+       note("退化成对角 Σ",390,322,"d");
+       note("k < d 时整个矩阵奇异",920,322,"d");
+       note("⇒ 相关性全丢",390,372,"r");
+       note("⇒ 回到开头那个病",920,372,"r");},"<b>验证一下这个分工：缺哪一块都不行。</b><br><b>拿掉 ΛΛᵀ</b>，只剩对角的 Ψ——<b>那就退化成「对角 Σ」，相关性全丢</b>，正是前面说的致命代价。<br><b>拿掉 Ψ</b>，只剩 ΛΛᵀ——<b>因为它的秩最多 k，当 k < d 时整个矩阵奇异</b>，回到开头那个「密度写不出来」的病。<br><b>⭐ 所以 Σ = ΛΛᵀ + Ψ 不是随便凑的，它是在「要相关性」和「要可逆」这两个要求之间，刚好同时满足的那个结构。</b>");
+  SUM(2087,16,{h:"★★★ Σ = ΛΛᵀ + Ψ",k:"<b>ΛΛᵀ 低秩（秩 ≤ k），装相关性；Ψ 对角正定，保证可逆。</b>",m:"<b>为什么能解决问题</b>：低秩那块自己是奇异的（把空间压扁），<b>加上对角正定的 Ψ 就相当于在每个方向都垫了一点厚度</b>，整体不再奇异。",w:"<b>缺哪块都不行</b>：没 ΛΛᵀ ⇒ 退化成对角 Σ、相关性全丢；没 Ψ ⇒ k&lt;d 时奇异、回到开头的病。",e:"⭐⭐ <b>这个式子必背</b>，并要能说出两块各自的职责。"});
+  QUIZ(2087,16,{t:"在 Σ = ΛΛᵀ + Ψ 中，两块各自承担什么职责？",o:["ΛΛᵀ（低秩）装相关性，Ψ（对角正定）保证整个矩阵可逆","ΛΛᵀ 是噪声，Ψ 是信号","ΛΛᵀ 保证可逆，Ψ 装相关性","两块都只是为了减少参数量"],a:0,w:"⭐ 低秩那块自己奇异，<b>加上对角正定的 Ψ 相当于每个方向垫了点厚度</b>，整体就可逆了。<b>缺哪块都不行。</b>"});
+});
+KP("17 · 参数量数一数，以及和 PCA 的关系",function(){
+  S(3142,function(){clearScene();setEq(null);setCap("它恰好卡在两端中间");
+       matrix({rows:4,cols:3,cw:290,ch:56,x:190,y:205,
+         cell:function(i,j){var t=[
+           ["模型","参数个数","d=100, k=5 时"],
+           ["满 Σ","d(d+1)/2","5050"],
+           ["因子分析","dk + d","505"],
+           ["对角 Σ","d","100"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 多出来的 dk 个参数，买的就是相关性",640,387,"y");},"<b>把参数量数清楚。</b>Λ 有 <b>d×k</b> 个元素，对角的 Ψ 有 <b>d</b> 个，合计 <b>dk + d</b>。<br>拿 Ng 提过的 d=100 代进去，取 k=5：<b>满 Σ 要 5050 个参数，因子分析只要 505 个，对角 Σ 要 100 个。</b><br><b>⭐ 它恰好卡在两端中间</b>——<b>比对角 Σ 多出来的那 dk 个参数，买的就是「能表达相关性」这件事。</b>");
+  S(3271,function(){clearScene();setEq(null);setCap("⭐ 和 PCA 的关系");
+       boxNode(230,215,840,80,"令 Ψ = σ²I，并让 σ² → 0","y");
+       note("因子分析 ⟶ 退化成 PCA（这叫「概率 PCA」）",640,340,"g");
+       note("⭐ 所以 PCA 可以看成「噪声各向同性且极小」的因子分析",640,395,"y");},"<b>⭐ 最后补一个和 M2 直接相关的联系。</b><br>如果把 Ψ 限制成 <b>σ²I</b>（各方向噪声一样大），<b>再让 σ² 趋近于 0</b>（噪声小到可以忽略），<b>因子分析就退化成了 PCA</b>。这个中间形态叫<b>概率 PCA</b>。<br><b>所以可以这样理解两者的关系：PCA 就是「噪声各向同性、而且极小」的因子分析。</b><br><b>⚠ 反过来说，因子分析比 PCA 多的东西是：它有一个显式的噪声模型 Ψ，而且允许各维的噪声大小不同。</b>这是两者最实质的区别。");
+  SUM(3271,17,{h:"参数量 dk + d；与 PCA 的关系",k:"<b>Λ 有 dk 个、对角 Ψ 有 d 个，合计 dk + d</b>。d=100、k=5 时：满 Σ 5050，<b>因子分析 505</b>，对角 Σ 100。",m:"⭐ 它<b>恰好卡在两端中间</b>——多出来的 dk 个参数<b>买的就是「能表达相关性」</b>。",w:"⭐ <b>令 Ψ = σ²I 且 σ² → 0，因子分析退化成 PCA</b>（概率 PCA）。所以 <b>PCA ＝ 噪声各向同性且极小的因子分析</b>。",e:"⭐ M2 可能考<b>因子分析 vs PCA</b>：<b>前者有显式噪声模型 Ψ 且允许各维噪声不同，后者没有。</b>"});
+  QUIZ(3271,17,{t:"因子分析和 PCA 的关系是什么？",o:["令 Ψ = σ²I 并让 σ² → 0，因子分析就退化成 PCA；所以 PCA 相当于「噪声各向同性且极小」的因子分析","PCA 是因子分析的推广","两者完全无关","因子分析是 PCA 的一种实现方式"],a:0,w:"⭐ 中间形态叫<b>概率 PCA</b>。⚠ 因子分析比 PCA 多的是：<b>显式的噪声模型 Ψ，而且允许各维噪声不同</b>。"});
+});
+KP("18 · E 步：把联合分布代进条件分布公式就完事了",function(){
+  S(3462,function(){clearScene();
+       setEq("$$\\mu_{z|x} = \\Lambda^\\top(\\Lambda\\Lambda^\\top+\\Psi)^{-1}(x-\\mu)$$");
+       setCap("没有新技术 —— 工具前面已经备好了");
+       boxNode(200,215,290,76,"[z; x] 的联合分布","b");
+       boxNode(600,215,320,76,"条件分布公式","g");
+       boxNode(1000,215,170,76,"E 步","y");
+       link(490,253,600,253); link(920,253,1000,253);
+       note("这一讲推出来的",345,170,"d");
+       note("前面第 8 个知识点备好的",760,170,"d");
+       note("⚠ Σ_{z|x} = I − Λᵀ(ΛΛᵀ+Ψ)⁻¹Λ　里面没有 x",640,276,"r");},"<b>E 步要算什么？算隐变量 z 的后验分布 p(z|x)。</b><br><b>⭐ 好消息是这一步没有任何新技术</b>：把这一讲推出来的<b>联合分布</b>，套进前面第 8 个知识点备好的<b>条件分布公式</b>，<b>直接就出来了</b>。<br>后验的均值是 Λᵀ(ΛΛᵀ+Ψ)⁻¹(x−µ)，后验的协方差是 I − Λᵀ(ΛΛᵀ+Ψ)⁻¹Λ。<br><b>⚠ 请特别注意后验协方差里没有 x</b>——这正是第 9 个知识点埋下的那个伏笔。<b>它意味着：每个样本的后验中心不同，但「宽度」完全一样。下一节就要用它。</b>");
+  SUM(3462,18,{h:"E 步：条件分布公式的直接套用",k:"把 <b>[z; x] 的联合分布</b>代进<b>条件分布公式</b>，直接得 p(z|x)。<b>没有任何新技术。</b>",m:"µ_{z|x} = Λᵀ(ΛΛᵀ+Ψ)⁻¹(x−µ)；Σ_{z|x} = I − Λᵀ(ΛΛᵀ+Ψ)⁻¹Λ。",w:"⚠ <b>Σ_{z|x} 里没有 x</b>：每个样本的后验<b>中心不同，宽度完全一样</b>。<b>下一节就用它。</b>",e:"E 步交付的是<b>一整个后验分布</b>，不是一个点——<b>这是下一条陷阱的前提</b>。"});
+  QUIZ(3462,18,{t:"因子分析的 E 步中，后验协方差 Σ_{z|x} 有什么值得注意的性质？",o:["它等于 Ψ","它一定是对角矩阵","它随每个样本 x 变化","它不含 x——每个样本的后验中心不同，但「宽度」完全一样"],a:3,w:"µ_{z|x} 里有 (x−µ) 所以随样本变，<b>但 Σ_{z|x} 的式子里只有 Λ 和 Ψ</b>。⭐ 这个性质是下一个陷阱的关键。"});
+});
+KP("19 · 先铺词：什么是「二阶矩」E[zzᵀ]",function(){
+  S(4275,function(){clearScene();setEq(null);setCap("一阶：平均值；二阶：平方的平均值");
+       matrix({rows:4,cols:3,cw:280,ch:56,x:200,y:205,
+         cell:function(i,j){var t=[
+           ["","怎么算","在说什么"],
+           ["一阶矩 E[z]","取平均","这堆数的中心在哪"],
+           ["二阶矩 E[z²]","先平方再取平均","离原点的平方距离的平均"],
+           ["方差","E[z²] − (E[z])²","这堆数有多散"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 关键关系：E[z²] = (E[z])² + 方差",640,387,"y");},"最后一个要铺的词：<b>二阶矩</b>。<br><b>「一阶矩」就是平均值 E[z]</b>——这堆数的中心在哪。<b>「二阶矩」是 E[z²]</b>——<b>先把每个数平方，再取平均</b>。<br><b>⭐ 两者有一个关键关系：E[z²] = (E[z])² + 方差。</b><b>注意它们不相等，差着一个方差。</b><br><b>直觉上为什么？</b>因为<b>平方会放大偏离</b>：一堆散开的数，它们平方之后的平均，<b>会比「平均值的平方」更大</b>——散得越开，差得越多。<b>而「差多少」正好就是方差。</b>");
+  S(4275,function(){clearScene();
+       setEq("$$E[zz^\\top] = E[z]E[z]^\\top + \\mathrm{Cov}(z)$$");
+       setCap("向量版本：完全一样的关系");
+       note("标量版：E[z²] = (E[z])² + 方差",640,170,"d");
+       note("向量版：E[zzᵀ] = E[z]E[z]ᵀ + 协方差",640,215,"b");
+       note("⭐ 两者差的那一项，就是协方差",640,265,"y");},"<b>把它推广到向量，关系完全一样</b>：<b>E[zzᵀ] = E[z]E[z]ᵀ + 协方差</b>。<br>标量版是「平方的平均 = 平均的平方 + 方差」；<b>向量版就是「zzᵀ 的期望 = z 期望的外积 + 协方差」</b>。<br><b>⭐ 请把这个式子记牢，特别是「两者差着一个协方差」这件事。</b><b>下一节就是这一讲的高潮——而高潮的全部内容，就是有人忘了这一项。</b>");
+  SUM(4275,19,{h:"★ 二阶矩：E[zzᵀ] = E[z]E[z]ᵀ + 协方差",k:"<b>一阶矩</b>＝平均值；<b>二阶矩</b>＝先平方再取平均。<b>标量版</b>：E[z²] = (E[z])² + 方差。",m:"<b>直觉</b>：平方会放大偏离 ⇒ 一堆散开的数，<b>平方的平均 > 平均的平方</b>，<b>差的那部分正好是方差</b>。",w:"<b>向量版</b>：<b>E[zzᵀ] = E[z]E[z]ᵀ + 协方差</b>。⭐ 记牢「两者差着一个协方差」。",e:"⚠ <b>下一节的全部内容，就是有人忘了这一项。</b>"});
+  QUIZ(4275,19,{t:"E[z²] 和 (E[z])² 是什么关系？",o:["两者相等","两者没有固定关系","E[z²] = (E[z])² + 方差——平方会放大偏离，散得越开两者差得越多","E[z²] 总是小于 (E[z])²"],a:2,w:"⭐ <b>差的那一项正好是方差。</b>向量版同理：<b>E[zzᵀ] = E[z]E[z]ᵀ + 协方差</b>。⚠ 这是下一条陷阱的全部内容。"});
+});
+KP("20 · ★★★ 这一讲的高潮：M 步要的是 E[zzᵀ]，不是 E[z]E[z]ᵀ",function(){
+  S(4275,function(){clearScene();
+       setEq("$$E[zz^\\top] = \\mu_{z|x}\\mu_{z|x}^\\top + \\Sigma_{z|x}$$");
+       setCap("Ng 称之为「推导 EM 时最常见的错误」");
+       boxNode(170,215,430,82,"❌ 只算 E[z]，代进 M 步","r");
+       boxNode(710,215,430,82,"✓ M 步需要的是 E[zzᵀ]","g");
+       note("等于默认后验毫无不确定性",385,170,"r");
+       note("必须额外带上 Σ_{z|x}",925,170,"g");
+       note("⚠ 漏了它 ⇒ 系统性低估分母 ⇒ Λ 估错",640,265,"r");},"<b>这是全片最该带走的一条。</b><br>很多人以为：<b>E 步的产出就是「隐变量的一个估计值」</b>，然后 M 步里<b>凡是出现 z 的地方，都拿这个值替换进去</b>。<br><b>⚠ Ng 把这个称作「推导 EM 时最常见的错误」。</b><br><b>错在哪？</b>M 步真正需要的是 <b>E[zzᵀ]</b>，而由上一节的关系，<b>E[zzᵀ] 比 E[z]E[z]ᵀ 多了整整一个 Σ_{z|x}</b>。<b>只代入 E[z]，等于默认「后验没有任何不确定性」、把 z 当成确切已知的量</b>——于是<b>系统性地低估了分母，Λ 就估错了</b>。");
+  S(4275,function(){clearScene();setEq(null);setCap("正确的理解方式");
+       boxNode(230,215,840,82,"E 步交出来的不是一个点，是一整个分布","g");
+       note("M 步要对这个分布「取期望」",640,340,"b");
+       note("而不是「对它的均值取值」",640,392,"y");},"<b>⭐ 把它浓缩成一句能带进考场的话：</b><br><b>「E 步交付的是一整个后验分布，不是一个点估计。M 步要对整个分布取期望，而不是对它的均值取值。」</b><br>这两件事听起来像，<b>但差着一个协方差</b>。<br><b>⭐ 回头看第 9 个知识点那个伏笔</b>：Σ_{z|x} 不依赖 x，<b>所以它在 M 步的分母里，就是一个被加了 n 次的常数项</b>。<b>这下那个细节的用处就清楚了。</b>");
+  SUM(4275,20,{h:"★★★ M 步要 E[zzᵀ]，它比 E[z]E[z]ᵀ 多一个后验协方差",k:"<b>E[zzᵀ] = µ_{z|x}µ_{z|x}ᵀ + Σ_{z|x}</b>。只代入 E[z] ⇒ <b>默认后验毫无不确定性</b> ⇒ <b>系统性低估分母，Λ 估错</b>。",m:"⭐ 一句话记法：<b>「E 步交付的是一整个分布，不是一个点。M 步要对整个分布取期望，而不是对它的均值取值。」</b>",w:"⭐ 回收伏笔：<b>Σ_{z|x} 不依赖 x</b>，所以它在 M 步分母里是<b>被加了 n 次的常数项</b>。",e:"⭐⭐ <b>最可能出概念题的一条。</b>Ng 称之为「推导 EM 时最常见的错误」。"});
+  QUIZ(4275,20,{t:"Ng 说「推导 EM 时最常见的错误」是什么？",o:["把 Ψ 设成了对角矩阵","只算 E[z] 并把它代入 M 步中所有出现 z 的地方；实际需要的是 E[zzᵀ]，它比 E[z]E[z]ᵀ 多一个后验协方差","忘记在 E 步归一化","在 M 步里更新了 µ"],a:1,w:"⭐ 记法：<b>E 步交付的是一整个分布，不是一个点</b>。只代入均值 ⇒ 默认后验毫无不确定性 ⇒ <b>系统性低估分母</b>。"});
+});
+KP("21 · 为什么混合高斯里没出事？因为那边的 z 是离散的",function(){
+  S(4275,function(){clearScene();setEq(null);setCap("Ng 自己做了这个对照");
+       says("71:15","When we're fitting a mixture of Gaussian distributions, z_i was discrete");
+       matrix({rows:4,cols:3,cw:300,ch:56,x:185,y:205,
+         cell:function(i,j){var t=[
+           ["","混合高斯","因子分析"],
+           ["隐变量 z","离散的类别编号","连续的向量"],
+           ["M 步里 z 的次数","一阶（指示函数）","二阶（zzᵀ）"],
+           ["只用 E[z] 行吗","碰巧行","不行"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===3)?"hl":"";}});
+       note("⭐ 一旦涉及二阶矩，均值就不够用了",640,387,"y");},"<b>那为什么学混合高斯的时候，「只用 E[z]」没出事？</b>Ng 自己做了这个对照：<b>拟合混合高斯时，z 是离散的</b>。<br><b>区别在这里</b>：<b>GMM 的隐变量是「这个点属于第几个成分」这样一个离散编号</b>，M 步里它只以<b>指示函数</b>的形式出现，是<b>一阶</b>的——<b>用责任度去替换它，恰好就等于对离散后验取期望</b>。所以碰巧对了。<br><b>而因子分析的 z 是连续向量，M 步里出现了 zzᵀ，是二阶的。⭐ 一旦涉及二阶矩，均值就不够用了。</b><br><b>⭐ 这正是 Ng 开场说「因子分析能把 EM 练扎实」的意思——GMM 可以靠直觉糊过去，因子分析不行。</b>");
+  S(717,function(){clearScene();setEq(null);setCap("同一个 EM，z 的类型一换，难度就变了");
+       says("11:57","for p of x and z, where z is continuous");
+       matrix({rows:4,cols:3,cw:300,ch:46,x:170,y:188,
+         cell:function(i,j){var t=[
+           ["","混合高斯（M2 T3）","因子分析（这一讲）"],
+           ["z 是什么","属于哪个成分","一组低维坐标"],
+           ["z 的类型","离散：1…K","连续：R^k"],
+           ["E 步要算","K 个责任度","一个连续分布"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===2;}});
+       note("⭐ 离散时 E 步是「算几个数」；连续时 E 步是「写出一个分布」",640,396,"y");},"用一张表把这件事钉死，顺便把 M2 那一讲接上。<br><b>混合高斯里的 z 是离散的</b>：它只回答「这个点属于第几个成分」，<b>所以 E 步算出来的是 K 个数（责任度），加起来等于 1。</b><br><b>因子分析里的 z 是连续的</b>：它是一组低维坐标，<b>取值遍布整个 Rᵏ</b>——<b>E 步没法再「算几个数」，只能写出一个完整的分布</b>（而且好在它还是高斯）。<br><b>⭐ 这就是为什么同一个 EM，在这里要难不少</b>：不是算法变了，是<b>隐变量的类型变了</b>。");
+  SUM(4275,21,{h:"★★ GMM 为什么没出事：那边的 z 是离散的",k:"<b>GMM 的 z 是离散编号</b>，M 步里只以<b>指示函数（一阶）</b>出现 ⇒ 用责任度替换<b>恰好等于取期望</b>，碰巧对了。",m:"<b>因子分析的 z 是连续向量</b>，M 步出现 <b>zzᵀ（二阶）</b> ⇒ <b>均值不够用，必须带上后验协方差</b>。",w:"⭐ <b>一旦涉及二阶矩，均值就不够用了。</b>",e:"⭐ 这正是 Ng 说「因子分析能把 EM 练扎实」的意思：<b>GMM 能靠直觉糊过去，因子分析不行。</b>"});
+  QUIZ(4275,21,{t:"为什么混合高斯的 EM 里「只用 E[z]」没出问题，因子分析里却不行？",o:["因为 GMM 的协方差是对角的","因为 GMM 不需要 M 步","GMM 的 z 离散、M 步只以指示函数（一阶）出现，用责任度替换恰好就是取期望；因子分析的 z 连续，M 步出现二阶量 zzᵀ","因为混合高斯的数据量更大"],a:2,w:"⭐ <b>一旦涉及二阶矩，均值就不够用了。</b>这正是 Ng 说「因子分析能把 EM 练扎实」的意思。"});
+});
+KP("22 · 收口：三个参数的更新，µ 算一次就不用动",function(){
+  S(4275,function(){clearScene();setEq(null);setCap("三个参数的更新方式不一样");
+       matrix({rows:4,cols:3,cw:300,ch:56,x:190,y:205,
+         cell:function(i,j){var t=[
+           ["参数","每轮重算？","要点"],
+           ["µ","不用","就是样本均值"],
+           ["Λ","要","分母里别漏 Σ_{z|x}"],
+           ["Ψ","要","算出 Φ 后只取对角线"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ µ 的更新式右端不依赖后验 ⇒ 参数怎么变它都不变",640,387,"y");},"最后把三个参数的更新收一下。<br><b>µ 很特别：它就是样本均值，而且算一次就固定，不用每轮重算。</b>为什么？因为<b>它的更新式右端不依赖后验 p(z|x)</b>——参数怎么变，它都不变。<br><b>Λ 每轮都要重算</b>，就是上一节那个式子，<b>⚠ 分母里千万别漏掉 Σ_{z|x}</b>。<br><b>Ψ 也要每轮重算</b>：先算出一个完整的矩阵，<b>然后只取它的对角线</b>放进 Ψ，非对角元一律丢掉——<b>因为模型本来就要求 Ψ 必须是对角的</b>（第 14 个知识点讲过为什么）。");
+  S(4087,function(){clearScene();setEq(null);setCap("为什么非得一轮一轮地迭代");
+       says("68:07","There is actually no closed-form solution for finding the values of Lambda and Psi and Mu");
+       boxNode(140,208,450,72,"想直接解 Λ、Ψ、µ","b");
+       boxNode(730,208,430,72,"✗ 没有闭式解","r");
+       link(590,244,730,244);
+       note("对数似然里 log 套着积分",365,324,"d");
+       note("只能 E/M 交替逼近",945,324,"g");
+       note("⭐ 这和线性回归的正规方程正好相反 —— 那边一步出解，这边只能迭代",640,394,"y");},"最后交代一句：<b>为什么非得一轮一轮地迭代？</b><br>Ng 说得很直接——<b>要让对数似然最大的那组 Λ、Ψ、µ，根本没有闭式解。</b>原因和 M2 讲 EM 时一样：<b>对数似然里 log 套着一个对隐变量的积分，拆不开。</b><br><b>⭐ 所以只能 E 步、M 步交替着逼近。</b><br><b>⚠ 把它和 M1 的线性回归对照着记</b>：<b>那边有正规方程，一步出解；这边没有，只能迭代</b>——<b>而且和所有 EM 一样，停在的是局部最优，换个初始值可能停在别处。</b>");
+  SUM(4275,22,{h:"µ 算一次即可；Λ 和 Ψ 每轮重算",k:"<b>µ ＝ 样本均值，算一次就固定</b>（它的更新式不依赖后验）。<b>Λ、Ψ 每轮都要重算。</b>",m:"<b>Ψ 的更新</b>：先算出完整矩阵，<b>再只取对角线</b>——因为模型要求 Ψ 对角。",w:"⚠ <b>Λ 的分母里别漏 Σ_{z|x}</b>。",e:"可能问「哪些参数需要每轮更新」。<b>答 µ 不需要、Λ 和 Ψ 需要，并说出 µ 的理由。</b>"});
+  QUIZ(4275,22,{t:"关于因子分析 M 步中 µ 的更新，下面哪句正确？",o:["每轮都要和 Λ、Ψ 一起重算","µ 等于样本均值，算一次之后不随迭代改变，因为它的更新式不依赖后验","µ 在 EM 中不被估计","µ 要用后验均值加权计算"],a:1,w:"<b>µ 的更新式右端不依赖 p(z|x)</b>，所以参数怎么变它都不变。⚠ 这和 Λ、Ψ 不同——<b>那两个每轮都要重算</b>。"});
+});
+KP("完 · 一条主线",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L14 · 完","EM 算法与因子分析","样本比维度还少的时候怎么办");},
+    "收一下。<b>这一讲只有一条主线：样本比维度还少的时候怎么办。</b><br><b>问题</b>：<b>n 个点最多撑起 n−1 维的片</b>，所以 d ≫ n 时必有一堆方向上数据毫无变化 ⇒ 方差为 0 ⇒ <b>Σ 把空间压扁了，也就是奇异</b>。而<b>奇异 ＝ 不可逆 ＝ 行列式为 0</b>（三种说法同一件事）。<b>后果很硬</b>：高斯密度同时需要 Σ⁻¹ 和 |Σ|^½，<b>两处一起废，密度根本写不出来</b>。<b>⚠ 这是结构性的，不是精度问题</b>，提高精度没用。<br><b>两个偷懒办法</b>：<b>对角 Σ</b>（参数降到 d 个，椭圆只能正着放）和 <b>σ²I</b>（参数只剩 1 个，等高线是正圆）。两者都解决了奇异，<b>但共同的代价是把相关性整个丢掉了</b>——而相关结构往往正是我们最想看的东西。<br><b>因子分析是中间档</b>：<b>生成三步——抽一个 k 维的 z、用 µ+Λz 把它送到低维「薄片」上、再加对角噪声 ε</b>。于是 <b>Σ = ΛΛᵀ + Ψ</b>：<b>低秩的 ΛΛᵀ 装相关性，对角正定的 Ψ 保证可逆</b>，<b>缺哪块都不行</b>。参数量 <b>dk + d</b>，恰好卡在满 Σ 和对角 Σ 中间。<b>⭐ 令 Ψ = σ²I 且 σ² → 0，它就退化成 PCA</b>——所以 PCA 相当于「噪声各向同性且极小」的因子分析。<br><b>EM 怎么跑</b>：<b>E 步</b>把联合分布代进条件分布公式，直接得后验，没有新技术；<b>M 步</b>用后验当权重更新参数。<b>⚠ 但这里有个陷阱，Ng 称之为「推导 EM 时最常见的错误」：M 步要的是 E[zzᵀ]，而它比 E[z]E[z]ᵀ 多了整整一个后验协方差 Σ_z|x。</b>只代入 E[z]，等于默认后验毫无不确定性，<b>会系统性低估分母、把 Λ 估错</b>。<br><b>⭐ 一句话记法：E 步交付的是一整个分布，不是一个点；M 步要对整个分布取期望，而不是对它的均值取值。</b><b>GMM 里之所以没出事，是因为那边的 z 是离散的、M 步只涉及一阶量</b>。<br>完整推导见配套精读：<b>讲义 Part X（9 页）</b>。");
+});
+window.__startProjector(CFG);
+})();
+</script>

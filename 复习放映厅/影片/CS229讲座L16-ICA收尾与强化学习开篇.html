@@ -1,0 +1,909 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L16 · ICA 收尾与强化学习开篇</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L16 · ICA 收尾与强化学习开篇",
+  subtitle:"为什么 ICA 必须非高斯 · 第四大主题登场 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=YQA9lLdLig8&t="};
+
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── S 形曲线（当 CDF 用）── */
+function sig(cx,cy,w,h,cls){
+  var p=[],i;
+  for(i=0;i<=80;i++){
+    var t=-6+12*i/80, v=1/(1+Math.exp(-t));
+    p.push([cx+w*t/12, cy-h*(v-0.5)]);}
+  curve(p,cls||"b");}
+
+/* ── 网格世界：cols×rows 个格子，cb(i,j) 返回 [文字, 类名] 或 null（墙）── */
+function grid(x0,y0,cw,ch,cols,rows,cb){
+  var i,j;
+  for(j=0;j<rows;j++)for(i=0;i<cols;i++){
+    var v=cb(i,j); if(v===null) continue;
+    boxNode(x0+i*cw, y0+j*ch, cw-6, ch-6, v[0], v[1]||"");}}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L16","ICA 收尾与强化学习开篇",
+      "一讲跨两个世界");},
+    "这一讲是全课的一个转折点，<b>前后半场讲的几乎是两门不同的学问。</b><br><b>前半场把 ICA 讲完。</b>L15 已经讲了鸡尾酒会问题——好几个声音混在一起，要把它们拆开。<b>但还欠一个关键问题没答：为什么这件事能做成？</b><br><b>⭐ 答案出人意料地苛刻：只有当信号「不是高斯的」，ICA 才可能成立。</b>这一讲会讲清楚三种「拆不开」的歧义，<b>其中旋转歧义正是高斯会让整件事垮掉的那个原因</b>。<br><b>后半场换一个世界。</b>Ng 说这是本课<b>四大主题里的最后一个：强化学习</b>。<br><b>⚠ 它和前面所有内容最大的不同在于——没有人告诉你正确答案是什么。</b>教直升机飞行时，<b>没有哪个专家能在每一毫秒告诉你操纵杆该推多少</b>。<b>⭐ 你能做的只是说清楚「什么算好、什么算坏」，剩下的让算法自己摸索。</b><br>这一讲会把这个想法形式化成 <b>MDP（马尔可夫决策过程）</b>——它是后面四讲的共同语言。");
+});
+KP("1 · 回顾：鸡尾酒会问题要解什么",function(){
+  S(130,function(){clearScene();setEq(null);setCap("混进去容易，拆出来难");
+   boxNode(120,195,230,66,"声源 s","g");
+   boxNode(500,195,280,66,"混合矩阵 A","y");
+   boxNode(930,195,230,66,"录音 x","b");
+   link(350,228,500,228); link(780,228,930,228);
+   note("x = A·s　　这是物理上真实发生的事",640,300,"d");
+   note("⭐ 我们只看得到 x，要反推出 s",640,352,"y");
+   note("办法：找一个「解混矩阵」W，使 W·x ≈ s",640,398,"g");},"<b>先把上一讲的设定收拢一下。</b><br><b>房间里有几个人同时说话</b>（这些是<b>声源 s</b>），<b>几个麦克风各自录到一段混音</b>（这是 <b>x</b>）。每个麦克风离每个人远近不同，所以<b>录到的是各个声音按不同比例相加的结果</b>——这个比例关系写成一个<b>混合矩阵 A</b>，于是 <b>x = A·s</b>。<br><b>⚠ 关键在于：我们只看得到 x。</b>A 不知道，s 也不知道。<br><b>⭐ ICA 要做的是找一个「解混矩阵」W，让 W·x 尽量还原出 s。</b><br><b>这一讲要回答的是一个更根本的问题：凭什么这件事做得成？</b>");
+  SUM(130,1,{h:"鸡尾酒会：x = A·s，只给 x 求 s",k:"<b>声源 s</b> 经<b>混合矩阵 A</b> 得到<b>录音 x</b>：<b>x = A·s</b>。混合是物理上真实发生的（麦克风离各人远近不同）。",m:"⚠ <b>我们只看得到 x</b>——A 不知道，s 也不知道。",w:"⭐ ICA 要找一个<b>解混矩阵 W</b>，使 <b>W·x ≈ s</b>。",e:"⭐ <b>这一讲回答的是更根本的问题：凭什么这件事做得成？</b>答案会很苛刻。"});
+  QUIZ(130,1,{t:"ICA 的输入和目标分别是什么？",o:["已知 s，求 A","只已知录音 x，要同时反推出混合方式和原始声源——办法是找一个解混矩阵 W 使 W·x ≈ s","已知 x 和 s，求 A","已知 A 和 x，求 s"],a:1,w:"⚠ <b>A 和 s 都是未知的</b>，这正是问题难的地方。⭐ 下面会看到，正因为未知得这么彻底，<b>必然留下三种拆不开的歧义</b>。"});
+});
+KP("2 · 先铺词：累积分布函数 CDF",function(){
+  S(494,function(){clearScene();setEq(null);setCap("「小于等于某个值」的概率");
+   axes({x0:300,x1:980,y0:380,y1:190});
+   sig(640,285,560,170,"b");
+   note("F(v) = P(s ≤ v)",640,170,"b");
+   note("⭐ 从 0 单调爬到 1，永不下降",640,230,"y");
+   note("左端趋近 0：几乎不可能比「很小的数」还小",400,340,"d");
+   note("右端趋近 1：几乎必然比「很大的数」小",900,340,"d");},"<b>这一讲要用到一个新词，先单独讲清楚：累积分布函数，简称 CDF。</b><br><b>它的定义只有一句话：F(v) 就是「这个随机变量小于等于 v 的概率」。</b><br><b>⭐ 所以它天生有三个性质</b>：<b>取值永远在 0 和 1 之间</b>（因为它是个概率）；<b>单调不下降</b>（门槛往右移，被框进来的只会更多）；<b>左端趋近 0、右端趋近 1</b>。<br><b>⚠ 别把 CDF 和概率密度混了</b>——<b>密度回答「在这一点附近有多密」，CDF 回答「到这一点为止累计了多少」</b>。<b>下一节讲它们的关系。</b>");
+  SUM(494,2,{h:"CDF：F(v) = P(s ≤ v)",k:"定义只有一句：<b>随机变量小于等于 v 的概率</b>。",m:"⭐ 三个天生的性质：<b>取值在 0 到 1 之间</b>、<b>单调不下降</b>、<b>左端趋近 0 右端趋近 1</b>。",w:"⚠ <b>别和概率密度混</b>：<b>密度问「这一点附近多密」，CDF 问「到这一点累计了多少」</b>。",e:"⭐ 下一节给出两者的关系——那正是 ICA 需要它的理由。"});
+  QUIZ(494,2,{t:"累积分布函数 F(v) 的定义是什么？",o:["随机变量小于等于 v 的概率","随机变量的平均值","随机变量恰好等于 v 的概率","随机变量在 v 附近的密度"],a:0,w:"⭐ 由定义直接得到三个性质：<b>取值在 [0,1]</b>、<b>单调不下降</b>（门槛右移只会框进更多）、<b>两端分别趋近 0 和 1</b>。"});
+});
+KP("3 · ★ 密度是 CDF 的导数",function(){
+  S(618,function(){clearScene();setEq("$$p(s) \\;=\\; F'(s)$$","top");setCap("两者只差一次求导");
+   note("CDF 爬得陡的地方 ⇒ 密度大",640,232,"b");
+   note("CDF 走得平的地方 ⇒ 密度小",640,285,"d");
+   note("⭐ 所以「指定一个 CDF」就等于「指定了一个密度」",640,392,"y");},"<b>密度和 CDF 的关系非常简单：密度就是 CDF 的导数。</b><br><b>直觉上很好理解</b>：CDF 在某处<b>爬得陡</b>，说明<b>那一小段里累计了很多概率</b> ⇒ 密度大；CDF 在某处<b>几乎是平的</b>，说明<b>那一带几乎没有概率</b> ⇒ 密度小。<br><b>⭐ 这个关系带来一个很实用的后果：只要你指定一个 CDF，就等于指定了一个密度。</b><br><b>⚠ 而且指定 CDF 往往更省事</b>——<b>CDF 只需要满足「从 0 单调爬到 1」，这个条件比「处处非负且积分为 1」好凑得多。</b><b>下一节就靠这一点挑出 ICA 要用的那个分布。</b>");
+  SUM(618,3,{h:"★ p(s) = F′(s)：密度是 CDF 的导数",k:"CDF <b>爬得陡 ⇒ 密度大</b>；<b>走得平 ⇒ 密度小</b>。",m:"⭐ <b>指定一个 CDF 就等于指定了一个密度。</b>",w:"⚠ <b>而且指定 CDF 更省事</b>：只要「从 0 单调爬到 1」，比「处处非负且积分为 1」好凑得多。",e:"⭐ ICA 正是靠这一点来挑它需要的那个分布。"});
+  QUIZ(618,3,{t:"概率密度和 CDF 是什么关系？",o:["密度是 CDF 的倒数","密度是 CDF 的积分","两者相等","密度是 CDF 的导数——CDF 爬得越陡，该处密度越大"],a:3,w:"⭐ 实用后果：<b>指定一个 CDF 就等于指定了一个密度</b>，而且<b>凑一个合法的 CDF 比凑一个合法的密度容易</b>（只要单调从 0 爬到 1）。"});
+});
+KP("4 · 为什么非要知道 s 的密度不可",function(){
+  S(463,function(){clearScene();setEq(null);setCap("极大似然需要一个密度才能写出来");
+       says("7:43","we need to figure out what is the density of S");
+       boxNode(150,205,440,70,"想用极大似然估计 W","b");
+       boxNode(680,205,440,70,"就必须先写出 s 的密度 p(s)","y");
+       link(590,240,680,240);
+       note("没有密度 ⇒ 似然函数根本写不出来 ⇒ 没有可优化的目标",640,330,"r");
+       note("⭐ 但 s 正是我们要求的未知量 —— 它的分布也没人告诉我们",640,392,"y");},"<b>ICA 的求解思路和前面几讲一样：写出似然，再最大化它。</b>Ng 说得很直接——<b>要建 ICA 模型，我们得先搞清楚 s 的密度是什么</b>。<br><b>为什么非要密度不可？</b>因为<b>似然函数的定义里就含着密度</b>。<b>没有密度，似然函数根本写不出来，也就没有可优化的目标。</b><br><b>⚠ 但这里有个尴尬：s 正是我们要求的未知量，它服从什么分布，同样没人告诉我们。</b><br><b>⭐ 于是只能自己挑一个。</b>下面会看到——<b>挑的方式会直接决定 ICA 能不能成立。</b>");
+  S(463,function(){clearScene();setEq("$$\\ell(W) \\;=\\; \\sum_i \\log p_x\\big(x^{(i)};W\\big), \\qquad p_x \\text{ 由 } p_s \\text{ 推出}$$","top");
+       setCap("把「含着密度」这句话摆出来看");
+       says("7:43","we need to figure out what is the density of S",214);
+       note("① 我们能观测的是 x，所以似然里出现的是 p_x",640,252,"b");
+       note("② 而 x = A·s，x 的密度完全由 s 的密度决定",640,304,"b");
+       note("⇒ 想算 ② 就必须先有 p_s —— 这就是上一镜那个死结",640,356,"r");
+       note("⭐ 注意「W 可逆」这个条件：x 与 s 要一一对应，密度才能这样换过去",640,398,"y");},"<b>把「似然里含着密度」这句话具体摆出来，死结在哪就看得清了。</b><br><b>① 我们能观测到的只有录音 x</b>，所以<b>似然函数里出现的是 x 的密度 p_x</b>。<br><b>② 而 x = A·s</b>，所以 <b>x 的密度完全由 s 的密度决定</b>——两者之间只隔一个线性变换。<br><b>⇒ 想算出 ② 里的 p_x，就必须先有 p_s。</b>这就是上一镜那个死结。<br><b>⚠ 这里还藏着一个条件：W 必须可逆。</b>Ng 在课上专门点了这一句——<b>之所以能把 x 的概率换成「s 取对应值」的概率，是因为可逆矩阵给出的是一个一一对应</b>。<b>⭐ 如果不是一一对应，一个 x 可能对应好多个 s，概率就没法这样直接搬过去。</b>");
+  SUM(463,4,{h:"要用极大似然，就必须先有 s 的密度",k:"Ng：<b>要建 ICA 模型，得先搞清楚 s 的密度是什么</b>。",m:"<b>链条</b>：似然里是 <b>p_x</b> ⇒ 而 <b>x = A·s</b>，p_x 由 <b>p_s</b> 决定 ⇒ <b>没有 p_s 就写不出似然，也就没有可优化的目标</b>。",w:"⚠ <b>尴尬之处</b>：s 正是待求的未知量，<b>它的分布同样没人告诉我们</b> ⇒ 只能自己挑一个。",e:"⚠ <b>还有一个前提：W 可逆</b>——x 与 s 一一对应，概率才能这样换过去。⭐ 不是一一对应的话，一个 x 会对应好多个 s。"});
+  QUIZ(463,4,{t:"ICA 为什么必须先确定 s 的密度？",o:["为了画图方便","因为要先判断声音是不是语音","似然函数里出现的是 p_x，而 x = A·s 使 p_x 完全由 p_s 决定——没有 p_s 就写不出似然","因为密度决定了麦克风的数量"],a:2,w:"⚠ 尴尬在于 <b>s 本身就是未知量</b>，这个密度<b>只能自己挑一个</b>。⚠ 另外还需要 <b>W 可逆</b>——x 与 s 一一对应，概率才能这样换过去。"});
+});
+KP("5 · ⚠ 歧义一：谁是「第一个」说话的人",function(){
+  S(352,function(){clearScene();setEq(null);setCap("顺序分不出来");
+       boxNode(150,200,250,70,"还原出 甲、乙","b");
+       boxNode(760,200,250,70,"还原出 乙、甲","b");
+       note("↕ 这两个结果一样好",640,240,"d");
+       note("⭐ 因为没有任何信息告诉我们「谁该编号为 1」",640,330,"y");
+       note("⚠ 这个歧义无害 —— 声音本身是对的，只是排序不定",640,392,"g");},"<b>ICA 必然留下三种「拆不开」的歧义。先说最无害的一种：顺序。</b><br><b>假设算法成功地把两个声音分开了，但它怎么知道哪个该叫「说话人 1」、哪个该叫「说话人 2」？</b><br><b>⭐ 答案是不知道，也没法知道</b>——<b>数据里没有任何信息能指定这个编号。</b>把两路输出调换一下，<b>似然完全相同</b>。<br><b>⚠ 但这个歧义是无害的</b>：<b>两段声音本身都是正确还原的</b>，只是<b>排列顺序不确定</b>。实际用的时候人听一下就知道谁是谁。<br><b>下面两种就没这么轻松了。</b>");
+  S(352,function(){clearScene();setEq("$$W' = PW \\quad (P \\text{ 是置换矩阵}) \\;\\Longrightarrow\\; \\text{似然完全相同}$$","top");
+       setCap("用矩阵说清楚：换个顺序就是左乘一个置换矩阵");
+       matrix({rows:2,cols:2,cw:120,ch:52,x:300,y:250,
+         cell:function(i,j){return (i===j)?"1":"0";},
+         label:"原来的 W"});
+       matrix({rows:2,cols:2,cw:120,ch:52,x:760,y:250,
+         cell:function(i,j){return (i===j)?"0":"1";},
+         label:"换序后 PW",labelCls:"y"});
+       note("⇒ 两路输出互换，似然一分不差",640,398,"r");},"<b>把这件事写成矩阵，就一眼看穿了。</b><br><b>「调换两路输出」在数学上就是给 W 左乘一个置换矩阵 P</b>——<b>置换矩阵的每一行、每一列都只有一个 1，其余全是 0</b>，作用就是把行的顺序重排。<br><b>左边是原来的 W（这里用单位矩阵示意），右边是把两行换过来之后的 PW。</b><br><b>⭐ 关键点：似然函数对 W 和 PW 给出完全相同的值。</b>既然两个不同的解在目标函数上一分不差，<b>优化算法就没有任何理由偏向其中一个。</b><br><b>⚠ 这也说明一件事：ICA 的解不是唯一的，而是一整族。</b>后面两种歧义会让这一族变得更大。");
+  SUM(352,5,{h:"⚠ 歧义一：输出的顺序定不下来",k:"算法分出两个声音，<b>但不知道哪一路该编号为 1</b>——数据里没有这个信息。",m:"<b>数学上</b>：调换输出 = <b>给 W 左乘一个置换矩阵 P</b>（每行每列只有一个 1）。<b>似然对 W 和 PW 完全相同</b>。",w:"⇒ 两个解在目标函数上一分不差，<b>优化算法没有任何理由偏向其中一个</b>。",e:"⭐ <b>这个歧义无害</b>：两段声音本身都还原正确，人听一下就能分辨。⚠ 但它说明 <b>ICA 的解是一整族而非唯一</b>。"});
+  QUIZ(352,5,{t:"「顺序歧义」在数学上对应什么操作？为什么它无害？",o:["把时间轴颠倒","给 W 左乘一个置换矩阵 P，似然完全相同——但两段声音本身都还原正确，只是排序不定","把 W 乘上一个标量；内容会失真","改变采样率"],a:1,w:"⭐ 置换矩阵<b>每行每列只有一个 1</b>，作用就是重排顺序。<b>实际使用时人听一下就知道谁是谁。</b>⚠ 但它说明 ICA 的解是<b>一整族</b>。"});
+});
+KP("6 · ⚠ 歧义二：音量与正负翻转",function(){
+  S(352,function(){clearScene();setEq("$$x \\;=\\; A\\,s \\;=\\; \\big(A\\,\\alpha^{-1}\\big)\\,\\big(\\alpha\\, s\\big)$$","top");
+       setCap("放大一倍，再把 A 缩小一倍 —— 完全等价");
+       note("把 s 放大 α 倍，同时把 A 缩小 α 倍",640,252,"b");
+       note("⇒ 乘出来的 x 一模一样 ⇒ 数据无法区分",640,304,"r");
+       note("⇒ 所以原始音量到底是多少，无从判断",640,356,"d");
+       note("⭐ α 取负数时还会出现一个更有趣的情况 —— 见下一镜",640,398,"y");},"<b>第二种歧义是缩放。</b><br><b>把某个声源整体放大一倍，同时把混合矩阵对应那一列缩小一倍——乘出来的录音一模一样。</b>式子里的 α 和 α⁻¹ 正好互相抵消。<br><b>⚠ 既然 x 完全相同，数据就无从判断原始音量到底是多少。</b>算法可能还原出一段音量只有原来十分之一的声音，而它在似然上和正确答案一样好。<br><b>⭐ 实际使用时这不成问题</b>——<b>把还原出的每一路归一化到统一音量就行了</b>，内容并没有损失。<br><b>⚠ 但 α 取负数时会出现一个更有趣的情况。</b>");
+  S(352,function(){clearScene();setEq(null);setCap("α 取负数：整段波形上下翻转");
+       axes({x0:260,x1:1020,y0:380,y1:180});
+       curve(fn(function(x){return 245-38*Math.sin((x-280)/38);},280,1000,140),"b");
+       curve(fn(function(x){return 340+38*Math.sin((x-280)/38);},280,1000,140),"r");
+       note("原始波形",200,245,"b","start");
+       note("乘 −1 之后",180,340,"r","start");
+       note("⭐ 两者在数学上不同，但播放出来人耳几乎听不出差别",640,398,"y");},"<b>α 取负数时，整段波形上下翻转</b>——正的变负、负的变正。<b>图上两条曲线正是这个关系：下面那条是上面那条乘了 −1。</b><br><b>⭐ 关键在于：这两段波形在数学上明显不同，但播放出来，人耳几乎听不出差别。</b><b>因为听觉主要感知的是波形的振动幅度和频率，而不是「此刻气压是偏高还是偏低」这个绝对符号。</b><br><b>⇒ 所以符号也定不下来，而且和音量一样，这件事不影响实用。</b><br><b>⚠ 小结一下：前两种歧义（顺序、幅度与符号）都只是「标签问题」，还原出的声音内容是对的。</b><b>⭐ 下一节那第三种就完全不同了——它会让「还原」本身失败。</b>");
+  SUM(352,6,{h:"⚠ 歧义二：幅度与符号定不下来",k:"<b>把 s 放大 α 倍、同时把 A 缩小 α 倍</b>，式子里 α 与 α⁻¹ 抵消，<b>乘出来的 x 完全相同</b>。",m:"⇒ <b>原始音量无从判断</b>。⭐ 实用上不成问题：<b>把每一路归一化到统一音量即可</b>，内容没有损失。",w:"⭐ <b>α 取负时整段波形上下翻转</b>，但<b>人耳几乎听不出差别</b>——听觉感知的是幅度和频率，不是气压的绝对符号。",e:"⚠ <b>前两种歧义都只是「标签问题」，声音内容是对的。</b>⭐ 第三种会让「还原」本身失败。"});
+  QUIZ(352,6,{t:"为什么 ICA 无法确定还原出的声源的音量和正负？",o:["因为采样有噪声","因为 sigmoid 把取值压缩到了 0 和 1 之间","因为麦克风的灵敏度未知","把 s 放大 α 倍、同时把 A 缩小 α 倍，x 完全相同；α 取负时波形翻转而人耳听不出差别"],a:3,w:"⭐ 实用上都不成问题：<b>音量可以归一化，符号不影响听感</b>。⚠ 这两种和顺序歧义一样<b>只是标签问题</b>，声音内容是对的。"});
+});
+KP("7 · ★★★ 歧义三：旋转 —— 高斯让整件事垮掉",function(){
+  S(328,function(){clearScene();setEq(null);setCap("标准二维高斯是「转着看都一样」的");
+       says("5:28","the Gaussian distribution is rotationally symmetric");
+       dots([[638,204],[698,228],[714,282],[690,334],[634,352],[582,330],
+             [566,274],[590,222],[670,250],[674,310],[608,312],[604,248],
+             [648,284],[626,300]],"b",7);
+       curve([[540,278],[740,278]],"y"); curve([[640,178],[640,378]],"y");
+       curve([[569,207],[711,349]],"r"); curve([[569,349],[711,207]],"r");
+       note("⭐ 两组轴都说得通 ⇒ 没有任何方向是「特别」的",640,400,"y");},"<b>⭐ 这是三种歧义里真正致命的一种。</b><br><b>想象两个标准高斯信号，把它们画在平面上，会得到一团圆形的点云。</b><br><b>⚠ 关键性质：标准二维高斯是旋转对称的。</b>Ng 的原话就是——<b>高斯分布是旋转对称的</b>。<br><b>图上画了两组坐标轴：黄色的一组和转了 45 度的红色一组。</b><b>⭐ 对这团圆形点云来说，两组轴完全同样合理——数据给不出任何理由偏向哪一组。</b><br><b>⇒ 于是没有任何一个方向是「特别」的。</b><br><b>⚠ 而 ICA 要做的恰恰是「找出那几个特别的方向」</b>——每个方向对应一个独立声源。<b>下一镜说明这为什么是致命的。</b>");
+  S(328,function(){clearScene();setEq("$$W' = RW \\quad (R \\text{ 是旋转矩阵}) \\;\\Longrightarrow\\; \\text{似然也完全相同}$$","top");
+       setCap("和置换矩阵对比：这次「转多少度」是连续的");
+       matrix({rows:3,cols:2,cw:420,ch:46,x:220,y:250,
+         cell:function(i,j){var t=[
+           ["歧义","还原出的声音"],
+           ["顺序 / 幅度 / 符号","内容正确，只是标签不定"],
+           ["★ 旋转","内容本身就是错的 —— 是几路声音的混合"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⚠ 而且旋转角度是连续的 ⇒ 有无穷多个一样好的错解",640,398,"r");},"<b>把三种歧义并排比较，严重程度的差别就很清楚了。</b><br><b>顺序、幅度、符号这三种，还原出的声音内容都是正确的</b>，只是标签（编号、音量、正负）定不下来。<br><b>⭐ 旋转歧义则完全不同：转过角度之后得到的每一路，都是几个真实声源按某个比例混在一起的结果。</b><b>换句话说，内容本身就是错的——你听到的还是混音，只是换了一种混法。</b><br><b>⚠ 更糟的是数量上的差别。</b><b>置换矩阵只有有限几个</b>（两路的话就两种），<b>而旋转角度是连续的——从 0 度到 360 度之间有无穷多个取值，每一个都给出一个一样好的错解。</b><br><b>⇒ 这就不是「人听一下就能分辨」能救的了。</b>");
+  SUM(328,7,{h:"★★★ 旋转歧义：高斯旋转对称 ⇒ 没有特别的方向",k:"Ng：<b>高斯分布是旋转对称的</b>。两个标准高斯画出来是一团<b>圆形</b>点云，<b>转任意角度看上去完全一样</b>。",m:"⇒ <b>没有任何方向是「特别」的</b>。而 ICA 要做的恰恰是<b>找出那几个特别的方向</b>（每个对应一个独立声源）。",w:"⚠⚠ <b>和前两种有本质区别</b>：前两种内容正确、只是标签不定；<b>旋转后的每一路都还是几路声音的混合，内容本身就是错的</b>。",e:"⚠ <b>数量上也更糟</b>：置换矩阵只有有限几个，<b>而旋转角度是连续的 ⇒ 有无穷多个一样好的错解</b>。"});
+  QUIZ(328,7,{t:"为什么「旋转歧义」比顺序歧义和缩放歧义严重得多？",o:["前两种内容正确、只是标签不定；旋转后的每一路仍是几路声音的混合，内容本身就错了，而且这样的错解有无穷多个","因为它只在高维时出现","因为它让计算量变大","因为它会让 A 变得不可逆"],a:0,w:"⭐ 根源是<b>标准高斯旋转对称</b>——转任意角度看上去都一样，<b>于是没有任何方向是「特别」的</b>。⚠ 置换矩阵只有有限几个，<b>旋转角度却是连续的</b>。"});
+});
+KP("8 · ★★ 定理：ICA 可行 ⟺ 数据非高斯",function(){
+  S(433,function(){clearScene();setEq(null);setCap("这是一条硬性的前提，不是建议");
+       says("7:13","ICA is possible only if your data is non Gaussian");
+       boxNode(150,200,440,76,"声源是高斯的","r");
+       boxNode(760,200,440,76,"ICA 不可能","r");
+       link(590,238,760,238);
+       note("⇐ 旋转对称 ⇒ 没有可依据的方向",640,320,"d");
+       note("⭐ 反过来：只要非高斯，点云就有「棱角」，方向就能定下来",640,392,"y");},"<b>把上一节的观察写成定理。Ng 在课上正式陈述了它</b>：<b>只有当你的数据是非高斯的，ICA 才可能成立。</b><br><b>⚠ 这是一条硬性前提，不是「最好这样」的建议。</b><br><b>反过来理解更有帮助</b>：<b>非高斯的分布画出来不是圆的，它有「棱角」或者说有特定的朝向</b>。<b>⭐ 正是这些棱角给了算法一个可依据的方向。</b><br><b>这也解释了为什么下一节挑密度时要绕开高斯</b>——<b>不是因为高斯不好算，而是因为用了它整件事就不成立。</b><br><b>⚠ 一个实践上的推论：如果你的信号恰好接近高斯，ICA 会表现很差，而且这不是调参能解决的问题。</b>");
+  S(433,function(){clearScene();setEq(null);setCap("有棱角的点云：方向立刻就定下来了");
+       axes({x0:300,x1:980,y0:385,y1:195});
+       dots([[430,350],[470,330],[510,310],[550,290],[590,270],[630,250],
+             [670,230],[710,215],[480,345],[520,325],[560,305],[600,285],
+             [640,265],[680,245],[720,232],[760,218]],"g",7);
+       curve([[420,355],[770,212]],"y");
+       note("⭐ 这团点明显「沿着一个方向」铺开",640,170,"y");
+       note("⇒ 把轴转一下，点云看上去就不一样了 ⇒ 方向可辨认",640,330,"g");
+       note("⚠ 语音天生强非高斯 —— 这正是鸡尾酒会成为经典案例的原因",640,392,"y");},"<b>换一团非高斯的点云，对比就出来了。</b><br><b>这团点明显沿着一个方向铺开，不是圆的。</b><b>⭐ 现在把坐标轴转一下，点云看上去立刻就不一样了——于是「哪个方向特别」有了答案。</b><br><b>这就是上一镜那句「棱角给了算法依据」的具体含义：分布的形状本身携带了方向信息。</b><br><b>⚠ 这里补一个很实用的事实：语音信号天生就是强非高斯的。</b>人说话时<b>大部分时间音量很小（停顿、气口），偶尔出现很大的峰值</b>，这种「大部分时间接近零、偶尔很大」的分布比高斯尖得多、尾巴重得多。<br><b>⭐ 这正是鸡尾酒会问题能成为 ICA 的经典成功案例的原因——它恰好满足那条最苛刻的前提。</b>");
+  SUM(433,8,{h:"★★ 定理：数据非高斯是 ICA 的硬性前提",k:"Ng 正式陈述：<b>只有当数据是非高斯的，ICA 才可能成立</b>。⚠ <b>这是硬性前提，不是建议</b>。",m:"<b>反过来理解</b>：非高斯的点云<b>沿某个方向铺开、有棱角</b>，<b>转一下轴看上去就不一样了</b> ⇒ ⭐ <b>方向可辨认</b>。",w:"⭐ <b>语音天生强非高斯</b>：大部分时间音量很小（停顿、气口），偶尔很大的峰值 ⇒ <b>比高斯尖得多、尾巴重得多</b>。",e:"⇒ <b>这正是鸡尾酒会成为经典案例的原因。</b>⚠ <b>实践推论</b>：信号若接近高斯，ICA 表现差，<b>调参救不了</b>。"});
+  QUIZ(433,8,{t:"关于「数据必须非高斯」这个条件，哪种说法准确？",o:["只影响收敛速度，不影响最终结果","是一条经验建议，数据接近高斯时调参即可","是硬性前提——高斯的旋转对称让所有方向等价，算法没有任何依据可拆分","只在声源多于麦克风时才需要"],a:2,w:"⭐ <b>非高斯的点云有棱角、有朝向，棱角才是算法的依据。</b>⭐ <b>语音天生强非高斯</b>（大部分时间很小、偶有大峰值），所以鸡尾酒会是经典案例。"});
+});
+KP("9 · ★ 挑 sigmoid 当 CDF",function(){
+  S(1143,function(){clearScene();setEq(null);setCap("要一个「非高斯」的分布，而且要好算");
+       says("19:03","Let's pick the sigmoid function");
+       axes({x0:320,x1:960,y0:380,y1:200});
+       sig(640,290,520,160,"g");
+       note("取 CDF：F(s) = σ(s) = 1/(1+e⁻ˢ)",640,175,"g");
+       note("⇒ 密度 p(s) = σ(s)(1−σ(s))　（对 CDF 求导）",640,340,"b");
+       note("⭐ 这个密度比高斯「尖」—— 正是我们要的非高斯",640,392,"y");},"<b>该挑哪个分布？Ng 的选择是：拿 sigmoid 当 CDF。</b><br><b>为什么 sigmoid 合格？</b>回想 CDF 的三个条件——<b>取值在 0 到 1 之间、单调不下降、两端分别趋近 0 和 1</b>。<b>图上这条 S 形曲线恰好全都满足</b>，所以它是一个合法的 CDF。<br><b>⭐ 对它求导就得到密度：p(s) = σ(s)(1−σ(s))。</b>这个式子你在逻辑回归那里见过——<b>正是 sigmoid 的导数。</b><br><b>⚠ 但按上一节的定理，真正要紧的不是「好算」，而是「它不是高斯」。</b><b>⭐ 下一镜把这个密度和高斯画在一起对比。</b>");
+  S(1143,function(){clearScene();setEq(null);setCap("和高斯摆在一起比一比");
+       axes({x0:300,x1:980,y0:380,y1:190});
+       curve(fn(function(x){var t=(x-640)/52;var v=1/(1+Math.exp(-t));
+         return 375-1700*v*(1-v)*0.52;},320,960,140),"b");
+       curve(fn(function(x){var t=(x-640)/78;
+         return 375-205*Math.exp(-t*t/2);},320,960,140),"d");
+       note("sigmoid 的导数（蓝）",900,215,"b");
+       note("高斯（灰）",910,330,"d");
+       note("⭐ 蓝线中间更高更窄、两侧落得更慢 = 更尖、尾巴更重",640,398,"y");},"<b>把两个密度画在一起，「非高斯」这件事就看得见了。</b><br><b>蓝线是 σ(s)(1−σ(s))，灰线是高斯。</b><b>⭐ 蓝线中间更高更窄，两侧落下去更慢——也就是通常说的「更尖、尾巴更重」。</b><br><b>这个形状恰好贴近语音的真实分布</b>：上一节说过，<b>人说话大部分时间音量很小、偶尔出现大峰值</b>，正对应「中间高耸、尾巴不薄」。<br><b>⚠ 要注意分寸：Ng 并没有说这是语音的真实密度。</b>他挑它的理由是<b>「满足 CDF 的条件、非高斯、而且导数很好写」</b>。<b>⭐ ICA 的实践经验是——只要挑的密度在「非高斯」这个大方向上对，算法通常就能工作，不必精确匹配真实分布。</b>");
+  SUM(1143,9,{h:"★ 用 sigmoid 当 CDF ⇒ 密度 σ(s)(1−σ(s))",k:"sigmoid <b>恰好满足 CDF 的三个条件</b>（在 [0,1]、单调不降、两端趋近 0 和 1），所以是合法的 CDF。",m:"对它求导得密度 <b>p(s) = σ(s)(1−σ(s))</b>——<b>就是逻辑回归里见过的那个 sigmoid 导数</b>。",w:"⭐ <b>和高斯比：中间更高更窄、两侧落得更慢</b>（更尖、尾巴更重），<b>恰好贴近语音的真实形状</b>。",e:"⚠ <b>分寸</b>：Ng 没说这是语音的真实密度，挑它是因为<b>合法、非高斯、导数好写</b>。⭐ <b>只要在「非高斯」这个方向上对，算法通常就能工作。</b>"});
+  QUIZ(1143,9,{t:"为什么可以、并且选择拿 sigmoid 当 CDF？",o:["因为它能把值压到 0 和 1 之间就够了","因为它是逻辑回归用的函数，可以复用代码","它满足 CDF 的三个条件，导数好写，而且导出的密度比高斯更尖、尾巴更重（非高斯）","因为它恰好是语音的真实密度"],a:2,w:"⚠ 最后一项不对：<b>Ng 没说它是真实密度</b>。⭐ ICA 的经验是<b>只要在「非高斯」这个大方向上对就通常能工作</b>，不必精确匹配。"});
+});
+KP("10 · ICA 的学习规则",function(){
+  S(1545,function(){clearScene();setEq(null);setCap("写出似然，对 W 求导，往上爬");
+       says("25:45","you can use stochastic gradient ascent");
+       boxNode(170,195,980,56,"① 假定 s 各分量相互独立 ⇒ 联合密度 = 各分量密度相乘","b");
+       boxNode(170,263,980,56,"② 代入 s = Wx，按变量替换补上 |det W| 这个因子","y");
+       boxNode(170,331,980,56,"③ 对 W 求导，用随机梯度上升往似然高处爬","g");
+       note("⭐ 「独立」这个假设正是 Independent Component Analysis 名字的由来",640,398,"y");},"<b>有了密度，剩下的就是熟悉的流程了。</b><br><b>第一步：假定各个声源相互独立。</b>于是<b>联合密度等于各个分量密度相乘</b>。<b>⭐ 「独立」这个假设正是 ICA 名字的由来——Independent Component Analysis。</b><br><b>第二步：把 s = Wx 代进去。</b>⚠ 这里有个技术细节：<b>做变量替换时密度要乘上一个 |det W| 的因子</b>。<br><b>第三步：对 W 求导，用随机梯度上升往上爬。</b>Ng 说的就是<b>可以用随机梯度上升</b>。<br><b>⚠ 注意是「上升」不是「下降」——因为我们在最大化似然，不是最小化损失。</b><b>下一镜说清楚 |det W| 为什么不能漏。</b>");
+  S(1545,function(){clearScene();setEq("$$p_x(x) \\;=\\; \\Big(\\prod_{j} p_s\\big(w_j^{\\top}x\\big)\\Big)\\cdot\\big|\\det W\\big|$$","top");
+       setCap("|det W| 这一项为什么不能漏");
+       note("① 变量替换会改变「体积」，密度必须按这个倍数补偿",640,258,"b");
+       note("② 漏掉它会怎样：W 越小 ⇒ 每个 p_s 的值越大 ⇒ 似然越大",640,310,"r");
+       note("⇒ 最大化似然会把 W 一路推向零，解完全失效",640,356,"r");
+       note("⭐ 有了 |det W|，W 缩小时这一项会同步变小，把虚假的收益抵消掉",640,398,"g");},"<b>这个式子就是 ICA 的似然核心，逐项看一下。</b><br><b>括号里是各分量密度的乘积</b>——来自「独立」这个假设，<b>w_j 是 W 的第 j 行，所以 w_jᵀx 就是还原出的第 j 路声音</b>。<br><b>⭐ 括号外面那个 |det W| 是变量替换带来的：线性变换会改变「体积」，密度必须按这个倍数补偿。</b><br><b>⚠ 漏掉它会出什么事？</b>注意<b>把 W 整体缩小时，每个 w_jᵀx 都更接近 0，而密度在 0 附近取值最大</b>——<b>于是括号里的乘积会变大，似然看起来在变好。</b><b>⇒ 最大化似然会把 W 一路推向零，解完全失效。</b><br><b>⭐ 有了 |det W| 就不会：W 缩小时行列式也同步变小，正好把这个虚假的收益抵消掉。</b>");
+  SUM(1545,10,{h:"ICA 的学习规则：似然 → 对 W 求导 → 梯度上升",k:"<b>① 假定各声源独立 ⇒ 联合密度 = 各分量密度相乘</b>（⭐ 这正是 ICA 名字的由来）；<b>w_jᵀx 就是还原出的第 j 路</b>。",m:"<b>② 代入 s = Wx，补上 |det W|</b>——线性变换改变体积，密度要按这个倍数补偿。",w:"⚠⚠ <b>漏掉它的后果</b>：W 缩小 ⇒ 各 w_jᵀx 更接近 0 ⇒ 密度取值更大 ⇒ 似然虚假变好 ⇒ <b>W 被一路推向零</b>。⭐ <b>有了行列式就同步抵消。</b>",e:"<b>③ 对 W 求导，用随机梯度上升。</b>⚠ <b>是「上升」不是「下降」</b>——我们在最大化似然。"});
+  QUIZ(1545,10,{t:"ICA 的似然里为什么必须有 |det W| 这一项？",o:["为了保证 W 可逆","变量替换会改变体积，密度必须补偿；漏掉它，W 缩小会让似然虚假变好，最大化会把 W 推向零","因为声源数必须等于麦克风数","为了防止过拟合"],a:1,w:"⭐ 机理：<b>W 缩小 ⇒ 各 w_jᵀx 更接近 0 ⇒ 密度取值更大 ⇒ 似然看起来变好</b>。有了行列式，<b>它同步变小把这份虚假收益抵消</b>。"});
+});
+KP("11 · ICA 的近亲：稀疏编码与 Google cat",function(){
+  S(1943,function(){clearScene();setEq(null);setCap("ICA 这条线后来长成了什么");
+       says("32:23","sparse coding which is actually very closely related to ICA");
+       boxNode(120,200,300,70,"ICA","b");
+       boxNode(500,200,300,70,"稀疏编码","y");
+       boxNode(880,200,280,70,"分层 / 多层版本","g");
+       link(420,235,500,235); link(800,235,880,235);
+       note("Ng：两者「优化的东西非常相似」",640,320,"d");
+       note("⭐ 一层学边缘检测器，叠起来学「物体部件」检测器",640,392,"y");},"<b>插一段这条线后来的发展，因为它能帮你把 ICA 放进更大的图里。</b><br><b>Ng 提到一个叫「稀疏编码」的算法，说它和 ICA 关系非常近</b>——<b>可以证明两者优化的东西非常相似</b>。<br><b>⭐ 真正有意思的是分层版本：先用一层稀疏编码从图像里提取低层特征，然后在它的输出上再叠一层。</b><br><b>Ng 说，这样做出来的<b>第一层学到的是边缘检测器，叠上去之后学到的就是「物体部件」检测器</b>。<br><b>⚠ 注意这个思路的形状：它本质上是「把 ICA 反复套用，做出一个非线性版本」。</b><b>⭐ 这正是深度学习早期的核心想法之一。</b>");
+  S(1943,function(){clearScene();setEq(null);setCap("那只著名的猫");
+       says("32:42","not just edge detectors, but object part detectors");
+       matrix({rows:4,cols:2,cw:420,ch:50,x:220,y:200,
+         cell:function(i,j){var t=[
+           ["层","学到了什么"],
+           ["第一层","边缘检测器（横的、竖的、斜的线条）"],
+           ["中间层","物体部件（眼睛、耳朵之类）"],
+           ["更高层","★ 整个物体 —— 著名的「Google cat」"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ Ng 说这是 Google Brain 最早做的项目之一",640,398,"y");},"<b>把这个层级摊开看。</b><b>第一层学到的是边缘检测器</b>——各种朝向的线条；<b>中间层学到物体部件</b>，比如眼睛、耳朵；<b>更高层则对应整个物体</b>。<br><b>⭐ Ng 说这是 Google Brain 最早做的项目之一，而最后那个结果就是广为人知的「Google cat」</b>——<b>网络在没有任何标签的情况下，自己长出了一个对猫脸有反应的单元。</b><br><b>⚠ 这里要把分寸讲清楚：这件事之所以让人印象深刻，不是因为识别猫很难，而是因为全程没有人告诉它「猫」这个概念。</b><br><b>⭐ 它和 ICA 是同一个逻辑：只给混在一起的数据，让算法自己找出「哪些成分是独立的、值得单独表示的」。</b>");
+  SUM(1943,11,{h:"稀疏编码：ICA 的近亲，以及它的分层版本",k:"Ng：<b>稀疏编码与 ICA 关系非常近</b>，<b>可以证明两者优化的东西非常相似</b>。",m:"⭐ <b>分层版本</b>：第一层学<b>边缘检测器</b>，叠上去学<b>物体部件检测器</b>，更高层对应<b>整个物体</b>。",w:"⭐ <b>Google Brain 最早的项目之一</b>，结果就是著名的 <b>Google cat</b>——<b>没有任何标签，网络自己长出了对猫脸有反应的单元</b>。",e:"⚠ <b>分寸</b>：让人印象深刻的不是识别猫难，而是<b>全程没人告诉它「猫」这个概念</b>——这和 ICA 是同一个逻辑。"});
+  QUIZ(1943,11,{t:"稀疏编码的分层版本在各层学到了什么？",o:["第一层是边缘检测器，更高层依次是物体部件、整个物体——著名的 Google cat 就是这样出来的","每一层学的都是边缘检测器","第一层是物体，越往上越简单","各层学的是同一组独立成分，只是精度不同"],a:0,w:"⭐ Ng 说<b>稀疏编码与 ICA 优化的东西非常相似</b>，分层版就是「<b>把 ICA 反复套用做出非线性版本</b>」。⚠ Google cat 的要点是<b>全程无标签</b>。"});
+});
+KP("12 · ★ 实战：用 ICA 清洗 EEG 数据",function(){
+  S(2045,function(){clearScene();setEq(null);setCap("脑袋里的鸡尾酒会");
+       says("34:05","ICAs are routinely used to clean up EEG data today");
+       note("头皮上贴很多电极，测到的是极微弱的电压",640,180,"b");
+       curve(fn(function(x){return 240-13*Math.sin((x-240)/17)-9*Math.sin((x-240)/5.5);},240,1040,180),"b");
+       curve(fn(function(x){return 282-13*Math.sin((x-240)/17)-7*Math.sin((x-240)/7.5);},240,1040,180),"b");
+       curve(fn(function(x){return 324-13*Math.sin((x-240)/17)-8*Math.sin((x-240)/4.5);},240,1040,180),"b");
+       note("每条线 = 一个电极测到的电压",640,360,"d");
+       note("⭐ 注意三条线里都有同一个慢节奏 —— 那是心跳混进来的",640,398,"y");},"<b>ICA 最成熟的实际用途之一是清洗 EEG 数据。Ng 说它今天已经是常规做法。</b><br><b>先说什么是 EEG</b>：<b>在头皮上贴很多电极，测量极微弱的电压</b>。<b>你的神经元放电会产生小的电脉冲，透过头皮能测到非常弱的信号。</b><br><b>⭐ 为什么这件事和鸡尾酒会是同一个问题？因为你的大脑同时在做很多件事。</b>Ng 的说法很生动——<b>一部分大脑在说「心脏，跳」，另一部分在说「吸气、呼气」，还有一部分在想机器学习。</b><br><b>⚠ 每个电极测到的都是所有这些活动叠加后的结果</b>，因为<b>不同脑区发出的电脉冲会相加</b>。<br><b>图上三条线都含着同一个慢节奏——那就是心跳混进来的部分。</b>");
+  S(2045,function(){clearScene();setEq(null);setCap("拆开 → 扔掉伪迹 → 重新合成");
+       says("37:53","then you can end up with a much more cleaned up EEG signal");
+       boxNode(120,200,280,60,"多路混合的 EEG","b");
+       boxNode(500,170,300,52,"成分：眨眼 ✗","r");
+       boxNode(500,228,300,52,"成分：心跳 ✗","r");
+       boxNode(500,286,300,52,"成分：真正的脑活动 ✓","g");
+       boxNode(900,228,280,60,"干净的 EEG","g");
+       link(400,230,500,196); link(400,230,500,254); link(400,230,500,312);
+       link(800,312,900,258);
+       note("⭐ 关键一步：扔掉伪迹成分，再把剩下的合回去",640,392,"y");},"<b>清洗的流程是三步。</b><br><b>第一步：对多路 EEG 跑 ICA，把它拆成若干个独立成分。</b><br><b>第二步：人看一眼，认出哪些成分是伪迹。</b>Ng 说<b>有人会指出「这个是心跳、这个是眨眼」</b>——<b>这类成分特征很明显：眨眼是偶发的大幅尖峰，心跳是规律的慢节奏。</b><br><b>第三步：把这些伪迹成分减掉，剩下的合回去，就得到明显干净得多的 EEG 信号。</b><br><b>⭐ 为什么值得这么做？</b>因为<b>这是下游分析的预处理步骤</b>。Ng 举的例子是<b>用 EEG 粗略判断人在想什么</b>——<b>不是读出每一个念头，而是区分很粗的几个类别</b>。<b>⚠ 他特意强调这确实能做到一定程度，但要清洗掉眨眼和心跳的伪迹，下游算法才拿得到干净数据。</b>");
+  SUM(2045,12,{h:"★ 清洗 EEG：ICA 最成熟的实际用途之一",k:"<b>EEG</b> = 头皮贴很多电极测极微弱电压。<b>大脑同时在做很多事</b>（管心跳、管呼吸、想机器学习），<b>不同脑区的电脉冲会相加</b>。",m:"⇒ <b>每个电极测到的都是叠加后的混合</b> —— 和鸡尾酒会完全同构。",w:"<b>三步</b>：① 跑 ICA 拆成独立成分 ② 人认出伪迹（<b>眨眼 = 偶发大尖峰，心跳 = 规律慢节奏</b>）③ <b>减掉伪迹再合回去</b>。",e:"⭐ <b>这是下游分析的预处理</b>：例如用 EEG <b>区分很粗的几类念头</b>（不是读出每个想法），⚠ <b>必须先清掉伪迹，算法才拿得到干净数据</b>。"});
+  QUIZ(2045,12,{t:"为什么清洗 EEG 和鸡尾酒会问题是同一类问题？",o:["因为电极的数量和声源数相同","因为两者都用到了声音","因为 EEG 信号是高斯的","大脑不同区域同时活动、电脉冲相加，所以每个电极测到的都是多路活动的混合——正是 x = A·s"],a:3,w:"⭐ 流程三步：<b>拆成独立成分 → 认出并扔掉伪迹（眨眼是偶发尖峰、心跳是规律慢节奏）→ 合回去</b>。它是<b>下游分析的预处理步骤</b>。"});
+});
+KP("13 · ⚠ 麦克风数要不要等于说话人数",function(){
+  S(2440,function(){clearScene();setEq(null);setCap("课上有人问过的问题");
+       says("40:40","Do the number of speakers and number of microphones need to be equal");
+       matrix({rows:4,cols:2,cw:430,ch:52,x:210,y:195,
+         cell:function(i,j){var t=[
+           ["情形","结论"],
+           ["麦克风 多于 说话人","✓ 没问题（会多出几个「沉默的说话人」）"],
+           ["麦克风 等于 说话人","✓ 标准情形，W 是方阵"],
+           ["麦克风 少于 说话人","⚠ 至今仍是前沿研究问题"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 不对称：多了好办，少了很难",640,398,"y");},"<b>这是课上有同学问过的问题，Ng 专门回答了，而且答案不对称。</b><br><b>麦克风多于说话人：没问题。</b>Ng 说<b>这种情况下跑 ICA（或者稍作修改的版本），你会发现有几个「说话人」是沉默的</b>——算法照样能工作，只是多出来的那几路没有内容。<br><b>麦克风等于说话人：这是标准情形</b>，也是本讲推导时假定的那种，<b>此时 W 是方阵</b>。<br><b>⚠ 麦克风少于说话人：Ng 说这至今仍然是前沿研究问题。</b><br><b>⭐ 记住这个不对称：多了好办，少了很难。</b>下一镜说清楚为什么。");
+  S(2440,function(){clearScene();setEq(null);setCap("为什么「少了」这么难");
+       says("41:39","If the number of microphones is smaller than the number of speakers",196);
+       note("本讲的全部推导都建立在「W 可逆」之上",640,248,"b");
+       note("⚠ 麦克风少于说话人 ⇒ W 不再是方阵 ⇒ 谈不上求逆",640,300,"r");
+       note("直觉：2 个麦克风只给你 2 个方程，却要解 3 个未知声源",640,352,"d");
+       note("⭐ 方程比未知数少 ⇒ 信息根本不够，不是算法不够聪明",640,398,"y");},"<b>为什么「麦克风少了」这么难？根子在前面那个「W 可逆」的前提上。</b><br><b>本讲的全部推导都建立在 W 可逆之上</b>——<b>从「x 与 s 一一对应」到「补 |det W|」，每一步都要用到它。</b><br><b>⚠ 而麦克风少于说话人时，W 不再是方阵，连「求逆」都谈不上。</b>Ng 在课上也正是这么说的。<br><b>⭐ 换个直觉说法更清楚：2 个麦克风在每个时刻只给你 2 个数，你却想解出 3 个声源的取值。</b><b>方程比未知数少，信息根本不够。</b><br><b>⚠ 这一点很重要——它不是「算法不够聪明」，而是信息量上的硬缺口。</b><b>要突破就必须引入额外假设（比如声源的稀疏性），这才是它成为研究问题的原因。</b>");
+  SUM(2440,13,{h:"⚠ 三种情形：多了好办，少了很难",k:"<b>麦克风 > 说话人</b>：✓ 没问题，<b>会多出几个「沉默的说话人」</b>。<b>麦克风 = 说话人</b>：✓ 标准情形，<b>W 是方阵</b>。",m:"⚠ <b>麦克风 < 说话人</b>：Ng 说<b>至今仍是前沿研究问题</b>。",w:"<b>原因</b>：全部推导都建立在 <b>W 可逆</b>之上；麦克风少了 <b>W 不再是方阵，连求逆都谈不上</b>。",e:"⭐ <b>直觉</b>：2 个麦克风每刻只给 2 个数，却要解 3 个声源 —— <b>方程比未知数少，是信息量的硬缺口，不是算法不够聪明</b>。要突破必须<b>引入额外假设</b>（如稀疏性）。"});
+  QUIZ(2440,13,{t:"麦克风数少于说话人数时，ICA 为什么会很困难？",o:["因为计算量随说话人数指数增长","因为无法做中心化预处理","W 不再是方阵、谈不上求逆；本质上是方程比未知数少，信息量有硬缺口","因为此时信号变成高斯的"],a:2,w:"⭐ 反过来<b>麦克风多于说话人没问题</b>——只会多出几个「沉默的说话人」。⚠ 记住这个<b>不对称</b>，以及「<b>不是算法不够聪明，而是信息不够</b>」。"});
+});
+KP("14 · 换场：全课第四个大主题",function(){
+  S(2993,function(){clearScene();setEq(null);setCap("前三个都讲完了");
+       matrix({rows:5,cols:2,cw:400,ch:44,x:240,y:162,
+         cell:function(i,j){var t=[
+           ["主题","给你的是什么"],
+           ["监督学习","每个 x 都配一个正确答案 y"],
+           ["无监督学习","只有 x，没有标签"],
+           ["学习理论","关于「能不能学好」的保证"],
+           ["★ 强化学习","只有「好 / 坏」的反馈信号"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===4?"hl":"";}});
+       note("⭐ 最大的不同：没有人告诉你正确答案是什么",640,398,"y");},"<b>ICA 讲完了，后半场换一个完全不同的世界。</b><br><b>Ng 说这是本课四大主题里的最后一个：强化学习。</b><br><b>把四个主题并排看，差别就很清楚了</b>：<b>监督学习给你每个 x 对应的正确答案 y；无监督学习只给 x；学习理论回答的是「能不能学好」这类保证问题；</b>而<b>强化学习给你的既不是答案、也不是「什么都没有」，而是一个「好还是坏」的反馈信号。</b><br><b>⭐ 最大的不同在于：没有人告诉你正确答案是什么。</b><br><b>⚠ 这个差别比听起来要大得多</b>——<b>它意味着连「训练集」这个概念都要重新定义</b>。下一镜用直升机的例子说明。");
+  S(2993,function(){clearScene();setEq(null);setCap("「训练集」这个概念要重新定义");
+       boxNode(130,185,460,62,"监督学习的训练集","b");
+       boxNode(130,255,460,62,"(x¹,y¹), (x²,y²), … 答案由人给出","b");
+       boxNode(700,185,460,62,"强化学习「得到」的东西","g");
+       boxNode(700,255,460,62,"自己试 → 环境回一个数 → 再试","g");
+       note("⚠ 数据不是现成的，而是算法自己试出来的",640,352,"r");
+       note("⭐ 所以它必须一边收集经验，一边改进自己的做法",640,398,"y");},"<b>把两边的「数据」摆在一起，差别就落到实处了。</b><br><b>监督学习的训练集是一堆 (x, y) 对，答案由人事先给出</b>，算法拿到的是一份静态的、现成的数据。<br><b>⚠ 强化学习没有这种东西。</b>它<b>只能自己去试一个动作，环境回给它一个数（奖励），然后再试下一个</b>。<br><b>⭐ 两个后果很重要。</b><b>第一，数据不是现成的，而是算法自己的行为产生的</b>——<b>它做得不好，收集到的经验就也很差。</b><b>第二，它必须一边收集经验一边改进</b>，不能像监督学习那样「先拿到数据，再训练」。<br><b>⚠ 这就是为什么强化学习需要一整套新的概念和算法，而不能把监督学习改一改就用。</b>");
+  SUM(2993,14,{h:"第四个大主题：强化学习",k:"<b>监督学习</b>给每个 x 配正确答案 y；<b>无监督学习</b>只给 x；<b>学习理论</b>回答「能不能学好」。",m:"⭐ <b>强化学习给的只是一个「好还是坏」的反馈信号</b>——<b>没有人告诉你正确答案是什么</b>。",w:"⚠ <b>连「训练集」都要重新定义</b>：监督学习拿到的是现成的静态 (x, y)；RL <b>只能自己试一个动作、环境回一个数、再试</b>。",e:"⇒ 两个后果：⭐ <b>数据是算法自己的行为产生的</b>（做得差，经验也差）；<b>必须一边收集一边改进</b>，不能先拿数据再训练。"});
+  QUIZ(2993,14,{t:"强化学习与监督学习最本质的区别是什么？",o:["强化学习只能用于游戏","监督学习每个输入都配有正确答案；强化学习只有「好/坏」的反馈，且数据要靠算法自己试出来","强化学习的数据量更大","强化学习不需要数据"],a:1,w:"⭐ 两个后果：<b>数据由算法自己的行为产生</b>（做得差经验也差），<b>必须一边收集一边改进</b>。⚠ 所以它需要一整套新概念，<b>不能把监督学习改一改就用</b>。"});
+});
+KP("15 · ★ 直升机：为什么监督学习在这里行不通",function(){
+  S(2993,function(){clearScene();setEq(null);setCap("没有哪个专家能逐毫秒告诉你操纵杆推多少");
+       says("49:53","you want to have a computer learn to fly a helicopter");
+       boxNode(140,200,460,76,"监督学习的要求","b");
+       boxNode(740,200,460,76,"现实","r");
+       note("每个状态都要配一个「正确动作」",370,320,"b");
+       note("没人能把这些答案写出来",970,320,"r");
+       note("⭐ 但「飞得好不好」你一眼就看得出来",640,392,"y");},"<b>Ng 的例子是：让计算机学会开直升机。</b><br><b>如果要套监督学习，你得准备一个训练集</b>——<b>每一个时刻的飞行状态，都要配上「此刻操纵杆的正确位置」。</b><br><b>⚠ 问题是这个训练集没人造得出来。</b>直升机的姿态每秒变化几十次，<b>就算是顶尖飞行员，也说不出「在这个姿态下，操纵杆应该精确推到哪个位置」</b>——他们是凭手感飞的，而手感没法逐条写成标注。<br><b>⭐ 但有一件事你一眼就看得出来：它飞得好不好。</b>平稳悬停就是好，摇摇晃晃就是不好，摔了就是很不好。<br><b>⇒ 强化学习就建立在这个不对称上。</b>");
+  S(2993,function(){clearScene();setEq(null);setCap("记住这个不对称 —— 它是整个强化学习的出发点");
+       boxNode(170,195,980,58,"说清楚「该怎么做」　→　很难，常常不可能","r");
+       boxNode(170,265,980,58,"说清楚「什么算好」　→　往往很容易","g");
+       note("⭐ 强化学习把「难的那一半」交给算法",640,340,"y");
+       note("⚠ 代价：算法必须自己摸索，而摸索要花很多次尝试",640,392,"r");},"<b>把这个不对称单独拎出来，因为它是整个强化学习的出发点。</b><br><b>说清楚「该怎么做」很难，常常根本不可能</b>——直升机的例子就是这样，<b>下围棋也是（没人能说出每一手的最优着法）</b>。<br><b>⭐ 而说清楚「什么算好」往往很容易</b>：平稳悬停是好，摔了是不好；赢了是好，输了是不好。<br><b>⇒ 强化学习的交易就是：你只负责说清「什么算好」，把「该怎么做」这一半交给算法去摸索。</b><br><b>⚠ 但这笔交易是有代价的，必须老实说</b>：<b>算法要靠大量尝试才能摸索出来</b>。<b>监督学习拿到答案就能直接学，而强化学习得反复试、反复失败</b>——<b>这也是它在真实机器人上难用的主要原因（摔一次直升机很贵）。</b>");
+  SUM(2993,15,{h:"★ 直升机：答案造不出来，但好坏看得出来",k:"套监督学习就要<b>给每个飞行状态配一个「正确的操纵杆位置」</b>——⚠ <b>这个训练集没人造得出来</b>（顶尖飞行员也是凭手感，手感无法逐条标注）。",m:"⭐ <b>但「飞得好不好」一眼就看得出来</b>：平稳悬停是好，摇晃是不好，摔了是很不好。",w:"⇒ ⭐ <b>核心不对称</b>：说清「该怎么做」很难甚至不可能；<b>说清「什么算好」往往很容易</b>。RL <b>把难的那一半交给算法</b>。",e:"⚠ <b>代价要老实说</b>：算法得靠<b>大量尝试</b>摸索。监督学习拿到答案就能学；<b>RL 要反复失败</b>——这正是它在真实机器人上难用的主因（摔一次很贵）。"});
+  QUIZ(2993,15,{t:"为什么不能用监督学习来训练直升机飞行？",o:["因为监督学习不能处理时间序列","因为数据太多算不过来","因为直升机的状态是连续的","需要给每个状态标注「正确的操纵动作」，而连顶尖飞行员也说不出精确答案"],a:3,w:"⭐ 关键不对称：<b>说清「什么算好」比说清「该怎么做」容易得多</b>。⚠ 代价是<b>算法要靠大量尝试摸索</b>，这正是 RL 在真实机器人上难用的主因。"});
+});
+KP("16 · ★ 状态：此刻的处境",function(){
+  S(3017,function(){clearScene();setEq(null);setCap("描述「现在是什么情况」的那组数");
+       says("50:17","called the state of a helicopter");
+       boxNode(120,200,300,76,"直升机","b");
+       boxNode(500,200,300,76,"下棋","b");
+       boxNode(880,200,280,76,"网格机器人","b");
+       note("位置、朝向、速度、角速度…",270,320,"d");
+       note("棋盘上所有棋子的摆法",650,320,"d");
+       note("现在站在哪一格",1020,320,"d");
+       note("⭐ 状态要包含「做决定所需的全部信息」",640,392,"y");},"<b>强化学习的第一个基本概念是「状态」。</b>Ng 说，<b>每个时刻给你直升机的位置，这叫直升机的状态</b>。<br><b>状态就是「描述此刻处境的那组数」</b>：直升机的状态包含<b>位置、朝向、速度、角速度</b>等等；下棋的状态是<b>棋盘上所有棋子的摆法</b>；网格世界里的状态就是<b>机器人现在站在哪一格</b>。<br><b>⭐ 一个好的状态定义，要包含「做决定所需要的全部信息」。</b><br><b>⚠ 这其实是一个很强的要求，而且它有个专门的名字。</b>下一镜讲。");
+  S(3017,function(){clearScene();setEq(null);setCap("马尔可夫性质 —— MDP 里的那个「M」");
+       boxNode(170,190,980,58,"知道了当前状态，就不需要再知道它是怎么走到这儿来的","g");
+       note("✓ 直升机：位置＋速度＋角速度 ⇒ 够了",640,290,"g");
+       note("✗ 只给位置、不给速度 ⇒ 不够（同一位置可能在上升或下降）",640,342,"r");
+       note("⭐ 所以「状态里该放什么」是建模时的一个关键决定",640,398,"y");},"<b>这个要求的名字叫「马尔可夫性质」，MDP 里的「M」指的就是它。</b><br><b>它说的是：知道了当前状态，就不需要再知道它是怎么走到这儿来的。</b>换句话说，<b>状态必须是「自足」的——历史不再提供任何额外有用的信息。</b><br><b>⭐ 用直升机对照一下就很具体了。</b><b>如果状态里包含位置、速度、角速度，那是够的</b>——凭这些就能决定下一步怎么操纵。<br><b>⚠ 但如果只给位置、不给速度，就不够了</b>：<b>同一个位置，直升机可能正在快速上升，也可能正在下坠，该做的动作完全相反。</b><br><b>⇒ 所以「状态里该放什么」不是小事，而是建模时的一个关键决定。</b><b>⭐ 放少了违反马尔可夫性质，算法学不好；放多了状态空间爆炸，算不过来。</b>");
+  SUM(3017,16,{h:"★ 状态：描述此刻处境的那组数",k:"直升机的状态含<b>位置、朝向、速度、角速度</b>；下棋是<b>棋盘上所有棋子的摆法</b>；网格世界是<b>站在哪一格</b>。",m:"⭐ <b>马尔可夫性质</b>（MDP 里的「M」）：<b>知道了当前状态，就不需要再知道它是怎么走到这儿来的</b>——状态必须「自足」。",w:"<b>对照</b>：位置＋速度＋角速度 ✓ 够；<b>只给位置不给速度 ✗ 不够</b>——同一位置可能在上升也可能在下坠，<b>该做的动作完全相反</b>。",e:"⇒ ⭐ 「状态里放什么」是<b>建模的关键决定</b>：<b>放少了违反马尔可夫性质学不好，放多了状态空间爆炸算不过来</b>。"});
+  QUIZ(3017,16,{t:"「马尔可夫性质」说的是什么？为什么直升机的状态里必须有速度？",o:["当前状态要含做决定所需的全部信息，历史不再提供额外信息；只给位置时无法区分上升与下坠","奖励只依赖于动作；速度是动作的一部分","状态必须是离散的；速度用来算距离","状态转移必须是确定性的；速度决定奖励"],a:0,w:"⭐ <b>MDP 里的「M」就是指这个。</b>⚠ 「状态里放什么」是建模的关键决定：<b>放少了违反马尔可夫性质，放多了状态空间爆炸</b>。"});
+});
+KP("17 · ★★ 奖励函数：你的职责是说清「什么算好」",function(){
+  S(3061,function(){clearScene();setEq(null);setCap("不是教它怎么做，而是告诉它什么是好");
+       says("51:01","specify a reward function");
+       boxNode(150,195,440,66,"✗ 你不需要说：操纵杆推到 0.37","r");
+       boxNode(150,270,440,66,"✓ 你要说：飞得平稳 ⇒ 高奖励","g");
+       boxNode(700,195,460,66,"✓ 摔机 ⇒ 很低的奖励（负的）","g");
+       boxNode(700,270,460,66,"✓ 下棋赢 ⇒ +1　输 ⇒ −1","g");
+       note("⭐ 设计奖励函数，是机器学习工程师在 RL 里的核心职责",640,392,"y");},"<b>既然不能告诉它「该怎么做」，那你要做什么？</b>Ng 的回答是——<b>你的职责是指定一个奖励函数</b>。<br><b>奖励函数只说一件事：什么情况算好、什么情况算坏。</b><br><b>直升机平稳飞行 ⇒ 给高奖励；摔机 ⇒ 给一个很低的（负的）奖励。下棋赢了 ⇒ +1，输了 ⇒ −1。</b><br><b>⭐ 注意这件事的分工</b>：<b>你负责定义「好」，算法负责找出「怎么做才能好」。</b><br><b>⚠ 这个职责比听起来重要得多。</b>下一镜说明写歪了会出什么事。");
+  S(3061,function(){clearScene();setEq(null);setCap("⚠ 奖励写歪了，算法会非常忠实地追求那个歪目标");
+       boxNode(130,190,470,58,"你写的：不摔机 ⇒ 奖励高","y");
+       boxNode(680,190,470,58,"它学到的：停在地上永远不起飞","r");
+       link(600,219,680,219);
+       note("⭐ 算法没有「常识」—— 它只会最大化你真的写下的那个数",640,290,"y");
+       note("⚠ 所以奖励函数要同时说清「什么算好」和「什么算不许」",640,342,"r");
+       note("这类问题在 L20「强化学习的调试与诊断」里专门讲",640,398,"d");},"<b>⚠ 这是 RL 工程里最常见的坑，值得单独一镜。</b><br><b>假设你只写了一条奖励：不摔机就给高分。</b><b>⭐ 算法会非常忠实地去最大化这个数——于是它学会把直升机停在地上，永远不起飞。</b>这确实从不摔机，奖励满分。<br><b>⚠ 根子在于算法没有「常识」。</b>它<b>不会去揣摩你真正想要什么，只会最大化你真的写下来的那个数</b>。<br><b>⇒ 所以奖励函数要同时说清两件事：什么算好（平稳悬停在目标高度），以及什么算不许（停在地上不动也要扣分）。</b><br><b>⭐ 把这件事记牢：RL 里「模型没学好」和「你的奖励写错了」是两种完全不同的毛病，而后者更常见、更难发现。</b><b>这类诊断在 L20 会专门讲。</b>");
+  SUM(3061,17,{h:"★★ 奖励函数：定义「什么算好」",k:"Ng：<b>你的职责是指定一个奖励函数</b>。它只说一件事——<b>什么情况算好、什么情况算坏</b>（平稳飞行高奖励；摔机很低的负奖励；赢 +1 输 −1）。",m:"⭐ <b>分工</b>：<b>你负责定义「好」，算法负责找出「怎么做才能好」。</b>",w:"⚠⚠ <b>写歪了的后果</b>：只奖励「不摔机」⇒ <b>它学会停在地上永远不起飞</b>（确实不摔机，奖励满分）。<b>算法没有常识，只会最大化你真的写下的那个数。</b>",e:"⇒ 奖励要同时说清<b>什么算好</b>和<b>什么算不许</b>。⭐ <b>「模型没学好」和「奖励写错了」是两种毛病，后者更常见更难发现</b>——L20 专门讲。"});
+  QUIZ(3061,17,{t:"在强化学习里，设计者的核心职责是什么？最常见的坑是什么？",o:["指定奖励函数说清什么算好；坑是奖励写歪后算法会忠实追求那个歪目标（只奖励不摔机 ⇒ 停在地上不起飞）","设计网络结构；坑是层数太少","为每个状态标注正确动作；坑是标注太慢","收集尽可能多的数据；坑是数据不够"],a:0,w:"⭐ 分工是：<b>你定义「好」，算法找出「怎么做才能好」。</b>⚠ <b>算法没有常识，只最大化你真的写下的那个数</b>，所以要同时写清「什么算不许」。"});
+});
+KP("18 · ⚠⚠ 信用分配问题：到底是哪一步错了",function(){
+  S(3228,function(){clearScene();setEq(null);setCap("输在第 50 步，可问题可能出在第 20 步");
+       says("53:48","one of the things that makes reinforcement learning hard is the credit assignment problem");
+       axes({x0:240,x1:1040,y0:330,y1:250});
+       dots([[300,290],[380,290],[460,290],[540,290],[620,290],[700,290],
+             [780,290],[860,290],[940,290],[1000,290]],"b",8);
+       note("第 1 步",300,240,"d"); note("第 50 步 输了",990,240,"r");
+       note("⚠ 唯一的反馈只有最后那个「输」",640,370,"r");
+       note("⭐ 可能第 20 步那一着就已经埋下败因了",640,398,"y");},"<b>⚠ Ng 说，<b>让强化学习变难的原因之一</b>，是「信用分配问题」。</b><br><b>设想下一盘棋，走了 50 步之后输了。</b><b>唯一的反馈就是最后那个「输」。</b><br><b>⇒ 可是到底哪一步走错了？</b>也许第 50 步没问题，<b>真正的败因是第 20 步那一着</b>。<b>甚至可能前 49 步都下得很好，只有最后一步昏招。</b><br><b>⭐ 算法必须从这个极其稀疏、极其延迟的信号里，分辨出每一步各自的功过。这就叫信用分配。</b><br><b>下一镜和监督学习对比一下，难度差别就很直观了。</b>");
+  S(3228,function(){clearScene();setEq(null);setCap("和监督学习比一比");
+       matrix({rows:4,cols:3,cw:320,ch:52,x:160,y:195,
+         cell:function(i,j){var t=[
+           ["","监督学习","强化学习"],
+           ["多久有反馈","每个样本立刻","可能几百步后一次"],
+           ["反馈说了什么","正确答案是 y","只有一个数：好/坏"],
+           ["谁该负责","就是这一个样本","⚠ 要在几百步之间分摊"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===3&&j===2)?"hl":"";}});
+       note("⭐ 这正是 RL 比监督学习难得多的根本原因之一",640,398,"y");},"<b>把两边并排放，难度差别就一目了然。</b><br><b>反馈的频率</b>：监督学习<b>每个样本立刻给反馈</b>；强化学习<b>可能走几百步才收到一个数字</b>。<br><b>反馈的内容</b>：监督学习直接告诉你<b>正确答案是 y</b>；强化学习<b>只给一个数，说好还是坏，不说该怎么做才对</b>。<br><b>⚠ 最关键的一行是最后一行</b>：监督学习里<b>该为这次错误负责的就是眼前这一个样本</b>，一清二楚；<b>强化学习里这份责任要在几百步之间分摊，而且没人告诉你怎么分。</b><br><b>⭐ 这正是 RL 比监督学习难得多的根本原因之一。</b><b>后面几讲的核心工具——价值函数——某种意义上就是在系统地解决这个分摊问题。</b>");
+  SUM(3228,18,{h:"⚠⚠ 信用分配：稀疏又延迟的反馈",k:"Ng：<b>让强化学习变难的原因之一是信用分配问题</b>。下 50 步后输了，<b>唯一的反馈只有最后那个「输」</b>。",m:"⇒ <b>到底哪一步走错了？</b>可能败因在第 20 步，也可能前 49 步都很好、只有最后一招昏。",w:"<b>三点对比</b>：反馈频率（<b>每个样本立刻</b> vs <b>几百步一次</b>）、反馈内容（<b>正确答案 y</b> vs <b>只有一个数</b>）、⚠ 责任归属（<b>就这一个样本</b> vs <b>要在几百步间分摊</b>）。",e:"⭐ 这是 RL 难得多的根本原因之一。<b>后面几讲的核心工具「价值函数」就是在系统地解决这个分摊问题。</b>"});
+  QUIZ(3228,18,{t:"「信用分配问题」指的是什么？",o:["如何给训练数据加权","如何在多个智能体之间分配奖励","如何把计算资源分配给不同的状态","反馈稀疏且延迟——下完 50 步才知道输了，却要分辨出到底哪一步该负责"],a:3,w:"⭐ 对比监督学习：<b>每个样本立刻给反馈、而且责任就在眼前这个样本</b>。⭐ <b>后面几讲的「价值函数」正是在系统地解决这个分摊问题。</b>"});
+});
+KP("19 · ★★ MDP：把这一切形式化成五个零件",function(){
+  S(3427,function(){clearScene();setEq(null);setCap("后面四讲的共同语言");
+       matrix({rows:6,cols:2,cw:420,ch:40,x:220,y:150,
+         cell:function(i,j){var t=[
+           ["零件","是什么"],
+           ["S","状态的集合"],
+           ["A","动作的集合"],
+           ["P_sa","状态转移概率：在 s 做 a，会去到哪儿"],
+           ["γ","折扣因子，0 到 1 之间的一个数"],
+           ["R","奖励函数"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return (i===3||i===4)?"hl":"";}});
+       note("⭐ 这五个一摆出来，问题就变成「纯数学」了",640,398,"y");},"<b>把前面那些直觉形式化，就得到马尔可夫决策过程（MDP）。它由五个零件组成。</b><br><b>S 是状态的集合，A 是动作的集合</b>——这两个好理解。<br><b>P_sa 是状态转移概率</b>：<b>在状态 s 做了动作 a 之后，会去到哪个状态</b>。⚠ 注意它是<b>概率</b>而不是确定的结果。<br><b>γ 是折扣因子，一个 0 到 1 之间的数</b>；<b>R 是奖励函数</b>。<br><b>⭐ 这五个零件一摆出来，一个模模糊糊的「学开直升机」问题，就变成了一个纯数学问题。</b><br><b>⚠ 而且后面四讲（L17 到 L20）全都在这个框架里说话</b>，所以这五个符号要很熟。");
+  S(3427,function(){clearScene();setEq(null);setCap("S 和 A：网格世界里具体是什么");
+       grid(400,195,130,54,4,3,function(i,j){
+         if(i===1&&j===1) return ["墙","d"];
+         if(i===3&&j===0) return ["+1","g"];
+         if(i===3&&j===1) return ["−1","r"];
+         return [(i+1)+","+(3-j),"b"];});
+       note("S = 11 个格子（图上每个方块一个状态）",640,170,"b");
+       note("A = { 上, 下, 左, 右 } —— 只有四个动作",640,382,"g");
+       note("⭐ 注意 S 是「处境」的集合，A 是「你能做什么」的集合",640,405,"y");},"<b>先把最好懂的两个零件落到实处。</b><br><b>在网格世界里，S 就是那些格子</b>——图上每个方块对应一个状态，<b>一共 11 个</b>。<b>A 就是机器人能做的动作：上、下、左、右，一共四个。</b><br><b>⭐ 注意这两者的性质完全不同：S 是「处境」的集合，A 是「你能做什么」的集合。</b>初学时很容易把它们混起来。<br><b>⚠ 再对照直升机看一下，差别很醒目</b>：<b>直升机的 S 是连续的</b>（位置和速度都是实数，有无穷多个状态），<b>A 也是连续的</b>（操纵杆可以推到任意位置）。<br><b>⭐ 这就是为什么要先用网格世界讲——S 和 A 都是有限的小集合，所有的量都能摊开在一张纸上算。L18 才会处理连续状态的情形。</b>");
+  SUM(3427,19,{h:"★★ MDP 的五个零件：S, A, P_sa, γ, R",k:"<b>S</b> 状态集合、<b>A</b> 动作集合、<b>P_sa</b> 状态转移概率、<b>γ</b> 折扣因子（0 到 1）、<b>R</b> 奖励函数。",m:"<b>网格世界里</b>：S = <b>11 个格子</b>，A = <b>{上,下,左,右}</b>。⭐ <b>S 是「处境」的集合，A 是「你能做什么」的集合</b>——别混。",w:"⚠ <b>对照直升机</b>：<b>S 连续</b>（位置速度是实数，无穷多状态），<b>A 也连续</b>（操纵杆任意位置）。",e:"⭐ <b>所以先用网格世界讲</b>——S 和 A 都是有限小集合，所有量都能摊在纸上算。<b>L18 才处理连续状态</b>。⚠ 这五个符号 L17–L20 全程使用。"});
+  QUIZ(3427,19,{t:"MDP 由哪五个部分组成？",o:["输入、输出、权重、偏置、损失","智能体、环境、策略、价值、模型","状态集合 S、动作集合 A、状态转移概率 P_sa、折扣因子 γ、奖励函数 R","训练集、验证集、测试集、模型、指标"],a:2,w:"⭐ 网格世界里 <b>S = 11 个格子、A = {上下左右}</b>。⚠ <b>直升机的 S 和 A 都是连续的</b>，所以先用网格讲；<b>L18 才处理连续状态</b>。"});
+});
+KP("20 · ★ 状态转移概率：世界不是完全听话的",function(){
+  S(3456,function(){clearScene();setEq(null);setCap("命令「往北」，不一定真的往北");
+       says("57:36","P subscript sa is a state transition probabilities");
+       boxNode(480,180,300,60,"命令：往北走","y");
+       boxNode(180,290,260,60,"往西 0.1","b");
+       boxNode(500,290,260,60,"往北 0.8","g");
+       boxNode(820,290,260,60,"往东 0.1","b");
+       link(600,240,310,290); link(630,240,630,290); link(660,240,950,290);
+       note("⭐ 真实机器人的轮子会打滑、地面会不平",640,392,"y");},"<b>P_sa 这个零件值得单独讲，因为它反映了现实世界的一个基本事实：你发出的命令不一定被完全执行。</b><br><b>Ng 用网格机器人举例</b>：<b>你命令它「往北走一格」，它有 0.8 的概率真的往北，但有 0.1 的概率偏到西边，0.1 的概率偏到东边。</b><br><b>⚠ 为什么要这么建模？</b>因为<b>真实机器人的轮子会打滑、地面会不平、马达有误差</b>。<b>把这些不确定性写进模型，算出来的策略才经得起现实考验。</b><br><b>⭐ 这也是「决策过程」这个名字里「过程」二字的来源——它描述的是一个带随机性的演化过程。</b>");
+  S(3456,function(){clearScene();setEq("$$\\sum_{s'} P_{sa}(s') \\;=\\; 1 \\qquad \\text{对每一组 } (s,a) \\text{ 分别成立}$$","top");
+       setCap("两个下标，一个要记住的约束");
+       note("⚠ P_sa 的下标有两个：同时依赖「在哪个状态」和「做了什么动作」",640,258,"r");
+       note("⇒ 同一个动作在不同状态下，结果分布可以完全不同",640,310,"b");
+       note("（贴着墙往北走 ⇒ 大概率原地不动，这也要写进 P_sa）",640,356,"d");
+       note("⭐ 而对每一组 (s,a)，所有去向的概率必须加起来等于 1",640,398,"y");},"<b>关于 P_sa 有两件事要记牢。</b><br><b>第一，它的下标有两个。</b><b>⚠ P_sa 同时依赖「在哪个状态」和「做了什么动作」</b>——<b>所以同一个动作在不同状态下，结果的分布可以完全不同</b>。<br><b>举个很具体的例子：机器人贴着上边的墙，再命令它往北走，那它大概率原地不动。</b><b>⭐ 这件事也要写进 P_sa 里——它不是「例外」，而就是那个状态下那个动作的转移概率。</b><br><b>第二，式子里那个约束：对每一组 (s, a)，所有可能去向的概率必须加起来等于 1。</b><b>这就是「它一定会去到某个地方」的意思（原地不动也算一个去向）。</b><br><b>⚠ 实现 MDP 时这是最容易出错的地方之一：漏了某个去向，概率加不到 1，后面算出来的价值就全是错的。</b>");
+  SUM(3456,20,{h:"★ P_sa：命令和结果之间有随机性",k:"网格机器人：<b>命令「往北」，0.8 的概率真往北，各 0.1 的概率偏到西边和东边</b>。",m:"⚠ <b>为什么这么建模</b>：真实机器人<b>轮子会打滑、地面不平、马达有误差</b>。把不确定性写进模型，策略才经得起现实考验。",w:"⚠ <b>两个下标</b>：同时依赖<b>状态</b>和<b>动作</b> ⇒ <b>同一动作在不同状态下结果分布可以完全不同</b>（贴着墙往北 ⇒ 大概率原地不动，这也要写进 P_sa）。",e:"⭐ <b>约束：对每一组 (s,a)，所有去向的概率加起来 = 1</b>（原地不动也算一个去向）。⚠ <b>实现时最容易漏某个去向，概率加不到 1，后面的价值全错。</b>"});
+  QUIZ(3456,20,{t:"关于状态转移概率 P_sa，哪种说法准确？",o:["它必须是确定性的，否则 MDP 无解","它同时依赖状态和动作（两个下标），且对每一组 (s,a)，所有去向的概率之和必须等于 1","它只依赖当前状态，与动作无关","它只在连续状态时才需要"],a:1,w:"⭐ 例子：命令「往北」只有 <b>0.8</b> 概率真往北。⚠ <b>贴着墙往北 ⇒ 大概率原地不动，这也要写进 P_sa</b>；<b>漏了去向、概率加不到 1，后面算的价值全错</b>。"});
+});
+KP("21 · ★★ 折扣因子 γ：未来的奖励打几折",function(){
+  S(3495,function(){clearScene();setEq("$$R(s_0) + \\gamma R(s_1) + \\gamma^2 R(s_2) + \\gamma^3 R(s_3) + \\cdots$$","top");
+       setCap("越远的奖励，权重越小");
+       says("58:15","gamma is a discount factor, that's a number between 0 and 1",196);
+       matrix({rows:5,cols:2,cw:380,ch:36,x:260,y:224,
+         cell:function(i,j){var t=[
+           ["第几步","权重（γ = 0.9）"],
+           ["现在","1"],
+           ["下一步","0.9"],
+           ["第 10 步","约 0.35"],
+           ["第 50 步","约 0.005"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===4?"hl":"";}});},"<b>γ 是 MDP 里最容易被忽略、但影响很大的一个零件。</b>Ng 说<b>gamma 是一个折扣因子，一个 0 到 1 之间的数</b>。<br><b>它的作用是：把未来的奖励按步数打折。</b>现在拿到的奖励算全额，下一步的乘 γ，再下一步乘 γ²，以此类推。<br><b>⭐ 看表里的数字：取 γ = 0.9 时，第 10 步的奖励只剩约 0.35 的权重，第 50 步只剩约 0.005——几乎可以忽略。</b><br><b>Ng 还提了一句实践经验：γ 通常取「略小于 1」的值。</b><b>⚠ 原因下一镜讲——它同时承担两个很不一样的任务。</b>");
+  S(3495,function(){clearScene();setEq(null);setCap("γ 同时承担两件事");
+       boxNode(130,190,470,62,"① 经济上的理由","g");
+       boxNode(130,262,470,62,"像银行利息：今天的一块钱比一年后的更值钱","g");
+       boxNode(680,190,470,62,"② 数学上的必要性","y");
+       boxNode(680,262,470,62,"保证无限长的过程里，总回报是有限的","y");
+       note("⚠ 不打折的话，奖励会一直累加下去，两个策略都「无穷大」，没法比较",640,352,"r");
+       note("⭐ γ 越小 = 越「短视」；γ 越接近 1 = 越看重长远",640,398,"y");},"<b>γ 同时承担两件很不一样的事，考试爱考这个区分。</b><br><b>第一个是经济上的理由</b>：Ng 用的类比是银行利息——<b>今天的一块钱比一年后的一块钱更值钱</b>。所以<b>早拿到的奖励理应算得更重</b>。<br><b>⭐ 第二个是数学上的必要性，这一条更硬。</b><b>Ng 明确说：有了 γ，就能保证总回报是一个有限的、有界的值。</b><br><b>⚠ 想一下不打折会怎样：一个无限长的过程里，奖励会一直累加下去，两个策略的总回报可能都是无穷大——那就根本没法比较哪个更好。</b><br><b>⭐ 最后给一个很实用的直觉：γ 越小，算法越「短视」，只顾眼前的奖励；γ 越接近 1，越看重长远利益。</b><b>这是你调 MDP 时真正会动的一个旋钮。</b>");
+  SUM(3495,21,{h:"★★ γ：未来的奖励按步数打折",k:"Ng：<b>gamma 是折扣因子，一个 0 到 1 之间的数</b>。总回报 = R(s₀) + γR(s₁) + γ²R(s₂) + …，⭐ <b>γ=0.9 时第 10 步只剩约 0.35，第 50 步约 0.005</b>。",m:"<b>① 经济上的理由</b>：像银行利息——<b>今天的一块钱比一年后的更值钱</b>，早拿到的理应算得更重。",w:"⭐ <b>② 数学上的必要性（更硬）</b>：Ng 明确说<b>有了 γ 才能保证总回报是有限、有界的</b>。⚠ <b>不打折的话两个策略可能都是无穷大，根本没法比较</b>。",e:"⭐ <b>实用直觉</b>：<b>γ 越小越「短视」</b>只顾眼前，<b>γ 越接近 1 越看重长远</b>。Ng 说实践中通常取<b>略小于 1</b>。"});
+  QUIZ(3495,21,{t:"折扣因子 γ 同时承担哪两个作用？",o:["控制探索与利用的比例，以及奖励的量纲","决定状态的个数，以及动作的个数","经济上反映「早拿到更值钱」；数学上保证无限过程的总回报有限、有界，否则策略之间无法比较","控制学习率，以及防止过拟合"],a:2,w:"⭐ γ=0.9 时第 10 步权重约 0.35、第 50 步约 0.005。⭐ 实用直觉：<b>γ 越小越短视，越接近 1 越看重长远</b>；实践中常取<b>略小于 1</b>。"});
+});
+KP("22 · 网格世界：一个能完整算完的小例子",function(){
+  S(3589,function(){clearScene();setEq(null);setCap("11 个状态，够小到能手算");
+       says("59:49","this MDP has 11 states");
+       grid(360,190,140,56,4,3,function(i,j){
+         if(i===1&&j===1) return ["墙","d"];
+         if(i===3&&j===0) return ["+1","g"];
+         if(i===3&&j===1) return ["−1","r"];
+         return ["",""];});
+       note("⭐ 4×3 减掉中间那堵墙 = 11 个状态",640,170,"y");
+       note("起点在左下角",430,390,"d");
+       note("右上 +1 是目标，它下面 −1 是陷阱",900,390,"d");},"<b>Ng 用一个小网格世界作为贯穿后面几讲的例子。</b>他说<b>这个 MDP 有 11 个状态</b>。<br><b>布局是 4 列 3 行，中间有一堵墙</b>，所以 <b>4×3 − 1 = 11 个格子，每个格子就是一个状态</b>。<br><b>右上角那格奖励 +1，是目标；紧挨着它下面那格奖励 −1，是要避开的陷阱。</b>机器人从左下角出发。<br><b>⭐ 为什么要用这么小的例子？因为它小到可以把每个状态的最优动作完整算出来</b>——<b>后面讲值迭代和策略迭代时，所有的数都能摊开在一张图上看。</b><br><b>⚠ 但别小看它的设计。</b>下一镜说明那个 −1 的位置为什么是故意的。");
+  S(3589,function(){clearScene();setEq(null);setCap("⚠ −1 紧挨着 +1，这是故意的");
+       grid(360,190,140,56,4,3,function(i,j){
+         if(i===1&&j===1) return ["墙","d"];
+         if(i===3&&j===0) return ["+1","g"];
+         if(i===3&&j===1) return ["−1","r"];
+         if(i===2&&j===1) return ["？","y"];
+         return ["",""];});
+       note("黄色这格要做个决定：往右走捷径，还是绕上去？",640,170,"y");
+       note("走捷径：擦着陷阱过 ⇒ 只要偏一下就掉进 −1",640,360,"r");
+       note("⭐ 这个权衡正是这个小例子的教学价值所在",640,398,"y");},"<b>看黄色标「？」那一格，它紧挨着 −1 陷阱的左边。</b><br><b>它要做个决定：往右一步就到 −1 旁边、是去 +1 的捷径；还是先绕到上面一行、多花几步再过去。</b><br><b>⚠ 如果转移是确定的，走捷径当然对——快就是好。</b><b>⭐ 但转移是随机的：命令「往右」只有 0.8 的概率真往右，还有 0.1 的概率偏向别处。擦着陷阱走的时候，偏一下就掉进 −1 了。</b><br><b>⇒ 于是「快」和「稳」之间出现了真实的权衡，而答案取决于具体的概率和奖励数值——光凭直觉算不准。</b><br><b>⭐ 这就是这个小例子的教学价值：它小到能手算，却已经包含了 MDP 最核心的那个张力。L17 会把这一格的正确答案真正算出来。</b>");
+  SUM(3589,22,{h:"网格世界：11 个状态的贯穿例子",k:"<b>4 列 3 行，中间一堵墙</b> ⇒ <b>4×3 − 1 = 11 个状态</b>。右上 <b>+1</b> 是目标，紧挨它下面 <b>−1</b> 是陷阱，起点在左下角。",m:"⭐ <b>小到可以把每个状态的最优动作完整算出来</b>——讲值迭代/策略迭代时所有数都能摊在一张图上。",w:"⚠ <b>−1 紧挨 +1 是故意设计的</b>：陷阱左边那格要选「走捷径擦着陷阱过」还是「绕路」。<b>转移确定的话捷径当然对</b>；",e:"⭐ <b>但转移是随机的</b>——命令往右只有 0.8 概率真往右，<b>偏一下就掉进 −1</b>。⇒ <b>「快」与「稳」的真实权衡，光凭直觉算不准，L17 会把答案算出来。</b>"});
+  QUIZ(3589,22,{t:"这个网格世界为什么是 11 个状态？−1 紧挨 +1 的设计意图是什么？",o:["因为有 11 个动作；−1 只是为了增加难度","4×3 共 12 格、墙占一格剩 11；−1 紧挨 +1 让「走捷径」变危险，制造「快 vs 稳」的权衡","因为机器人要走 11 步；−1 是终止条件","因为奖励有 11 种取值；−1 用来归一化"],a:1,w:"⭐ 关键在<b>转移是随机的</b>：命令往右只有 0.8 概率真往右，<b>擦着陷阱走时偏一下就掉进 −1</b>。⇒ 光凭直觉算不准，<b>L17 会真正算出来</b>。"});
+});
+KP("23 · ★ 轨迹与总回报：要最大化的到底是什么",function(){
+  S(3996,function(){clearScene();setEq("$$s_0 \\xrightarrow{a_0} s_1 \\xrightarrow{a_1} s_2 \\xrightarrow{a_2} s_3 \\;\\cdots$$","top");
+       setCap("机器人走出来的是一条轨迹");
+       says("66:36","the robots will go through a sequence of states S_0, S_1, S_2",196);
+       note("每一步：在 sₜ 挑一个动作 aₜ ⇒ 按 P_sa 随机落到 sₜ₊₁",640,258,"b");
+       note("沿途在每个状态收到一个奖励 R(sₜ)",640,310,"g");
+       note("总回报 = R(s₀) + γR(s₁) + γ²R(s₂) + ⋯",640,356,"y");
+       note("⚠ 同一套做法跑两次，轨迹会不一样 —— 因为转移是随机的",640,398,"r");},"<b>现在把前面的零件串起来，看一次完整的「运行」是什么样。</b><br><b>机器人会走出一串状态</b>——Ng 的说法是<b>经过 s₀、s₁、s₂ 这样一个状态序列，取决于它选的动作</b>。<b>每一步：在当前状态 sₜ 挑一个动作 aₜ，然后按 P_sa 随机落到下一个状态 sₜ₊₁。</b>这一串就叫一条<b>轨迹</b>。<br><b>沿途它在每个状态收到一个奖励 R(sₜ)</b>，<b>把这些奖励按 γ 折扣后加起来，就是这条轨迹的总回报</b>。<br><b>⚠ 这里有个很要紧的细节：同一套做法跑两次，轨迹不会一样。</b>因为<b>转移是随机的</b>——同样命令「往北」，这次真往北了，下次可能偏到东边。<b>⭐ 这就引出了下一镜那个关键的词。</b>");
+  S(4262,function(){clearScene();setEq("$$\\max \\; \\mathbb{E}\\big[R(s_0) + \\gamma R(s_1) + \\gamma^2 R(s_2) + \\cdots\\big]$$","top");
+       setCap("注意那个 E —— 期望");
+       says("71:02","the goal of reinforcement learning is to choose actions over time",196);
+       note("⭐ 目标不是「最大化某一次的总回报」，而是最大化它的期望",640,258,"y");
+       note("因为同一套做法每次跑出的轨迹都不同，单次结果可能纯属运气",640,310,"b");
+       note("⇒ 要优化的是「长期平均下来最好」",640,356,"g");
+       note("⚠ 一个后果：最优做法在某一次运行里也可能运气很差",640,398,"r");},"<b>强化学习的目标，Ng 的原话是：随着时间选择动作，去最大化期望总回报。</b><br><b>⭐ 那个「期望」两个字不能漏掉。</b>目标不是「最大化某一次跑出来的总回报」，而是<b>最大化它的期望值</b>。<br><b>为什么必须是期望？</b>因为上一镜说了——<b>同一套做法每次跑出的轨迹都不一样，单次结果可能纯属运气</b>。<b>⇒ 所以要优化的是「长期平均下来最好」。</b><br><b>⚠ 这里有个很容易忽略但重要的后果：最优做法在某一次具体运行里，也完全可能运气很差、结果难看。</b><b>⭐ 这正是评估强化学习算法时最容易犯的错——拿一次运行的结果去判断好坏。要判断得跑很多次看平均。</b><br><b>⇒ 有了这个目标，剩下的问题就是：怎么描述一套「做法」？下一镜回答。</b>");
+  SUM(3996,23,{h:"★ 轨迹与「期望」总回报",k:"<b>一条轨迹</b>：在 sₜ 挑动作 aₜ ⇒ 按 P_sa 随机落到 sₜ₊₁，沿途收到 R(sₜ)。<b>总回报 = R(s₀) + γR(s₁) + γ²R(s₂) + ⋯</b>",m:"Ng：<b>强化学习的目标是随着时间选择动作，最大化期望总回报</b>。",w:"⭐ <b>「期望」两个字不能漏</b>：同一套做法<b>每次跑出的轨迹都不同</b>，单次结果可能纯属运气 ⇒ <b>要优化的是长期平均下来最好</b>。",e:"⚠ <b>重要后果</b>：<b>最优做法在某一次运行里也可能运气很差</b>。⭐ <b>所以评估 RL 算法不能看一次运行，要跑很多次看平均</b>——这是最常犯的错。"});
+  QUIZ(3996,23,{t:"强化学习要最大化的目标是什么？为什么里面必须有「期望」？",o:["最大化期望折扣总回报——因为转移随机、同一套做法每次轨迹都不同，单次结果可能纯属运气","最小化到达目标的步数；期望来自折扣因子","最大化每一步的即时奖励；期望用来平滑噪声","最大化单次运行的总回报；期望只是写法习惯"],a:0,w:"⚠ 一个重要后果：<b>最优做法在某一次运行里也可能运气很差</b>。⭐ 所以<b>评估 RL 算法要跑很多次看平均，不能看一次运行</b>。"});
+});
+KP("24 · ★★★ 策略 π：从状态到动作的映射",function(){
+  S(4310,function(){clearScene();setEq(null);setCap("强化学习算法最终要交出来的东西");
+       says("71:50","the output of most reinforcement learning algorithms will be a policy");
+       boxNode(180,200,300,76,"状态 s","b");
+       boxNode(700,200,300,76,"动作 a","g");
+       link(480,238,700,238);
+       note("π",590,228,"y");
+       note("⭐ 执行策略 = 每当处于状态 s，就做 π(s)",640,330,"y");
+       note("⚠ 它不是一条路线，而是「每个状态下该怎么办」的完整说明书",640,392,"r");},"<b>⭐ 现在回答上一镜那个问题：一套「做法」怎么描述？答案是策略。</b>Ng 说，<b>大多数强化学习算法给出的是一个策略，它把状态映射到动作</b>。<br><b>执行策略的意思就是：每当你处于状态 s，就去做 π(s) 这个动作。</b><br><b>⚠ 这里有个很容易误解的地方：策略不是一条路线。</b><br>如果是一条路线（「先往北、再往东、再往北」），<b>一旦中途被风吹偏，后面的指令就全错位了</b>。<br><b>⭐ 而策略是「每一个状态下该怎么办」的完整说明书</b>——<b>不管你怎么偏，只要知道现在在哪一格，就知道下一步该怎么走。</b><br><b>⇒ 这正是它能应对 P_sa 那种随机性的原因。</b>");
+  S(4344,function(){clearScene();setEq(null);setCap("最优策略长什么样");
+       says("72:24","this is the optimal policy");
+       grid(360,190,140,56,4,3,function(i,j){
+         if(i===1&&j===1) return ["墙","d"];
+         if(i===3&&j===0) return ["+1","g"];
+         if(i===3&&j===1) return ["−1","r"];
+         if(j===0) return ["→","y"];
+         if(j===1) return ["↑","y"];
+         if(i===0) return ["↑","y"];
+         return ["←","y"];});
+       note("⭐ 每一格都标着「在这里该往哪走」",640,170,"y");
+       note("⚠ 看下面一整排：箭头朝左，是在背离 +1",640,382,"r");
+       note("⇒ 它宁可从左边绕上去，也不走右边那条贴着 −1 的近路",640,405,"g");},"<b>把最优策略画在网格上，就是每一格标一个箭头。</b>Ng 说<b>这就是最优策略</b>，而且<b>执行它——每到一个状态就按箭头走——就能最大化期望总回报</b>。<br><b>⭐ 注意看 −1 陷阱左边那格的箭头：它指向左，而不是直接往右冲向 +1。</b><br><b>⚠ 为什么？因为转移是随机的。</b>擦着陷阱走的时候，<b>只要有 0.1 的概率偏一下，就会掉进 −1</b>。<b>绕远一点，虽然多花几步、多打几次折扣，但安全得多。</b><br><b>⭐ 这一格把整个 MDP 框架的价值展示得淋漓尽致</b>——<b>最优策略会自动把「随机性带来的风险」算进去，而这件事光凭直觉很难算准。</b><br><b>下一讲 L17 就讲怎么把这样的策略算出来：值迭代与策略迭代。</b>");
+  S(4490,function(){clearScene();setEq(null);setCap("⚠ 往北还是往西：Ng 说光用眼睛看很难判断");
+       says("74:50","not totally obvious whether here you are better off going North or going West");
+       boxNode(120,200,470,58,"往北：走近路","b");
+       boxNode(120,268,470,58,"快，但这一步有 0.1 的概率滑进 −1","r");
+       boxNode(690,200,470,58,"往西：绕远路","g");
+       boxNode(690,268,470,58,"安全，但路更长、折扣更多、沿途一直在扣分","y");
+       note("⭐ Ng 的结论：解出来的最优动作是「走更长但更安全的那条路」",640,370,"y");
+       note("⚠ 他特意说：这种细微的权衡，人光看是看不出来的 —— 得算",640,402,"r");},"<b>⭐ Ng 在这一格上停了很久，因为它最能说明 MDP 的价值。</b><br><b>他指着一格说：这里到底该往北还是往西，其实并不显然。</b><br><b>往北是近路</b>：<b>能更快到 +1</b>。<b>⚠ 但他紧接着说——就在这一步，有 0.1 的概率会滑进 −1。</b><br><b>往西是远路</b>：<b>安全，可是代价也实在</b>。Ng 把代价说得很具体：<b>路更长，所以奖励被折扣得更厉害</b>（γ 的幂次更高），<b>而且沿途一直在承受每一步的扣分</b>。<br><b>⇒ 所以这是一个真实的权衡，两边都有道理。</b><br><b>⭐ Ng 的原话很值得记住：这个很难光用眼睛看出来、做个判断。而解出来的最优动作，是走更长、更安全的那条路。</b><br><b>⚠ 这就是整套 MDP 机器存在的理由——它能做出人凭直觉做不出的细微区分。L17 就教怎么解。</b>");
+  SUM(4310,24,{h:"★★★ 策略 π：每个状态下该做什么",k:"Ng：<b>大多数强化学习算法的输出就是一个策略</b>，他紧接着补了一句——<b>策略就是控制器，把状态映射到动作</b>。执行策略 = <b>每当处于状态 s，就做 π(s)</b>，这样就能<b>最大化期望总回报</b>。",m:"⚠⚠ <b>策略不是一条路线</b>。路线一旦被风吹偏，后面的指令全错位；<b>策略是「每个状态下该怎么办」的完整说明书</b>。",w:"⇒ ⭐ <b>这正是它能应对 P_sa 那种随机性的原因</b>——不管偏到哪，只要知道在哪一格就知道下一步。",e:"⭐ <b>最精彩的一格</b>：Ng 说<b>「往北还是往西并不显然」</b>——往北快但<b>这一步有 0.1 的概率滑进 −1</b>；往西安全但<b>路长、折扣更重、沿途一直扣分</b>。⚠ <b>他说这种权衡人光看是看不出来的</b>，<b>解出来的最优动作是走更长更安全的那条路</b>。"});
+  QUIZ(4310,24,{t:"为什么说策略是「说明书」而不是「路线」？",o:["因为它更长","因为策略可以重复使用","因为路线不能处理连续状态","路线一旦被随机性带偏，后续指令就全错位；策略给出每个状态下该做什么，无论偏到哪里都知道下一步"],a:3,w:"⭐ 这正是它能应对 <b>P_sa 随机性</b>的原因。⭐ 网格里<b>整个下排都朝左、背离 +1</b>——宁可从左边绕上去，也不走右边贴着 −1 的近路。"});
+});
+KP("完 · 一讲跨两个世界",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L16 · 完","ICA 收尾 ＋ 强化学习开篇",
+      "非高斯是前提，MDP 是语言");},
+    "收一下，这一讲前后半场几乎是两门学问。<br><b>前半场 ICA。</b>要用极大似然就<b>必须先有 s 的密度</b>——因为<b>似然的定义里就含着密度，没有密度就没有可优化的目标</b>。可 s 本身是未知量，<b>只能自己挑一个分布</b>。挑的办法是<b>先指定 CDF 再求导</b>（CDF 只要「从 0 单调爬到 1」，比直接凑一个合法密度容易），于是<b>拿 sigmoid 当 CDF，密度就是 σ(s)(1−σ(s))</b>。<b>⚠ 选它的真正理由不是好算，而是它不是高斯。</b><br><b>为什么非高斯这么要紧？因为 ICA 必然留下三种歧义。</b>前两种无害：<b>① 顺序</b>——分出来的两路不知道谁该编号为 1；<b>② 幅度与符号</b>——把 s 放大 α 倍、同时把 A 缩小 α 倍，<b>乘出来的 x 完全相同</b>，而 α 取负时波形整体翻转、人耳几乎听不出差别。<b>⭐ 第三种是致命的：旋转。</b>两个标准高斯画出来是一团<b>圆形</b>点云，<b>转任意角度看上去都一样</b> ⇒ <b>没有任何方向是「特别」的</b>，而 ICA 恰恰要找那些特别的方向。<b>⇒ 于是有了那条硬性定理：只有数据非高斯，ICA 才可能成立。</b>非高斯的点云有棱角、有朝向，<b>棱角才是算法的依据</b>。⚠ <b>实践推论：信号若接近高斯，ICA 表现差，而且调参救不了。</b><br><b>学习规则</b>就是老流程：<b>假定各源独立 ⇒ 联合密度相乘</b>（这正是 Independent Component Analysis 名字的由来），<b>代入 s = Wx 时补上 |det W|</b>（变量替换会改变体积，漏了它最大化似然会把 W 推向零），再<b>对 W 做随机梯度上升</b>（是上升——我们在最大化似然）。<br><b>后半场换世界：强化学习。</b>监督学习给每个 x 配答案 y，无监督只给 x，<b>而 RL 给的只是一个「好还是坏」的信号</b>。<b>直升机的例子说明了为什么必须这样</b>：<b>连顶尖飞行员也说不出「这个姿态下操纵杆该精确推到哪」</b>，他们凭手感飞，手感没法逐条标注；<b>⭐ 但「飞得好不好」一眼就看得出来</b>。<b>RL 就建立在这个不对称上：说清「什么算好」比说清「该怎么做」容易得多。</b>所以<b>你的职责是设计奖励函数</b>，⚠ 而<b>奖励写歪了算法会非常忠实地追求那个歪目标</b>（只奖励不摔机 ⇒ 它学会停在地上不起飞）。<b>⚠⚠ RL 真正难的地方是信用分配</b>：下 50 步后输了，<b>唯一反馈只有最后那个「输」</b>，却要分辨出到底哪一步该负责。<br><b>最后把这一切形式化成 MDP 的五个零件</b>：<b>S</b> 状态集合（⚠ 状态要含<b>做决定所需的全部信息</b>，这就是<b>马尔可夫性质</b>，MDP 的「M」）、<b>A</b> 动作集合、<b>P_sa</b> 状态转移概率（⚠ <b>是概率不是确定结果</b>——命令「往北」只有 0.8 概率真往北，因为轮子会打滑）、<b>γ</b> 折扣因子（<b>第 k 步乘 γ^k</b>；γ=0.9 时第 50 步只剩约 0.005 的权重。既反映「早拿到更值钱」，<b>也保证无限过程的总回报不发散</b>）、<b>R</b> 奖励函数。<b>算法最终交出的是策略 π：从状态到动作的映射。</b>⚠⚠ <b>它不是一条路线而是一本说明书</b>——路线一旦被随机性带偏后续全错位，<b>而说明书让你无论偏到哪格都知道下一步</b>。<b>⭐ 网格世界里最精彩的地方：整个下排的箭头都朝左、背离 +1，它宁可从左边绕上去，也不走右边那条贴着 −1 的近路。Ng 在这一格上停了很久——<b>往北快，但这一步有 0.1 的概率滑进 −1；往西安全，可是路更长、折扣更重、沿途一直在扣分</b>。他说这种权衡人光用眼睛是看不出来的，而解出来的最优动作正是「走更长但更安全的那条路」。<b>这就是整套 MDP 机器存在的理由：它能做出人凭直觉做不出的细微区分。</b></b><br><b>下一讲 L17 讲怎么把这样的策略真正算出来：值迭代与策略迭代。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>

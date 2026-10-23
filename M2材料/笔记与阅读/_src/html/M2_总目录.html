@@ -1,0 +1,105 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Module 2 复习资料</title><style>
+@page { size: A4; margin: 16mm 14mm 16mm 14mm; }
+@page { @bottom-center { content: counter(page); font-size:9pt; color:#8a97aa } }
+@page :first { @bottom-center { content: "" } }
+*{box-sizing:border-box}
+html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+     font-size:10.5pt; line-height:1.62; color:#14181f; margin:0}
+code,.mono{font-family:"Consolas","Cascadia Mono","Courier New",monospace;
+   font-size:.92em; background:#eef1f6; color:#13365e; font-weight:600;
+   padding:0 1.6px; border-radius:2px}
+
+/* ── 封面 ── */
+.cover{text-align:center; padding-top:52mm; page-break-after:always}
+.cover h1{font-size:30pt; margin:0 0 4mm; letter-spacing:.04em}
+.cover .sub{font-size:14pt; color:#334; margin:0 0 2mm}
+.cover .course{font-size:11pt; color:#667; margin:0 0 14mm}
+.cover .cov{display:inline-block; text-align:left; border:1px solid #b9c2d0;
+     border-radius:6px; padding:6mm 9mm; font-size:10pt; line-height:1.9; background:#f7f9fc}
+.cover .cov b{color:#1b3a63}
+.cover .mate{margin-top:10mm; font-size:9.5pt; color:#778}
+
+/* ── 目录 ── */
+.toc{page-break-after:always}
+.toc h2{border:none; margin-top:0}
+.toc ol{list-style:none; padding-left:0; font-size:11pt; line-height:2.05}
+.toc ol ol{font-size:10pt; line-height:1.75; color:#445; padding-left:7mm; margin:1mm 0 2mm}
+.toc ol ol li::before{content:"· "; color:#8a97aa}
+
+/* ── 标题 ── */
+h2{font-size:15pt; margin:9mm 0 3mm; padding:2mm 0 1.6mm;
+   border-bottom:2.2px solid #1b3a63; color:#1b3a63; page-break-after:avoid}
+h3{font-size:12.2pt; margin:6mm 0 2mm; color:#20456f; page-break-after:avoid}
+h4{font-size:11pt; margin:4.5mm 0 1.5mm; color:#2d4a6b; page-break-after:avoid}
+h2 .pg{float:right; font-size:9.5pt; font-weight:400; color:#7a8698; padding-top:2.4mm}
+p{margin:0 0 2.4mm; text-align:justify}
+ol{margin:0 0 2.8mm; padding-left:6.5mm}
+ul{margin:0 0 2.8mm; padding-left:5mm; list-style:none}
+ul>li::before{content:"▪"; color:#4a73a8; display:inline-block;
+              width:4mm; margin-left:-4mm}
+li{margin:.9mm 0}
+b,strong{color:#0d2b4e}
+
+/* ── 表格 ── */
+table{border-collapse:collapse; width:100%; margin:2.5mm 0 4mm; font-size:9.8pt;
+      break-inside:avoid; page-break-inside:avoid}
+th,td{border:1px solid #c3ccd9; padding:1.5mm 2.2mm; vertical-align:top}
+th{background:#e8eef7; color:#12355c; font-weight:600; text-align:left}
+tr:nth-child(even) td{background:#fafbfd}
+td.n,th.n{text-align:right; font-variant-numeric:tabular-nums;
+   font-feature-settings:"tnum" 1; letter-spacing:.2px}
+table.tight td,table.tight th{padding:1.1mm 1.8mm; font-size:9.3pt}
+
+/* ── 公式 ── */
+.eq{margin:2.5mm 0 3mm; padding:2.4mm 4mm; background:#f4f7fb; border-left:3.5px solid #4a73a8;
+    font-family:"Cambria Math","Cascadia Mono",Consolas,serif; font-size:10.6pt;
+    break-inside:avoid; white-space:pre-wrap}
+.eq .lbl{display:block; font-family:inherit; font-size:8.8pt; color:#6b7686}
+sub{font-size:.72em} sup{font-size:.72em}
+
+/* ── 提示框 ── */
+.cal{margin:3mm 0; padding:2.6mm 3.6mm; border-radius:4px; break-inside:avoid;
+     page-break-inside:avoid; font-size:10.1pt}
+.cal .ttl{font-weight:700; display:block; margin-bottom:1.2mm}
+.cal p:last-child{margin-bottom:0}
+.k{background:#fff6e0; border:1px solid #e3b43a; border-left:4px solid #e3b43a}      /* ★ 考点 */
+.k .ttl{color:#8a5a00}
+.w{background:#fdeeee; border:1px solid #d77; border-left:4px solid #d77}            /* ⚠ 易错 */
+.w .ttl{color:#9a2222}
+.t{background:#edf7ee; border:1px solid #6aa96f; border-left:4px solid #6aa96f}      /* ⭐ 技巧 */
+.t .ttl{color:#1f6128}
+.s{background:#eef2fa; border:1px solid #93a7c9; border-left:4px solid #5878ab}      /* Study check */
+.s .ttl{color:#23456f}
+.ng{background:#f3eefb; border:1px solid #9a84c4; border-left:4px solid #7a5fb0}     /* CS229 旁注 */
+.ng .ttl{color:#4c327f}
+
+/* ── 手算例题 ── */
+.ex{margin:3.5mm 0 4.5mm; border:1px solid #9fb3cc; border-radius:5px}
+.ex>.hd{break-after:avoid; page-break-after:avoid}
+.ex>.hd{background:#1b3a63; color:#fff; padding:1.8mm 3.4mm; font-weight:600; font-size:10.4pt}
+.ex>.bd{padding:3mm 3.6mm}
+.ex>.bd>:last-child{margin-bottom:0}
+.step{margin:2mm 0; padding-left:5.5mm; border-left:2px solid #c3ccd9;
+   break-inside:avoid; page-break-inside:avoid}
+.step .sn{font-weight:700; color:#1b3a63; margin-right:1.5mm}
+
+/* ── 题库 ── */
+.qg{margin:4mm 0 5mm; break-inside:avoid-page}
+.qg>.hd{background:#20456f; color:#fff; padding:1.6mm 3.2mm; font-weight:600;
+        font-size:10.5pt; border-radius:4px 4px 0 0}
+.qg>.bd{border:1px solid #9fb3cc; border-top:none; border-radius:0 0 4px 4px; padding:2.6mm 3.4mm}
+.q{margin:0 0 3mm; break-inside:avoid}
+.q .qt{font-weight:600; margin-bottom:1.2mm}
+.q .op{padding-left:6mm; font-size:10pt; line-height:1.75}
+.ans{margin-top:2.5mm; padding:2.4mm 3mm; background:#f6f8fb; border-top:1.5px dashed #9fb3cc;
+     font-size:9.8pt}
+.ans .ttl{font-weight:700; color:#1b3a63; display:block; margin-bottom:1.2mm}
+.ans .a{margin:1.1mm 0}
+.ans .a b{color:#1f6128}
+
+.pb{page-break-before:always}
+.nb{page-break-inside:avoid}
+hr.sep{border:none; border-top:1px solid #d6dde7; margin:5mm 0}
+.note{font-size:9.4pt; color:#5a6676; margin:1.5mm 0 3mm}
+</style></head><body><div class="cover"><h1>Module 2 复习资料</h1><p class="sub">无监督学习 · PCA / 聚类 / GMM — 总目录</p><p class="course">ARTI2001 Machine Learning · 2026 Semester 2</p><div class="cov"><b>7 册 · 约 115 页</b><br>四册<b>知识点整理</b> + 三册<b>题库与解析</b>（共 170 道选择题）<br>全部对照 <b>Canvas 官方讲义</b>编排，附 <b>Tutorial 完整解答</b><br>每册都带<b>公式速查表</b>、<b>易错点清单</b>与<b>术语中英对照</b></div><p class="mate">ARTI2001 · Module 2 测验：2026-10-12（周一）</p></div><div class="toc"><h2>目录</h2><ol><li>这一套包含什么</li><li>建议的使用顺序</li><li>★ 考前最后一小时：只看这几处</li><li>材料来源</li></ol></div><h2>这一套包含什么</h2><table><thead><tr><th>文件</th><th>归属</th><th class="n">页数</th></tr></thead><tbody><tr><td>M2_评估与模型选择_知识点整理.pdf</td><td>跨三个主题</td><td class="n">11 页</td></tr><tr><td>M2T1_PCA_知识点整理.pdf</td><td>Topic 1</td><td class="n">18 页</td></tr><tr><td>M2T1_PCA_题库与解析.pdf</td><td>Topic 1 · 题库</td><td class="n">13 页</td></tr><tr><td>M2T2_聚类_知识点整理.pdf</td><td>Topic 2</td><td class="n">18 页</td></tr><tr><td>M2T2_聚类_题库与解析.pdf</td><td>Topic 2 · 题库</td><td class="n">16 页</td></tr><tr><td>M2T3_GMM与EM_知识点整理.pdf</td><td>Topic 3</td><td class="n">24 页</td></tr><tr><td>M2T3_GMM与EM_题库与解析.pdf</td><td>Topic 3 · 题库</td><td class="n">15 页</td></tr></tbody></table><p><b>合计 115 页。</b>建议双面打印；题库可以单独抽出来做。</p><h2>建议的使用顺序</h2><table><thead><tr><th>顺序</th><th>做什么</th><th>为什么</th></tr></thead><tbody><tr><td>①</td><td>先读《评估与模型选择》</td><td>它是<b>跨三个主题</b>的骨架，官方标为 CORE / ASSESSABLE；后面每个主题的论证都要用到那四格证据框架</td></tr><tr><td>②</td><td>按 T1 → T2 → T3 读知识点整理</td><td>每一册都按讲义页编号编排，和 Canvas 对得上</td></tr><tr><td>③</td><td>每读完一册，做对应题库</td><td><b>每组 5 题，先遮住解析作答</b>，整组做完再核对</td></tr><tr><td>④</td><td>做错的题回到知识点整理的对应章节</td><td>组标题后面的括号就是讲义页编号</td></tr><tr><td>⑤</td><td>考前只看每册的附录 A/B</td><td><b>公式速查 + 易错点清单</b>，是密度最高的两页</td></tr></tbody></table><h2>★ 考前最后一小时：只看这几处</h2><table><thead><tr><th>主题</th><th>最该确认的东西</th></tr></thead><tbody><tr><td>评估</td><td><b>四部分证据框架</b>（拟合/稳定性/假设/领域有用性）；silhouette 的 a(i)、b(i) 定义；<b>「不要只看一个数」那张示范决策表</b></td></tr><tr><td>PCA</td><td>中心化 → 散布/协方差 → 特征分解 → 解释方差比 → 投影 → <b>重构要加回均值</b>；<b>散布矩阵与协方差矩阵特征向量相同、解释方差比相同</b></td></tr><tr><td>k-means</td><td>指派/更新两步<b>为什么不会增加 WCSS</b>；<b>全局最优 inertia 不随 k 上升，但实测值可能波动</b>；n_init 是重跑次数</td></tr><tr><td>DBSCAN</td><td><b>邻域含点自己</b>；核心/边界/噪声的判据；<b>只有核心点能扩张簇</b>；<b>先标噪声的点可能变成边界点</b></td></tr><tr><td>GMM</td><td><b>责任度 = 先验 × 密度 ÷ 混合密度</b>；M 步<b>分母是 N_k</b>、<b>用新均值</b>、<b>除 N_k 不是 N_k−1</b>；<b>p = 3K − 1</b>；AIC/BIC 低者优且<b>不能互比</b></td></tr></tbody></table><div class="cal w"><span class="ttl">⚠ 三条最容易丢分的「概念性」答法</span><ul><li>凡是问「这个结果可信吗」，<b>必须答不止一类证据</b>，并以「这是有依据的判断，不是证明」收尾；</li><li>凡是涉及预测流程，<b>必须提一句「预处理与无监督变换只在训练集上拟合」</b>；</li><li>凡是问「簇/成分是不是真实分组」，<b>答案都是否</b> —— 它们是模型产出的摘要，需要领域证据支撑。</li></ul></div><h2>材料来源</h2><table><thead><tr><th>来源</th><th>用在哪</th></tr></thead><tbody><tr><td>Canvas 讲义 T1-00 ~ T3-06（8 份，约 12.4 万字）</td><td>知识点整理的主体，章节按讲义页编号编排</td></tr><tr><td>M2 T1/T2/T3 Tutorial_ans.pdf</td><td>三份 Tutorial 的<b>完整官方解答</b>，含扩展题</td></tr><tr><td>M2 T2 / T3 Prac solution.ipynb</td><td>Practical 的参考数字与讨论要点</td></tr><tr><td>numpy 复算</td><td><b>全部 58 个数字逐个验算通过</b>（手算例题、Tutorial 答案、AIC/BIC）</td></tr></tbody></table><p class="note">⚠ Andrew Ng 的 CS229 讲了 GMM 与 EM（L13/L14），但<b>完全没讲 DBSCAN</b>，也基本没讲 BIC/AIC 选成分数。这两块只能看本套资料与学校讲义。</p></body></html>

@@ -1,0 +1,1374 @@
+{
+ "tag": "M2T3",
+ "title": "高斯混合模型与 EM",
+ "sub": "M2 T3",
+ "pdf": "slides/M2T3_GMM.pdf",
+ "pages": 16,
+ "notes": [
+  {
+   "r": [
+    1,
+    1
+   ],
+   "t": "这一讲要回答什么",
+   "star": 1,
+   "one": "当组与组重叠时，怎么用「概率」而不是「硬标签」来描述归属？",
+   "pts": [
+    "<b>副标题三个词各有分量</b>：<em>Soft</em>（软——归属是概率不是标签）、<em>clustering</em>（仍然在做分组）、<em>with probability distributions</em>（用概率分布来做）。",
+    "⚠️ 但<b>把 GMM 只当成「软版 K-means」会漏掉一半</b>。它首先是一个<b>密度模型</b>：拟合完你得到完整的 p(x)，能回答「这个观测有多罕见」。<b>分组只是副产品。</b>",
+    "<b>和前两讲的关系</b>：T1 的 PCA 换<b>表示</b>，T2 的聚类给<b>分组</b>，T3 的 GMM 给<b>密度</b>。三种输出，三类问题。",
+    "<b>这一讲最容易出的问题是「公式记住了但不知道为什么」</b>——E 步为什么长那样、M 步的分母为什么是 N_k、为什么不能直接求导。后面每一页都会回到这些「为什么」。"
+   ],
+   "tip": {
+    "t": "与考试的关系",
+    "v": "评估文档给的示例大题里，有一道就是 GMM：给权重和成分密度，要你算加权贡献、混合密度、两个责任度，再解释 E 步与 M 步的分工。<b>这条计算链必考</b>。"
+   },
+   "exam": "开场定调：<b>「GMM 是生成式概率模型，给出的是每个成分的后验责任度与完整密度，而不是硬标签」</b>。",
+   "ng": "<b>GMM 从零听</b>：Lecture 13 从 23:00 起进入混合高斯——他先说「你只看到数据，不知道它来自哪个高斯」，再和<b>高斯判别分析（GDA）</b>对照（<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1612s\" target=\"_blank\">26:52</a>），然后 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> 给出 <b>EM 的两个步骤</b>。<span class='src'>视频：CS229 Lecture 13 中后段 · 讲义：main_notes.pdf 第 150–166 页（本地 CS229/notes/ch11_em.txt）</span>",
+   "quote": "<b>Gaussian Mixture Models</b> — <em>Soft clustering with probability distributions</em>",
+   "say": "把三个 Topic 放在 CS229 那张 2×2 地图上看，T3 的位置一下就清楚了：横轴是<b>建不建模 P(x)</b>，纵轴是<b>数据住在低维子空间还是聚成团</b>。<b>GMM 占的是「团 × 概率」那一格</b>，正上方是 K-means（团 × 非概率），左边同一行是因子分析（子空间 × 概率），左上是 PCA（子空间 × 非概率）。⭐ Ng 还补了一句很关键的：<b>EM 管的是整个「概率」列</b>——只要模型里有隐变量 z、你想建模 P(x)，EM 就适用。<b>这顺带解释了 K-means 为什么没有 EM 步骤</b>：它在非概率那一列，压根没有 P(x)，也就没有「对隐变量求期望」这回事。所以 <b>K-means 与 GMM 是同一行的两格</b>，差别只在建不建模概率——这也是为什么 GMM 常被叫作「软版 K-means」，以及为什么那个叫法只说对了一半。"
+  },
+  {
+   "r": [
+    2,
+    2
+   ],
+   "t": "六段路线图",
+   "one": "硬到软 → 混合密度 → 责任度 → EM → 模型选择 → tutorial。",
+   "pts": [
+    "<b>第 1 段就是这一讲的出发点</b>：<em>Membership can be uncertain</em>——<b>归属可以是不确定的</b>。K-means 强行给每点一个标签，GMM 承认「这个点我不确定」。",
+    "<b>第 3 段给了责任度的正式身份</b>：<em>Posterior probability</em>——<b>后验概率</b>。注意是「后验」：先有先验权重 π，观测到 x 之后才更新成 r。",
+    "<b>第 5 段是 T3 独有的能力</b>：<b>AIC 和 BIC</b>。前两讲选 k 只能靠肘部和 silhouette，GMM <b>有似然，所以能用信息准则</b>。",
+    "<b>路线图就是答题顺序</b>：硬→软 → 混合密度 → 责任度 → EM → 选 K。"
+   ],
+   "tip": {
+    "t": "读法建议",
+    "v": "第 ③ 段和第 ④ 段是全讲的心脏。第 ⑤ 段的 AIC/BIC 是大题里「怎么选成分数」的标准答法。"
+   },
+   "exam": "「解释每段如何引出下一段」的串法：<b>归属可能不确定 ⇒ 需要一个能表达不确定性的模型（混合密度）⇒ 不确定性量化成责任度 ⇒ 但参数未知，要用 EM 交替估计 ⇒ 成分数也未知，用 AIC/BIC 选</b>。",
+   "quote": "<b>M2 T3 Roadmap</b>：1 Hard → Soft Clusters — <em>Membership can be uncertain</em> · 2 Mixture Density — <em>Weighted sum of Gaussian components</em> · 3 Responsibilities — <em>Posterior probability of each component</em> · 4 EM Algorithm · 5 Model Selection — <em>Covariance choices, AIC and BIC</em>",
+   "tbl": [
+    {
+     "cap": "五段 ↔ 各自回答什么",
+     "head": [
+      "段",
+      "小标题",
+      "回答的问题"
+     ],
+     "rows": [
+      [
+       "1",
+       "Hard → Soft",
+       "为什么需要「不确定的归属」"
+      ],
+      [
+       "2",
+       "Mixture Density",
+       "p(x) 怎么由成分加权而来"
+      ],
+      [
+       "3",
+       "<b>Responsibilities</b>",
+       "r 是什么、怎么算"
+      ],
+      [
+       "4",
+       "EM Algorithm",
+       "两步怎么交替、为什么有效"
+      ],
+      [
+       "5",
+       "Model Selection",
+       "协方差类型、<b>AIC / BIC</b>"
+      ]
+     ]
+    }
+   ],
+   "say": "这条路线图和 T2 的一个关键差别值得先点出来：<b>T2 选 k 只能靠肘部和 silhouette 这类「内部指标」，而 T3 多了一整条路——AIC/BIC</b>。原因很直接：<b>GMM 是概率模型，能算出似然</b>，有了似然就能套信息准则；K-means 和 DBSCAN 没有似然，只能用几何意义上的指标。⚠️ 但别把这理解成「T3 选 K 更容易」——<b>似然本身不能用来选 K</b>（加成分不会降低最好的训练似然），必须加罚项；而且<b>不同 EM 运行会落进不同局部最优</b>，所以实际拟合出的似然<b>未必随 K 单调上升</b>。<b>多出来的是一条证据，不是一个免死金牌</b>——四类证据框架在这一讲同样适用。",
+   "ng": "Ng 讲 GMM 的路线和这张图几乎重合，但<b>他先讲「为什么非要这么做」再给公式</b>：<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1447s\" target=\"_blank\">24:07</a> 写下混合高斯模型；<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1642s\" target=\"_blank\">27:22</a> ⭐ 这是全讲最关键的转折——他说<b>「要是我们知道 z 就好了，可惜不知道」</b>，并指出如果 z 可见就能直接用极大似然、而且公式<b>和你 M1 学的 GDA 一模一样</b>；<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> 正式给出 EM 两步；<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=3584s\" target=\"_blank\">59:44</a> 起用「绿曲线下界」讲为什么似然不会下降。<br>⚠️ <b>路线图第 5 段（AIC/BIC 选 K）他基本没讲</b>——Ng 在 L13 里说自己选簇数<b>倾向不用信息准则</b>，那部分只能看本课讲义。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"
+  },
+  {
+   "r": [
+    3,
+    3
+   ],
+   "t": "K-means 与 GMM 表达归属的方式不同",
+   "star": 3,
+   "one": "K-means 给一个硬标签；GMM 给每个成分一个后验概率，并且还建模形状。",
+   "eq": "隐变量 zᵢ：一个未观测到的成分指示（one-hot）\n责任度 rᵢₖ = P(zᵢₖ = 1 | xᵢ)　，　Σₖ rᵢₖ = 1",
+   "pts": [
+    "⭐ <b>这一页最重要的是把 z 和 r 分清</b>（官方 Study check 第一问就是这个）。<b>z 是生成模型里真实但未观测的归属</b>（one-hot，非 0 即 1）；<b>r 是观测到 x 之后算出的后验概率</b>（0~1 的小数，每个观测各成分之和为 1）。",
+    "<b>讲义有一句话说得极准</b>：<em>观测到 x 之后，我们并不是把隐藏变量替换成一个已知的标签，而是算一个后验概率。</em> 换句话说——<b>EM 从来没有「猜出」z，它只是算出了 z 的分布。</b>",
+    "<b>第二个差别是 shape</b>：K-means 隐含假设球形（各向同性的距离）；GMM 每个成分有自己的协方差，<b>可以又扁又斜</b>。",
+    "⚠️ <b>Study check 第二问：为什么两次正确的 GMM 运行可以给成分编不同的号？</b> 答：<b>成分标签是任意的</b>——把两个成分的编号对调，<b>混合密度一点都不变</b>。所以要通过<b>估计出的参数和它描述的那些观测</b>来解释一个成分，<s>不能靠编号</s>。这和 T2 里「比成员不比标签号」是同一件事。"
+   ],
+   "say": "CS229 把生成故事写得很清楚：先按权重 <b>z ~ Multinomial(π)</b> 抽一个成分，再从<b>那一个</b>成分 <b>x|z=j ~ N(μⱼ, Σⱼ)</b> 抽一个观测。它和 GDA 的唯一差别是：<b>GDA 知道 z（有标签），GMM 不知道</b>。整个 EM 就是为了对付这个「不知道」。",
+   "tip": {
+    "t": "高频失分点",
+    "v": "<b>把责任度当成临时硬标签。</b> 责任度 [0.55, 0.45] 的真实含义是<b>「这个点其实很难分」</b>；压成硬标签就把这个信息丢了。sklearn 里 <code>predict</code> 丢掉不确定性，<code>predict_proba</code> 保留。",
+    "w": 1
+   },
+   "exam": "「z 与 r 各代表什么」「为什么成分编号可以不同」都是官方 Study check 原题，极可能原样出现。",
+   "ng": "隐变量的直觉在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1612s\" target=\"_blank\">26:52</a> 附近：GMM 和 <b>GDA 的模型几乎一样，唯一差别是 GDA 知道 z（有标签）、GMM 不知道</b>。整个 EM 就是为了对付这个「不知道」。理解了这一句，责任度是什么就自然清楚了。<span class='src'>视频：CS229 Lecture 13 · 讲义：ch11_em.txt 11.1 节</span>",
+   "quote": "<b>K-means and GMM Represent Membership Differently</b> — <em>Both can describe groups, but GMM also models <b>shape and uncertainty</b>.</em> · K-means: <em>Hard centroid assignment · One label per observation · Spherical distance-based groups</em> · GMM: <em>Hidden state and posterior responsibility · Latent zᵢ</em>",
+   "tbl": [
+    {
+     "cap": "z 与 r：最容易混的一对",
+     "head": [
+      "",
+      "z（潜变量）",
+      "r（责任度）"
+     ],
+     "rows": [
+      [
+       "是什么",
+       "生成模型里的<b>真实</b>归属",
+       "观测 x 之后的<b>后验概率</b>"
+      ],
+      [
+       "取值",
+       "one-hot，非 0 即 1",
+       "0~1 的小数"
+      ],
+      [
+       "约束",
+       "恰好一个成分为 1",
+       "<b>Σₖ rᵢₖ = 1</b>"
+      ],
+      [
+       "看得到吗",
+       "<b>看不到</b>",
+       "算得出来"
+      ]
+     ]
+    },
+    {
+     "cap": "K-means vs GMM",
+     "head": [
+      "",
+      "K-means",
+      "GMM"
+     ],
+     "rows": [
+      [
+       "归属",
+       "<b>硬</b>：一个标签",
+       "<b>软</b>：一个责任度向量"
+      ],
+      [
+       "形状",
+       "球形、基于距离",
+       "各成分自己的协方差，<b>可扁可斜</b>"
+      ],
+      [
+       "目标",
+       "最小化簇内平方和",
+       "<b>最大化似然</b>"
+      ],
+      [
+       "额外产出",
+       "无",
+       "<b>完整密度 p(x)</b>"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "r": [
+    4,
+    4
+   ],
+   "t": "混合密度就是一个加权和",
+   "star": 3,
+   "one": "权重说「多常出现」，密度说「出现在哪」。",
+   "eq": "p(x) = Σₖ πₖ · N(x | μₖ, Σₖ)\nπₖ ≥ 0，  Σₖ πₖ = 1   ⇒ 只有 K−1 个自由权重",
+   "pts": [
+    "⭐ <b>那句对照极其精炼</b>：<b>权重说「这个成分多常出现」，密度说「它出现在哪里」。</b> 两件事相乘再相加，就是混合密度。",
+    "⚠️ <b>官方特意写了一句 not P(X=x)</b>：对连续数据，<b>p(x) 是密度不是概率</b>。「恰好取到某个值」的概率<b>严格等于 0</b>；概率要对<b>区间</b>积分。<b>推论：密度值可以大于 1</b>——看到 p(x)=1.8 别以为算错。",
+    "<b>权重的两个约束</b>：非负、和为 1。⭐ <b>「和为 1」意味着 K 个权重只有 K−1 个是自由的</b>——最后一个由前面决定。这直接决定了后面数参数个数时的 (K−1) 那一项。",
+    "⚠️ <b>成分数不等于峰数</b>：两个成分靠得近、方差又大时，叠出来<b>只有一个峰</b>。所以<b>看到单峰不能断定只有一个成分</b>，反过来 K 选大了也未必能从图上看出来。"
+   ],
+   "say": "⚠️ 讲义在收尾的「四条警告」里还点了一条容易忽略的：<b>混合的方差有两个来源</b>——每个成分<b>内部</b>的离散，加上<b>成分均值之间</b>的差异。所以<b>混合方差不等于各成分方差的加权平均</b>。举个极端例子：两个成分各自方差都很小，但中心离得很远，<b>混合的整体方差会很大</b>。这是选择题爱设的陷阱，p9 的 Checkpoint 也专门列了它。",
+   "tip": {
+    "t": "必背区分",
+    "v": "<b>密度 = 曲线的高度</b>；<b>概率 = 曲线下的面积</b>；<b>责任度 = 概率</b>（在 0 和 1 之间且对成分求和为 1）。三者混淆是 GMM 题最常见的失分。"
+   },
+   "exam": "⭐ <b>Tutorial Q1 第 3 问就在考这一条，而且 Practical 共性反馈又点了一次</b>：问 p(x_A) 和 p(x_B) <b>为什么是密度值而不是「观测到这个点的概率」</b>。官方答案：<b>对连续变量，一个精确的点的概率是 0</b>；密度描述的是<b>每单位 x 的概率</b>，<b>必须在一个区间上积分才能得到概率</b>。⚠️ 共性反馈的原话更直接：<em>Probability density at a point is <b>not</b> the probability of observing that exact continuous value</em>，而且要求<b>解释理由而不只是给结论</b>。<br>⭐ <b>同页还考「混合密度怎么算」</b>：<b>p(x) = Σ πₖ Nₖ(x)，就是各分量密度的加权和</b>。官方 Q1 的数字：π=(0.6,0.4)，x_A 的两个分量密度 (0.30,0.10) ⇒ 加权后 <b>0.18 + 0.04 = 0.22</b>；x_B 的 (0.12,0.18) ⇒ <b>0.072 + 0.072 = 0.144</b>。",
+   "ng": "混合密度与成分能拟合什么形状，见 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=2380s\" target=\"_blank\">39:40</a>：他演示了两个高斯的混合能拟合什么、更多成分又能拟合什么。<span class='src'>视频：CS229 Lecture 13 · 讲义：ch11_em.txt 11.1 节</span>",
+   "quote": "<b>A Mixture Density Is a Weighted Sum</b> — <em>Weights describe how often components occur; densities describe where they occur.</em> · <b>p(x) = Σₖ πₖ N(x|μₖ,Σₖ)</b> · <em>Each πₖ ≥ 0 and the weights sum to one.</em> · <em><b>For continuous data, p(x) is a density—not P(X=x).</b></em>",
+   "tbl": [
+    {
+     "cap": "式子里每个符号读作什么",
+     "head": [
+      "符号",
+      "读作",
+      "约束"
+     ],
+     "rows": [
+      [
+       "πₖ",
+       "混合权重（这个成分<b>多常</b>出现）",
+       "≥0，<b>Σ=1</b>"
+      ],
+      [
+       "μₖ",
+       "成分中心（出现在<b>哪里</b>）",
+       "—"
+      ],
+      [
+       "Σₖ",
+       "成分的离散与朝向",
+       "正定"
+      ],
+      [
+       "p(x)",
+       "混合<b>密度</b>",
+       "<b>可以 &gt;1</b>；对区间积分才是概率"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "r": [
+    5,
+    5
+   ],
+   "t": "EM：软分配与更新交替",
+   "star": 3,
+   "one": "初始化 → E 步算责任度 → M 步用责任度当权重更新参数 → 检查收敛。",
+   "pts": [
+    "⭐ <b>那句保证要读准</b>：<em>improves <b>or preserves</b></em>——<b>不会变差</b>，但可能原地不动。它<s>没有</s>说「一定找到最好的」。",
+    "<b>官方 Study check 三问，逐个答</b>：<b>E 步固定什么？</b> 固定<b>参数</b>（π、μ、Σ），算责任度。<b>M 步更新什么？</b> 更新<b>参数</b>，而<b>责任度在整个 M 步里保持不动</b>。<b>为什么责任度叫「分数计数」？</b> 见下一条。",
+    "⭐ <b>fractional counts（分数计数）的含义</b>：如果归属已知，每个观测对某成分的贡献要么 1 要么 0；<b>在 GMM 里归属不确定，责任度 0.9 就贡献 0.9 个计数</b>。加起来得到的 N_k 是<b>该成分预期生成了多少个观测</b>，通常<b>不是整数</b>，<b>绝不能凑整</b>。",
+    "⚠️ <b>初始化不能省</b>：责任度是由参数算出来的，<b>参数不存在就算不了责任度</b>。所以必须先选 K 并给出合法的初始权重、均值、协方差（常用 K-means 的结果来初始化）。"
+   ],
+   "say": "为什么必须这样交替？CS229 的答案是：直接对混合模型做 MLE 会得到 <b>log 里面套一个求和</b>（log Σₖ πₖN(...)），求导没有闭式解。EM 的办法是用 <b>Jensen 不等式</b>给对数似然造一个<b>下界</b>：<b>E 步挑一个 Q 让下界在当前参数处正好取等（贴住）</b>，<b>M 步最大化这个下界</b>。因为下界被推高、而且在起点处与真似然相等，所以真似然<b>只能升不能降</b>——这就是单调性的来源。",
+   "tip": {
+    "t": "考纲边界",
+    "v": "Topic overview 明确写了：<b>要会应用 E 步与 M 步，但详细的收敛性证明不在考核范围</b>。上面那段理解一遍即可，不必背证明。"
+   },
+   "exam": "⚠️⚠️ <b>Practical 共性反馈点名了一个极其具体的 M 步陷阱，值得单独背下来</b>：更新方差时，<b>要先对「更新后的均值」算离差再平方，然后才用责任度去加权</b>——<em>first square the deviations from the <b>updated</b> mean, then weight those squared deviations by responsibilities</em>。<b>把责任度放进平方里面，得到的是另一个、错误的更新式</b>。<br>⭐ <b>E 步 / M 步各自固定什么，也是原话</b>：<b>E 步里当前的 π、μ、σ 全部不动</b>，只算责任度并<b>对每个观测在各分量之间归一化</b>；<b>M 步里责任度充当「分数权重」</b>去更新 π、μ、σ²。<br><b>三个必查的自洽条件</b>（共性反馈要求「解释这些检查，而不只是把它们打印出来」）：① <b>每一行责任度加起来等于 1</b>；② <b>更新后的 π 加起来等于 1</b>；③ <b>更新后的标准差为正</b>。",
+   "ng": "<b>这是 CS229 最有价值的一段。</b><a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> 先给出 EM 两步；之后从 47:00 起他从头推导<b>为什么</b>要这么做：先讲凹函数，<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=3169s\" target=\"_blank\">52:49</a> 引入 <b>Jensen 不等式</b>，<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=3766s\" target=\"_blank\">62:46</a> <b>构造下界</b>。Lecture 14 开头 <a href=\"https://www.youtube.com/watch?v=tw6cmL5STuY&t=131s\" target=\"_blank\">02:11</a>–06:23 再复述一遍：<b>E 步选 Q 让下界贴住，M 步最大化下界</b>。⚠️ 考纲写明<b>收敛性证明不考</b>，但听懂这段之后，E/M 步的公式就不用背了。<span class='src'>视频：CS229 Lecture 13 后段 + Lecture 14 开头 · 讲义：ch11_em.txt 11.2–11.3 节</span>",
+   "quote": "<b>Expectation–Maximisation Alternates Soft Assignment and Update</b> — <em><b>Each iteration improves or preserves the fitted log-likelihood.</b></em> · 1 Initialise → 2 E-step — <em>compute posterior responsibilities rᵢₖ</em> → 3 M-step — <em>update parameters using responsibility weights</em> → 4 repeat",
+   "tbl": [
+    {
+     "cap": "两步各自固定什么、动什么（Study check 的答案）",
+     "head": [
+      "步",
+      "固定",
+      "计算/更新",
+      "输出"
+     ],
+     "rows": [
+      [
+       "E 步",
+       "<b>参数</b> π, μ, Σ",
+       "每个观测的后验",
+       "责任度 rᵢₖ"
+      ],
+      [
+       "M 步",
+       "<b>责任度</b> rᵢₖ",
+       "加权统计量",
+       "新的 π, μ, Σ"
+      ]
+     ]
+    },
+    {
+     "cap": "⚠ 三个关于 N_k 的错误理解（讲义都点名了）",
+     "head": [
+      "说法",
+      "对不对"
+     ],
+     "rows": [
+      [
+       "N_k 是责任度超过 0.5 的点的个数",
+       "<b>错</b>"
+      ],
+      [
+       "一个观测被物理地拆开了",
+       "<b>错</b>"
+      ],
+      [
+       "N_k 要四舍五入成整数",
+       "<b>错</b>"
+      ],
+      [
+       "N_k 是<b>期望计数</b>，且 <b>Σₖ N_k = N</b>",
+       "<b>对</b>（自检点）"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "r": [
+    6,
+    6
+   ],
+   "t": "GMM 的结果取决于你做的分布选择",
+   "star": 2,
+   "one": "成分数、协方差类型、初始化、高斯假设、似然——五个都会改变结论。",
+   "pts": [
+    "<b>五条依赖就是评价 GMM 结果的清单</b>：成分数、协方差类型、初始化、高斯假设、似然随复杂度上升。",
+    "<b>「Gaussian assumption」那条是 GMM 的根本边界</b>：<b>偏斜或形状不规则的组拟合不好</b>。GMM 比 K-means 灵活（成分可扁可斜），但<b>比 DBSCAN 死板</b>——它仍然假设每个成分是高斯，处理不了弯月形。",
+    "<b>「Likelihood」那条要展开</b>：参数约束兼容时，<b>加成分不会降低最好的训练似然</b>，因为更大的模型能表示更小的模型。<b>所以「似然最大」永远指向「成分最多」，毫无信息</b>——这就是需要 AIC/BIC 的原因。",
+    "⚠️ <b>还有一条课件没列的数值陷阱</b>：<b>成分坍缩</b>——一个成分收缩到单个点上，方差趋近 0，<b>似然可以趋向无穷大</b>。实现里靠<b>协方差正则化</b>（sklearn 的 <code>reg_covar</code>）和合理初始化来防。讲义原话：<b>高似然本身并不保证模型有用。</b>"
+   ],
+   "say": "⚠️ <b>一维数据上，full 就是「每个成分一个方差」</b>——四个取值的差别在一维下会塌缩，别被名字绕进去。<br>另外这组选项和 CS229 是对得上的：Ng 说<b>按约定每个高斯有自己的 Σ，但你想强制它们相同也可以</b>——那就是 <code>tied</code>。<b>限制越强，参数越少，AIC/BIC 的罚项也越小</b>，所以协方差类型的选择会直接影响模型选择的结果。",
+   "tip": {
+    "t": "等密度轮廓",
+    "v": "图上那些椭圆是<b>成分的等密度线</b>，<s>不是</s>簇与簇之间的分界线，也不是「包住所有观测」的范围。"
+   },
+   "exam": "「为什么训练似然最高的模型不一定最好」是 p7 的 Study check，答案的第一半就在这一页：<b>加成分不会降低最好的训练似然</b>。",
+   "ng": "<b>CS229 没有对应内容。</b> <b>spherical / diag / tied / full 四种协方差类型是 scikit-learn 的参数</b>，CS229 讲的是一般的 full 协方差。这一页按 Canvas 的 GMM 页准备即可。<span class='src'>来源：Canvas「Mixture of Gaussians」，本地 M2材料/Canvas讲义/T3-B_混合高斯概念.txt</span>",
+   "quote": "<b>GMM Results Depend on Distributional Choices</b> — Components: <em>Too few underfit; too many can fragment structure</em> · Covariance type: <em>Controls permitted component shapes</em> · Initialisation: <em>Different starts can reach local optima</em> · Gaussian assumption: <em>Skewed or irregular groups may fit poorly</em> · Likelihood: <em>More components</em>…",
+   "tbl": [
+    {
+     "cap": "covariance_type 的四个取值",
+     "head": [
+      "取值",
+      "含义",
+      "参数最多/最少"
+     ],
+     "rows": [
+      [
+       "<code>full</code>",
+       "每个成分<b>各自</b>完整的协方差（可扁可斜）",
+       "最多"
+      ],
+      [
+       "<code>tied</code>",
+       "所有成分<b>共用</b>一个协方差",
+       "中"
+      ],
+      [
+       "<code>diag</code>",
+       "各自对角：允许不同尺度但<b>轴对齐</b>",
+       "较少"
+      ],
+      [
+       "<code>spherical</code>",
+       "各自一个标量方差：<b>球形</b>",
+       "最少"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "r": [
+    7,
+    7
+   ],
+   "t": "用拟合、简约与稳定性来选模型",
+   "star": 3,
+   "one": "似然衡量拟合但随复杂度上升；AIC/BIC 加惩罚；再加上稳定性与假设检查。",
+   "eq": "AIC = −2 log L + 2p\nBIC = −2 log L + p · log N\n一维、每成分一个方差：p = (K−1) + K + K = 3K − 1",
+   "pts": [
+    "⭐ <b>页标题给了三个判据</b>：<b>拟合（Fit）、简约（Parsimony）、稳定（Stability）</b>。官方 Study check 问「哪两个额外检查能加强你的选择」——答案就是<b>后两个</b>。",
+    "<b>为什么训练似然最高的不一定最好</b>：<em>usually rises with complexity</em>——<b>似然通常随复杂度上升</b>。所以要用加了罚项的 AIC/BIC。",
+    "<b>AIC 与 BIC 的差别只在罚项</b>：<b>AIC 是 2p，与样本量无关</b>；<b>BIC 是 p·log N，样本越多罚得越狠</b>。N 超过约 7 时 log N 就大于 2，所以 <b>BIC 通常更保守、选出的成分数更少</b>。两者不一致时用其它证据判。",
+    "⚠️ <b>两者都是越小越好</b>，而且<b>只能在同一份数据、同样的候选之间比</b>。另外这里的 <b>p 是「参数个数」不是密度 p(x)</b>——同一个字母两个意思。"
+   ],
+   "say": "⭐ <b>「权重只有 K−1 个自由」这一点最容易数错</b>，原因就在 p4：权重<b>必须加起来等于 1</b>，所以最后一个由前面决定，不是自由参数。<br>还有一条边界和 T2 的 inertia 完全平行：<b>不同的 EM 运行可能落进不同的局部最优</b>，所以<b>你实际拟合出的似然未必随 K 单调上升</b>——看到这种情况<s>不是 bug</s>，应提高 <code>n_init</code> 后再比较。",
+   "tip": {
+    "t": "高频失分点",
+    "v": "<b>把权重数成 K 个。</b> 一维 K 成分（每成分一个方差）的参数个数是 <b>3K−1</b> 不是 3K——因为权重之和为 1，只有 K−1 个自由。",
+    "w": 1
+   },
+   "exam": "⚠️ <b>共性反馈对 BIC 的措辞非常克制，考试照抄这个口径最稳</b>：用 BIC 时要<b>报出选中的分量数和它的 BIC 值，并至少和一个备选在数值上比一比</b>；而且——<em>the lowest BIC is <b>evidence for a model among those compared</b>—not proof that the data contain that many natural groups</em>。<b>「BIC 最低」只是在你比过的那几个模型里胜出，不等于数据里真有这么多个自然的组。</b><br>⭐ 它还给了一个具体的反例理由：<b>好几个高斯分量，可能只是在逼近一个「不是高斯形状」的组</b>。<br>⚠️ <b>另一条常被忽略的</b>：BIC 偏好的分量数<b>取决于你放进来的候选模型和它们的假设</b>——换一组候选，答案可能就变了。",
+   "ng": "<b>CS229 没有对应内容。</b> <b>AIC/BIC 不在 CS229 这两讲里</b>（Ng 把模型选择放在 Lecture 8 的正则化与交叉验证那一讲，而且讲的是交叉验证不是信息准则）。这一页只能按 Canvas 的评估页与 GMM 页准备。<span class='src'>来源：Canvas「Evaluating Unsupervised Learning」+「GMM in Python」</span>",
+   "quote": "<b>Choose a GMM with Fit, Parsimony and Stability</b> — Fit: <em>Log-likelihood describes fit but usually rises with complexity</em> · Parsimony: <em>Prefer lower AIC or BIC among fitted candidates</em> · Stability: <em>Compare seeds because EM can reach different local solutions</em> · Assumptions",
+   "tbl": [
+    {
+     "cap": "参数个数 p = 3K − 1（一维，每成分一个方差）",
+     "head": [
+      "K",
+      "权重 K−1",
+      "均值 K",
+      "方差 K",
+      "p"
+     ],
+     "rows": [
+      [
+       "2",
+       "1",
+       "2",
+       "2",
+       "<b>5</b>"
+      ],
+      [
+       "3",
+       "2",
+       "3",
+       "3",
+       "<b>8</b>"
+      ],
+      [
+       "4",
+       "3",
+       "4",
+       "4",
+       "<b>11</b>"
+      ]
+     ]
+    },
+    {
+     "cap": "讲义给的实际数字（300 个观测，已复算）",
+     "head": [
+      "K",
+      "p",
+      "log L",
+      "BIC",
+      "AIC"
+     ],
+     "rows": [
+      [
+       "2",
+       "5",
+       "−516.30",
+       "<b>1061.12</b>",
+       "<b>1042.60</b>"
+      ],
+      [
+       "3",
+       "8",
+       "略有改善",
+       "改善<b>不足以抵消</b>多出的参数",
+       "—"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "r": [
+    8,
+    8
+   ],
+   "t": "责任度公式：加权密度除以混合密度",
+   "star": 3,
+   "one": "E 步估责任度，M 步把责任度当分数计数用。",
+   "eq": "E 步：rᵢₖ = πₖ N(xᵢ|μₖ,Σₖ) ÷ Σⱼ πⱼ N(xᵢ|μⱼ,Σⱼ)\nM 步：Nₖ = Σᵢ rᵢₖ  →  πₖ = Nₖ/N，μₖ = (1/Nₖ)Σᵢ rᵢₖ xᵢ  →  Σₖ = (1/Nₖ)Σᵢ rᵢₖ (xᵢ − μₖ^new)²",
+   "pts": [
+    "<b>E 步就是一次贝叶斯计算</b>：<b>后验 = 先验权重 × 成分密度 ÷ 混合密度</b>。⚠️ <b>分母正是 p(xᵢ) 本身</b>，所以每个观测的各成分责任度<b>自动加起来等于 1</b>——这是个免费的自检，手算完一定要核。",
+    "<b>M 步三步，顺序不能错</b>：① 有效计数 → ② 权重与均值 → ③ 协方差，<b>而且协方差要用刚算出的新均值</b>。",
+    "⚠️ <b>三个分母都是 N_k</b>——<s>不是 N</s>（那就变成普通平均了），<s>也不是 N_k−1</s>（那是<b>无偏样本方差</b>的公式，而 EM 做的是<b>极大似然</b>）。",
+    "⭐ <b>责任度谁大，看的是「权重 × 密度」的乘积</b>，不是单看权重、也不是单看离哪个均值近。<b>两个因素可以反向</b>：权重小的成分如果在该点密度高得多，照样会赢。"
+   ],
+   "say": "⭐ CS229 里 Ng 点破了一件事，能让 M 步的公式一下子讲通：<b>责任度 wᵢⱼ 恰好就是指示函数 1{zᵢ=j} 的期望</b>（因为一个指示函数的期望就等于它为真的概率）。所以 <b>M 步的公式和「如果 z 可见」那版长得几乎一样，只是把 1{zᵢ=j} 整个换成了 rᵢₖ</b>。<b>这就是「E 步」里 E（Expectation，期望）这个名字的由来</b>——E 步做的正是把那个看不见的指示函数替换成它的期望。<br>顺带说：如果 z 可见，公式就<b>退化成你 M1 学过的 GDA</b>。GMM 说白了就是<b>把 GDA 的标签藏起来</b>。",
+   "tip": {
+    "t": "高频失分点",
+    "v": "<b>方差分母用 N_k−1。</b> 差距不是一点点——本页算例里 1.93/2.88 会变成 <b>5.16/10.09</b>，整题全毁。记住：<b>EM 是极大似然，分母就是 N_k</b>。",
+    "w": 1
+   },
+   "exam": "⚠️ <b>共性反馈开宗明义纠正了一个普遍误解</b>：<b>责任度是「软成员度」，不是「离分量均值的距离」</b>——<em>They depend on <b>both</b> the component weights <b>and</b> the component densities at the observation.</em> <b>离得近但先验权重小，责任度照样可以输给离得远、权重大的那个分量。</b><br>⚠️⚠️ <b>第二个被点名的误读，极可能出判断题</b>：<b>一个 0.64 的责任度，是「模型认为它属于该分量的概率」，不是「模型有 64% 的把握是对的」</b>——<em>it does <b>not</b> show that the model is 64% correct against known labels</em>。<b>责任度完全由模型自己算出来，和真实标签没有任何关系。</b><br>⭐ <b>Tutorial Q2 的官方数字</b>：x_A ⇒ γ=(0.18/0.22, 0.04/0.22) ≈ <b>(0.818, 0.182)</b>；x_B ⇒ (0.072/0.144, 0.072/0.144) = <b>(0.5, 0.5)</b>，<b>两个分量完全无法区分</b>。",
+   "ng": "责任度公式在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> 之后紧跟着给出，他还用了一个很好的类比（<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=2250s\" target=\"_blank\">37:30</a>）：<b>把责任度类比成 k-means 的簇质心分配，只是这里是「软」的</b>。讲义 11.1 节有完整的 E 步/M 步公式。<span class='src'>视频：CS229 Lecture 13 · 讲义：ch11_em.txt 11.1 节</span>",
+   "quote": "<b>EM Alternates Soft Assignment and Parameter Updates</b> — <em>E-step estimates responsibilities; M-step uses them as fractional counts.</em> · <b>rᵢₖ = πₖN(xᵢ|μₖ,Σₖ) / ΣⱼπⱼN(xᵢ|μⱼ,Σⱼ)</b> · <em>For every observation i, responsibilities across components sum to one.</em>",
+   "tbl": [
+    {
+     "cap": "E 步四步（讲义给的顺序）· 算例 π=(0.7,0.3)、μ=(−1,2)、σ²=1、x=0",
+     "head": [
+      "步",
+      "做什么",
+      "成分 1",
+      "成分 2"
+     ],
+     "rows": [
+      [
+       "①",
+       "在<b>同一个 x</b> 上算每个成分的密度",
+       "0.2420",
+       "0.0540"
+      ],
+      [
+       "②",
+       "各自乘以当前权重 πₖ",
+       "0.7×0.2420 = <b>0.1694</b>",
+       "0.3×0.0540 = <b>0.0162</b>"
+      ],
+      [
+       "③",
+       "相加得分母 p(x)",
+       "0.1694 + 0.0162 = <b>0.1856</b>",
+       ""
+      ],
+      [
+       "④",
+       "各自除以这个共同分母",
+       "<b>0.913</b>",
+       "<b>0.087</b>"
+      ]
+     ]
+    },
+    {
+     "cap": "⚠ 分母用错的后果（算例 2 的方差，已复算）",
+     "head": [
+      "分母",
+      "σ₁²",
+      "σ₂²"
+     ],
+     "rows": [
+      [
+       "<b>N_k（正确）</b>",
+       "<b>1.933594</b>",
+       "<b>2.882653</b>"
+      ],
+      [
+       "N_k − 1（错）",
+       "5.16",
+       "10.09"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "r": [
+    9,
+    9
+   ],
+   "t": "Checkpoint：五个必须能默写的量",
+   "star": 2,
+   "one": "加权再求和 / 均值是加权平均 / 方差含组内与组间 / 抽样先选成分 / BIC 越低越好。",
+   "eq": "E[X] = Σₖ πₖ μₖ\nVar(X) = Σₖ πₖ σₖ²　+　[ Σₖ πₖ μₖ² − (Σₖ πₖ μₖ)² ]\n　　　　　　组内　　　　　　　　　组间（成分均值的离散）",
+   "pts": [
+    "<b>五个必须能默写的量</b>，Study check 要求 <em>without looking</em>。",
+    "<b>Mean 那条很好记</b>：<b>混合的期望 = 各成分均值按权重加权平均</b>，E[X] = Σπₖμₖ。这个是「加权平均」，符合直觉。",
+    "⚠️ <b>但 Variance 那条正好相反</b>：<b>混合方差要包含成分<u>内</u>与成分<u>间</u>两部分</b>，<s>不是</s>各成分方差的加权平均。这是本页最容易错的一条，也是课件特意大写标出的。",
+    "<b>Sampling 那条就是生成故事</b>：<b>先选成分，再从它里面抽</b>——两步。这正好解释了 z 是什么（第一步的结果）。"
+   ],
+   "tip": {
+    "t": "最容易答错的一条",
+    "v": "「混合分布的方差 = 各成分方差的加权平均」是<b>错的</b>，漏掉了组间那一项。选择题很爱考。",
+    "w": 1
+   },
+   "exam": "Checkpoint 五点就是手算与概念题的全部基础。<b>「混合方差有两个来源」</b>几乎必考。",
+   "quote": "<b>M2 T3 Checkpoint</b>：Density — <em>weight each Gaussian before summing</em> · Mean — <b>E[X] = Σπₖμₖ</b> · Variance — <em><b>include within- and between-component variation</b></em> · Sampling — <em>choose component, then draw from it</em> · BIC — <em>lower is preferred among fitted candidates</em>",
+   "tbl": [
+    {
+     "cap": "五个量默写自检（盖住右列）",
+     "head": [
+      "量",
+      "定义"
+     ],
+     "rows": [
+      [
+       "Density",
+       "<b>先按权重加权</b>再相加"
+      ],
+      [
+       "Mean",
+       "E[X] = Σπₖμₖ（<b>加权平均</b>）"
+      ],
+      [
+       "Variance",
+       "<b>成分内 + 成分间</b>两部分"
+      ],
+      [
+       "Sampling",
+       "<b>先选成分，再从它抽</b>"
+      ],
+      [
+       "BIC",
+       "<b>越小越好</b>（在已拟合的候选之间比）"
+      ]
+     ]
+    }
+   ],
+   "say": "要说出一条<b>连接</b>（Study check 的要求），最漂亮的一条是：<b>Sampling 那两步正好解释了前三条</b>——「先选成分」对应权重 πₖ（Density 里的加权、Mean 里的加权平均都来自它），「再从它抽」对应成分密度；而<b>正因为「先选哪个成分」本身是随机的，混合的方差才会多出「成分间」那一项</b>。<b>一个生成故事同时解释了密度、均值和方差三个量。</b>",
+   "ng": "Checkpoint 五个量里，<b>Ng 讲透了前四个</b>：<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1447s\" target=\"_blank\">24:07</a> 给出生成故事（<b>先掷骰子选成分、再从那个高斯抽点</b>）——这正好一次解释了 <b>Density</b>（按权重加权再相加）、<b>Mean</b>（加权平均）和 <b>Sampling</b>（两步抽样）三条。<br>⭐ <b>Variance 那条「有两个来源」他没有单独强调</b>，但它是生成故事的直接推论：<b>正因为「先选哪个成分」本身是随机的，混合的方差才会在成分内部的离散之外，再多出「成分均值之间」那一项。</b><br>⚠️ <b>第五条 BIC 不在 CS229 的讲法里</b>，只能看本课讲义。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"
+  },
+  {
+   "r": [
+    10,
+    10
+   ],
+   "t": "第一部分小结",
+   "star": 2,
+   "one": "五条要点：生成模型 / 软归属 / EM 交替 / 方差不止组内 / BIC 不替代判断。",
+   "pts": [
+    "<b>第一条定性</b>：<em>generative probability model</em>——<b>生成式概率模型</b>。「生成式」的意思就是它描述了「数据是怎么被produce出来的」（先选成分、再抽点）。",
+    "<b>第二条点出软归属真正起作用的地方</b>：<em>where components overlap</em>——<b>在成分重叠的地方</b>。远离重叠区的点责任度接近 0/1，和硬分配没区别；<b>软分配的价值全在交界处</b>。",
+    "<b>第四条又强调了一次混合方差</b>（p4 和 p9 都提过）——课件在三个地方反复讲同一件事，说明它是考点。",
+    "⭐ <b>第五条是收尾必写句</b>：<em>BIC helps compare component counts but does not replace judgement</em>——<b>BIC 帮你比较成分数，但不能代替判断。</b>"
+   ],
+   "tip": {
+    "t": "自测",
+    "v": "能不能一句话说清：隐变量 z 与责任度 r 的区别？密度与概率的区别？E 步与 M 步各自固定什么、更新什么？三个都说得出，这一讲就过了。"
+   },
+   "exam": "小结五句每句都能当采分句。最后一句是<b>答题第四步「说出局限」的标准落点</b>。",
+   "quote": "<b>Section 1 Complete: Gaussian Mixture Models</b> — Key Takeaways：<em>GMM is a generative probability model</em> · <em>Membership is soft where components overlap</em> · <em>EM alternates responsibility and parameter updates</em> · <em>Mixture variance includes more than component variances</em> · <em>BIC helps compare component counts but <b>does not replace judgement</b></em>",
+   "tbl": [
+    {
+     "cap": "五条小结 · 在大题里怎么用",
+     "head": [
+      "小结",
+      "用途"
+     ],
+     "rows": [
+      [
+       "生成式概率模型",
+       "开头定性；解释为什么能算 p(x)"
+      ],
+      [
+       "<b>重叠处才软</b>",
+       "解读责任度 [0.55,0.45] 时用"
+      ],
+      [
+       "EM 交替两步",
+       "手算题流程"
+      ],
+      [
+       "<b>混合方差 ≠ 成分方差加权平均</b>",
+       "选择题陷阱"
+      ],
+      [
+       "<b>BIC 不能代替判断</b>",
+       "<b>结论后的局限句</b>"
+      ]
+     ]
+    }
+   ],
+   "say": "五条小结里，<b>第二条藏着一个容易被跳过的判断</b>：<em>Membership is soft <b>where components overlap</b></em>——<b>软归属只在重叠处才有意义</b>。<br>远离重叠区的点，责任度接近 0 或 1，<b>软分配和硬分配给出的结论完全一样</b>；真正的差别<b>全部发生在交界带</b>。⭐ 这对答题有直接用处：被问「GMM 比 K-means 好在哪」时，<b>别泛泛说「它给概率」，要说清「在成分重叠的区域，它能告诉你这个点有多难分，而硬标签会把这个信息抹掉」</b>。<br>反过来也成立：<b>如果两个成分分得很开，用 GMM 相对 K-means 的收益就很小</b>——这也是一条可以写进「局限」的话。",
+   "ng": "⭐ <b>Ng 对「软 vs 硬」给了一个很直观的说法</b>：<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=2140s\" target=\"_blank\">35:40</a> 他说混合高斯<b>有点像 k-means，但是软分配</b>——k-means 里一个点哪怕只是<em>稍微</em>离左边质心近一点，就<b>100% 归给左边</b>；EM 则用概率给出<b>权重</b>，两个成分都吃一点。<br>同一处他还点破了一件让 M 步公式一下子讲通的事：<b>责任度恰好就是指示函数的期望</b>（一个指示函数的期望就等于它为真的概率）。⭐ <b>所以 M 步的公式和「z 可见」那版长得几乎一样，只是把指示函数整个换成了责任度——这就是「E 步」里 E（Expectation，期望）这个名字的由来。</b><br>他还在同一段展示了<b>混合能拟合出什么形状</b>：一个窄高斯配一个宽胖高斯、双峰的、偏斜的。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"
+  },
+  {
+   "r": [
+    11,
+    11
+   ],
+   "t": "Tutorial 三道题各在考什么",
+   "star": 1,
+   "one": "Q1 算密度与责任度，Q2 改先验再算，Q3 先诊断分母再做 M 步。",
+   "pts": [
+    "<b>三问是递进的</b>：Q1 用给定密度算责任度；Q2 <b>只改先验权重</b>再算一次，看责任度怎么变；Q3 <b>先诊断分母</b>再做参数更新。",
+    "⭐ <b>Q1 的关键词是 compare overall density with membership ambiguity</b>——<b>把「整体密度」和「归属的模糊程度」分开看</b>。这两件事无关：一个点可以<b>密度很高但归属很模糊</b>（落在两个成分中间的高密度区），也可以<b>密度很低但归属很确定</b>（远离所有成分，但明显更靠近其中一个）。",
+    "<b>Q2 测的是「权重与密度的乘积」这个理解</b>：密度不变、只改权重，责任度就会变——<b>说明责任度不是只由「离哪个近」决定的</b>。",
+    "<b>Q3 的 diagnose a denominator 是个很实际的技能</b>：分母是所有加权密度之和，<b>如果它接近 0，责任度就不可靠</b>（数值不稳定）。"
+   ],
+   "tip": {
+    "t": "省时技巧",
+    "v": "题目<b>直接给成分密度</b>，意味着你不需要代高斯公式算 exp。把时间花在<b>加权、求和、归一化和解释</b>上。"
+   },
+   "exam": "Q1/Q2 是纯计算送分题，<b>但必须写出四步中间量</b>。Q3 要先说「分母是否正常」再往下算。",
+   "quote": "<b>Section 2: M2 T3 Tutorial Activity</b> — <em>Three core questions connect density, responsibility and EM</em> · Q1 <em>use supplied densities for two observations; compare overall density with membership ambiguity</em> · Q2 <em>change the priors and recalculate responsibilities</em> · Q3 <em>diagnose a denominator</em>",
+   "tbl": [
+    {
+     "cap": "三问 ↔ 对应的知识点页",
+     "head": [
+      "问",
+      "测什么",
+      "回看哪一页"
+     ],
+     "rows": [
+      [
+       "Q1",
+       "混合密度与责任度的区别",
+       "p4、p8"
+      ],
+      [
+       "Q2",
+       "<b>权重×密度</b>的乘积关系",
+       "p8"
+      ],
+      [
+       "Q3",
+       "分母诊断 + M 步更新",
+       "p5、p8"
+      ]
+     ]
+    }
+   ],
+   "say": "Q1 那个「密度高 ≠ 归属确定」的区分值得多想一层：<b>混合密度 p(x) 大，说明「这个位置常出现观测」；责任度接近 0.5，说明「说不清它来自哪个成分」。</b> 两个成分重叠的区域<b>恰好同时满足这两点</b>——那里密度往往最高（两个成分都在贡献），而归属最模糊。<b>所以「这个点很典型」和「这个点好归类」是两回事。</b>",
+   "ng": "Tutorial 三问考的都是 E 步与 M 步的手算，<b>CS229 对应的是</b> <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> 那一段——Ng 在那里写出 E 步的贝叶斯式子，并说这和生成式学习里用贝叶斯求 P(y|x) <b>是一模一样的计算</b>。<br>⭐ <b>但更值得先听的是前面那段</b>（<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1642s\" target=\"_blank\">27:22</a>）：他先假想「如果 z 是能看到的」——那就直接写对数似然、求导令零，<b>一步到位</b>，而且得到的公式<b>就是 GDA 那套</b>；然后才说「可惜我们不知道 z」。<b>听完这段再做 Tutorial，你会明白 M 步的公式根本不是新东西</b>，它就是极大似然，只不过喂进去的是猜出来的责任度。他把这种套路叫 <b>bootstrap procedure</b>：用猜测跑算法、再更新猜测、再跑。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"
+  },
+  {
+   "r": [
+    12,
+    12
+   ],
+   "t": "Q1：从密度到成员（官方答案已核对）",
+   "star": 3,
+   "one": "读密度 → 乘权重 → 求和再归一化 → 解释。",
+   "eq": "加权贡献 = πₖ × 成分密度\n混合密度 p(x) = Σₖ（加权贡献）\n责任度 rₖ = 加权贡献ₖ ÷ p(x)",
+   "pts": [
+    "<b>三步就是 E 步的压缩版</b>：读密度 → 乘权重 → 求和再归一化。⚠️ <b>密度是题目给的，不用自己算高斯</b>（<em>supplied</em>）——别浪费时间去套指数公式。",
+    "<b>第 3 步的两个动作要分开写</b>：<b>先求和得到 p(x)</b>（这本身就是一个有意义的量——混合密度），<b>再各自除</b>（得到责任度）。很多人直接跳到责任度，把 p(x) 漏了。",
+    "<b>自检</b>：两个责任度<b>加起来必须等于 1</b>。算完立刻核。",
+    "<b>要能解释结果</b>：责任度大的那个成分为什么赢——是<b>权重大</b>、还是<b>该处密度高</b>、还是<b>两者都占</b>？这三种情形的答法不同。"
+   ],
+   "tip": {
+    "t": "答题格式",
+    "v": "按 <b>加权贡献 → 混合密度 → 责任度 → 解释</b> 四行写，每行都写出算式和数值。评估文档示例答案就是这个结构。"
+   },
+   "exam": "⭐ <b>这是官方 Tutorial Q1 的完整解答，三个数字我都用 numpy 复核过。</b><br><b>① 加权贡献与混合密度</b>：π=(0.6, 0.4)。<br>　x_A：0.6×0.30 = <b>0.18</b>，0.4×0.10 = <b>0.04</b> ⇒ <b>p(x_A) = 0.22</b><br>　x_B：0.6×0.12 = <b>0.072</b>，0.4×0.18 = <b>0.072</b> ⇒ <b>p(x_B) = 0.144</b><br><b>② 哪个密度大、哪个更含糊</b>：<b>x_A 的总密度更大</b>（0.22 > 0.144）；<b>x_B 更含糊</b>——理由要写出来：<b>它的两个加权贡献完全相等（都是 0.072），所以没有任何一个分量被偏向</b>。⚠️ <b>「密度大」和「归属含糊」是两件独立的事</b>，这道题故意把它们分开考。<br><b>③ 为什么是密度不是概率</b>：<b>连续变量的单点概率为 0</b>；密度是「每单位 x 的概率」，<b>要在区间上积分才得到概率</b>。",
+   "quote": "<b>Question 1: Density and Membership</b> — <em>Use the supplied component densities for each of the two observations.</em> · 1 Read densities → 2 Weight them — <em>multiply each density by its mixing weight</em> → 3 Sum and divide — <em>find total density, then normalise contributions</em>",
+   "tbl": [
+    {
+     "cap": "标准算例走一遍（π=(0.7,0.3)、μ=(−1,2)、σ²=1、x=0，已复算）",
+     "head": [
+      "步",
+      "成分 1",
+      "成分 2",
+      "小计"
+     ],
+     "rows": [
+      [
+       "密度 N(0|μ,1)",
+       "0.2420",
+       "0.0540",
+       "—"
+      ],
+      [
+       "× 权重",
+       "0.7×0.2420 = 0.1694",
+       "0.3×0.0540 = 0.0162",
+       "—"
+      ],
+      [
+       "求和 = <b>p(0)</b>",
+       "—",
+       "—",
+       "<b>0.1856</b>"
+      ],
+      [
+       "÷ p(0) = 责任度",
+       "<b>0.913</b>",
+       "<b>0.087</b>",
+       "和 = 1 ✓"
+      ]
+     ]
+    }
+   ],
+   "say": "这个算例里<b>成分 1 赢得很彻底（0.913）</b>，讲义特意说明了原因：<b>它同时具备更大的先验权重（0.7 vs 0.3）和该处更高的密度（0.2420 vs 0.0540）——两个因素同向</b>。⚠️ <b>但它们完全可以反向</b>：比如 π=(0.2, 0.8) 而密度是 0.90 / 0.15 时，加权后是 0.18 vs 0.12，<b>权重小的成分反而赢</b>（r₁=0.6）。<b>所以判断责任度谁大，必须看乘积。</b>",
+   "ng": "这一问的三步就是 E 步。<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> Ng 写出同一个式子，并强调<b>分母是把所有成分的加权密度加起来</b>——⭐ 那个分母<b>正是 p(x) 本身</b>，所以每个观测的各成分责任度<b>自动加起来等于 1</b>。<b>手算时这就是最省事的自检。</b><br>他还把这一步和你 M1 学过的东西挂上了钩：<b>这和生成式学习里用贝叶斯公式求 P(y|x) 是同一种计算</b>——先验乘似然再归一化。<b>如果 M1 的 GDA 你做得熟，这里不需要重新学。</b><span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"
+  },
+  {
+   "r": [
+    13,
+    13
+   ],
+   "t": "Q2：改先验就改了归属（官方答案已核对）",
+   "star": 3,
+   "one": "密度不变、权重变了，责任度随之改变。",
+   "eq": "γₖ(x) = πₖ N(x|μₖ,σₖ²) ÷ Σⱼ πⱼ N(x|μⱼ,σⱼ²)",
+   "pts": [
+    "⭐ <b>第一句是这一问的全部要点</b>：<b>密度不变，只换权重。</b> 很多人会不自觉地把密度也重算一遍——题目明确说了保持不变。",
+    "<b>这一问在演示什么</b>：<b>责任度不是只由「离哪个成分近」决定的</b>。同一个点、同样的密度，<b>先验权重一变，归属就可能翻过来</b>。",
+    "<b>四个检查</b>（课件列的）：分子对不对 → 分母对不对 → 比值算对没 → <b>和是不是 1</b>。最后一条是最省事的自检。",
+    "⚠️ <b>符号换了但东西没换</b>：这一页用 γₖ(x)，p8 用 rᵢₖ，<b>是同一个量</b>。看到不同记号别慌。"
+   ],
+   "tip": {
+    "t": "容易答错",
+    "v": "<b>以为权重大的成分一定赢。</b> 责任度比的是 <b>π × 密度</b> 的乘积；权重小但该处密度高得多时，<b>小权重的成分照样赢</b>。",
+    "w": 1
+   },
+   "exam": "⭐ <b>官方 Q2 解答，含那个最值钱的第 3 问。</b><br><b>① 责任度</b>：x_A ⇒ <b>(0.818, 0.182)</b>；x_B ⇒ <b>(0.5, 0.5)</b>。<br><b>② 验和并解读</b>：两对都<b>加起来等于 1</b>。x_B 的 (0.5, 0.5) 表示<b>在当前模型下，两个分量完全无法区分</b>。<br><b>③ ⭐ 把权重改成 π=(0.2, 0.8)、分量密度不变，重算 x_A</b>：<br>　0.2×0.30 = <b>0.06</b>，0.8×0.10 = <b>0.08</b> ⇒ p(x_A) = <b>0.14</b> ⇒ γ = <b>(0.429, 0.571)</b><br>　<b>最大责任从分量 1 翻到了分量 2。</b>官方给的理由要照抄：<b>责任度是「分量密度」与「它的先验混合权重」两者合起来决定的；分量 2 更大的先验权重，压过了它在 x_A 处更低的密度。</b><br>⚠️ <b>这一问就是在防「责任度 = 看谁离得近」这个误解</b>——<b>密度没变，只改了权重，归属就翻了。</b>",
+   "quote": "<b>Question 2: Changing Priors Changes Membership</b> — <em><b>Keep the supplied densities fixed; use the new mixing weights.</b></em> · <b>γₖ(x) = πₖN(x|μₖ,σₖ²) / ΣⱼπⱼN(x|μⱼ,σⱼ²)</b> · <em>The responsibilities for one observation must sum to one.</em> · 四个检查：numerator / denominator / ratio / sum",
+   "tbl": [
+    {
+     "cap": "同一组密度、不同先验 → 责任度翻转（已复算）",
+     "head": [
+      "先验 π",
+      "加权密度",
+      "分母",
+      "r₁"
+     ],
+     "rows": [
+      [
+       "(0.7, 0.3)，密度 0.2420/0.0540",
+       "0.1694 / 0.0162",
+       "0.1856",
+       "<b>0.913</b>"
+      ],
+      [
+       "(0.2, 0.8)，密度 0.90/0.15",
+       "0.18 / 0.12",
+       "0.30",
+       "<b>0.6</b>（权重小的赢）"
+      ]
+     ]
+    }
+   ],
+   "say": "下面那一行值得记住，它是选择题的经典设计：<b>π=(0.2, 0.8)</b> 看起来成分 2 占压倒优势，但该点处成分 1 的密度是成分 2 的<b>六倍</b>（0.90 vs 0.15），乘完之后 <b>0.18 &gt; 0.12</b>，<b>成分 1 反而赢</b>。⭐ <b>这就是「必须看乘积」最干净的例子</b>——只看权重会答错，只看距离也会答错。",
+   "ng": "「只改先验、密度不变」这个设计，在 CS229 里有对应的直觉。<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> Ng 把 E 步写成<b>先验 × 密度 ÷ 归一化</b>的形式，⭐ <b>这个写法本身就说明了两个因素是「相乘」而不是「谁压倒谁」</b>：<b>权重大不一定赢，密度高也不一定赢，赢的是乘积大的那个。</b><br>这一问故意让你把密度固定住只动权重，就是为了让这件事看得见。⚠️ 选择题最爱设的陷阱正是这里：<b>给一个权重悬殊但密度反向的情形</b>（比如 π=(0.2, 0.8)、密度 0.90/0.15 ⇒ 加权 0.18 vs 0.12 ⇒ <b>权重小的赢</b>）。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"
+  },
+  {
+   "r": [
+    14,
+    14
+   ],
+   "t": "Q3：先查分母，再当软计数用（官方答案已核对）",
+   "star": 3,
+   "one": "分母错了，后面的 M 步全错。",
+   "eq": "Nₖ = Σᵢ rᵢₖ　（有效计数，可为小数）\nπₖ ← Nₖ / n\nμₖ ← (Σᵢ rᵢₖ xᵢ) / Nₖ",
+   "pts": [
+    "⭐ <b>第 1 步是个诊断步骤</b>，别跳过：<b>分母是所有加权成分密度之和</b>。如果它接近 0，说明<b>所有成分在这个点上的密度都极低</b>，责任度会变得数值不稳定——这时报出来的软归属不可信。",
+    "<b>第 2 步和第 3 步就是 M 步</b>：先<b>按列求和</b>得有效计数，再算权重与均值。⚠️ <b>μₖ 的分母是 Nₖ 不是 n</b>——这是加权平均。",
+    "<b>第 4 步 Interpret EM 是分值所在</b>：要说清 <b>E 步在做什么、M 步在做什么、为什么要交替</b>。",
+    "⚠️ <b>整个 M 步里责任度保持不动</b>，重算是下一轮 E 步的事。官方 Study check 专门问过：<b>为什么 M 步更新完参数之后必须重算责任度？</b> 答：<b>责任度是由参数算出来的，参数变了它就过期了。</b>"
+   ],
+   "say": "⚠️ 三个容易翻车的细节，讲义都特意强调了：<b>① x=0 这个观测对分子贡献 0，但它的责任度仍然算进分母</b>——所以它照样影响结果，「除以 3 是错的」。<b>② 算成分 2 的方差时要用未四舍五入的 μ₂ = 2.5/1.4</b>，全程保留完整精度，只在显示时才四舍五入。<b>③ 方差不是标准差</b>：σ₁² = 1.933594，开根号才是 σ₁ ≈ 1.391。本课一维高斯的第二个参数是<b>方差</b>，而 NumPy 的 <code>random.normal</code> 用的是<b>标准差</b>。",
+   "tip": {
+    "t": "E 步 M 步的分工",
+    "v": "一句话版本：<b>E 步：参数不动，算成员；M 步：成员不动，算参数。</b> 写进答案能直接拿分。"
+   },
+   "exam": "⭐ <b>官方 Q3 解答。这道题的设计是「先让你抓出一个错，再让你算对」。</b><br><b>① 错在哪</b>：题里那个 μ_k = Σᵢ rᵢₖxᵢ / <b>4</b> 的分母是错的。官方理由：<b>每个均值都是「某一个分量的加权平均」，分母必须是那个分量自己的有效计数 N_k = Σᵢ rᵢₖ，而不是观测总数。</b><br><b>② 算</b>（x = −4, −1, 2, 5）：<br>　<b>N₁ = 0.9+0.7+0.2+0.1 = 1.9</b>，<b>N₂ = 0.1+0.3+0.8+0.9 = 2.1</b>（⚠️ 两者相加 = 4 = 观测数，可用来自查）<br>　<b>π₁ = 1.9/4 = 0.475</b>，<b>π₂ = 2.1/4 = 0.525</b><br>　<b>μ₁ = −3.4 / 1.9 ≈ −1.789</b>，<b>μ₂ = 5.4 / 2.1 ≈ 2.571</b><br>　⚠️ <b>若按错的分母 4 来算，μ₁ = −0.85</b>——<b>被硬生生拉向 0，两个分量会挤在一起</b>。这就是分母错了的后果。<br><b>③ 解读与 E/M 的配合</b>：更新后的均值<b>把分量 1 定位到负的那些观测、分量 2 定位到正的那些</b>。<b>E 步用当前参数算软成员度；M 步把这些责任度当成「分数成员」重新估参数；两步反复交替，直到达到停止条件为止，数据似然一路改善。</b>",
+   "ng": "M 步把责任度当<b>分数计数</b>用，这一点 CS229 讲义 11.1 节写得最清楚（<code>CS229/notes/ch11_em.txt</code>，搜 <code>effective number</code>）。视频里对应 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> 之后那几分钟。<span class='src'>视频：CS229 Lecture 13 · 讲义：ch11_em.txt 11.1 节</span>",
+   "quote": "<b>Question 3: Check Responsibilities, Then Update</b> — <em>Diagnose the denominator before treating responsibilities as soft counts.</em> · 1 Check denominator — <em>sum all weighted component densities</em> → 2 Effective counts — <b>Nₖ = Σᵢrᵢₖ</b> → 3 Update parameters — <b>πₖ = Nₖ/n；μₖ = Σᵢrᵢₖxᵢ/Nₖ</b> → 4 Interpret EM",
+   "tbl": [
+    {
+     "cap": "完整 M 步算例：x=(−2,0,3)，r 如下（已复算）",
+     "head": [
+      "步",
+      "成分 1",
+      "成分 2",
+      "自检"
+     ],
+     "rows": [
+      [
+       "责任度",
+       "0.9, 0.6, 0.1",
+       "0.1, 0.4, 0.9",
+       "<b>每行和 = 1</b> ✓"
+      ],
+      [
+       "Nₖ = 按<b>列</b>求和",
+       "<b>1.6</b>",
+       "<b>1.4</b>",
+       "<b>1.6+1.4 = 3 = N</b> ✓"
+      ],
+      [
+       "πₖ = Nₖ/3",
+       "0.5333",
+       "0.4667",
+       "和 = 1 ✓"
+      ],
+      [
+       "μₖ（加权平均）",
+       "−1.5/1.6 = <b>−0.9375</b>",
+       "2.5/1.4 = <b>1.785714</b>",
+       "分母是 Nₖ"
+      ],
+      [
+       "σₖ²（围绕<b>新</b>均值）",
+       "<b>1.933594</b>",
+       "<b>2.882653</b>",
+       "分母也是 Nₖ"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "r": [
+    15,
+    15
+   ],
+   "t": "Practical 五题 · 讲师点名的失分处",
+   "star": 1,
+   "one": "拟合两成分 → 读重叠处的责任度 → 密度与 BIC → 手写一轮 EM → 初始化诊断。",
+   "pts": [
+    "<b>关键词 overlapping</b>：数据是<b>特意造成重叠</b>的——因为<b>软归属的价值全在重叠区</b>（见 p10）。",
+    "<b>Q2 是重点</b>：<em>interpret responsibilities <b>near overlap</b></em>——解读重叠附近的责任度。那里的责任度会接近 0.5，<b>正是「硬分配会掩盖什么」的最好例证</b>。",
+    "<b>Q4 要你亲手实现一次 E 步</b>——这是把公式变成代码的检验。实现时最容易错的就是<b>忘了除以分母</b>（那样各成分的值加起来不等于 1）。",
+    "<b>reproducible 的意思是固定随机种子</b>（<code>random_state</code>），否则每次跑出来的数不一样，没法讨论。"
+   ],
+   "tip": {
+    "t": "Q5 的考点",
+    "v": "如果把两个成分初始化成完全一样的参数，EM 会让它们<b>永远一样</b>——责任度各 0.5，更新出来还是相同。这就是为什么初始化必须<b>打破对称</b>（随机或用 k-means）。"
+   },
+   "exam": "⭐⭐ <b>这一条整个来自官方《M2 T3 Practical 共性反馈》，是讲师逐题写的失分点，含金量最高。</b>先记总口径：<b>这次 Practical 是「完成度 50 / 展示出的理解 50」</b>——<em>Correct code alone was therefore <b>not always enough</b> for full marks</em>，<b>每段解释都要「答全提示里的每一问」并且「解读你自己跑出来的数字」</b>。<br><b>Q1 拟合参数</b>：⚠️ 最常见的漏答是<b>没说「分量编号是任意的」</b>——<b>分量 0 和分量 1 可以互换而不改变拟合出来的混合模型</b>，所以<b>比较之前必须先对齐或排序（例如按均值排）</b>。⚠️ 另一条：<b>要报「拟合表里的估计值」，不是「生成数据时用的真值」</b>——有限样本本来就不必复原那些真值。<br><b>Q2 不确定的观测</b>：要<b>报出最不确定和最有把握那两个点的责任度向量</b>、<b>验证每行和为 1</b>、并<b>说出不确定性的一个实际用途</b>。⚠️ <b>别把行号写死</b>，要<b>按「每行责任度的最大值」程序化地挑出来</b>。<br><b>Q3 密度与分量数</b>：见第 4 页与第 7 页两条（密度≠概率、BIC 只是「在比过的模型里」胜出）。<br><b>Q4 一次 EM 迭代</b>：<b>手算 [0.12, 0.08] ÷ 0.20 = [0.6, 0.4]</b>（官方点名要保留这一步）；方差更新的顺序见第 5 页那条。<b>三个自查要「解释」不能只「打印」。</b><br><b>Q5 初始化与收敛</b>：<b>两个分量初值完全相同会保持对称</b>，EM 可能<b>停在一个对称的驻点上而分不开</b>；<b>似然不下降只说明「局部在改善或持平」，不保证全局最优</b>。⚠️⚠️ <b>最容易栽的一条</b>：<b>负数要看方向</b>——<b>对数似然从 −1028.912 变到 −778.898 是上升了（+250.014）</b>，不是下降。",
+   "quote": "<b>Section 3: GMM Practical</b> — <em>Generate a reproducible overlapping one-dimensional mixture</em> · Q1 <em>fit two Gaussian components and inspect parameters</em> · Q2 <em>interpret responsibilities near overlap</em> · Q3 <em>interpret mixture density and compare counts using BIC</em> · Q4 <em>implement one E-step</em>",
+   "tbl": [
+    {
+     "cap": "四问 · 用什么证据",
+     "head": [
+      "问",
+      "做什么",
+      "看什么"
+     ],
+     "rows": [
+      [
+       "Q1",
+       "拟合两成分",
+       "<code>weights_</code> / <code>means_</code> / 标准差"
+      ],
+      [
+       "Q2",
+       "<b>解读重叠处的责任度</b>",
+       "<code>predict_proba</code>"
+      ],
+      [
+       "Q3",
+       "混合密度 + 比较成分数",
+       "<b>BIC</b>"
+      ],
+      [
+       "Q4",
+       "实现一次 E 步",
+       "各成分责任度<b>和为 1</b>"
+      ]
+     ]
+    }
+   ],
+   "say": "Practical 的数据是<b>特意造成重叠</b>的（<em>overlapping</em>），这不是偶然——<b>不重叠的数据用 GMM 是浪费</b>：责任度全是 0/1，和 K-means 给的东西一样，多出来的概率框架没有任何额外信息。<br>⭐ 所以这份 notebook 的四问是有内在逻辑的：<b>先把模型拟合出来（Q1）→ 到重叠处看责任度，这是 GMM 唯一不可替代的地方（Q2）→ 再看整体密度并用 BIC 选成分数（Q3）→ 最后亲手实现一次 E 步，确认公式真的会算（Q4）</b>。<br><b>Q4 最容易错的是忘了除以分母</b>——那样各成分的值加起来不等于 1，一眼就能查出来。",
+   "ng": "⚠️ <b>sklearn 的 API 在 CS229 里不讲</b>（2018 年的课，作业是自己实现算法）。<br>⭐ <b>但 Q4「亲手实现一次 E 步」正是 CS229 的做法</b>——<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=1854s\" target=\"_blank\">30:54</a> 那一段就是照着实现的规格说明。<br>另外如果你想彻底搞懂「为什么这样交替一定不会变差」，<b>Lecture 14 前 6 分钟</b>（<a href=\"https://www.youtube.com/watch?v=tw6cmL5STuY&t=131s\" target=\"_blank\">02:11</a>）接着 L13 把<b>下界的构造</b>讲得更完整。⚠️ 那部分<b>不在你们考核范围</b>（评估文档写明不要求推导收敛证明），但看懂了能让你在写「局限」时说得更准。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"
+  },
+  {
+   "r": [
+    16,
+    16
+   ],
+   "t": "怎么走这本 notebook",
+   "star": 1,
+   "one": "拟合两成分 → 读责任度 → 画图并用 BIC 选 → 跟踪 EM。",
+   "pts": [
+    "⚠️ <b>第 1 步就有个陷阱</b>：<em>inspect weights, means and <b>standard deviations</b></em>——sklearn 给的 <code>covariances_</code> 在一维下是<b>方差</b>，要开根号才是标准差。<b>看到一个数先问：这是 σ 还是 σ²？</b>",
+    "<b>第 2 步是这个 notebook 的核心</b>：解释重叠附近的软归属。用 <code>predict_proba</code>，<b>不是 <code>predict</code></b>——后者丢掉不确定性。",
+    "<b>官方 Study check 又问了一次方法论问题</b>：<em>how will you avoid using test data to make development decisions?</em> 答：<b>选 K、调参只用训练/验证数据，测试数据留到最后一次性评估。</b>",
+    "<b>sklearn 三个方法要分清</b>：<code>score_samples</code> 给<b>对数</b>混合密度；<code>predict</code> 给 argmax 成分（丢不确定性）；<code>predict_proba</code> 给<b>完整责任度向量</b>。"
+   ],
+   "say": "讲义参考结果可以拿来对照：n=300（左 180、右 120），拟合出权重约 0.59/0.41（接近真实的 0.6/0.4），均值约 −2.05 和 1.94，4 轮收敛。三个探测点的责任度分别是 [0.9997, 0.0003]、[0.4477, 0.5523]、[0.0000, 1.0000]——中间那个正落在重叠区。注意<b>显示成 0 的其实是四舍五入</b>，不是真的等于 0。",
+   "tip": {
+    "t": "容易踩的坑",
+    "v": "生成数据时 NumPy 的 <b>scale 参数是标准差</b>，而 GaussianMixture 的 <b>covariances_ 存的是方差</b>。对不上数的时候先检查是不是差了一个平方。"
+   },
+   "exam": "⭐ <b>共性反馈最后给了一张「以后每次 Practical 都照着做」的清单，直接搬过来</b>：<b>① 把每一问要求的代码和文字动作都做完；② 真的把代码跑起来并留下相关输出或图；③ 报出你自己输出里那个重要的数值结果；④ 用正确的概念或指标解释这个结果说明什么；⑤ 说出提示里要求的任何局限；⑥ 提交前确认答案写在对应的那一问下面。</b><br>⚠️ <b>关于提交证据的具体要求</b>：<b>交之前先重启内核、全部重跑、检查输出、再保存</b>。如果执行计数被清掉了，<b>留有匹配的保存输出仍然算证据</b>；但<b>既没有执行计数、也没有相关保存结果的代码，很难被核验</b>。<br>⭐ <b>扩展题的口径</b>：两个可选探究<b>总共最多 10 分奖励分，不做也不扣核心分</b>；要拿满<b>必须真的跑了实验、留下证据、并给出有意义的解读</b>——<b>只抄起始代码不算</b>。⚠️ 它还点了两个「过度推论」：<b>几次非对称初始化都成功，不能证明「任何非对称初始化都能找到全局最优」</b>；<b>自助法的均值接近原估计，本身也不能证明估计量是无偏的</b>。",
+   "quote": "<b>How to Work Through the GMM Notebook</b> — <em>Fitting and plotting scaffolds are supplied; complete the density, model-selection and EM challenges.</em> · 1 Fit two components — <em>inspect weights, means and standard deviations</em> → 2 Read responsibilities — <em>explain soft membership near overlap</em> → 3 Plot and select",
+   "tbl": [
+    {
+     "cap": "常考的 sklearn 属性与方法",
+     "head": [
+      "写法",
+      "返回什么",
+      "注意"
+     ],
+     "rows": [
+      [
+       "<code>weights_</code>",
+       "各成分权重 π",
+       "和为 1"
+      ],
+      [
+       "<code>means_</code> / <code>covariances_</code>",
+       "均值与协方差",
+       "<b>一维下是方差，不是标准差</b>"
+      ],
+      [
+       "<code>score_samples(X)</code>",
+       "<b>对数</b>混合密度",
+       "是对数，不是密度本身"
+      ],
+      [
+       "<code>predict(X)</code>",
+       "责任度最大的成分",
+       "<b>丢掉不确定性</b>"
+      ],
+      [
+       "<code>predict_proba(X)</code>",
+       "<b>完整责任度向量</b>",
+       "每行和为 1"
+      ],
+      [
+       "<code>n_init=10</code>",
+       "<b>十次初始化</b>",
+       "<s>不是十轮迭代</s>"
+      ]
+     ]
+    }
+   ],
+   "ng": "⚠️ <b>sklearn 不在 CS229 范围内。</b><br>⭐ <b>但这一页 Study check 问的「怎么避免用测试数据做开发决策」，Ng 用了一整讲</b>：<b>Lecture 8 · Data Splits, Models &amp; Cross-Validation</b>（<a href=\"https://www.youtube.com/watch?v=rjbkWSTjHzM\" target=\"_blank\">L8</a>，本地字幕 <code>CS229/transcripts/L8.txt</code>）。<br>那一讲讲的是监督学习的切分纪律，但核心原则在无监督里<b>同样成立</b>：<b>一旦你用某份数据做过选择（选 K、调参、比较协方差类型），它就不再是干净的评估集</b>。⭐ 这也正是 T1 那道 PCA 泄漏题的同一条原理。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"
+  }
+ ],
+ "quiz": {
+  "1": [
+   {
+    "q": "GMM 相对 K-means 最本质的新增能力是什么？",
+    "o": [
+     "运行速度更快",
+     "不需要指定成分个数",
+     "一定能找到全局最优",
+     "给出每个成分的后验概率（软归属），并能通过协方差表达组的形状"
+    ],
+    "a": 3,
+    "why": "K-means 只给<b>一个硬标签</b>、组是球形距离型的。GMM 给出<b>责任度</b>（对每个成分一个概率，和为 1），并用<b>协方差</b>描述展开程度与朝向。成分个数仍要你指定，EM 也只保证局部最优。"
+   }
+  ],
+  "2": [
+   {
+    "q": "关于本讲的考核范围，正确的是？",
+    "o": [
+     "不考 AIC/BIC",
+     "要会应用 E 步和 M 步，但详细的收敛性证明不在考核范围",
+     "只考概念不考计算",
+     "必须能证明 EM 的收敛性"
+    ],
+    "a": 1,
+    "why": "Topic overview 原话：<b>understand and apply the E-step and M-step, but detailed convergence proofs are outside scope</b>。AIC/BIC 要会用来<b>比较</b>成分数，计算题（责任度、M 步）更是重点。"
+   }
+  ],
+  "3": [
+   {
+    "q": "隐变量 zᵢ 和责任度 rᵢₖ 的区别是什么？",
+    "o": [
+     "两者是同一个东西的不同写法",
+     "zᵢ 是观测到的标签，rᵢₖ 是预测",
+     "rᵢₖ 揭示了 zᵢ 的真实取值",
+     "zᵢ 是生成模型里未观测到的成分状态；rᵢₖ 是看到 xᵢ 之后我们对它的后验概率"
+    ],
+    "a": 3,
+    "why": "zᵢ 是<b>真实但看不见</b>的 one-hot 状态。观测到数据后我们并<s>不能</s>还原它，只能算出后验 <b>rᵢₖ = P(zᵢₖ=1 | xᵢ)</b>——一个表达<b>不确定性</b>的软信念，不是揭示真实身份。"
+   },
+   {
+    "q": "「责任度告诉我们这个观测真正来自哪个成分」——这个说法的问题是？",
+    "o": [
+     "责任度只对高斯分布成立",
+     "责任度不能超过 0.5",
+     "责任度其实是先验概率",
+     "责任度是模型下的后验概率，表达不确定性，并不能还原未观测到的真实状态 z"
+    ],
+    "a": 3,
+    "why": "z 是生成模型里<b>真实但看不见</b>的 one-hot 状态；观测到 x 之后我们<b>无法还原它</b>，只能算出后验 r = P(z=k | x)。责任度表达的是<b>不确定性</b>，不是身份证明。"
+   },
+   {
+    "q": "GMM 相对 k-means 的两项新增能力是？",
+    "o": [
+     "可以处理缺失值，且不受尺度影响",
+     "给出每个成分的后验概率（软归属），并能通过协方差表达组的形状与朝向",
+     "不需要初始化，且保证全局最优",
+     "更快，且不需要指定成分数"
+    ],
+    "a": 1,
+    "why": "k-means 只给<b>一个硬标签</b>、组是球形距离型的。GMM 给<b>责任度</b>（对每个成分一个概率、和为 1），并用<b>协方差</b>描述展开与倾斜。成分数仍要你指定，EM 也只保证局部最优。"
+   }
+  ],
+  "4": [
+   {
+    "q": "对连续数据，混合密度 p(x) 的正确理解是？",
+    "o": [
+     "p(x) 一定在 0 和 1 之间",
+     "p(x) 是责任度",
+     "p(x) 是密度（曲线高度），可以大于 1；概率要对区间求面积",
+     "p(x) 就是 X 恰好等于 x 的概率"
+    ],
+    "a": 2,
+    "why": "连续分布下 <b>P(X = x) = 0</b>（一个点没有宽度）。<b>密度是高度、概率是面积</b>，所以窄而高的高斯峰值可以超过 1。责任度才是必须落在 [0,1] 且对成分求和为 1 的量。"
+   },
+   {
+    "q": "某高斯成分在其均值处的密度值是 1.6。这说明什么？",
+    "o": [
+     "该点一定属于这个成分",
+     "该成分的权重是 1.6",
+     "这是合法的密度值——密度是高度不是概率，说明该成分很窄很集中",
+     "计算出错了，概率不能超过 1"
+    ],
+    "a": 2,
+    "why": "<b>密度可以大于 1</b>，只要曲线下总面积为 1 即可。σ 越小曲线越窄越高，峰值就越大。概率要对<b>区间求面积</b>——例如宽 0.01 的区间上概率约为 1.6×0.01 = 0.016。"
+   },
+   {
+    "q": "一份数据的直方图只看到两个峰。据此断定成分数 K=2，问题在哪？",
+    "o": [
+     "重叠较多的成分可以合成一个宽单峰，成分数不一定等于可见峰数",
+     "直方图不能用于连续数据",
+     "K 必须是奇数",
+     "必须先标准化才能看峰"
+    ],
+    "a": 0,
+    "why": "讲义明确提醒：<b>成分个数不一定等于看得见的峰数</b>。两个重叠很多的成分会叠成一个宽峰，三个成分也可能只显出两个峰。选 K 要靠 <b>AIC/BIC + 稳定性 + 领域意义</b>，不能数峰。"
+   }
+  ],
+  "5": [
+   {
+    "q": "EM 的 E 步和 M 步各自固定什么？",
+    "o": [
+     "E 步更新均值，M 步更新方差",
+     "E 步固定参数算责任度；M 步固定责任度更新参数",
+     "E 步固定责任度，M 步固定参数",
+     "两步都更新全部量"
+    ],
+    "a": 1,
+    "why": "这是 EM 的定义性分工：<b>E 步：参数不动，算成员；M 步：成员不动，算参数。</b> 所以 M 步里必须用<b>同一轮 E 步</b>算出的责任度，不能边更新边重算。"
+   },
+   {
+    "q": "EM 每轮都不降低对数似然。据此可以得出什么结论？",
+    "o": [
+     "说明 K 选对了",
+     "似然会一直严格上升永不停止",
+     "只能保证不变差，落点仍取决于初始化，可能停在局部最优",
+     "一定收敛到全局最优"
+    ],
+    "a": 2,
+    "why": "单调性只保证<b>不降低</b>。EM 是在推高一个下界，会停在<b>局部</b>最优，所以要用<b>多次初始化</b>比较。似然高低也<s>不能</s>用来选 K——更复杂的模型训练似然总能更好。"
+   },
+   {
+    "q": "为什么不能像普通 MLE 那样直接对混合模型求导解出参数？",
+    "o": [
+     "因为数据没有标签就无法定义似然",
+     "因为对数里套着对成分的求和，求导没有闭式解",
+     "因为高斯密度不可导",
+     "因为参数个数太多"
+    ],
+    "a": 1,
+    "why": "对数似然是 <b>Σᵢ log( Σₖ πₖ N(xᵢ|·) )</b>——<b>log 里面是一个和</b>，求导后各成分纠缠在一起，解不出闭式。EM 的办法是用 Jensen 不等式造一个下界：<b>E 步让下界在当前参数处取等，M 步最大化下界</b>。似然本身是定义得出来的，与有没有标签无关。"
+   }
+  ],
+  "6": [
+   {
+    "q": "两个成分需要有不同的倾斜方向，应该选哪种协方差类型？",
+    "o": [
+     "tied",
+     "diag",
+     "full",
+     "spherical"
+    ],
+    "a": 2,
+    "why": "<b>spherical</b> 只有一个方差（圆）；<b>diag</b> 允许各轴不同展开但<b>与坐标轴对齐、不能倾斜</b>；<b>tied</b> 要求所有成分<b>形状完全相同</b>；只有 <b>full</b> 允许每个成分有自己的大小、拉伸和倾斜。"
+   },
+   {
+    "q": "两个成分需要有不同的大小、拉伸和<b>相反的倾斜方向</b>。应选哪种 covariance_type？",
+    "o": [
+     "spherical",
+     "tied",
+     "full",
+     "diag"
+    ],
+    "a": 2,
+    "why": "<b>spherical</b> 只有一个方差（圆）；<b>diag</b> 允许各轴不同展开但<b>与坐标轴对齐、不能倾斜</b>；<b>tied</b> 要求所有成分形状完全一样（只有中心不同）；只有 <b>full</b> 允许每个成分独立的大小、拉伸与倾斜。"
+   }
+  ],
+  "7": [
+   {
+    "q": "一维、每个成分一个方差的 K 成分 GMM，自由参数个数 p 是多少？",
+    "o": [
+     "2K",
+     "K + 1",
+     "3K − 1",
+     "3K"
+    ],
+    "a": 2,
+    "why": "<b>K−1 个独立的混合权重</b>（必须和为 1，所以少一个自由度）+ <b>K 个均值</b> + <b>K 个方差</b> = <b>3K − 1</b>。算 AIC/BIC 时要用这个 p。"
+   },
+   {
+    "q": "一维、每成分一个方差的 K 成分 GMM，自由参数个数 p 是多少？",
+    "o": [
+     "3K",
+     "K + 1",
+     "3K − 1",
+     "2K"
+    ],
+    "a": 2,
+    "why": "<b>K−1 个独立的混合权重</b>（必须和为 1，少一个自由度）+ <b>K 个均值</b> + <b>K 个方差</b> = <b>3K − 1</b>。算 AIC/BIC 时要用这个 p。"
+   },
+   {
+    "q": "某次比较中 AIC 在 K=3 最低，BIC 在 K=2 最低。最恰当的处理是？",
+    "o": [
+     "取平均，选 K=2.5",
+     "两者都是有依据的候选；BIC 惩罚更重更偏简单模型，应结合稳定性与领域意义再定",
+     "一定选 AIC 的结果",
+     "说明计算出错了"
+    ],
+    "a": 1,
+    "why": "<b>BIC 的惩罚项含 log n</b>，样本越大越偏向简单模型，所以两者不一致很常见，<s>不是错误</s>。此时要回到多证据框架：看<b>稳定性</b>（换种子是否一致）和<b>成分是否讲得通</b>。"
+   }
+  ],
+  "8": [
+   {
+    "q": "π=(0.7, 0.3)，在某点 x 处两成分密度为 0.2420 和 0.0540。第一个成分的责任度是多少？",
+    "o": [
+     "约 0.913",
+     "0.242",
+     "0.500",
+     "0.700"
+    ],
+    "a": 0,
+    "why": "加权贡献：0.7×0.2420 = <b>0.1694</b>，0.3×0.0540 = <b>0.0162</b>；混合密度 = <b>0.1856</b>；责任度 = 0.1694/0.1856 ≈ <b>0.913</b>。注意它<b>既不等于先验 0.7，也不等于密度本身</b>。"
+   },
+   {
+    "q": "M 步更新成分均值时，分母应该是什么？",
+    "o": [
+     "Nₖ − 1",
+     "成分个数 K",
+     "观测总数 n",
+     "该成分的有效计数 Nₖ = Σᵢ rᵢₖ"
+    ],
+    "a": 3,
+    "why": "这是<b>责任度加权的平均</b>，分母必须是用于加权的<b>总权重 Nₖ</b>，不是 n。方差更新同样除 <b>Nₖ</b>（极大似然），<s>不是 Nₖ−1</s>——那是无偏样本方差的写法。"
+   },
+   {
+    "q": "三个观测 −2、0、3 对成分 1 的责任度为 0.9、0.6、0.1。更新后的 μ₁ 是？",
+    "o": [
+     "0.6",
+     "(−2+0+3)/3 ≈ 0.33",
+     "−0.9375",
+     "−1.5"
+    ],
+    "a": 2,
+    "why": "N₁ = 0.9+0.6+0.1 = <b>1.6</b>；分子 = 0.9(−2)+0.6(0)+0.1(3) = <b>−1.5</b>；μ₁ = −1.5/1.6 = <b>−0.9375</b>。注意 0 那个观测<b>对分子贡献 0 但仍进入分母</b>；<s>除以 3 是错的</s>。"
+   }
+  ],
+  "9": [
+   {
+    "q": "两个成分权重各 0.5、方差都很小，但中心相距很远。整个混合分布的方差如何？",
+    "o": [
+     "等于成分方差的加权平均，所以很小",
+     "远大于成分方差，因为还要加上成分均值之间的离散",
+     "无法计算",
+     "等于两个方差之和"
+    ],
+    "a": 1,
+    "why": "<b>Var(X) = 组内 Σπₖσₖ² + 组间 [Σπₖμₖ² − (Σπₖμₖ)²]</b>。成分再窄，只要中心离得远，<b>组间那一项</b>就很大。「混合方差 = 成分方差的加权平均」是常见错误。"
+   }
+  ],
+  "10": [
+   {
+    "q": "下列哪一条是本讲的正确结论？",
+    "o": [
+     "似然越高模型一定越好",
+     "EM 保证找到全局最优",
+     "成分数可以由 EM 自动决定",
+     "EM 每轮不降低似然，但可能停在局部最优，所以要多次初始化"
+    ],
+    "a": 3,
+    "why": "EM 的单调性只保证<b>不降低</b>，落点取决于初始化。似然会随复杂度上升所以不能单独用来选模型（要用 AIC/BIC）。成分数 K 是<b>你指定的</b>，EM 不会替你决定。"
+   },
+   {
+    "q": "下列哪一句最适合作为 GMM 大题的收尾「局限」句？",
+    "o": [
+     "较低的 BIC 支持在这些候选中的选择，但不证明总体存在那么多自然分组",
+     "责任度揭示了每个观测的真实来源",
+     "EM 保证找到全局最优解",
+     "高斯假设对任何数据都成立"
+    ],
+    "a": 0,
+    "why": "另外三句都是<b>错的</b>：EM 只保证局部最优；责任度是后验概率<s>不是真实身份</s>；高斯是<b>建模选择</b>，偏态或不规则的组拟合会很勉强。只有 BIC 那句准确划出了证据的边界。"
+   }
+  ],
+  "11": [
+   {
+    "q": "Tutorial Q1 直接给出成分密度，这意味着什么？",
+    "o": [
+     "必须自己验证这些密度",
+     "题目出错了",
+     "不需要代高斯公式算 exp，重点在加权、求和、归一化与解释",
+     "只能用计算器完成"
+    ],
+    "a": 2,
+    "why": "给定密度是为了<b>把考点集中在贝叶斯式的归一化和解释上</b>，而不是考你算指数函数。把时间花在四步流程和结论表述上。"
+   }
+  ],
+  "12": [
+   {
+    "q": "算完两个责任度后，最快的自检是什么？",
+    "o": [
+     "看它们是否都大于 0.5",
+     "看它们是否小于对应的密度",
+     "看它们是否等于混合权重",
+     "看它们加起来是否等于 1"
+    ],
+    "a": 3,
+    "why": "对<b>同一个观测</b>，责任度是对成分的一个概率分布，<b>必须和为 1</b>。不等于 1 说明<b>分母（混合密度）算错了</b>。责任度与混合权重一般不相等。"
+   },
+   {
+    "q": "两个观测的混合密度差别很大，但责任度几乎相同。这说明什么？",
+    "o": [
+     "两个观测必定属于同一成分",
+     "模型没有收敛",
+     "计算一定有误",
+     "一个观测比另一个更典型，但两者在成分之间的相对归属倾向相近"
+    ],
+    "a": 3,
+    "why": "<b>混合密度</b>回答「这个值有多典型」，<b>责任度</b>回答「哪个成分更能解释它」——两个不同的问题。一个点可以落在很稀疏的尾部（密度低）却仍明显更靠近某一个成分（责任度偏向明显）。"
+   }
+  ],
+  "13": [
+   {
+    "q": "某成分的混合权重较小，它在某个观测上的责任度可能较大吗？",
+    "o": [
+     "只有权重相等时才可能",
+     "不可能，责任度由权重决定",
+     "可能，因为责任度是权重与该点密度的乘积再归一化",
+     "只有在成分重叠时才可能"
+    ],
+    "a": 2,
+    "why": "<b>责任度 ∝ πₖ × N(x|μₖ,Σₖ)</b>。先验小的成分，只要在这个 x 处密度高得多，乘积照样可以更大。评估文档的示例大题专门考这一点。"
+   },
+   {
+    "q": "π₁=0.2、π₂=0.8，某点处成分密度分别为 0.90 和 0.15。第一个成分的责任度是？",
+    "o": [
+     "0.6",
+     "0.45",
+     "0.75",
+     "0.2"
+    ],
+    "a": 0,
+    "why": "加权贡献：0.2×0.90 = <b>0.18</b>，0.8×0.15 = <b>0.12</b>；混合密度 = <b>0.30</b>；r₁ = 0.18/0.30 = <b>0.6</b>。权重小的成分靠<b>密度上的优势</b>反超了——这正是这一页要讲的。"
+   }
+  ],
+  "14": [
+   {
+    "q": "M 步更新成分均值时，分母应该是什么？",
+    "o": [
+     "观测总数 n",
+     "Nₖ − 1",
+     "该成分的有效计数 Nₖ = Σᵢ rᵢₖ",
+     "成分个数 K"
+    ],
+    "a": 2,
+    "why": "这是<b>责任度加权的平均</b>，分母必须是<b>用于加权的总权重 Nₖ</b>，不是 n。方差更新同样除 <b>Nₖ</b>（极大似然），<s>不是 Nₖ−1</s>。"
+   },
+   {
+    "q": "有效计数 Nₖ = Σᵢ rᵢₖ 出现小数（如 1.6），正确的处理是？",
+    "o": [
+     "保持小数——它是分数计数，且 ΣₖNₖ 必须等于观测总数 n",
+     "四舍五入成 2",
+     "重新跑 E 步直到它是整数",
+     "说明责任度算错了"
+    ],
+    "a": 0,
+    "why": "责任度是<b>分数归属</b>，加起来自然是小数。<b>Nₖ 是「期望有多少个观测来自成分 k」</b>，不必是整数；把它取整或把责任度硬化成 0/1，就退化成 k-means 了。检验办法是 ΣₖNₖ = n。"
+   },
+   {
+    "q": "更新方差时，应该用哪一组均值和哪一组责任度？",
+    "o": [
+     "旧均值 + 新责任度",
+     "旧均值 + 旧责任度",
+     "新均值 + 下一轮的新责任度",
+     "刚更新出的新均值 + 同一轮 E 步的旧责任度"
+    ],
+    "a": 3,
+    "why": "M 步内部有顺序：<b>先算 Nₖ 和新均值，再用新均值算方差</b>；而<b>责任度在整个 M 步里保持不变</b>（它们来自本轮的 E 步）。混用下一轮的责任度就破坏了 EM 的交替结构。"
+   }
+  ],
+  "15": [
+   {
+    "q": "把 GMM 的两个成分初始化成完全相同的参数，会发生什么？",
+    "o": [
+     "EM 会自动把它们分开",
+     "算法会报错",
+     "它们会一直保持相同——对称性不会自己打破",
+     "会收敛到全局最优"
+    ],
+    "a": 2,
+    "why": "参数相同 ⇒ 每个点对两成分的责任度都是 0.5 ⇒ M 步算出的两组新参数<b>还是相同</b>，如此循环。所以初始化必须<b>打破对称</b>（随机或用 k-means 的结果）。"
+   }
+  ],
+  "16": [
+   {
+    "q": "想保留观测归属的不确定性，应该用 sklearn 的哪个方法？",
+    "o": [
+     "predict",
+     "predict_proba",
+     "bic",
+     "score_samples"
+    ],
+    "a": 1,
+    "why": "<b>predict</b> 返回责任度最大的那个成分，<b>丢掉了不确定性</b>；<b>predict_proba</b> 保留完整的责任度向量（每行和为 1）。score_samples 给的是<b>对数混合密度</b>，bic() 用于模型比较。"
+   }
+  ]
+ }
+}

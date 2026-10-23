@@ -1,0 +1,888 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS229 讲座 L15 · PCA 与 ICA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CS229 讲座 L15 · PCA 与 ICA",
+  subtitle:"降维到底在找什么 · 为什么是特征向量 · 鸡尾酒会 · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=dyb_cFywuik&t="};
+
+/* ── Ng 原话：画面顶部一行，摘自 L15 字幕 ── */
+function says(ts,en,y){
+  note("🎙 Ng "+ts+"  «"+en+"»",640,y||150,"g");}
+
+/* ── 一朵沿斜方向拉长的点云（中心化过）── */
+var CLOUD=[[-150,-58],[-96,-70],[-68,-18],[-16,-34],[14,26],[64,16],[90,70],[146,50],
+           [-120,-30],[40,-8],[-40,8],[110,30]];
+function cloud(cx,cy,cls,r){
+  dots(CLOUD.map(function(p){return [cx+p[0],cy+p[1]];}),cls||"b",r||7);}
+
+/* ── 把点投到过 (cx,cy)、方向角 deg 的直线上 ── */
+function project(cx,cy,deg,showResid){
+  var a=deg*Math.PI/180,ux=Math.cos(a),uy=Math.sin(a);
+  curve([[cx-ux*210,cy-uy*210],[cx+ux*210,cy+uy*210]],"g");
+  CLOUD.forEach(function(p){
+    var t=p[0]*ux+p[1]*uy, fx=cx+t*ux, fy=cy+t*uy;
+    if(showResid) link(cx+p[0],cy+p[1],fx,fy);
+    dots([[fx,fy]],"y",6);});}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CS229 讲座 L15","PCA 与 ICA",
+      "降维，以及一个关于「别乱用它」的警告");},
+    "这一讲讲两个算法：<b>PCA（主成分分析）</b>和 <b>ICA（独立成分分析）</b>。<br><b>⭐ 但 Ng 开场就先泼了一盆冷水</b>，这句话值得你一开始就记住——他说 PCA 在某些场合确实有用，<b>可他见过太多人在根本不该用的时候用它</b>。所以这一讲他除了讲「怎么用」，还会花很大篇幅讲<b>「什么时候别用」</b>。<br><b>这一版是重做的。</b>上一版有两个大洞：数学推导那一段我写了「压缩版，详版见别的片子」就跳过去了；ICA 那一段写了「不在考纲」就一笔带过。<b>这一版两个洞都补上，而且每个术语（投影、方差、特征向量、正交基…）都先用一整个知识点讲清楚再用。</b>");
+});
+KP("1 · 先定位：PCA 和上一讲的因子分析差在哪",function(){
+  S(91,function(){clearScene();setEq(null);setCap("两个算法都在处理「高维数据其实躺在低维里」");
+   says("1:31","not probabilistic. It does not model P of x");
+   matrix({rows:4,cols:3,cw:300,ch:54,x:185,y:200,
+     cell:function(i,j){var t=[
+       ["","因子分析（上一讲）","PCA（这一讲）"],
+       ["是概率模型吗","是","不是"],
+       ["建模 p(x) 吗","建","不建"],
+       ["产出","一个概率分布","一组方向"]];return t[i][j];},
+     dim:function(i,j){return i===0;},
+     hl:function(i,j){return j===2?"hl":"";}});
+   note("⭐ 同一个现象，两种完全不同的处理方式",640,374,"y");},"先把 PCA 放在地图上。<b>上一讲的因子分析</b>做的事是：把高维数据建模成一个<b>概率分布</b>——它会给你一个 p(x)，告诉你每个位置有多拥挤。<b>它是概率模型。</b><br><b>而 PCA 不是。</b>Ng 说得很干脆：<b>PCA 不是概率性的，它不建模 p(x)</b>。<br><b>⭐ 那 PCA 给你什么？</b>它给你<b>一组方向</b>——告诉你「数据主要沿着哪几个方向在变化」。仅此而已，没有概率、没有分布。<br><b>两者处理的是同一个现象</b>（高维数据其实躺在一个低维的「薄片」上），<b>但一个用概率语言，一个用几何语言</b>。这一讲走的是几何那条路。");
+  S(34,function(){clearScene();setEq(null);setCap("两个算法，同一个目标，两种语言");
+       says("0:34","you saw the factor analysis algorithm");
+       matrix({rows:4,cols:3,cw:300,ch:48,x:170,y:190,
+         cell:function(i,j){var t=[
+           ["","因子分析（上一讲）","PCA（这一讲）"],
+           ["想干的事","找低维子空间","找低维子空间"],
+           ["用什么语言","概率模型 P(x)","几何：方差与投影"],
+           ["怎么解","EM 迭代","一次特征分解"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⭐ 第一行相同、后两行不同 —— 这就是它们的关系",640,398,"y");},"把两个算法并排放，关系一眼就清楚。<br><b>第一行完全相同</b>：两者想干的事是一样的——<b>找出数据实际所在的那个低维子空间</b>。<br><b>后两行完全不同</b>：<b>因子分析用的是概率语言</b>，它建一个关于 P(x) 的模型，<b>要用 EM 迭代去解</b>；<b>PCA 用的是几何语言</b>，只谈方差和投影，<b>一次特征分解就出答案、不用迭代</b>。<br><b>⭐ 所以别把它们当成「谁更高级」</b>——<b>是同一个目标的两种讲法</b>，这一讲走的是几何那条。");
+  SUM(91,1,{h:"PCA 不是概率模型",k:"<b>因子分析</b>建模 p(x)，是概率模型，产出一个分布；<b>PCA 不建模 p(x)</b>，产出的是<b>一组方向</b>。",m:"两者处理的是<b>同一个现象</b>——高维数据其实躺在低维「薄片」上——但<b>一个用概率语言，一个用几何语言</b>。",w:"⚠ 别把 PCA 当成「能算概率」的工具。它给不了「这个点有多常见」这种答案。",e:"⭐ 问「PCA 和因子分析的区别」时，<b>「是否建模 p(x)」是最干净的一刀</b>。"});
+  QUIZ(91,1,{t:"PCA 和上一讲的因子分析最根本的区别是什么？",o:["PCA 只能处理二维数据","因子分析是概率模型、建模 p(x)；PCA 不是概率模型、不建模 p(x)，它产出的是一组方向","因子分析是有监督的","PCA 计算更快"],a:1,w:"Ng 的原话：PCA <em>is not probabilistic. It does not model P of x</em>。⭐ 两者处理同一个现象，<b>但一个用概率语言、一个用几何语言</b>。"});
+});
+KP("2 · 降维是什么意思：把 n 个数变成 k 个数",function(){
+  S(154,function(){clearScene();setEq(null);setCap("目标：n 维 → k 维，而且 k 远小于 n");
+   says("2:34","reduce the dimension from n dimensions to maybe k dimensions");
+   boxNode(200,215,330,80,"每个样本 n 个数","b");
+   boxNode(760,215,330,80,"每个样本 k 个数","g");
+   link(530,255,760,255);
+   note("比如 10000 维",365,330,"d");
+   note("比如 50 维",925,330,"d");
+   note("⭐ 要求：丢掉的那些维度，尽量别丢掉有用的信息",640,385,"y");},"<b>「降维」这个词听起来玄，其实就是：原来每个样本要用 n 个数描述，现在想用 k 个数描述，而且 k 比 n 小得多。</b><br>举个具体的：一张 100×100 的灰度图，<b>原本是 10000 个数</b>（每个像素一个）。能不能用 50 个数就把它大致表示出来？<b>那就是从 10000 维降到 50 维。</b><br><b>⚠ 当然，丢掉 9950 个数肯定会丢信息。</b>关键在于——<b>丢掉的是不是无关紧要的那部分</b>。PCA 要回答的就是：<b>哪 k 个方向最值得保留？</b><br>下面两个知识点先看看「为什么高维数据常常其实没那么高维」。");
+  S(91,function(){clearScene();setEq(null);setCap("用一个具体的数感受一下「降维」在做什么");
+       says("1:31","if the data lives in a low dimensional subspace, what is that subspace");
+       boxNode(150,200,450,78,"原来：每个样本 1000 个数","b");
+       boxNode(730,200,420,78,"之后：每个样本 50 个数","g");
+       link(600,239,730,239);
+       note("1000 维",375,320,"d");
+       note("50 维",940,320,"d");
+       note("⭐ 不是「从 1000 个里挑 50 个」，而是「造出 50 个新的数」",640,382,"y");},"换个具体的数感受一下。<b>原来每个样本要一千个数，降维之后只要五十个。</b><br><b>⭐ 这里有个最常见的误解必须先堵掉</b>：<b>降维不是「从原来一千个特征里挑出五十个」</b>——那叫<b>特征选择</b>，是另一回事。<br><b>PCA 做的是「造出五十个新的数」</b>，每个新数都是<b>原来那一千个数的某种组合</b>。<br><b>Ng 把这件事说成：找出数据实际所在的那个低维子空间，并且找到把数据降到那里去的办法。</b><b>「子空间」这个词后面会一直用。</b>");
+  SUM(154,2,{h:"降维 ＝ 用更少的数描述同一个样本",k:"原来 n 个数，现在 k 个数，<b>k ≪ n</b>。例：100×100 的图是 10000 维，想用 50 维表示。",m:"<b>丢信息是必然的</b>，关键是丢掉的是不是无关紧要的那部分。",w:"PCA 要回答的核心问题：<b>哪 k 个方向最值得保留？</b>",e:"答题时「降维」要说清<b>降的是特征的个数</b>，不是样本的个数。"});
+  QUIZ(154,2,{t:"「把数据从 n 维降到 k 维」降的是什么？",o:["描述每个样本所用的数字个数（特征维数）","模型参数的个数","样本的个数","数据的取值范围"],a:0,w:"⚠ 降的是<b>特征维数</b>，样本个数不变。例：10000 个像素 → 50 个数，<b>但样本还是那么多张图</b>。"});
+});
+KP("3 · ★ 厘米与英寸：看起来 2 维，其实只有 1 维",function(){
+  S(1489,function(){clearScene();setEq(null);setCap("同一批孩子的身高，量了两遍");
+   says("24:49","the example we had earlier about children's height in centimeters and inches");
+   axes({x0:330,x1:980,y0:390,y1:170});
+   dots([[400,352],[450,318],[500,285],[550,250],[600,218],[650,185],
+         [430,330],[480,300],[530,266],[580,232],[630,200],[690,168]],"b",8);
+   note("身高（厘米）→",655,400,"d");
+   note("身高（英寸）↑",300,275,"d");
+   note("⭐ 所有点几乎落在一条直线上",640,300,"y");},"Ng 举了一个特别好记的例子。<b>你管着一所小学，同一个月里，有人用厘米量了全校学生的身高，又有人用英寸量了一遍。</b>于是每个学生有<b>两个数</b>。<br><b>把它画出来</b>——所有点<b>几乎落在一条直线上</b>。为什么？因为厘米和英寸只差一个固定倍数，<b>这两个数本质上是同一个信息</b>。<br><b>⚠ 注意是「几乎」不是「完全」</b>：因为各自四舍五入到最近的厘米/英寸，所以会有一点点偏离。<b>两列高度相关，但不完全相关。</b>");
+  S(1783,function(){clearScene();setEq(null);setCap("所以用一个数就够了");
+   axes({x0:330,x1:980,y0:390,y1:170});
+   curve([[380,365],[700,160]],"g");
+   dots([[400,352],[450,318],[500,285],[550,250],[600,218],[650,185]],"y",8);
+   note("沿着这条线的位置 —— 一个数就定了",640,255,"g");
+   note("⭐ 名义上 2 维，真实的「自由度」只有 1 维",640,330,"y");
+   note("PCA 要做的，就是自动发现这条线",640,385,"b");},"<b>既然两个数说的是同一件事，那就只留一个。</b>具体怎么留？<b>沿着那条直线，记下每个点在线上的位置——一个数就够了。</b><br><b>⭐ 这就是「名义维数」和「真实自由度」的区别</b>：数据名义上是 2 维的（每个样本两个数），<b>但它真正能变化的方向只有 1 个</b>，所以真实自由度是 1。<br><b>PCA 做的事，就是自动把这条线找出来。</b>你不用告诉它「厘米和英寸是一回事」——<b>它从数据的形状里自己看出来</b>。");
+  SUM(1489,3,{h:"★ 名义维数 ≠ 真实自由度",k:"厘米和英寸量同一批身高 ⇒ 每个样本 2 个数，但<b>两个数说的是同一件事</b>，点几乎落在一条直线上。",m:"<b>沿那条线记下位置，一个数就够了</b>。名义 2 维，<b>真实自由度只有 1 维</b>。",w:"⚠ 是「几乎」共线不是「完全」——各自四舍五入会带来一点偏离。<b>高度相关，但不完全相关。</b>",e:"⭐ <b>PCA 的价值就在这里</b>：你不用事先知道哪些特征冗余，<b>它从数据形状里自己看出来</b>。"});
+  QUIZ(1489,3,{t:"「厘米与英寸」这个例子想说明什么？",o:["身高数据服从正态分布","单位换算会引入误差","应该统一用公制单位","数据名义上是 2 维，但两列说的是同一件事，真实自由度只有 1 维——PCA 能自动发现这一点"],a:3,w:"⭐ 关键是<b>「名义维数 ≠ 真实自由度」</b>。而且<b>你不用事先告诉 PCA 哪些特征冗余</b>，它从数据形状里自己看出来。"});
+});
+KP("4 · 再看一个：两个传感器量同一台机器",function(){
+  S(304,function(){clearScene();setEq(null);setCap("工厂里的一台大机器，装了两个传感器");
+   says("5:04","a different sensor 2 on a big factory machine either shaking");
+   boxNode(480,200,320,80,"同一台机器在抖","y");
+   boxNode(220,330,280,70,"传感器 1","b");
+   boxNode(780,330,280,70,"传感器 2","g");
+   link(560,280,360,330); link(720,280,920,330);
+   note("两个读数都来自同一个「抖动程度」",640,172,"d");
+   note("⇒ 它们必然高度相关",640,308,"y");},"再看一个更贴近工程的例子。<b>工厂里一台大机器在震动，你在它身上装了两个传感器</b>，分别测不同的东西。<br><b>但两个读数其实都来自同一个物理原因——这台机器抖得有多厉害。</b>机器抖得厉害，两个读数都大；抖得轻，两个读数都小。<b>所以它们必然高度相关。</b><br><b>⭐ 这个例子比厘米英寸更贴近真实情况</b>：现实中的冗余<b>很少是「单位换算」这么明显</b>，更多是「<b>好几个测量值背后其实是同一个看不见的原因</b>」。PCA 能把这种隐藏的冗余挖出来。");
+  SUM(304,4,{h:"冗余常常来自「共同的原因」",k:"两个传感器测同一台机器的震动 ⇒ 两个读数都来自同一个物理原因 ⇒ <b>必然高度相关</b>。",m:"⭐ 现实中的冗余<b>很少像「厘米/英寸」那么明显</b>，更多是<b>好几个测量值背后其实是同一个看不见的原因</b>。",w:"PCA 能把这种隐藏的冗余挖出来——<b>而你并不需要事先知道那个「共同原因」是什么</b>。",e:"举实际用途时，<b>传感器冗余比课本例子更有说服力</b>。"});
+  QUIZ(304,4,{t:"两个传感器测同一台机器，为什么它们的读数高度相关？",o:["因为传感器型号相同","因为测量有误差","因为两个读数背后是同一个物理原因（机器抖得多厉害）","因为它们装在同一个位置"],a:2,w:"⭐ 这类冗余是<b>「共同的隐藏原因」</b>造成的，比「单位换算」更接近真实场景，<b>而且你不需要事先知道那个原因是什么</b>。"});
+});
+KP("5 · 预处理第一步：中心化（为什么必须先减均值）",function(){
+  S(449,function(){clearScene();setEq(null);setCap("没中心化：方向会被「数据在哪」带偏");
+       says("7:29","Before running PCA, common pre-processing");
+       axes({x0:230,x1:1050,y0:390,y1:170});
+       cloud(800,230,"b",7);
+       curve([[250,385],[900,195]],"r");
+       note("原点在左下角，点云在右上角",640,330,"d");
+       note("⚠ 找出来的方向会指向「点云在哪儿」，而不是「它往哪儿散」",640,375,"r");},"PCA 之前有个必做的预处理：<b>中心化</b>，就是<b>把每一维都减去它的平均值</b>，让点云的中心挪到原点。<br><b>为什么必须做？</b>看这张图：点云在右上角，原点在左下角。如果不中心化，PCA 找出来的「主方向」会<b>指向点云所在的位置</b>——也就是从原点伸向那一坨数据的方向。<br><b>⚠ 可我们想要的根本不是这个。</b>我们关心的是<b>数据自己往哪个方向散开</b>，而不是<b>这坨数据整体坐落在哪儿</b>。<b>这两件事完全不同。</b>");
+  S(449,function(){clearScene();setEq("$$x \\leftarrow x - \\bar{x}\\qquad(\\text{每一维各自减去自己的均值})$$");
+       setCap("中心化之后：方向才真正反映「往哪散」");
+       axes({x0:230,x1:1050,y0:390,y1:170});
+       cloud(640,280,"b",7);
+       curve([[460,355],[820,205]],"g");
+       note("中心挪到原点",640,170,"d");
+       note("⭐ 现在这条线描述的才是「数据往哪个方向拉长」",640,265,"g");},"<b>中心化之后，点云的中心正好落在原点上。</b>此时再去找方向，找到的才是<b>「数据往哪个方向拉长」</b>。<br><b>怎么做？很简单：每一维各自减去自己那一维的平均值。</b>第一列减第一列的均值，第二列减第二列的均值……<br><b>⭐ 一个值得记的说法：中心化之后，所有主方向都穿过原点。</b>这不是巧合——<b>正因为中心在原点，「方向」才成了一个纯粹关于形状的概念，和位置无关。</b>");
+  SUM(449,5,{h:"★ 中心化：每一维减去自己的均值",k:"<b>把点云的中心挪到原点。</b>做法：每一维各自减去该维的平均值。",m:"不中心化的话，找出来的方向会<b>指向「点云坐落在哪儿」</b>，而不是<b>「数据往哪散」</b>——这两件事完全不同。",w:"⭐ 中心化之后<b>所有主方向都穿过原点</b>，「方向」才成了纯粹关于形状、与位置无关的概念。",e:"⚠ 手算题第一步几乎都是中心化。<b>漏了它后面全错。</b>"});
+  QUIZ(449,5,{t:"PCA 为什么必须先做中心化？",o:["为了加快计算速度","不中心化的话，找到的方向会指向「点云坐落在哪儿」，而不是「数据往哪个方向散开」","为了让数据服从正态分布","为了让所有特征取值在 0 到 1 之间"],a:1,w:"⭐ 中心化后<b>主方向都穿过原点</b>，方向才成为纯粹关于<b>形状</b>的概念。⚠ 「让取值在 0–1」说的是另一回事（标准化）。"});
+});
+KP("6 · 预处理第二步：标准化（这个要看情况）",function(){
+  S(449,function(){clearScene();setEq(null);setCap("当各维的「单位」差很远时");
+       matrix({rows:4,cols:3,cw:300,ch:54,x:185,y:195,
+         cell:function(i,j){var t=[
+           ["特征","单位","典型数值范围"],
+           ["房屋面积","平方米","50 – 300"],
+           ["卧室数","间","1 – 5"],
+           ["房龄","年","0 – 80"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⚠ 面积的数值天生就大，方差也天生就大",640,370,"r");},"第二步预处理是<b>标准化</b>：把每一维<b>除以它自己的标准差</b>，让各维的「尺度」拉平。<br><b>为什么有时需要？</b>看这张表：面积是 50–300，卧室数是 1–5。<b>面积这一列的数值天生就大，它的方差也就天生就大。</b>而 PCA 是「找方差最大的方向」——<b>于是它几乎必然会把第一主方向指向面积</b>，<b>不是因为面积更重要，纯粹因为它的单位让数值更大</b>。<br><b>⚠ 这是个纯粹的假象，必须消掉。</b>");
+  S(449,function(){clearScene();setEq(null);setCap("但不是任何时候都该标准化");
+       boxNode(170,210,470,80,"各维单位不同 ⇒ 要标准化","g");
+       boxNode(700,210,470,80,"各维单位相同 ⇒ 通常不用","y");
+       note("面积 / 卧室数 / 房龄",405,330,"d");
+       note("比如一张图的所有像素（都是 0–255）",935,330,"d");
+       note("⭐ 判断标准：数值大小的差异，是「真实的」还是「单位造成的」",640,390,"y");},"<b>但标准化不是无条件要做的。</b><br><b>该做的情况</b>：各维<b>单位不同</b>（面积、间数、年数混在一起）。这时数值大小的差异是<b>单位造成的假象</b>，必须拉平。<br><b>通常不做的情况</b>：各维<b>单位相同</b>。比如一张图的所有像素，全都是 0–255 的灰度值。<b>这时某个像素的方差大，是真的因为它变化大</b>——<b>那是真实信息，不该抹掉</b>。<br><b>⭐ 所以判断标准只有一条：数值大小的差异，是「真实的」还是「单位造成的」？</b>");
+  SUM(449,6,{h:"标准化：各维除以自己的标准差（看情况）",k:"<b>各维单位不同时要做</b>（面积 50–300 vs 卧室数 1–5）——否则 PCA 会把第一主方向指向「数值天生大」的那一维。",m:"<b>各维单位相同时通常不做</b>（如图像像素都是 0–255）——那时方差大是<b>真实信息</b>，抹掉反而有害。",w:"⭐ 判断只有一条：<b>数值大小的差异，是真实的，还是单位造成的？</b>",e:"⚠ 中心化<b>必做</b>，标准化<b>看情况</b>。这两者常被混为一谈，分清是得分点。"});
+  QUIZ(449,6,{t:"什么时候 PCA 之前不该做标准化？",o:["任何时候都应该标准化","特征数超过样本数时","样本量很大的时候","各维单位相同时（如图像像素都是 0–255），此时方差大是真实信息，抹掉反而有害"],a:3,w:"⭐ 判断标准：<b>数值差异是「真实的」还是「单位造成的」</b>。⚠ 注意区分：<b>中心化必做，标准化看情况</b>。"});
+});
+KP("7 · 核心概念：什么叫「投影」",function(){
+  S(598,function(){clearScene();setEq(null);setCap("投影 = 从点向直线作垂线，落脚的那个位置");
+       curve([[300,400],[1000,220]],"g");
+       dots([[560,230]],"b",11);
+       dots([[608,336]],"y",10);
+       link(560,230,608,336);
+       note("原来的点",520,200,"b");
+       note("投影点（垂足）",720,350,"y");
+       note("这根垂线和绿线成直角",760,265,"d");
+       note("⭐ 投影后，这个点的位置只用「沿绿线走了多远」一个数就能描述",640,390,"g");},"整个 PCA 的几何都建立在<b>「投影」</b>这个动作上，先把它讲清楚。<br><b>投影就是：从一个点，向一条直线作垂线，垂足落在哪儿，那就是这个点在这条直线上的投影。</b>图上蓝点是原来的点，黄点是它的投影，中间那根短线和绿线<b>成直角</b>。<br><b>⭐ 投影有什么用？</b>关键在这里——<b>投影点落在直线上，所以描述它只需要一个数：沿着这条线走了多远</b>。原来要两个数（横坐标、纵坐标），现在一个数就够了。<br><b>这就是降维的几何本质：把点压到一条线上，维数就降了。</b>");
+  S(832,function(){clearScene();setCap("「走了多远」写成式子，就是一个点积");
+       setEq("$$\\text{投影长度}\\;=\\;u^{\\top}x\\qquad(\\|u\\|=1)$$");
+       says("13:52","the length of the projection of x(i) onto u is u transpose x(i)");
+       note("x 是那个点的坐标向量　　u 是方向（长度为 1）",640,196,"b");
+       note("⭐ 几何上的「沿线走了多远」，代数上就是这一个点积",640,240,"y");},"上一镜是几何，这一镜把它写成式子——<b>这两件事是同一件事，必须连起来看。</b><br>Ng 的原话是：<b>只要 u 的长度等于 1，x 投影到 u 上的长度就等于 uᵀx。</b><br><b>⭐ 所以「投影」在代码里根本不用作图，就是一个点积。</b>这也解释了后面为什么所有推导都在跟 uᵀx 打交道——<b>它就是「这个点在新坐标轴上的坐标」</b>。<br><b>⚠ 注意那个前提：‖u‖=1。</b>这个条件不是摆设，<b>下一个知识点专门讲它为什么非有不可。</b>");
+  SUM(598,7,{h:"★ 投影：向直线作垂线，取垂足",k:"从点向直线作<b>垂线</b>，垂足就是投影。垂线与直线<b>成直角</b>。",m:"⭐ <b>投影点落在直线上，所以只需一个数（沿线走了多远）就能描述它</b>——原来要两个数。",w:"<b>这就是降维的几何本质</b>：把点压到一条线上（或一个低维平面上），维数就降了。",e:"⚠ 「投影」在 PCA 里是<b>垂直投影</b>。别和线性回归的「竖直距离」混——那个不是垂直的。"});
+  QUIZ(598,7,{t:"PCA 中「把点投影到一条直线上」具体指什么？",o:["从点向直线作垂线，取垂足；投影点只需一个数（沿线走了多远）就能描述","把点移到离它最近的另一个数据点","把点沿竖直方向移到直线上","把点的坐标都乘以同一个数"],a:0,w:"⚠ 是<b>垂直</b>投影（垂线与直线成直角），不是竖直移动。<b>这是 PCA 和线性回归最常被混淆的一点</b>——回归量的是竖直距离。"});
+});
+KP("8 · ★ 好方向和坏方向：投影之后散得开不开",function(){
+  S(598,function(){clearScene();setEq(null);setCap("坏方向：投影全挤在一小段里");
+       cloud(640,290,"b",7);
+       project(640,290,-72,false);
+       note("投影点挤成一团",880,250,"r");
+       note("⚠ 压到这个方向上，原本离得很远的点变得几乎重合",640,390,"r");
+       note("信息被压没了",640,172,"d");},"现在有了投影，就能问那个关键问题了：<b>往哪个方向投影最好？</b><br><b>先看一个坏方向。</b>图上绿线是投影方向，黄点是投影结果。<b>投影点全挤在一小段里</b>——原本在点云两端、离得很远的点，<b>投影之后几乎重合了</b>。<br><b>⚠ 这意味着信息被压没了</b>：降维之后你再也分不出这些点谁是谁。<b>这就是「坏方向」。</b>");
+  S(746,function(){clearScene();setEq(null);setCap("好方向：投影铺得很开");
+       cloud(640,290,"b",7);
+       project(640,290,18,false);
+       note("投影点铺得很开",880,215,"g");
+       note("⭐ 原本离得远的点，投影之后仍然离得远 —— 信息保住了",640,390,"g");
+       note("肉眼就能看出：这朵点云沿这个方向最长",640,172,"d");},"<b>换一个方向试试。</b>现在投影点<b>铺得很开</b>——原本离得远的点，<b>投影之后仍然离得远</b>。<b>信息保住了。</b><br><b>⭐ 肉眼其实就能看出来：这朵点云沿着这个方向拉得最长，所以往这个方向投影，摊得最开。</b><br><b>于是 PCA 要找的东西有了一个清晰的说法</b>：<b>找那个让投影「摊得最开」的方向。</b><br>Ng 在课上也是这么说的——<b>看起来那条绿线是个不错的方向</b>，因为<b>投影后的点彼此离得很远</b>。<b>下一步就是把「摊得开」这句大白话变成一个能算的式子。</b>");
+  SUM(746,8,{h:"★ PCA 找的是「投影后摊得最开」的方向",k:"<b>坏方向</b>：投影点挤成一团，原本远的点变得几乎重合，<b>信息被压没了</b>。<b>好方向</b>：投影点铺得很开，<b>信息保住了</b>。",m:"肉眼可见的规律：<b>点云沿哪个方向拉得最长，往那个方向投影就摊得最开</b>。",w:"⭐ 于是 PCA 的目标有了清晰说法：<b>找让投影摊得最开的方向</b>。下一步是把这句话变成能算的式子。",e:"大题要能用一句话说清 PCA 在找什么。<b>「让投影方差最大的方向」是标准答法。</b>"});
+  QUIZ(746,8,{t:"PCA 认为什么样的投影方向是「好」的？",o:["穿过最多数据点的方向","让投影点尽量集中的方向","让投影点摊得最开的方向——原本离得远的点投影后仍然离得远，信息保住了","与坐标轴平行的方向"],a:2,w:"⚠ 正好相反于「集中」：<b>挤成一团意味着信息被压没了</b>，降维后分不出谁是谁。<b>摊得开才说明信息保住了。</b>"});
+});
+KP("9 · 把「摊得开」写成数学：方差",function(){
+  S(746,function(){clearScene();setEq(null);setCap("先认识一个词：方差");
+       axes({x0:260,x1:1020,y0:380,y1:190});
+       dots([[600,345],[620,345],[640,345],[660,345],[680,345]],"r",8);
+       note("挤在一起 ⇒ 方差小",640,300,"r");
+       dots([[330,250],[470,250],[640,250],[810,250],[950,250]],"g",8);
+       note("摊得很开 ⇒ 方差大",640,205,"g");
+       note("⭐ 方差就是「这堆数离它们的平均值有多远」的平均",640,392,"y");},"<b>「摊得开」这件事，数学上有个现成的词：方差。</b><br><b>方差衡量的就是：这堆数彼此有多分散。</b>具体算法是——<b>先求出这堆数的平均值，再看每个数离平均值差多远，把这些差距平方，然后取平均</b>。<br><b>挤在一起 ⇒ 每个数离平均值都很近 ⇒ 方差小。摊得很开 ⇒ 离平均值远 ⇒ 方差大。</b><br><b>⭐ 所以「找摊得最开的方向」就可以改写成：找让投影值的方差最大的方向。</b><b>这一下就从大白话变成了能算的东西。</b>");
+  S(893,function(){clearScene();
+       setEq("$$\\frac{1}{m}\\sum_{i=1}^{m}\\big(x^{(i)\\top}u\\big)^2$$");
+       setCap("这就是要最大化的东西");
+       says("14:53","over your m training examples of x(i) transpose u squared");
+       note("xᵀu ：这个点投影到方向 u 之后的「位置」",640,170,"b");
+       note("平方再求平均 ⇒ 投影值的方差",640,215,"g");
+       note("⚠ 为什么不用减均值？因为数据已经中心化了，投影值的均值本来就是 0",640,265,"y");},"<b>写成式子就是这个。</b>一项一项拆开看：<br><b>xᵀu</b> —— 这是<b>点 x 投影到方向 u 之后，沿着 u 走了多远</b>。（两个向量这样相乘叫<b>内积</b>，它算出来正好就是投影的长度。）<br><b>平方，再对所有 m 个样本求平均</b> —— 这就是投影值的<b>方差</b>。<br><b>⚠ 一个常见疑问：方差不是应该先减均值吗？</b>这里不用，<b>因为数据已经中心化过了</b>——中心化之后，投影值的平均本来就是 0，减不减一样。<b>这就是前面那步预处理在这里的回报。</b>");
+  SUM(893,9,{h:"★ 目标函数：(1/m)Σ(xᵀu)²",k:"<b>方差＝这堆数离平均值有多远的平均</b>（差距先平方再取平均）。「摊得开」＝「方差大」。",m:"<b>xᵀu 是点 x 投影到方向 u 之后的位置</b>（内积正好算出投影长度）。平方再求平均，就是投影值的方差。",w:"⚠ <b>为什么不减均值</b>：数据已中心化，投影值的均值本来就是 0。<b>这是前面那步预处理的回报。</b>",e:"⭐ 这个式子要会写。考试里「PCA 在最大化什么」问的就是它。"});
+  QUIZ(893,9,{t:"PCA 的目标函数 (1/m)Σ(x⁽ⁱ⁾ᵀu)² 里，为什么不需要先减去均值？",o:["因为均值不影响结果","因为平方之后均值自动为 0","因为数据已经中心化过了，投影值的均值本来就是 0","这是一个简化近似"],a:2,w:"⭐ 这是<b>中心化那步预处理在这里的回报</b>。⚠ 如果没中心化，这个式子算的就不是方差了。"});
+});
+KP("10 · ★ 为什么必须限制 ‖u‖ = 1",function(){
+  S(1043,function(){clearScene();setEq(null);setCap("先看看：不限制长度会发生什么");
+       says("17:23","max u norm of u equals 1 u transpose sigma u");
+       boxNode(150,200,450,74,"把 u 拉长 10 倍","b");
+       boxNode(730,200,430,74,"投影的方差变成 100 倍","r");
+       link(600,237,730,237);
+       note("方向一个字没变",375,316,"d");
+       note("数字却大了 100 倍",945,316,"r");
+       note("⚠ 不钉死长度，「谁的方差大」就能靠拉长来作弊 —— 比较失去意义",640,386,"y");},"在讲结论之前，先看看<b>不限制长度会发生什么</b>。<br>投影长度是 uᵀx，<b>把 u 拉长 10 倍，每个投影也跟着变 10 倍，而方差是平方，就变成了 100 倍</b>。<br><b>⚠ 问题在这里：方向一个字没变，数字却大了 100 倍。</b>那「哪个方向方差最大」这个问题就<b>没有答案</b>了——<b>只要把 u 拉得够长，任何方向都能排第一。</b><br><b>⭐ 所以必须先把长度钉死，比较才有意义。</b>Ng 写的那个最大化式子里，<b>「‖u‖=1」就挂在 max 下面，是约束的一部分。</b>");
+  S(1194,function(){clearScene();setEq("$$\\max_{u}\\ \\frac{1}{m}\\sum_i (x^{(i)\\top}u)^2 \\quad \\text{s.t.}\\ u^\\top u = 1$$");
+       setCap("不加这个限制，问题就没有答案了");
+       says("19:54","So this constraint is u transpose u equals 1");
+       note("假设 u 是某个方向，目标值是 V",640,170,"d");
+       note("那么把 u 放大 10 倍 ⇒ 投影也放大 10 倍 ⇒ 目标值变成 100V",640,200,"r");
+       note("再放大 10 倍 ⇒ 10000V …… 可以无限大",640,230,"r");
+       note("⭐ 所以必须规定 u 的长度为 1：只比「方向」，不比「长度」",640,265,"g");},"这里有个必须加的限制：<b>u 的长度必须是 1</b>（写成 uᵀu = 1）。<b>为什么？</b><br><b>假设你找到了某个方向 u，目标函数算出来是 V。</b>现在你把 u <b>放大 10 倍</b>——投影长度也跟着放大 10 倍，平方之后<b>目标值变成 100V</b>。再放大 10 倍，变成 10000V……<b>可以无限大。</b><br><b>⚠ 那这个最大化问题就没有答案了</b>——你永远能通过「把 u 拉长」让目标值更大，但那<b>根本没有改变方向</b>，纯粹是作弊。<br><b>⭐ 所以必须把 u 的长度钉死为 1。这样大家长度相同，比的才是真正的「方向」。</b>");
+  SUM(1194,10,{h:"★ 约束 ‖u‖ = 1：只比方向，不比长度",k:"不加限制的话，<b>把 u 放大 10 倍，目标值就变成 100 倍</b>，可以无限大 ⇒ <b>最大化问题没有答案</b>。",m:"而放大 u <b>根本没有改变方向</b>，纯粹是作弊。<b>把长度钉死为 1，比的才是真正的方向。</b>",w:"⭐ 这类「目标函数可以靠缩放无限变大」的问题，<b>标准做法就是加一个长度约束</b>。",e:"⚠ 写优化式时<b>别漏掉 s.t. uᵀu = 1</b>，漏了这一行会被扣分。"});
+  QUIZ(1194,10,{t:"PCA 的优化问题为什么要加约束 ‖u‖ = 1？",o:["为了让计算更快","否则把 u 放大就能让目标值无限变大，而这并没有改变方向——问题会没有答案","为了让投影值落在 0 到 1 之间","因为特征向量的长度必须是 1"],a:1,w:"⭐ 把 u 放大 10 倍 ⇒ 目标值变 100 倍，纯属作弊。<b>钉死长度，比的才是方向。</b>⚠ 写优化式时别漏这一行。"});
+});
+KP("11 · ★★ 先铺一个词：特征向量和特征值",function(){
+  S(1043,function(){clearScene();setEq(null);setCap("一个矩阵作用在向量上，一般会「转向」");
+       dots([[400,300]],"b",9);
+       curve([[400,300],[560,230]],"b");
+       note("原来的向量 v",470,200,"b");
+       curve([[400,300],[520,370]],"r");
+       note("乘上矩阵 A 之后 —— 方向变了",620,375,"r");
+       note("⭐ 但有一些特殊的向量，乘完之后方向不变，只是长短变了",640,392,"y");},"下一步要用到「特征向量」这个词，<b>先花一整节把它讲清楚，因为它是理解 PCA 的钥匙。</b><br><b>一个矩阵乘上一个向量，一般会发生两件事：方向转了，长度也变了。</b>图上蓝色是原来的向量，红色是乘完矩阵之后的——<b>明显转向了</b>。<br><b>⭐ 但对每个矩阵来说，都存在一些很特殊的向量：乘完之后方向完全不变，只是被拉长或缩短了。</b>");
+  S(1043,function(){clearScene();setEq("$$A v = \\lambda v$$");
+       setCap("特征向量：乘完之后方向不变，只是长短变了");
+       dots([[420,300]],"b",9);
+       curve([[420,300],[620,240]],"b");
+       note("v",640,204,"b");
+       curve([[420,300],[920,150]],"g");
+       note("Av —— 同一个方向，只是长了 λ 倍",900,170,"g");
+       note("⭐ 这样的 v 叫「特征向量」，那个倍数 λ 叫「特征值」",640,248,"y");
+       note("λ 大 ⇒ 这个方向被拉得厉害；λ 小 ⇒ 几乎没动",640,265,"d");},"<b>这就是特征向量。</b>式子写出来是 <b>Av = λv</b>：左边是「矩阵作用在 v 上」，右边是「v 乘一个数」。<b>两边相等，意思就是——矩阵作用在 v 上之后，v 还是指向原来的方向，只是长度变成了 λ 倍。</b><br><b>这样的 v 叫「特征向量」，那个倍数 λ 叫「特征值」。</b><br><b>⭐ 直觉上怎么理解 λ？</b><b>λ 大，说明这个矩阵把这个方向拉得很厉害；λ 小，说明在这个方向上几乎没什么动作。</b><b>所以特征值的大小，衡量的是「这个方向对这个矩阵有多重要」。</b><br><b>⚠ 记住这句话，下一节马上就要用。</b>");
+  SUM(1043,11,{h:"★★ 特征向量：乘完方向不变的那些向量",k:"<b>Av = λv</b>。矩阵作用在 v 上之后，<b>v 还指向原方向，只是长度变成 λ 倍</b>。这样的 v 叫<b>特征向量</b>，倍数 λ 叫<b>特征值</b>。",m:"一般向量乘上矩阵会<b>转向</b>；特征向量是<b>不转向</b>的那些特殊向量。",w:"⭐ <b>λ 的直觉</b>：λ 大 ⇒ 矩阵把这个方向拉得厉害；λ 小 ⇒ 几乎没动。<b>所以 λ 衡量「这个方向有多重要」。</b>",e:"⚠ 这是 PCA 最关键的前置概念。<b>不懂 Av=λv，就只能背结论。</b>"});
+  QUIZ(1043,11,{t:"「v 是矩阵 A 的特征向量」是什么意思？",o:["A 作用在 v 上之后，v 仍指向原来的方向，只是长度变成了 λ 倍（Av = λv）","v 是 A 的某一列","v 与 A 的所有列都正交","v 的长度等于 1"],a:0,w:"<b>一般向量乘矩阵会转向；特征向量不转向。</b>⭐ 特征值 λ 衡量<b>这个方向被拉伸的程度</b>，也就是它对这个矩阵有多重要。"});
+});
+KP("12 · ★★★ 结论：最优方向就是协方差矩阵的最大特征向量",function(){
+  S(1194,function(){clearScene();
+       setEq("$$\\Sigma = \\frac{1}{m}\\sum_i x^{(i)}x^{(i)\\top}$$");
+       setCap("先看这个矩阵：它把数据的「散布形状」装了起来");
+       note("对角线上：每一维自己的方差（这一维有多散）",640,170,"b");
+       note("非对角线上：两维之间的协方差（它们是否一起变大变小）",640,213,"g");
+       note("⭐ 这个矩阵叫「协方差矩阵」，它完整描述了点云的形状",640,265,"y");},"现在把目标函数稍作整理，就会冒出一个矩阵来。<b>它叫协方差矩阵，通常记作 Σ。</b><br><b>它里面装的是什么？</b><b>对角线上</b>是每一维自己的方差——<b>这一维有多散</b>；<b>非对角线上</b>是两维之间的协方差——<b>这两维是不是一起变大变小</b>。<br><b>⭐ 把这些信息凑在一起，这个矩阵就完整地描述了点云的「形状」</b>：它往哪儿拉长、哪两维有关联。<b>注意它完全不含「点云在哪」的信息——那部分已经被中心化消掉了。</b>");
+  S(1194,function(){clearScene();setEq("$$\\Sigma u = \\lambda u$$");
+       setCap("最大化投影方差 ⟹ 解这个方程");
+       boxNode(170,205,440,78,"目标：最大化投影方差","b");
+       boxNode(690,205,440,78,"答案：Σ 的最大特征向量","g");
+       link(610,244,690,244);
+       note("在 ‖u‖=1 的约束下",390,170,"d");
+       note("对应最大的那个特征值 λ",910,170,"d");
+       note("⭐ 而那个最大的 λ，正好就是沿这个方向的投影方差",640,265,"y");},"<b>现在是这一讲最关键的结论。</b>在 ‖u‖=1 的约束下最大化投影方差，<b>答案是：u 取协方差矩阵 Σ 的「最大特征向量」</b>——也就是对应最大特征值 λ 的那个方向。<br><b>⭐ 为什么是它？用上一节的直觉就能理解</b>：特征值 λ 衡量「矩阵把这个方向拉得多厉害」，而<b>协方差矩阵描述的是点云的散布形状</b>。<b>所以「被 Σ 拉得最厉害的方向」，就是「点云散得最开的方向」。</b><b>两者说的是同一件事。</b><br><b>⭐ 还有一个漂亮的副产品：那个最大的特征值 λ，数值上正好就等于沿这个方向的投影方差。</b>所以特征值不只是个中间量，<b>它本身就有意义——它就是这个方向上保留了多少「散开程度」</b>。");
+  SUM(1194,12,{h:"★★★ 最优方向 ＝ 协方差矩阵的最大特征向量",k:"<b>协方差矩阵 Σ</b>：对角线是各维自己的方差，非对角线是两维的协方差——<b>它完整描述了点云的形状</b>（不含位置信息）。",m:"在 ‖u‖=1 下最大化投影方差 ⇒ <b>u 取 Σ 的最大特征向量</b>。<br>⭐ 直觉：<b>λ 衡量「被 Σ 拉得多厉害」，而 Σ 描述散布形状 ⇒ 被拉得最厉害的方向＝散得最开的方向</b>。",w:"⭐ 副产品：<b>最大特征值 λ 数值上就等于该方向的投影方差</b>。所以 λ 本身有意义，不只是中间量。",e:"⭐⭐ 这是 PCA 的核心结论，<b>必须能写出 Σu = λu 并说清 λ 的含义</b>。"});
+  QUIZ(1194,12,{t:"为什么 PCA 的最优方向恰好是协方差矩阵的最大特征向量？",o:["因为协方差矩阵是对称的","这是一个巧合，只能记住","因为特征向量互相正交","特征值 λ 衡量「被该矩阵拉伸的程度」，而协方差矩阵描述点云的散布形状——所以被拉得最厉害的方向就是散得最开的方向"],a:3,w:"⭐ 两者说的是同一件事。<b>副产品：最大特征值 λ 数值上就等于该方向的投影方差</b>，所以 λ 本身就有意义。"});
+});
+KP("13 · 要 k 个方向：top-k，而且它们互相垂直",function(){
+  S(1634,function(){clearScene();setEq(null);setCap("按特征值从大到小排，取前 k 个");
+       matrix({rows:4,cols:3,cw:290,ch:54,x:190,y:200,
+         cell:function(i,j){var t=[
+           ["排名","特征值 λ","含义"],
+           ["第 1","最大","数据散得最开的方向"],
+           ["第 2","第二大","在剩下的方向里散得最开"],
+           ["…","…","…"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       says("27:14","So you say you pick the top k");
+       note("⭐ 第 2 个方向必须和第 1 个垂直 —— 否则会重复记录同样的信息",640,374,"y");},"要降到 k 维，就需要 k 个方向。<b>做法：把特征值从大到小排，取前 k 个对应的特征向量。</b>Ng 的说法就是<b>取 top k</b>。<br><b>⭐ 关键是第 2 个方向怎么选</b>：它是<b>「在所有和第 1 个方向垂直的方向里，散得最开的那个」</b>。<br><b>为什么要垂直？</b>因为<b>如果第 2 个方向和第 1 个有重叠，那它记录的信息就有一部分是重复的</b>——而我们只有 k 个名额，<b>浪费不起</b>。<b>互相垂直，才保证每个方向都在记新的东西。</b><br><b>⚠ 好消息是这件事不用额外操心</b>：协方差矩阵是对称矩阵，<b>它的特征向量天然就互相垂直</b>。");
+  S(1331,function(){clearScene();setEq(null);setCap("两个方向画在同一团数据上");
+       says("22:11","set u1, u2, u3 to be the top k eigenvectors");
+       dots([[430,330],[470,300],[505,345],[545,310],[580,355],[620,320],
+             [660,365],[700,330],[735,375],[775,340]],"b",7);
+       curve([[400,370],[800,300]],"g");
+       curve([[575,270],[610,395]],"y");
+       note("第 1 主方向：数据最散的那条",905,296,"g");
+       note("第 2 主方向：与它垂直，在剩下的方向里最散",905,340,"y");
+       note("⭐ 两条线成直角 —— 所以它们记的是互不重复的信息",640,398,"d");},"把两个方向画在同一团数据上就清楚了。<br><b>绿线是第 1 主方向</b>：数据沿着它摊得最开。<b>黄线是第 2 主方向</b>：它<b>和绿线成直角</b>，并且在所有与绿线垂直的方向里，它是最散的那个。<br><b>⭐ 为什么非要直角？</b>因为<b>两条线一旦有夹角小于 90°，它们就有一部分在记同一件事</b>——而名额只有 k 个。<b>直角保证每个方向都在记新东西。</b><br><b>推广到 k 维也一样</b>：Ng 说的就是<b>取前 k 个特征向量</b>，它们两两垂直，合起来张成一个 k 维的子空间。");
+  SUM(1634,13,{h:"top-k：按特征值排序取前 k 个",k:"<b>特征值从大到小排，取前 k 个特征向量。</b>第 2 个方向是「在与第 1 个垂直的方向里散得最开的」。",m:"⭐ <b>为什么要互相垂直</b>：有重叠就意味着记录了重复的信息，<b>而只有 k 个名额，浪费不起</b>。",w:"⚠ 这件事不用额外操心——<b>协方差矩阵是对称的，它的特征向量天然互相垂直</b>。",e:"⭐ 「一组互相垂直的新方向」就是所谓的<b>正交基</b>。答题时能点出「正交」是加分项。"});
+  QUIZ(1634,13,{t:"PCA 的第二主方向为什么要和第一主方向垂直？",o:["为了方便计算","为了让特征值变大","若两个方向有重叠，第二个会记录部分重复的信息；而名额只有 k 个，浪费不起","因为数据是垂直分布的"],a:2,w:"<b>互相垂直才保证每个方向都在记新东西。</b>⭐ 而且这件事不用操心——<b>协方差矩阵是对称的，特征向量天然正交</b>。"});
+});
+KP("14 · 用途一：压缩 —— 两个数变成一个数",function(){
+  S(1783,function(){clearScene();setEq(null);setCap("回到那些孩子的身高");
+       says("29:43","compressed each child's height ... into a single number");
+       boxNode(180,205,420,80,"原来：(厘米, 英寸)","b");
+       boxNode(700,205,420,80,"现在：沿主方向的一个数","g");
+       link(600,245,700,245);
+       note("两个数",390,325,"d");
+       note("一个数",910,325,"d");
+       note("⭐ 这个数叫「得分」（score），它就是前面讲的 xᵀu",640,385,"y");},"<b>最直接的用途是压缩。</b>回到那些孩子的身高——原来每个孩子要两个数（厘米、英寸），<b>现在只用一个数</b>：他在主方向上的位置。<br><b>这个数有个名字，叫「得分」（score）</b>，它就是前面讲的 <b>xᵀu</b>——这个点投影到主方向上走了多远。<br><b>⚠ 要清楚压缩是有损的</b>：你没法从这一个数完美还原出原来的两个数，<b>因为垂直于主方向的那点点偏离（四舍五入造成的）已经丢了</b>。<b>但那部分本来也不是你关心的信息。</b>");
+  S(1559,function(){clearScene();setEq(null);setCap("拿一个孩子的真实数字走一遍");
+       says("25:59","If you ever want to uncompress your data");
+       matrix({rows:4,cols:3,cw:300,ch:52,x:170,y:196,
+         cell:function(i,j){var t=[
+           ["","压缩前","压缩后"],
+           ["存什么","(160 厘米, 63 英寸)","得分 z = xᵀu"],
+           ["几个数","2 个","1 个"],
+           ["能还原吗","—","≈ 能，但不完全"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===2&&j===2?"hl":"";}});
+       note("⭐ 还原的办法：x̂ = z·u + 均值 —— 只能回到那条线上，回不到原来的点",640,396,"y");},"用一个孩子的真实数字走一遍。<br><b>压缩前</b>：这个孩子要两个数，160 厘米和 63 英寸。<b>压缩后</b>：只存一个得分 <b>z = xᵀu</b>。<br><b>⭐ 怎么还原？</b>Ng 提到了「解压」：<b>x̂ = z·u，再把均值加回去</b>。<br><b>⚠ 但还原回来的点一定落在那条主方向线上</b>，而原来的点多半<b>不在线上</b>——差的那一点点就是丢掉的信息。<br><b>所以「能还原」要说准确：能还原到子空间上，不能还原成原来那个点。</b>");
+  SUM(1783,14,{h:"用途一：压缩，每个样本用 k 个「得分」表示",k:"把 (厘米, 英寸) 压成<b>一个数</b>：这个点在主方向上的位置。这个数叫<b>得分（score）</b>，就是 <b>xᵀu</b>。",m:"⚠ <b>压缩是有损的</b>——垂直于主方向的那点偏离丢掉了。但那部分往往本来就不是你关心的信息。",w:"推广到 k 维：每个样本变成 <b>k 个得分</b>，原来的 n 个数就不用存了。",e:"「得分」这个词要会用：<b>它是样本在新坐标系下的坐标</b>。"});
+  QUIZ(1783,14,{t:"PCA 降维后，每个样本用什么来表示？",o:["原始特征中最大的那 k 个","它在各个主方向上的投影位置，即 k 个「得分」xᵀu","离它最近的那个主方向的编号","它到原点的距离"],a:1,w:"⚠ 注意<b>不是「从原始特征里挑 k 个」</b>——PCA 产出的是<b>新的、由原特征组合出来的坐标</b>。这是它和「特征选择」的根本区别。"});
+});
+KP("15 · 用途二：可视化 —— 降到 2D 才画得出来",function(){
+  S(1935,function(){clearScene();setEq(null);setCap("人眼只能看 2D 和 3D");
+       says("32:15","to 2D or 3D. And maybe you have some ways to visualize 4D data");
+       boxNode(180,205,420,80,"50 维的数据","b");
+       boxNode(700,205,420,80,"降到 2 维 → 画成散点图","g");
+       link(600,245,700,245);
+       note("画不出来",390,325,"r");
+       note("一眼能看出有没有分组、有没有离群点",910,325,"g");},"<b>第二个用途是可视化，这个用途 Ng 认为是完全站得住的。</b><br><b>理由很朴素：人眼只能看 2 维和 3 维。</b>你有 50 维的数据，<b>根本画不出来</b>；降到 2 维，就能画成一张散点图——<b>一眼就能看出数据里有没有分组、有没有离群点</b>。<br><b>⚠ 注意这个用途的性质</b>：它是<b>给人看的</b>，不是给模型用的。<b>你不是指望降维让模型更准，而是指望自己能看懂数据。</b><b>这个区别在后面会变得很重要。</b>");
+  S(2080,function(){clearScene();setEq(null);setCap("Ng 举的一个漂亮例子");
+       says("34:40","they could now visualize how the monkey is thinking and planning");
+       boxNode(230,200,400,80,"猴子大脑里几百个神经元","b");
+       boxNode(760,200,330,80,"降到 2–3 维","g");
+       link(630,240,760,240);
+       note("每个神经元一个读数 ⇒ 几百维",430,315,"d");
+       note("画出来能看到一条轨迹",925,315,"d");
+       note("⭐ 研究者由此「看见」了猴子在想什么、在计划什么",640,375,"y");},"Ng 举了一个很漂亮的例子。研究者同时记录<b>猴子大脑里几百个神经元</b>的活动——<b>每个神经元一个读数，所以数据是几百维的，完全没法看</b>。<br><b>用 PCA 降到两三维之后画出来</b>，能看到一条随时间移动的轨迹。<b>Ng 的说法是：他们由此能「看见」这只猴子在想什么、在计划什么。</b><br><b>⭐ 这是可视化用途的最佳广告</b>：<b>降维本身没有产生任何新信息，但它让人类的眼睛终于能够介入。</b>");
+  SUM(1935,15,{h:"用途二：可视化（Ng 认可的用途）",k:"<b>人眼只能看 2D/3D</b>。50 维画不出来，降到 2 维就能画散点图，<b>一眼看出分组和离群点</b>。",m:"Ng 的例子：<b>猴子大脑几百个神经元</b>的记录降到 2–3 维，研究者由此「看见」它在想什么、在计划什么。",w:"⚠ 这个用途是<b>给人看的，不是给模型用的</b>。<b>不是指望降维让模型更准，而是指望自己能看懂数据。</b>",e:"⭐ 「为效率或可视化而用 PCA 是站得住的」——这句话后面会和「可疑用法」形成对照。"});
+  QUIZ(1935,15,{t:"Ng 为什么认为「可视化」是 PCA 站得住脚的用途？",o:["因为可视化不需要标签","因为它能提高模型准确率","因为它能消除噪声","因为人眼只能看 2D/3D，降维让人类的眼睛终于能介入——它是给人看的，不是给模型用的"],a:3,w:"⭐ 关键在于<b>目的</b>：<b>给人看</b>（可视化、理解数据）vs <b>给模型用</b>（指望更准）。<b>Ng 认可前者，对后者很警惕。</b>"});
+});
+KP("16 · ★★ 最重要的纪律：特征向量只在训练集上定一次",function(){
+  S(2840,function(){clearScene();setEq(null);setCap("Ng 被问到这个问题时回答得很干脆");
+       says("47:20","take your training set, run PCA on your training set");
+       boxNode(160,200,440,80,"训练集：跑一次 PCA","b");
+       boxNode(690,200,440,80,"得到的特征向量 ⇒ 永久固定","g");
+       link(600,240,690,240);
+       boxNode(160,310,440,80,"测试集 / 新数据","y");
+       boxNode(690,310,440,80,"直接用那组固定的特征向量去投影","y");
+       link(600,350,690,350);
+       note("⚠ 绝不在测试集上重新跑一次 PCA",640,398,"r");},"<b>课堂上有学生问了一个很好的问题</b>：用 PCA 的话，是不是测试集上也要重新算一遍特征向量？<b>Ng 的回答斩钉截铁：不。</b><br><b>正确做法是</b>：<b>在训练集上跑一次 PCA，得到的那组特征向量从此永久固定</b>；测试集和以后来的任何新数据，<b>都直接用这组固定的特征向量去投影</b>。<br><b>⚠ 为什么不能在测试集上重跑？</b>因为那样<b>测试集的信息就渗进了你的模型</b>——你的降维方式被测试数据影响了，<b>于是测试集不再是「没见过的数据」，评估结果会偏乐观</b>。<b>这类错误叫「数据泄漏」。</b>");
+  S(2840,function(){clearScene();setEq(null);setCap("两种做法，差别在「谁参与了算特征向量」");
+       says("47:20","run PCA on your training set, and then your eigenvectors are fixed forever");
+       boxNode(150,196,470,66,"✓ 对：只用训练集算特征向量","g");
+       boxNode(150,286,470,66,"✗ 错：把训练+测试合起来算","r");
+       boxNode(700,196,440,66,"测试集仍是没见过的数据","g");
+       boxNode(700,286,440,66,"测试集已经「参与过」","r");
+       link(620,229,700,229); link(620,319,700,319);
+       note("⚠ 错的那一行，分数会偏高 —— 而且你不会收到任何报错",640,392,"y");},"把两种做法并排放，差别只有一句话：<b>谁参与了「算特征向量」这一步。</b><br><b>对的做法</b>：只用训练集算，算完<b>特征向量就定死了</b>（Ng 的原话是 fixed forever），测试集只做变换、不参与计算。<br><b>错的做法</b>：把训练集和测试集拼起来一起算——<b>测试集的信息就渗进了那组特征向量</b>。<br><b>⚠ 最阴的地方在于：错的做法不会报任何错</b>，程序照跑，<b>分数还更好看</b>。<b>所以这件事只能靠纪律，靠不了报错。</b>");
+  SUM(2840,16,{h:"★★ 特征向量在训练集上定一次，永久固定",k:"<b>训练集上跑一次 PCA → 特征向量固定 → 测试集和新数据都用这一组去投影。</b>Ng 对「测试集要不要重跑」的回答是<b>不</b>。",m:"⚠ 在测试集上重跑 ⇒ <b>测试集的信息渗进了模型</b>，它不再是「没见过的数据」，<b>评估结果会偏乐观</b>。",w:"<b>这类错误叫「数据泄漏」（leakage）。</b>同理，中心化用的均值、标准化用的标准差，<b>也都只能来自训练集</b>。",e:"⭐⭐ 这是实操中最容易犯、也最容易考的一条。<b>sklearn 里对应 fit 只在训练集、测试集只能 transform。</b>"});
+  QUIZ(2840,16,{t:"对测试集做 PCA 投影时，应该用哪组特征向量？",o:["在训练集上算出并固定下来的那一组","每个样本各自算一组","在测试集上重新跑一次 PCA 得到的","训练集和测试集合并后算出来的"],a:0,w:"⚠ 在测试集上重跑会造成<b>数据泄漏</b>——测试集不再是「没见过的」，评估偏乐观。<b>中心化的均值、标准化的标准差同理，都只能来自训练集。</b>"});
+});
+KP("17 · ★★ Ng 的警告：用 PCA 来「防过拟合」是可疑的",function(){
+  S(2382,function(){clearScene();setEq(null);setCap("他对这个用法的评价相当不客气");
+       says("39:42","It sometimes works, sometimes fails");
+       boxNode(230,205,820,80,"想法：特征太多容易过拟合 ⇒ 先用 PCA 降维 ⇒ 过拟合就少了","y");
+       note("⚠ Ng：有时 work，有时失败 ——",640,320,"r");
+       note("「我不认为它成功的次数比失败多」",640,370,"r");},"<b>现在是这一讲最该记住的警告。</b>有一个很常见的想法：<b>特征太多容易过拟合，那先用 PCA 把维度降下来，过拟合不就少了吗？</b><br><b>Ng 对这个用法的评价相当不客气</b>：他说这个办法<b>有时 work，有时失败</b>，而且补了一句——<b>他不认为它成功的次数比失败多</b>。<br><b>⚠ 为什么？</b>因为 <b>PCA 完全不看 y</b>。<b>它只知道「数据往哪散得开」，根本不知道「哪些方向对预测 y 有用」。</b>完全可能发生这种事：<b>某个方向上数据散得很小（所以被 PCA 丢掉了），但它恰恰是和 y 关系最紧的那个方向。</b>");
+  S(2693,function(){clearScene();setEq(null);setCap("该用什么来防过拟合");
+       boxNode(170,205,440,80,"防过拟合","g");
+       boxNode(690,205,440,80,"用正则化","g");
+       link(610,245,690,245);
+       note("它会看着 y 来决定压哪些方向",910,320,"d");
+       note("⚠ 而 PCA 从头到尾不看 y",910,368,"r");
+       note("⭐ Ng 说他在课程项目提案里经常看到这种误用",640,398,"y");},"<b>那该用什么防过拟合？</b>答案是<b>正则化</b>。<br><b>⭐ 两者的根本差别就在于看不看 y</b>：<b>正则化是看着 y 来决定压制哪些方向的</b>——它知道哪些方向对预测有贡献；<b>而 PCA 从头到尾不看 y</b>，它只按「散得开不开」来取舍。<br>Ng 说他<b>在 CS229 的课程项目提案里经常看到这种误用</b>：学生写「我打算先把 x 降成低维的 y，再用它训练模型」。<br><b>⚠ 注意他不是在否定 PCA</b>——他明确说自己当时在 Landing AI 的一个项目上就在用。<b>他区分的是两种动机：为效率或可视化而用，站得住；为了让模型更准而用，就得当心。</b>");
+  SUM(2382,17,{h:"★★ 用 PCA 防过拟合是「可疑」用法",k:"Ng 的原话：这个办法 <b>sometimes works, sometimes fails</b>，而且<b>他不认为成功多于失败</b>。",m:"⭐ 根本原因：<b>PCA 完全不看 y</b>。某个方向数据散得小（被 PCA 丢掉），<b>却可能恰恰是和 y 关系最紧的那个</b>。",w:"<b>防过拟合该用正则化</b>——它<b>看着 y</b> 决定压哪些方向。<b>这是两者的根本差别。</b>",e:"⭐⭐ 高频考点。⚠ 答题时要讲清<b>Ng 区分的是动机</b>：为效率/可视化而用站得住，为提准确率而用要当心。"});
+  QUIZ(2382,17,{t:"为什么 Ng 认为「用 PCA 来防过拟合」是可疑的做法？",o:["因为 PCA 完全不看 y，它只按「散得开不开」取舍，可能丢掉散度小但与 y 关系最紧的方向","因为 PCA 会引入噪声","因为 PCA 计算太慢","因为 PCA 只适用于低维数据"],a:0,w:"⭐ <b>该用正则化</b>——它看着 y 来决定压哪些方向。⚠ Ng 并不否定 PCA，<b>他区分的是动机</b>：为效率/可视化站得住，为提准确率要当心。"});
+});
+KP("18 · 单个特征向量不稳定，子空间才稳定",function(){
+  S(3432,function(){clearScene();setEq(null);setCap("一个很好的课堂提问");
+       says("57:12","Is it quite stable? Is that what able them to do rotation");
+       note("学生问：k-means 的簇质心可以解释，为什么主成分不行？",640,215,"b");
+       cloud(430,310,"d",6);
+       curve([[310,350],[550,275]],"g");
+       curve([[322,357],[538,268]],"y");
+       note("数据抖动一点 ⇒ 这两条线可能互换",430,398,"r");
+       cloud(900,310,"d",6);
+       curve([[780,350],[1020,275]],"g");
+       curve([[825,250],[975,375]],"g");
+       note("但它们张成的那个平面基本不动",900,398,"g");},"课堂上有个很好的提问：<b>你说 k-means 的簇质心是可以解释的，为什么主成分就不行？</b><br><b>Ng 的回答是这一讲里最值得记的一句：因为单个特征向量的位置，在数值上是不稳定的。</b><br><b>什么意思？</b>如果第 1 个和第 2 个特征值很接近，<b>数据稍微抖动一下（比如换一批样本），这两个方向就可能互换，甚至转到完全不同的角度去。</b>所以<b>「第一主成分代表什么含义」这种解释往往站不住</b>。<br><b>⭐ 但有个东西是稳定的：它们张成的那个子空间。</b>两条线各自可能转，<b>但它们共同撑起的那个平面基本不动</b>。<b>所以「降维到这个子空间」是可靠的，「解释单个主成分」是不可靠的。</b>");
+  S(3315,function(){clearScene();setEq(null);setCap("同一份数据跑两次，看哪一样变了、哪一样没变");
+       says("55:15","What turns out to be stable is a subspace spanned by the first K eigenvectors");
+       matrix({rows:4,cols:3,cw:300,ch:52,x:170,y:196,
+         cell:function(i,j){var t=[
+           ["","第一次跑","第二次跑"],
+           ["u₁ 的方向","(0.71, 0.70)","(0.69, 0.72)"],
+           ["u₂ 的方向","(−0.70, 0.71)","(−0.72, 0.69)"],
+           ["两者张成的平面","同一个","同一个"]];return t[i][j];},
+         dim:function(i,j){return i===0||j===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 上面两行在抖，最后一行纹丝不动 —— 这就是「子空间稳定」的意思",640,396,"y");},"用一张对照表把这件事说死。<br><b>前两行在抖</b>：同一份数据跑两次，u₁ 和 u₂ 各自的方向都有点变化——尤其当两个特征值很接近时，<b>它俩几乎可以在那个平面里自由转动</b>。<br><b>最后一行纹丝不动</b>：<b>它们张成的那个平面是同一个。</b><br><b>⭐ Ng 的说法就是这个：稳定的是「前 k 个特征向量张成的子空间」，不是单个特征向量。</b><br><b>⚠ 实践后果：拿单个主成分去讲故事（「第一主成分代表健康程度」）是不可靠的</b>；拿整个子空间去降维是可靠的。");
+  SUM(3432,18,{h:"★ 单个主成分不稳定，子空间才稳定",k:"若前两个特征值接近，<b>数据稍抖动，这两个方向就可能互换或大幅转动</b> ⇒ <b>「第一主成分代表什么」这类解释往往站不住</b>。",m:"⭐ <b>但它们张成的子空间是稳定的</b>——两条线各自会转，<b>共同撑起的那个平面基本不动</b>。",w:"⇒ <b>「降维到这个子空间」可靠；「解释单个主成分的含义」不可靠。</b>",e:"⭐ 这正好回答了「为什么 k-means 的质心能解释、主成分不能」。<b>答出「子空间稳定而单个向量不稳定」就到位了。</b>"});
+  QUIZ(3432,18,{t:"为什么说「解释单个主成分的含义」是不可靠的？",o:["因为特征向量的符号可正可负","因为主成分不是原始特征","因为主成分没有数学意义","若特征值接近，数据稍有抖动这些方向就可能互换或大幅转动；稳定的是它们张成的子空间，不是单个向量"],a:3,w:"⭐ <b>子空间稳定，单个向量不稳定。</b>所以「降维到这个子空间」可靠，「这个主成分代表收入水平」这类解释往往站不住。"});
+});
+KP("19 · 保留多少方差：90% / 95% 那套说法",function(){
+  S(3578,function(){clearScene();setEq("$$\\frac{\\lambda_1+\\cdots+\\lambda_k}{\\lambda_1+\\cdots+\\lambda_n}\\ \\ge\\ 0.95$$");
+       setCap("用特征值之比来决定 k");
+       says("59:16","if this is, let's say, 0.9");
+       note("分子：留下的 k 个方向的特征值之和",640,170,"b");
+       note("分母：全部方向的特征值之和",640,200,"g");
+       note("⭐ 还记得吗 —— 特征值就是该方向的投影方差",640,235,"y");
+       note("所以这个比值 = 保留了百分之多少的「散开程度」",640,265,"d");},"<b>k 到底取几？</b>常见做法是看<b>「解释方差比」</b>：<b>留下的那 k 个特征值之和，占全部特征值之和的百分之多少。</b>定个门槛，比如 90% 或 95%，<b>取刚好够到门槛的最小 k</b>。<br><b>⭐ 为什么这个比值有意义？</b>回忆前面那个结论——<b>特征值就等于该方向上的投影方差</b>。所以这个比值的含义是：<b>我保留下来的这几个方向，占了全部「散开程度」的百分之多少。</b><br><b>⚠ 但 Ng 对这套说法有保留</b>。他紧接着说：<b>如果你看到有人在论文里写「我们用 PCA 把维度从一万降到一千」</b>——<b>这种说法本身并不说明什么</b>，因为降完之后到底有没有变好，<b>得看实际效果，不是看降了多少维</b>。");
+  S(3616,function(){clearScene();setEq(null);setCap("累计解释方差：一张表就能定 k");
+       says("60:16","you see people use PCA to retain 90% or 95%");
+       matrix({rows:5,cols:4,cw:228,ch:50,x:180,y:190,
+         cell:function(i,j){var t=[
+           ["k","λ_k","占比","累计"],
+           ["1","4.0","57%","57%"],
+           ["2","2.0","29%","86%"],
+           ["3","0.7","10%","96%"],
+           ["4","0.3","4%","100%"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("要 90% ⇒ 取 k=3（86% 不够，96% 够）",640,398,"y");},"这件事落到操作上就是一张表。<b>把特征值从大到小排，算各自占总和的比例，再累加。</b><br>看这张表：<b>k=2 累计 86%，还不到 90%；k=3 累计 96%，够了</b>——所以要保 90% 就取 <b>k=3</b>。<br><b>⭐ Ng 说实践中常见的数字就是 90% 或 95%。</b><br><b>⚠ 但这两个数字没有任何理论依据</b>，是<b>约定俗成</b>。而且<b>「保住 95% 的方差」不等于「保住 95% 的有用信息」</b>——方差大的方向未必是对你的任务有用的方向。");
+  SUM(3578,19,{h:"解释方差比：用特征值之比选 k",k:"<b>留下的 k 个特征值之和 ÷ 全部特征值之和 ≥ 90% 或 95%</b>，取刚好够门槛的最小 k。",m:"⭐ 这个比值之所以有意义，是因为<b>特征值就等于该方向的投影方差</b> ⇒ 比值＝<b>保留了百分之多少的散开程度</b>。",w:"⚠ Ng 对此有保留：<b>「把维度从一万降到一千」这种说法本身不说明什么</b>，<b>好不好要看实际效果，不是看降了多少维</b>。",e:"⭐ 会算这个比值是基本功；<b>能补一句 Ng 的保留态度，显示你不是只会套公式</b>。"});
+  QUIZ(3578,19,{t:"「解释方差比」这个指标为什么有意义？",o:["因为它总是介于 0 和 1 之间","因为它能衡量模型准确率","因为特征值就等于该方向上的投影方差，所以这个比值表示保留了百分之多少的「散开程度」","因为它与样本量无关"],a:2,w:"⚠ 但要记住 Ng 的保留：<b>「从一万维降到一千维」本身不说明什么</b>，<b>得看实际效果</b>。⚠ 它也完全不衡量准确率。"});
+});
+KP("20 · 换一个问题：鸡尾酒会上，两个人同时说话",function(){
+  S(3798,function(){clearScene();setEq(null);setCap("两个人在说话，房间里放了两个麦克风");
+       says("63:18","speaker 1's voice will go to both microphones");
+       boxNode(200,195,280,72,"说话人 1","b");
+       boxNode(800,195,280,72,"说话人 2","g");
+       boxNode(200,340,280,72,"麦克风 1","y");
+       boxNode(800,340,280,72,"麦克风 2","y");
+       link(340,267,340,340); link(340,267,940,340);
+       link(940,267,940,340); link(940,267,340,340);
+       note("每个人的声音都会进到两个麦克风",640,290,"d");
+       note("⚠ 只是距离不同，所以混合的比例不同",640,398,"r");},"PCA 讲完了，换一个完全不同的问题。<b>场景：一个房间里两个人同时说话，你在房间里放了两个麦克风。</b><br><b>⭐ 关键在于 Ng 强调的这一点：说话人 1 的声音会进到<em>两个</em>麦克风里</b>，说话人 2 也一样。<b>所以每个麦克风录到的都不是某一个人的声音，而是两个人的混合。</b><br><b>⚠ 那两个麦克风录到的东西一样吗？不一样。</b>因为<b>它们离两个说话人的距离不同</b>——离谁近，谁的声音在这份录音里占比就大。<b>所以是两份「配方不同」的混合。</b><br><b>问题就是：能不能只凭这两份混合录音，把两个人的原声分开？</b>");
+  SUM(3798,20,{h:"鸡尾酒会问题",k:"两人同时说话、两个麦克风。<b>每个人的声音都进到两个麦克风</b>，所以每份录音都是<b>混合</b>。",m:"两份录音<b>混合的比例不同</b>，因为两个麦克风离两个说话人的<b>距离不同</b>。",w:"<b>任务：只凭这两份混合录音，把两个人的原声分开。</b>",e:"⭐ 这是 ICA 的经典引入。<b>麦克风数要和说话人数一样多</b>（这里都是 2），这是模型的前提。"});
+  QUIZ(3798,20,{t:"鸡尾酒会问题中，为什么两个麦克风录到的内容不同？",o:["因为录音有噪声","因为它们离两个说话人的距离不同，所以两个人的声音在各自录音里的混合比例不同","因为麦克风型号不同","因为一个麦克风只录一个人"],a:1,w:"⚠ <b>每个麦克风都录到两个人</b>，不存在「一个麦克风只录一个人」。差别在于<b>混合的比例</b>，而比例由距离决定。"});
+});
+KP("21 · ★ 为什么能写成 x = As：因为声音是「相加」的",function(){
+  S(4271,function(){clearScene();setEq("$$x = A\\,s$$");
+       setCap("这个式子的物理依据，Ng 专门讲了");
+       says("71:11","captures a linear combination of the speaker sources ... sound adds");
+       note("s ：两个人各自的原声（看不见）",640,170,"g");
+       note("A ：混合矩阵 —— 谁的声音以多大比例进了哪个麦克风",640,200,"y");
+       note("x ：两个麦克风实际录到的（看得见）",640,230,"b");
+       note("⭐ 为什么是「线性」组合？因为声音在空气里是直接叠加的",640,265,"r");},"<b>把这件事写成数学，就是 x = As。</b>一项一项看：<b>s 是两个人各自的原声</b>（我们想要的，但看不见）；<b>A 叫「混合矩阵」</b>，它记录「谁的声音以多大比例进了哪个麦克风」；<b>x 是两个麦克风实际录到的</b>（看得见的）。<br><b>⭐ 但为什么偏偏是「线性」组合、而不是别的更复杂的关系？</b>Ng 在课上专门交代了物理依据：<b>声音是相加的</b>。<br><b>两个人同时说话时，空气里的压强变化就是两个人各自造成的压强变化直接叠加</b>——<b>不是相乘，不是别的什么，就是加法</b>。<b>所以用一个矩阵乘法来描述混合，是物理上站得住的，不是为了数学方便硬凑的。</b>");
+  S(4512,function(){clearScene();setEq("$$s = W x,\\qquad W = A^{-1}$$");
+       setCap("于是任务变成了：求一个矩阵");
+       says("75:12","You only observe the x's, not the S's");
+       boxNode(180,205,420,78,"已知：x（录音）","b");
+       boxNode(700,205,420,78,"未知：s（原声）和 A（混合方式）","r");
+       note("⚠ 两样都不知道 —— 只知道它们的乘积",640,170,"r");
+       note("⭐ 但只要求出 W = A 的逆，一次矩阵乘法就能还原：s = Wx",640,265,"g");},"<b>⚠ 现在看清这个问题有多难</b>：Ng 说得很明白——<b>你只观测到 x，看不到 s</b>。而 <b>A 你也不知道</b>。<b>两样都不知道，你只知道它们的乘积。</b><br><b>⭐ 但有一个好消息：只要能求出 A 的逆矩阵（记作 W，叫「解混矩阵」），一次矩阵乘法就能把原声还原出来——s = Wx。</b><br><b>所以整个 ICA 的任务被归结成一句话：估出那个矩阵 W。</b><br><b>⚠ 顺带一提 Ng 提到的一个细节</b>：严格来说<b>声音并不会「相减」</b>，所以现实中的 ICA 还有一些变体来处理这类约束。<b>但基本框架就是这个。</b>");
+  SUM(4271,21,{h:"★ x = As，任务是求 W = A⁻¹",k:"<b>s</b> 原声（看不见）、<b>A</b> 混合矩阵（不知道）、<b>x</b> 录音（看得见）。<b>两样未知，只知道乘积。</b>",m:"⭐ <b>为什么是「线性」组合</b>：Ng 给了物理依据——<b>声音是相加的</b>，空气里的压强变化直接叠加，<b>不是相乘</b>。所以用矩阵乘法描述混合是站得住的。",w:"<b>求出解混矩阵 W = A⁻¹，一次乘法就还原：s = Wx。</b>于是 ICA 的全部任务＝估出 W。",e:"⚠ Ng 提到严格来说<b>声音不会相减</b>，现实中的 ICA 有变体处理这类约束。"});
+  QUIZ(4271,21,{t:"为什么混合可以写成线性组合 x = As？",o:["因为 A 是可逆矩阵","因为麦克风是线性设备","因为声音是相加的——空气中的压强变化直接叠加，不是相乘","这只是为了数学上方便"],a:2,w:"⭐ Ng 专门给了这个<b>物理依据</b>。⚠ 这一点很重要：<b>模型的线性假设不是硬凑的</b>，而是物理决定的。"});
+});
+KP("22 · ★★ ICA 和 PCA 的根本差别",function(){
+  S(3798,function(){clearScene();setEq(null);setCap("两者都在「找一组新的方向」，但目标不同");
+       matrix({rows:4,cols:3,cw:300,ch:54,x:185,y:195,
+         cell:function(i,j){var t=[
+           ["","PCA","ICA"],
+           ["要的方向满足","方差最大、互相垂直","各分量互相独立"],
+           ["用到的统计量","只到二阶（协方差）","必须用更高阶"],
+           ["方向必须正交吗","必须","不必"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2?"hl":"";}});
+       note("⭐ 「独立」比「不相关」强得多 —— 这是全部差别的根源",640,370,"y");},"<b>Ng 开篇就说这两个算法都是在「找一组新的基」，但目标完全不同。</b>把差别摆清楚：<br><b>PCA 要的方向是「方差最大、互相垂直」</b>；<b>ICA 要的方向是「各分量互相独立」</b>。<br><b>⭐ 「独立」和「不相关」不是一回事，而且独立强得多。</b>「不相关」只是说两者没有<b>线性</b>关系；<b>「独立」是说它们之间没有任何关系</b>——知道一个，对另一个一点信息都不提供。<br><b>这个强度差别带来两个后果</b>：<b>① PCA 只需要用到二阶统计量（协方差）就够了，ICA 必须用更高阶的信息；② PCA 找出的方向一定互相垂直，ICA 不要求</b>。");
+  SUM(3798,22,{h:"★★ PCA 求「不相关且正交」，ICA 求「独立」",k:"<b>PCA</b>：方差最大、互相垂直，<b>只用二阶统计量（协方差）</b>。<b>ICA</b>：各分量<b>互相独立</b>，<b>必须用更高阶信息</b>，方向<b>不要求正交</b>。",m:"⭐ <b>「独立」比「不相关」强得多</b>：不相关只是没有<b>线性</b>关系；独立是<b>没有任何关系</b>——知道一个对另一个毫无信息。",w:"这个强度差别是两者所有区别的根源。",e:"⭐ 「ICA 和 PCA 的区别」是标准问法。<b>答「不相关 vs 独立、二阶 vs 高阶、正交 vs 不必正交」三条就齐了。</b>"});
+  QUIZ(3798,22,{t:"ICA 和 PCA 最根本的区别是什么？",o:["ICA 更快","PCA 求「方差最大且互相正交」只用二阶统计量；ICA 求「各分量互相独立」，必须用更高阶信息且方向不必正交","PCA 只能处理二维数据","ICA 是有监督的"],a:1,w:"⭐ 根源是<b>「独立」比「不相关」强得多</b>：不相关只排除了<b>线性</b>关系，独立排除了<b>一切</b>关系。"});
+});
+KP("23 · ★★ 为什么源必须是「非高斯」的",function(){
+  S(3798,function(){clearScene();setEq(null);setCap("先看高斯分布的一个特殊性质");
+       axes({x0:380,x1:900,y0:400,y1:180});
+       var i,p=[];
+       for(i=0;i<=40;i++){var a=i*9*Math.PI/180;
+         p.push([640+95*Math.cos(a),290+95*Math.sin(a)]);}
+       curve(p,"b");
+       p=[];
+       for(i=0;i<=40;i++){var a=i*9*Math.PI/180;
+         p.push([640+58*Math.cos(a),290+58*Math.sin(a)]);}
+       curve(p,"b");
+       note("标准正态的等高线是「正圆」",640,185,"b");
+       note("⭐ 圆有个性质：怎么转都还是它自己",640,398,"y");},"<b>ICA 有一个前提条件，必须讲清楚：源信号不能是高斯分布的。</b>为什么？<b>先看高斯分布的一个特殊性质。</b><br><b>标准正态分布（各维独立、方差相同）的等高线是正圆。</b>而<b>圆有一个性质：你把它转任意角度，它看起来完全一样。</b>这叫<b>旋转对称</b>。<br><b>⚠ 这个性质对我们是坏消息，下一镜说明为什么。</b>");
+  S(3798,function(){clearScene();setEq("$$\\mathrm{Cov}(ARs) = A R R^\\top A^\\top = A A^\\top$$");
+       setCap("旋转对称 ⇒ 混合矩阵里的「旋转」看不出来");
+       boxNode(180,215,420,78,"用混合矩阵 A","b");
+       boxNode(700,215,420,78,"用 A 再转一下（AR）","g");
+       note("观测到的分布",390,170,"d");
+       note("观测到的分布",910,170,"d");
+       note("⭐ 完全一样 ⇒ 任何只看数据的算法都分不出用的是哪个",640,265,"r");},"<b>假设源 s 是标准正态的。</b>现在拿<b>任意一个旋转矩阵 R</b>，把混合矩阵从 A 换成 AR。<b>算一下观测数据的协方差</b>：因为旋转矩阵满足 RRᵀ = I，<b>它直接被抵消掉了，结果还是 AAᵀ——和用 A 时一模一样。</b><br><b>⚠ 两个不同的混合方式，产生了完全相同的观测分布。</b>既然分布相同，<b>任何只看数据的算法都不可能分辨它们</b>。<b>这不是算法无能，是那个信息根本不在数据里。</b><br><b>⭐ 所以 ICA 要求源非高斯。</b>换个角度说也通：<b>高斯分布下「不相关」就等于「独立」，而「不相关」PCA 已经做到了——ICA 就再也榨不出任何 PCA 之外的东西。</b><br><b>⚠ 好消息是语音天生就是强非高斯的</b>（有尖峰、有重尾），所以鸡尾酒会问题正是 ICA 的经典成功案例。");
+  SUM(3798,23,{h:"★★ 源必须非高斯，否则旋转不可辨识",k:"标准正态的等高线是<b>正圆 ⇒ 旋转对称</b>。于是对任意旋转 R，用 <b>AR</b> 和用 <b>A</b> 产生<b>完全相同</b>的观测分布（RRᵀ=I 被抵消）。",m:"⇒ <b>任何只看数据的算法都分不出用的是哪个</b>。不是算法无能，<b>是那个信息根本不在数据里</b>。",w:"⭐ 另一种说法：<b>高斯下「不相关」就等于「独立」</b>，而不相关 PCA 已经做到了 ⇒ <b>ICA 榨不出 PCA 之外的东西</b>。",e:"⚠ 语音天生强非高斯（尖峰、重尾），<b>所以鸡尾酒会问题是 ICA 的经典成功案例</b>。"});
+  QUIZ(3798,23,{t:"ICA 为什么要求源信号是非高斯的？",o:["标准正态旋转对称，于是 AR 与 A 产生完全相同的观测分布，混合矩阵中的旋转成分不可辨识","因为语音不是高斯的","因为高斯分布没有高阶矩","因为高斯分布难以计算"],a:0,w:"关键：<b>RRᵀ=I 被抵消，协方差都是 AAᵀ</b>。⭐ 换个说法：<b>高斯下不相关即独立，而不相关 PCA 已做到</b>，ICA 无从下手。"});
+});
+KP("完 · 两条主线",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CS229 L15 · 完","PCA 与 ICA","一个找「散得最开」，一个找「互相独立」");},
+    "收一下，这一讲是两条独立的主线。<br><b>PCA 这条线</b>：它<b>不是概率模型、不建模 p(x)</b>，产出的是一组方向。动机是<b>名义维数常常远大于真实自由度</b>（厘米与英寸、两个传感器测同一台机器）。做法是——<b>先中心化</b>（否则找到的方向会指向「点云在哪」而不是「往哪散」），<b>单位不同时再标准化</b>；然后找<b>让投影方差最大的方向</b>，并约束 <b>‖u‖=1</b>（否则把 u 拉长就能让目标无限大）；<b>答案是协方差矩阵的最大特征向量</b>，而<b>最大特征值正好就等于该方向的投影方差</b>；要 k 个就取 <b>top-k</b>，它们天然互相垂直。<br><b>⚠ Ng 的三条警告必须记住</b>：<b>① 特征向量只在训练集上定一次、永久固定</b>，在测试集上重跑就是数据泄漏；<b>② 用 PCA 来防过拟合是可疑的</b>——「有时 work，有时失败」，<b>根本原因是 PCA 完全不看 y</b>，该用的是正则化；<b>③ 单个特征向量不稳定，稳定的是它们张成的子空间</b>——所以「解释某个主成分的含义」往往站不住。<b>他认可的用途是效率与可视化</b>（猴子神经数据那个例子）。<br><b>ICA 这条线</b>：鸡尾酒会问题。<b>每个麦克风录到的都是混合</b>，写成 <b>x = As</b>——<b>之所以能写成线性，物理依据是「声音是相加的」</b>。<b>s 和 A 都未知，只知道乘积</b>；求出 <b>W = A⁻¹</b> 就能还原 <b>s = Wx</b>。<b>它和 PCA 的根本差别是：PCA 要「不相关且正交」（只用二阶统计量），ICA 要「独立」（必须用高阶、不必正交）</b>。<b>⚠ 前提是源非高斯</b>——否则正态的旋转对称会让混合矩阵里的旋转成分不可辨识。<b>语音天生强非高斯，所以鸡尾酒会是它的经典成功案例。</b><br>完整推导见配套精读：<b>PCA 看讲义 Part XI，ICA 看讲义 Part XII</b>。");
+});
+window.__startProjector(CFG);
+})();
+</script>

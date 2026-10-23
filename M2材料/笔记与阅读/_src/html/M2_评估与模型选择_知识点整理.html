@@ -1,0 +1,105 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>评估无监督学习</title><style>
+@page { size: A4; margin: 16mm 14mm 16mm 14mm; }
+@page { @bottom-center { content: counter(page); font-size:9pt; color:#8a97aa } }
+@page :first { @bottom-center { content: "" } }
+*{box-sizing:border-box}
+html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+     font-size:10.5pt; line-height:1.62; color:#14181f; margin:0}
+code,.mono{font-family:"Consolas","Cascadia Mono","Courier New",monospace;
+   font-size:.92em; background:#eef1f6; color:#13365e; font-weight:600;
+   padding:0 1.6px; border-radius:2px}
+
+/* ── 封面 ── */
+.cover{text-align:center; padding-top:52mm; page-break-after:always}
+.cover h1{font-size:30pt; margin:0 0 4mm; letter-spacing:.04em}
+.cover .sub{font-size:14pt; color:#334; margin:0 0 2mm}
+.cover .course{font-size:11pt; color:#667; margin:0 0 14mm}
+.cover .cov{display:inline-block; text-align:left; border:1px solid #b9c2d0;
+     border-radius:6px; padding:6mm 9mm; font-size:10pt; line-height:1.9; background:#f7f9fc}
+.cover .cov b{color:#1b3a63}
+.cover .mate{margin-top:10mm; font-size:9.5pt; color:#778}
+
+/* ── 目录 ── */
+.toc{page-break-after:always}
+.toc h2{border:none; margin-top:0}
+.toc ol{list-style:none; padding-left:0; font-size:11pt; line-height:2.05}
+.toc ol ol{font-size:10pt; line-height:1.75; color:#445; padding-left:7mm; margin:1mm 0 2mm}
+.toc ol ol li::before{content:"· "; color:#8a97aa}
+
+/* ── 标题 ── */
+h2{font-size:15pt; margin:9mm 0 3mm; padding:2mm 0 1.6mm;
+   border-bottom:2.2px solid #1b3a63; color:#1b3a63; page-break-after:avoid}
+h3{font-size:12.2pt; margin:6mm 0 2mm; color:#20456f; page-break-after:avoid}
+h4{font-size:11pt; margin:4.5mm 0 1.5mm; color:#2d4a6b; page-break-after:avoid}
+h2 .pg{float:right; font-size:9.5pt; font-weight:400; color:#7a8698; padding-top:2.4mm}
+p{margin:0 0 2.4mm; text-align:justify}
+ol{margin:0 0 2.8mm; padding-left:6.5mm}
+ul{margin:0 0 2.8mm; padding-left:5mm; list-style:none}
+ul>li::before{content:"▪"; color:#4a73a8; display:inline-block;
+              width:4mm; margin-left:-4mm}
+li{margin:.9mm 0}
+b,strong{color:#0d2b4e}
+
+/* ── 表格 ── */
+table{border-collapse:collapse; width:100%; margin:2.5mm 0 4mm; font-size:9.8pt;
+      break-inside:avoid; page-break-inside:avoid}
+th,td{border:1px solid #c3ccd9; padding:1.5mm 2.2mm; vertical-align:top}
+th{background:#e8eef7; color:#12355c; font-weight:600; text-align:left}
+tr:nth-child(even) td{background:#fafbfd}
+td.n,th.n{text-align:right; font-variant-numeric:tabular-nums;
+   font-feature-settings:"tnum" 1; letter-spacing:.2px}
+table.tight td,table.tight th{padding:1.1mm 1.8mm; font-size:9.3pt}
+
+/* ── 公式 ── */
+.eq{margin:2.5mm 0 3mm; padding:2.4mm 4mm; background:#f4f7fb; border-left:3.5px solid #4a73a8;
+    font-family:"Cambria Math","Cascadia Mono",Consolas,serif; font-size:10.6pt;
+    break-inside:avoid; white-space:pre-wrap}
+.eq .lbl{display:block; font-family:inherit; font-size:8.8pt; color:#6b7686}
+sub{font-size:.72em} sup{font-size:.72em}
+
+/* ── 提示框 ── */
+.cal{margin:3mm 0; padding:2.6mm 3.6mm; border-radius:4px; break-inside:avoid;
+     page-break-inside:avoid; font-size:10.1pt}
+.cal .ttl{font-weight:700; display:block; margin-bottom:1.2mm}
+.cal p:last-child{margin-bottom:0}
+.k{background:#fff6e0; border:1px solid #e3b43a; border-left:4px solid #e3b43a}      /* ★ 考点 */
+.k .ttl{color:#8a5a00}
+.w{background:#fdeeee; border:1px solid #d77; border-left:4px solid #d77}            /* ⚠ 易错 */
+.w .ttl{color:#9a2222}
+.t{background:#edf7ee; border:1px solid #6aa96f; border-left:4px solid #6aa96f}      /* ⭐ 技巧 */
+.t .ttl{color:#1f6128}
+.s{background:#eef2fa; border:1px solid #93a7c9; border-left:4px solid #5878ab}      /* Study check */
+.s .ttl{color:#23456f}
+.ng{background:#f3eefb; border:1px solid #9a84c4; border-left:4px solid #7a5fb0}     /* CS229 旁注 */
+.ng .ttl{color:#4c327f}
+
+/* ── 手算例题 ── */
+.ex{margin:3.5mm 0 4.5mm; border:1px solid #9fb3cc; border-radius:5px}
+.ex>.hd{break-after:avoid; page-break-after:avoid}
+.ex>.hd{background:#1b3a63; color:#fff; padding:1.8mm 3.4mm; font-weight:600; font-size:10.4pt}
+.ex>.bd{padding:3mm 3.6mm}
+.ex>.bd>:last-child{margin-bottom:0}
+.step{margin:2mm 0; padding-left:5.5mm; border-left:2px solid #c3ccd9;
+   break-inside:avoid; page-break-inside:avoid}
+.step .sn{font-weight:700; color:#1b3a63; margin-right:1.5mm}
+
+/* ── 题库 ── */
+.qg{margin:4mm 0 5mm; break-inside:avoid-page}
+.qg>.hd{background:#20456f; color:#fff; padding:1.6mm 3.2mm; font-weight:600;
+        font-size:10.5pt; border-radius:4px 4px 0 0}
+.qg>.bd{border:1px solid #9fb3cc; border-top:none; border-radius:0 0 4px 4px; padding:2.6mm 3.4mm}
+.q{margin:0 0 3mm; break-inside:avoid}
+.q .qt{font-weight:600; margin-bottom:1.2mm}
+.q .op{padding-left:6mm; font-size:10pt; line-height:1.75}
+.ans{margin-top:2.5mm; padding:2.4mm 3mm; background:#f6f8fb; border-top:1.5px dashed #9fb3cc;
+     font-size:9.8pt}
+.ans .ttl{font-weight:700; color:#1b3a63; display:block; margin-bottom:1.2mm}
+.ans .a{margin:1.1mm 0}
+.ans .a b{color:#1f6128}
+
+.pb{page-break-before:always}
+.nb{page-break-inside:avoid}
+hr.sep{border:none; border-top:1px solid #d6dde7; margin:5mm 0}
+.note{font-size:9.4pt; color:#5a6676; margin:1.5mm 0 3mm}
+</style></head><body><div class="cover"><h1>评估无监督学习</h1><p class="sub">Module 2 · 跨三个主题 — 知识点完整整理</p><p class="course">ARTI2001 Machine Learning · 2026 Semester 2</p><div class="cov">涵盖：<b>Canvas 讲义 T1-04</b>，官方标为 <b>CORE / ASSESSABLE</b><br>这一页<b>横跨 PCA、聚类与 GMM</b>，所以单独成册<br><b>四部分证据框架</b> + <b>可复用的六步检查清单</b><br><b>inertia 与 silhouette 的完整算法与手算例题</b><br><b>AIC / BIC</b> 与「示范决策」表（大题的标准答法模板）<br>附录：公式速查 · 12 条易错点 · 术语中英对照</div><p class="mate">配套：《M2T1 PCA》《M2T2 聚类》《M2T3 GMM 与 EM》三册知识点整理</p></div><div class="toc"><h2>目录</h2><ol><li>1. 为什么无监督结果不能用准确率来判<ol></ol></li><li>2. ★★★ 四部分证据框架（整个 M2 的骨架）<ol></ol></li><li>3. 评估 PCA<ol></ol></li><li>4. 评估聚类（一）：inertia 与肘部法<ol><li>inertia 怎么算</li><li>手算例题 1</li></ol></li><li>5. 评估聚类（二）：轮廓系数 silhouette<ol><li>三步算法与 b(i) 的三个误解</li><li>手算例题 2</li><li>★★★ silhouette 的系统性偏向</li><li>稳定性四项检查</li></ol></li><li>6. 评估高斯混合模型<ol><li>AIC 与 BIC：平衡拟合与复杂度</li></ol></li><li>7. ★★★ 示范决策：不要只看一个数<ol></ol></li><li>8. 可复用的评估检查清单（六步）<ol></ol></li><li>9. 四个 Study check（官方原题 + 参考答案）<ol></ol></li><li>附录 A · 公式速查表</li><li>附录 B · 高频易错点清单</li><li>附录 C · 术语中英对照</li></ol></div><h2><span class="pg">T1-04</span>1. 为什么无监督结果不能用准确率来判</h2><div class="cal k"><span class="ttl">★ 官方对这一页的定位（原文）</span><p><b>「核心且可考核的材料：你应当能够为一个无监督学习结果选择、解释并批判恰当的证据。」</b></p><p><b>「你不需要推导 silhouette、AIC 或 BIC 的公式。」</b></p></div><p>评估无监督模型和评估有监督预测器不同。<b>没有提供目标标签时，通常没有一个单一的准确率能告诉我们发现的结构是否正确。</b>取而代之的是：把几种形式的证据合起来，并结合问题、表示与建模假设去解释。</p><h3>五条学习成果</h3><ol><li>解释为什么无监督结果通常不能用准确率来判断；</li><li>为 PCA、聚类与 GMM <b>选择合适的评估证据</b>；</li><li>解释 inertia、silhouette、解释方差、AIC 与 BIC，<b>而不把任何单一数值当成自动的真理</b>；</li><li>检查对<b>初始化、缩放与超参数</b>的稳定性与敏感性；</li><li>判断发现的结构对这个应用是否有意义。</li></ol><h2><span class="pg">T1-04</span>2. ★★★ 四部分证据框架（整个 M2 的骨架）</h2><table><thead><tr><th>证据</th><th>要问的问题</th><th>例子</th></tr></thead><tbody><tr><td><b>拟合 / 内部结构</b></td><td>拟合出来的模型，是否表示了它被设计去找的那种结构？</td><td>解释方差、重构误差、inertia、silhouette、似然、AIC、BIC</td></tr><tr><td><b>稳定性</b></td><td>一个小的建模或抽样改动，会不会给出相似的结果？</td><td>跨随机种子、初始化、样本或邻近超参数重复</td></tr><tr><td><b>假设与表示</b></td><td>距离、尺度、形状与分布假设是否合理？</td><td>特征缩放、簇的几何、密度、协方差形式、噪声处理</td></tr><tr><td><b>领域有用性</b></td><td>这个结果是否回答了真实问题、是否支撑一个可辩护的解释？</td><td>有意义的投影、可行动的分组、合理的成分、专家审阅</td></tr></tbody></table><div class="cal k"><span class="ttl">★★★ 这一页的关键原则（一句话，建议背下来）</span><p><b>「一个有说服力的结果通常需要不止一个信号。</b><b>一个高分本身不能证明某个嵌入、簇或成分对应真实世界的真相。」</b></p></div><div class="cal t"><span class="ttl">⭐ 怎么把这个框架用在答题上</span><p>任何「请评估/论证这个无监督结果」的大题，都可以照这四格展开：<b>① 内部证据是多少 → ② 稳不稳 → ③ 假设合不合适 → ④ 对应用有没有用</b>，最后写一句<b>「这是有依据的判断，不是证明」</b>。</p></div><h2><span class="pg">T1-04</span>3. 评估 PCA</h2><table><thead><tr><th>证据</th><th>内容</th></tr></thead><tbody><tr><td>解释方差比</td><td>每个保留成分所代表的总方差占比。<b>累计解释方差</b>帮助决定保留几个成分</td></tr><tr><td>重构质量</td><td>数据投影再重构之后丢了多少信息。<b>对压缩或去噪尤其相关</b></td></tr><tr><td>任务有用性</td><td>降维后的表示是否支持了预期的可视化、解释或下游分析</td></tr><tr><td>对缩放与离群点的敏感性</td><td><b>必须检查</b> —— 高数值方差可能只反映测量单位或极端观测，而不是有用信号</td></tr></tbody></table><div class="cal k"><span class="ttl">★★ PCA 评估的那句总结（原文的意思）</span><p><b>「高解释方差是有用的证据，但 PCA 保的是方差，不是意义。</b><b>一个低方差方向仍可能对应用很重要；一个高方差方向可能代表的是干扰变异。」</b></p></div><h2><span class="pg">T1-04</span>4. 评估聚类（一）：inertia 与肘部法</h2><p><b>k-means 的 inertia 是簇内平方距离之和。</b>inertia 越低意味着点离各自的质心越近。</p><div class="cal k"><span class="ttl">★★★ 必须分清的两句话（讲义反复强调）</span><ul><li><b>全局最优的 inertia 不会随簇数增加而上升</b>；</li><li><b>但不同次拟合可能落到不同的局部极小，所以「实测到的」inertia 不一定单调下降。</b></li></ul><p><b>肘部法</b>找的是「再加簇、收益明显变小」的那个点。<b>有些数据集根本没有明显的肘部，所以这是一个诊断手段，不是自动规则。</b></p></div><h3>inertia 怎么算（等权重）</h3><div class="eq">I = Σ<sub>r=1</sub><sup>K</sup> Σ<sub>i∈C_{r</sub>} ‖x<sub>i</sub> − µ<sub>r</sub>‖₂² ,    µ<sub>r</sub> = (1/|C<sub>r</sub>|) Σ<sub>i∈C_{r</sub>} x<sub>i</sub><br>‖x<sub>i</sub> − µ<sub>r</sub>‖₂² = Σ<sub>q=1</sub><sup>p</sup> (x<sub>iq</sub> − µ<sub>rq</sub>)²</div><p>K 是簇数，C<sub>r</sub> 是第 r 个簇的观测下标集合，|C<sub>r</sub>| 是它的大小，µ<sub>r</sub> 是质心（均值），p 是特征数、用 q 索引。</p><div class="cal w"><span class="ttl">⚠ 三条计算约定</span><ul><li><b>先算每个点到它所属质心的平方距离，再把所有点加起来</b>；</li><li><b>它是「和」，不是「平均」</b>；</li><li><b>比较时必须用同一批观测、同一组特征、同一种缩放。</b></li></ul></div><div class="ex"><div class="hd">手算例题 1 · inertia（讲义的一维小例）</div><div class="bd"><p>一维两个簇 {1, 3} 与 {8, 10}。</p><div class="step"><span class="sn">① 质心</span><div class="eq">µ<sub>1</sub> = (1+3)/2 = 2      µ<sub>2</sub> = (8+10)/2 = 9</div></div><div class="step"><span class="sn">② inertia</span><div class="eq">I = (1−2)² + (3−2)² + (8−9)² + (10−9)² = 1 + 1 + 1 + 1 = <b>4</b></div></div></div></div><h2><span class="pg">T1-04</span>5. 评估聚类（二）：轮廓系数 silhouette</h2><p><b>轮廓系数比较「一个观测离自己簇有多近」与「它离最近的另一个簇有多近」。</b>取值在 −1 到 1 之间：</p><table><thead><tr><th>取值</th><th>含义</th></tr></thead><tbody><tr><td>接近 1</td><td>这个点与它被指派的簇<b>匹配得好</b></td></tr><tr><td>接近 0</td><td><b>重叠或边界</b>上的点</td></tr><tr><td>负值</td><td>这个点<b>可能离另一个簇更近</b></td></tr></tbody></table><h3>怎么算（三步）</h3><div class="eq">a(i) = (1/(|C<sub>r</sub>|−1)) · Σ<sub>j∈C_{r</sub>, j≠i} d(x<sub>i</sub>, x<sub>j</sub>)</div><p>a(i) 是到<b>同簇其它点</b>的平均距离 —— <b>排除点自己</b>。d 通常是欧氏距离，<b>不平方</b>。</p><div class="eq">b(i) = min<sub>t≠r</sub> [ (1/|C<sub>t</sub>|) · Σ<sub>j∈C_{t</sub>} d(x<sub>i</sub>, x<sub>j</sub>) ]</div><p>对每一个其它簇，算点 i 到该簇<b>所有点</b>的平均距离；这些平均值里<b>最小的</b>就是 b(i)。</p><div class="cal w"><span class="ttl">⚠⚠ b(i) 的三个常见误解</span><ul><li>用的是<b>「按点到点平均距离」最近的那个簇</b>，</li><li><b>不是最近的那个「单个点」</b>，</li><li><b>也不是最近的那个「质心」。</b></li></ul></div><div class="eq">s(i) = (b(i) − a(i)) / max{a(i), b(i)} ,    S = (1/n) Σ<sub>i=1</sub><sup>n</sup> s(i)</div><p>s(i) 是该点的轮廓系数；S 是整体分数，对 n 个被评估的观测取平均。<b>a(i) 远小于 b(i) 时分数为正且接近 1；两个平均值接近时接近 0；a(i) 更大时为负。</b></p><div class="ex"><div class="hd">手算例题 2 · silhouette（接上例）</div><div class="bd"><p>仍是 {1, 3} 与 {8, 10}，算<b>点 1</b> 的轮廓系数。</p><div class="step"><span class="sn">① a(1)</span><p>同簇只剩点 3：</p><div class="eq">a = |1 − 3| = 2</div></div><div class="step"><span class="sn">② b(1)</span><p>到另一个簇<b>所有点</b>的平均距离：</p><div class="eq">b = (|1 − 8| + |1 − 10|) / 2 = (7 + 9)/2 = 8</div></div><div class="step"><span class="sn">③ s(1)</span><div class="eq">s = (8 − 2) / max{2, 8} = 6/8 = <b>0.75</b></div></div><div class="step"><span class="sn">④ 整体分数</span><p>对其余各点同样算一遍，再取平均。</p></div></div></div><div class="cal w"><span class="ttl">⚠⚠ 计算条件（容易被忽略，但很爱考）</span><ul><li><b>整体分数要求簇数在 2 到 n−1 之间</b>；</li><li><b>独自成簇的点按约定记为 0</b>；两个距离平均值都为 0 时也记 0；</li><li><b>对 DBSCAN，评估时要排除噪声点（label = −1）</b>，<b>报告被排除的比例</b>，并检查剩下的数据仍满足上述条件。</li></ul></div><div class="cal k"><span class="ttl">★★★ silhouette 的系统性偏向（高频简答题）</span><p><b>「平均轮廓系数更高，往往意味着簇更紧致、更分离。</b><b>但是 silhouette 倾向于偏好「凸」的簇，当有用的分组是弯曲的、基于密度的或极不均衡时，它可能给出有误导性的排名。」</b></p><p><b>对 DBSCAN，还要同时看：簇的个数、被标为噪声的比例、以及对 eps 和 min_samples 的敏感性。</b></p></div><h3>稳定性与意义（四条检查）</h3><ul><li><b>跨多个初始化或随机种子重复 k-means</b>；</li><li><b>检查邻近的 k、eps 或 min_samples 会不会引起突变</b>；</li><li><b>看图和簇的摘要，而不是只依赖一个分数</b>；</li><li><b>问这些分组在应用里是否有意义、有用。</b></li></ul><div class="pb"></div><h2><span class="pg">T1-04</span>6. 评估高斯混合模型</h2><table><thead><tr><th>证据</th><th>内容</th></tr></thead><tbody><tr><td>对数似然</td><td>度量拟合出的密度，但<b>它一般会随模型复杂度上升而改善</b>，<b>所以不能单独用它来选成分数</b></td></tr><tr><td>AIC 与 BIC</td><td>在拟合与复杂度之间权衡。<b>对同一批数据拟合的模型，AIC 或 BIC 更低者更优</b></td></tr><tr><td>责任度</td><td>显示软成员度里的不确定性。<b>大量模糊的责任度可能意味着成分之间重叠严重</b></td></tr><tr><td>初始化与收敛</td><td><b>EM 可能收敛到局部解。</b>要用多个初始化并比较拟合结果</td></tr><tr><td>分布假设</td><td><b>低 BIC 不证明总体里有那么多自然分组</b>，也不证明高斯成分在科学上有意义</td></tr></tbody></table><h3>AIC 与 BIC：平衡拟合与复杂度</h3><div class="eq">AIC = 2k − 2 log(L̂)        BIC = k·log(n) − 2 log(L̂)</div><p>k 是估计出的参数个数，n 是观测数，L̂ 是最大似然。<b>一个更灵活的模型可能把训练数据拟合得更好，但也可能过拟合。</b>复杂度罚项鼓励「解释得好、又不含多余参数」的模型。</p><div class="cal k"><span class="ttl">★★ 三条使用规则</span><ul><li><b>对同一数据集拟合的模型，AIC 或 BIC 更低的那个更受偏好</b>；</li><li><b>BIC 的复杂度罚项比 AIC 更强</b>（尤其样本量增大时），所以<b>它常常选出更简单的模型</b>；</li><li><b>这两个准则支持「模型比较」，但不保证选中的模型在科学上或实践上恰当。</b></li></ul></div><p class="note">⚠ 在 T3 的讲义里，同一组公式写成 AIC = −2 log L + 2p、BIC = −2 log L + p·log N —— <b>完全是同一个式子，只是把两项前后调换、并把参数个数记作 p。</b>不要被符号差异迷惑。</p><h2><span class="pg">T1-04</span>7. ★★★ 示范决策：不要只看一个数</h2><p>讲义给了一张非常典型的三行表，<b>几乎就是大题的标准答法模板</b>：</p><table><thead><tr><th>候选</th><th>内部证据</th><th>稳定性</th><th>应用证据</th></tr></thead><tbody><tr><td>k-means, k = 2</td><td>silhouette 0.58；inertia 相对较高</td><td><b>稳定</b></td><td>把领域专家会区分的两个组<b>合并了</b></td></tr><tr><td>k-means, k = 3</td><td>silhouette 0.55；inertia 明显下降</td><td><b>稳定</b></td><td>三个组有合理的解释</td></tr><tr><td>k-means, k = 4</td><td>silhouette <b>0.59（最高）</b>；inertia 略低</td><td><b>不稳定</b></td><td>有一个小组跨运行会变</td></tr></tbody></table><div class="cal k"><span class="ttl">★★★ 标准结论（照着这个结构写）</span><p><b>最大的 silhouette 属于 k = 4，但那个结果不稳定。</b></p><p><b>k = 2 的解稳定，但它合并了应用关心的分组。</b></p><p><b>⇒ 在这个例子里 k = 3 是最可辩护的选择，因为有好几种形式的证据支持它。</b></p><p><b>⚠ 收尾必须有这一句：这是一个有理据的判断，不是「恰好存在三个自然分组」的证明。</b></p></div><h2><span class="pg">T1-04</span>8. 可复用的评估检查清单（六步）</h2><ol><li><b>陈述实际问题</b>，以及「什么样的结果才算有用」；</li><li><b>检查特征表示、缩放与相似性度量是否恰当</b>；</li><li><b>使用一个方法专属的诊断量</b>，但要说明它度量什么、以及它<b>不能</b>确立什么；</li><li><b>检查跨初始化、跨样本或跨邻近超参数的稳定性</b>；</li><li><b>检视图形、摘要、不确定性与失败案例</b>；</li><li><b>用领域证据解释结果，并报告局限。</b></li></ol><div class="cal k"><span class="ttl">★ 数据泄漏提醒（三个主题通用，必考）</span><p><b>「如果 PCA 或聚类被用在后续的预测工作流里，</b><b>预处理与无监督变换都只用「训练数据」拟合，</b><b>然后把拟合好的变换应用到验证或测试数据。」</b></p></div><h2><span class="pg">T1-04</span>9. 四个 Study check（官方原题，附参考答案）</h2><div class="ex"><div class="hd">Study check 与参考答法</div><div class="bd"><h4>① 为什么「k-means 的 inertia 更低」不足以支持更大的 k？</h4><p>因为<b>全局最优的 inertia 不会随 k 增大而上升</b> —— 极端情况下每个点自成一簇时 inertia 为 0。所以「更低」几乎是必然的，<b>它不构成选择依据</b>。还必须看 silhouette、稳定性、以及分组在应用里是否可解释。</p><h4>② 为什么即使 DBSCAN 还原了更有意义的弯曲分组，silhouette 仍可能偏向 k-means？</h4><p><b>silhouette 倾向偏好「凸」的簇。</b>它比较的是簇内平均距离与到另一簇的平均距离；<b>一条弯曲带上相距很远的两点会抬高簇内平均距离，哪怕它们属于同一个连通组。</b>于是这个度量偏好的几何，与应用要求的几何不一致。</p><h4>③ 更低的 BIC 支持什么、不证明什么？</h4><p>它<b>支持</b>：在这些候选模型里，这一个在「拟合 vs 复杂度」的权衡下更可取。它<b>不证明</b>：总体里存在那么多自然分组，也不证明高斯成分在科学上有意义。</p><h4>④ 在接受一个无监督结果之前，能做哪两项稳定性或敏感性检查？</h4><p><b>(a) 跨多个随机种子/初始化重复拟合</b>，用<b>标签无关</b>的方式比较哪些观测仍在一起；<b>(b) 重采样观测（或改动邻近的超参数，如相邻的 k、eps、min_samples）</b>，看结构是否突变。前者查优化敏感性，后者查抽样稳定性。</p></div></div><h2>附录 A · 公式速查表</h2><table><thead><tr><th>名称</th><th>公式</th><th>备注</th></tr></thead><tbody><tr><td>inertia / WCSS</td><td>I = Σ<sub>r</sub>Σ<sub>i∈C_{r</sub>} ‖x<sub>i</sub>−µ<sub>r</sub>‖²</td><td>是<b>和</b>，不是平均</td></tr><tr><td>平方欧氏距离</td><td>‖x<sub>i</sub>−µ<sub>r</sub>‖² = Σ<sub>q</sub>(x<sub>iq</sub>−µ<sub>rq</sub>)²</td><td>p 个特征逐个平方相加</td></tr><tr><td>silhouette a(i)</td><td>(1/(|C<sub>r</sub>|−1)) Σ<sub>j∈C_{r</sub>,j≠i} d(x<sub>i</sub>,x<sub>j</sub>)</td><td><b>排除自己</b>；d <b>不平方</b></td></tr><tr><td>silhouette b(i)</td><td>min<sub>t≠r</sub> (1/|C<sub>t</sub>|) Σ<sub>j∈C_{t</sub>} d(x<sub>i</sub>,x<sub>j</sub>)</td><td><b>按平均距离</b>最近的那个簇</td></tr><tr><td>silhouette s(i)</td><td>(b(i)−a(i)) / max{a(i), b(i)}</td><td>范围 −1 到 1</td></tr><tr><td>整体分数</td><td>S = (1/n) Σ<sub>i</sub> s(i)</td><td>簇数须在 2 到 n−1 之间</td></tr><tr><td>解释方差比</td><td>r<sub>j</sub> = λ<sub>j</sub> / Σ<sub>l</sub>λ<sub>l</sub></td><td>PCA</td></tr><tr><td>AIC</td><td>2k − 2 log L̂   （= −2 log L + 2p）</td><td>低者优</td></tr><tr><td>BIC</td><td>k·log(n) − 2 log L̂   （= −2 log L + p·log N）</td><td>罚得更重</td></tr></tbody></table><h2>附录 B · 高频易错点清单</h2><table><thead><tr><th>#</th><th>易错点</th><th>正确做法</th></tr></thead><tbody><tr><td>1</td><td>把 inertia 当平均</td><td><b>是平方距离之和</b></td></tr><tr><td>2</td><td>以为实测 inertia 必须单调下降</td><td><b>只有全局最优才单调不增</b>；局部极小会让实测值波动</td></tr><tr><td>3</td><td>只靠肘部法定 k</td><td><b>有些数据没有明显肘部</b>；它是诊断不是规则</td></tr><tr><td>4</td><td>算 a(i) 时把点自己算进去</td><td><b>要排除自己</b>，分母是 |C<sub>r</sub>| − 1</td></tr><tr><td>5</td><td>算 silhouette 时把距离平方了</td><td><b>silhouette 用的是距离本身，不平方</b></td></tr><tr><td>6</td><td>b(i) 取「最近的点」或「最近的质心」</td><td>取的是<b>按平均点到点距离最近的那个簇</b></td></tr><tr><td>7</td><td>DBSCAN 算 silhouette 不排除噪声</td><td><b>排除 label = −1</b>，并报告排除比例</td></tr><tr><td>8</td><td>只剩一个簇时还去要 silhouette</td><td><b>无法计算（NaN）</b>；NaN ≠ 质量为 0</td></tr><tr><td>9</td><td>用对数似然选成分数</td><td>它随复杂度上升而改善；<b>要用 AIC/BIC</b></td></tr><tr><td>10</td><td>拿 AIC 和 BIC 互相比较</td><td><b>同类相比</b>，且须同数据同特征</td></tr><tr><td>11</td><td>由「分数最高」直接下结论</td><td><b>要同时过稳定性与领域有用性两关</b></td></tr><tr><td>12</td><td>在全量数据上拟合预处理再划分训练/测试</td><td><b>只在训练集上拟合</b>，再 transform</td></tr></tbody></table><h2>附录 C · 术语中英对照</h2><table><thead><tr><th>英文</th><th>中文</th><th>一句话</th></tr></thead><tbody><tr><td>internal measure</td><td>内部度量</td><td>不用外部标签、只看数据本身的评价量</td></tr><tr><td>inertia / WCSS</td><td>惯性 / 簇内平方和</td><td>到各自质心的平方距离之和</td></tr><tr><td>elbow method</td><td>肘部法</td><td>找收益明显变小的拐点</td></tr><tr><td>silhouette coefficient</td><td>轮廓系数</td><td>(b−a)/max(a,b)</td></tr><tr><td>explained variance ratio</td><td>解释方差比</td><td>PCA 每个成分占的方差比例</td></tr><tr><td>reconstruction error</td><td>重构误差</td><td>投影再还原后丢了多少</td></tr><tr><td>log likelihood</td><td>对数似然</td><td>GMM 的拟合度，随复杂度上升</td></tr><tr><td>AIC / BIC</td><td>赤池 / 贝叶斯信息准则</td><td>拟合与复杂度的权衡，低者优</td></tr><tr><td>stability</td><td>稳定性</td><td>小改动下结果是否相似</td></tr><tr><td>sensitivity</td><td>敏感性</td><td>对初始化、缩放、超参数的反应</td></tr><tr><td>label-invariant comparison</td><td>标签无关比较</td><td>看哪些点仍在一起，而非比标签数字</td></tr><tr><td>domain usefulness</td><td>领域有用性</td><td>结果是否回答了真实问题</td></tr><tr><td>data leakage</td><td>数据泄漏</td><td>测试集信息混进了拟合过程</td></tr><tr><td>convex cluster</td><td>凸簇</td><td>silhouette 偏好的那种形状</td></tr></tbody></table></body></html>

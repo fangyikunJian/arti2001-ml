@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M2 T2 · 聚类：K-means 与 DBSCAN · 逐页精读</title>
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --panel2:#FAF8F4; --sunken:#EDEAE3;
+  --stage:#E9E6DF; --hover:#F0EDE6;
+  --line:#E3DFD6; --line2:#D2CCC0;
+  --dot:#DDD8CE; --dot2:#B9B1A2; --errdot:#D08A8A;
+  --ink:#23272C; --ink2:#111417; --ink3:#4A525C; --dim:#616973;
+  --acc:#0E7355; --acc2:#845808; --warn:#B23540; --blue:#1C6AA6;
+  --mark:#FFF6DC; --codeink:#17506E; --eqink:#1E2833;
+  --okink:#0B5B43; --noink:#8F2A33; --violet:#6A4BA3; --tintviolet:rgba(106,75,163,.07);
+  --okfill:rgba(14,115,85,.10); --nofill:rgba(178,53,64,.09);
+  --missbg:rgba(245,243,238,.97);
+  --tintacc:rgba(14,115,85,.07); --tintacc2:rgba(14,115,85,.05);
+  --tintblue:rgba(28,106,166,.06); --tintwarn:rgba(178,53,64,.05);
+  --tintwarn2:rgba(178,53,64,.06);
+  --lift:rgba(60,54,44,.022); --lift2:rgba(60,54,44,.028);
+  --scrim:rgba(58,52,42,.40);
+  --shadow:0 1px 2px rgba(40,34,20,.05), 0 6px 18px rgba(40,34,20,.05);
+
+  --cjk:"PingFang SC","Microsoft YaHei","微软雅黑","Deng",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --bar:50px; --strip:36px;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f15; --panel:#121823; --panel2:#0d141c; --sunken:#0a0e14;
+  --stage:#070a0f; --hover:#0d141c;
+  --line:#212c3c; --line2:#2a3b4f;
+  --dot:#18212e; --dot2:#2c3c52; --errdot:#7a3a3a;
+  --ink:#e7eef7; --ink2:#f4f8fd; --ink3:#c3d2e3; --dim:#8b9ab0;
+  --acc:#6fd3bb; --acc2:#f2bd63; --warn:#ff8f8f; --blue:#7fb8ff;
+  --mark:#16202e; --codeink:#cfe3f5; --eqink:#dbe8f7;
+  --okink:#d8fff4; --noink:#ffdede; --violet:#B48BF5; --tintviolet:rgba(180,139,245,.08);
+  --okfill:rgba(111,211,187,.13); --nofill:rgba(255,143,143,.12);
+  --missbg:rgba(10,14,20,.97);
+  --tintacc:rgba(111,211,187,.09); --tintacc2:rgba(111,211,187,.07);
+  --tintblue:rgba(127,184,255,.055); --tintwarn:rgba(255,120,120,.055);
+  --tintwarn2:rgba(255,143,143,.08);
+  --lift:rgba(255,255,255,.022); --lift2:rgba(255,255,255,.025);
+  --scrim:rgba(6,9,13,.82);
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--cjk);font-size:15px;line-height:1.75}
+
+#bar{height:var(--bar);display:flex;align-items:center;gap:11px;padding:0 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+#bar h1{margin:0;font-size:14.5px;font-weight:650;white-space:nowrap}
+#bar h1 span{color:var(--acc)}
+.btn{background:var(--sunken);border:1px solid var(--line);border-radius:7px;color:var(--dim);
+  font:13px var(--cjk);padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{color:var(--acc);border-color:var(--acc)}
+#pnum{width:48px;background:var(--sunken);border:1px solid var(--line);border-radius:7px;
+  color:var(--ink);font:13px var(--mono);text-align:center;padding:5px 0}
+#bar .sp{flex:1}
+#tot{font:12px var(--mono);color:var(--dim)}
+
+#strip{height:var(--strip);display:flex;align-items:center;gap:2px;padding:0 14px;
+  background:var(--sunken);border-bottom:1px solid var(--line);overflow-x:auto}
+#strip::-webkit-scrollbar{height:0}
+#strip b{flex:0 0 auto;width:13px;height:16px;border-radius:3px;background:var(--dot);
+  cursor:pointer;font:0/0 a}
+#strip b.has{background:var(--dot2)}
+#strip b.on{background:var(--acc2)}
+#strip b:hover{background:var(--acc)}
+
+#main{display:flex;height:calc(100% - var(--bar) - var(--strip))}
+/* 左栏 = 一块板，板中央摆一张 4:3 的幻灯片。
+   幻灯片本身就是 363×272（4:3），把框裁成同样比例再用 view=FitH，
+   这一页正好铺满框，下一页落到框外 —— 这样才是「一页」，
+   而不是一个能上下滚、还露出半张下一页的阅读器。 */
+#left{width:50%;min-width:280px;position:relative;background:var(--stage);
+  display:flex;align-items:center;justify-content:center;padding:14px}
+#stage{aspect-ratio:4/3;width:100%;max-width:100%;max-height:100%;
+  border-radius:8px;overflow:hidden;background:#fff;
+  box-shadow:var(--shadow)}
+#stage iframe{width:100%;height:100%;border:0;display:block}
+#drag{width:6px;cursor:col-resize;background:var(--line);flex:0 0 6px}
+#drag:hover{background:var(--acc)}
+#right{flex:1;overflow-y:auto;padding:24px 28px 40px}
+
+.pg{font:11.5px var(--mono);color:var(--bg);background:var(--acc2);border-radius:999px;
+  padding:2px 11px;font-weight:700;display:inline-block;margin-bottom:12px}
+.pg.multi{background:var(--blue)}
+h2{margin:0 0 14px;font-size:21px;font-weight:680;line-height:1.4}
+.one{font-size:16.5px;line-height:1.7;color:var(--ink2);border-left:3px solid var(--acc);
+  padding:9px 0 9px 14px;margin:0 0 16px;
+  background:linear-gradient(90deg,var(--tintacc),transparent)}
+ul{margin:0 0 16px;padding-left:0;list-style:none}
+ul li{margin-bottom:11px;padding-left:22px;position:relative;line-height:1.72}
+ul li::before{content:"";position:absolute;left:6px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--acc)}
+b{font-weight:650;color:var(--ink2)}
+.k{color:var(--acc);font-weight:650}
+.w{color:var(--warn);font-weight:650}
+code{font-family:var(--mono);font-size:.9em;background:var(--mark);padding:1.5px 6px;
+  border-radius:4px;color:var(--codeink)}
+.eq{display:block;text-align:center;background:var(--mark);border-radius:8px;padding:12px 8px;
+  margin:14px 0;font-family:var(--mono);font-size:14px;color:var(--eqink);overflow-x:auto}
+.say{border:1px solid var(--line2);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;background:var(--tintblue);font-size:14px;line-height:1.72}
+.say .t{color:var(--blue);font-weight:700;font-size:12.5px;display:block;margin-bottom:5px;
+  letter-spacing:.5px}
+.tip{border:1px solid var(--line);border-radius:9px;padding:11px 15px;margin:14px 0;
+  background:var(--lift2);font-size:14px;line-height:1.72}
+.tip .t{font-weight:700;color:var(--acc);margin-right:7px}
+.tip.w2{border-color:var(--warnline);background:var(--tintwarn)}
+.tip.w2 .t{color:var(--warn)}
+.star{color:var(--acc2);font-size:14px;margin-left:8px;letter-spacing:1px}
+.nav{display:flex;gap:10px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+.nav .btn{flex:1;text-align:center;padding:9px}
+.empty{color:var(--dim);font-size:14px;padding:36px 0;text-align:center;line-height:2}
+#miss{position:absolute;inset:0;background:var(--missbg);z-index:5;display:none;
+  padding:26px;color:var(--dim);font-size:13.5px;line-height:1.9}
+#miss code{background:var(--mark);padding:2px 6px;border-radius:4px;color:var(--acc2)}
+
+
+.qbadge{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;
+  margin-left:9px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 9px;font:11.5px var(--mono);color:var(--acc);cursor:pointer;
+  background:var(--sunken);transition:border-color .12s}
+.qbadge:hover{border-color:var(--acc)}
+.qbadge.bad{color:var(--warn)}
+#wrongBox .tally{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+#wrongBox .tally span{border:1px solid var(--line);border-radius:8px;padding:5px 11px;
+  font-size:12.5px;color:var(--dim);background:var(--sunken)}
+#wrongBox .tally b{color:var(--ink);font-weight:650}
+#wrongBox .tally b.hot{color:var(--warn)}
+.wrow .h{gap:3px}
+.wrow .h u{display:flex;gap:2px;text-decoration:none;
+  padding-right:7px;margin-right:4px;border-right:1px solid var(--line)}
+.wrow .h u:last-child{border-right:0;padding-right:0;margin-right:0}
+#revChip{display:none;align-items:center;gap:9px;border:1px solid var(--warn);
+  border-radius:8px;padding:5px 11px;font-size:12.5px;color:var(--warn);
+  background:var(--tintwarn2);white-space:nowrap}
+#revChip.on{display:inline-flex}
+#revChip b{font:650 12px var(--mono)}
+#revChip button{background:none;border:0;color:var(--dim);cursor:pointer;
+  font:12px var(--cjk);text-decoration:underline;padding:0}
+#revChip button:hover{color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn:disabled:hover{border-color:var(--line)}
+
+/* ── 自测 ── */
+.quiz{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.quiz>h3{margin:0 0 12px;font-size:13px;color:var(--dim);letter-spacing:.16em;
+  display:flex;align-items:center;gap:8px}
+.quiz>h3 b{color:var(--acc2);font-weight:700}
+.qq{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:11px;
+  background:var(--lift)}
+.qq .t{font-size:14.5px;font-weight:600;margin-bottom:10px;line-height:1.6}
+.opt{display:block;width:100%;text-align:left;background:var(--sunken);border:1px solid var(--line);
+  border-radius:8px;color:var(--ink);font:14px var(--cjk);padding:8px 12px;margin-bottom:7px;
+  cursor:pointer;line-height:1.5;transition:border-color .12s,background .12s}
+.opt:hover:not(:disabled){border-color:var(--acc);background:var(--hover)}
+.opt:disabled{cursor:default}
+.opt.ok{border-color:var(--acc);background:var(--okfill);color:var(--okink)}
+.opt.no{border-color:var(--warn);background:var(--nofill);color:var(--noink)}
+.opt .m{float:right;font-weight:700;margin-left:10px}
+.why{font-size:13.5px;line-height:1.7;color:var(--ink3);border-left:3px solid var(--acc);
+  padding:8px 0 8px 12px;margin-top:9px;background:linear-gradient(90deg,var(--tintacc2),transparent)}
+.qhist{font:11px var(--mono);color:var(--dim);margin-top:8px;display:flex;
+  align-items:center;gap:5px}
+.qhist i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.qhist i.o{background:var(--acc)} .qhist i.x{background:var(--warn)}
+.qagain{background:none;border:0;color:var(--dim);font:12px var(--cjk);cursor:pointer;
+  text-decoration:underline;padding:0;margin-left:auto}
+.qagain:hover{color:var(--acc2)}
+#strip b.err{background:var(--errdot)}
+#strip b.err.on{background:var(--acc2)}
+/* 错题本 */
+#wrongPanel{position:fixed;inset:0;background:var(--scrim);z-index:80;display:none;
+  align-items:center;justify-content:center;padding:28px}
+#wrongPanel.on{display:flex}
+#wrongBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  width:min(760px,100%);max-height:84vh;overflow:auto;padding:22px 24px}
+#wrongBox h3{margin:0 0 4px;font-size:18px}
+#wrongBox .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+.wrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--line);margin-bottom:8px;cursor:pointer;background:var(--sunken)}
+.wrow:hover{border-color:var(--acc2)}
+.wrow .p{font:700 12px var(--mono);color:var(--acc2);flex:0 0 52px}
+.wrow.done{opacity:.5}
+.wrow.done .p{color:var(--acc)}
+.wrow .n2{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.wrow .s{font:11.5px var(--mono);color:var(--dim);flex:0 0 auto}
+.wrow .h{display:flex;gap:3px;flex:0 0 auto}
+.wrow .h i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.wrow .h i.o{background:var(--acc)} .wrow .h i.x{background:var(--warn)}
+#wrongBox .none{color:var(--dim);text-align:center;padding:30px 0;line-height:2}
+#wrongFoot{display:flex;gap:10px;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--line)}
+#wrongFoot .btn{flex:1;text-align:center}
+
+@media (max-width:900px){
+  #main{flex-direction:column} #left{width:100%;height:40%} #drag{display:none}
+  #right{padding:16px 16px 30px}
+}
+
+/* ══ EXTRA_CSS:BEGIN ══ */
+/* ══ 讲解区里的链接兜底 ══
+   ⚠ 2026-10-03 查出来的：原先只给 .ng a 上了色，放在 tip / say / pts / exam 里的链接
+   会退回浏览器默认的 #0000EE —— 浅色下还能看（8.47:1），**暗色下只有 1.95:1**。
+   做 notes2 时第一次往 tip 里放时间码链接就撞上了。这条规则管住所有其它位置。 */
+#card a{color:var(--blue);text-decoration:none;border-bottom:1px solid var(--blue)}
+#card a:hover{opacity:.75}
+
+/* ══ 「从零补基础 · Andrew Ng」栏 ══ */
+.ng{border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintviolet)}
+.ng .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--violet);
+  letter-spacing:.4px;margin-bottom:5px}
+/* ⚠ 要用 #card .ng a 而不是 .ng a —— 上面的兜底规则带了 #card 这个 id，
+   光写 .ng a（0,1,1）会被 #card a（1,0,1）压过去，紫色链接会变蓝。 */
+#card .ng a{color:var(--violet);text-decoration:none;border-bottom:1px solid var(--violet)}
+#card .ng a:hover{opacity:.75}
+.ng .src{display:block;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+:root:not([data-theme="dark"]) .ng{box-shadow:var(--shadow)}
+
+/* ══ 「课件原话」栏：引官方英文 ══ */
+.quote{border-left:3px solid var(--dim);background:var(--lift2);border-radius:0 8px 8px 0;
+  padding:10px 15px;margin:12px 0;font-size:13px;line-height:1.7;color:var(--ink3)}
+.quote .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--dim);
+  letter-spacing:.4px;margin-bottom:5px}
+.quote b{color:var(--ink2)}
+.quote em{font-style:normal;color:var(--ink2);font-weight:560}
+
+/* ══ 笔记表格：对比表 / 情况表 / 数值表 ══ */
+.tw{margin:13px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.tc{font-size:11.5px;font-family:var(--mono);color:var(--dim);letter-spacing:.3px;
+  padding:7px 12px;background:var(--sunken);border-bottom:1px solid var(--line)}
+table.nt{width:100%;border-collapse:collapse;font-size:12.8px;line-height:1.55}
+table.nt th{text-align:left;font-weight:620;font-size:11.5px;color:var(--dim);
+  background:var(--panel2);padding:7px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.nt td{padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.nt tbody tr:last-child td{border-bottom:none}
+table.nt td:first-child{font-weight:560;color:var(--ink2)}
+table.nt b{color:var(--ink2)}
+:root:not([data-theme="dark"]) .tw{box-shadow:var(--shadow)}
+
+/* ══ 「与考试的联系」栏 ══ */
+.exam{border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintacc2)}
+.exam .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--acc2);
+  letter-spacing:.4px;margin-bottom:5px}
+:root:not([data-theme="dark"]) .exam{box-shadow:var(--shadow)}
+
+/* ══ 双主题补丁：浅色下的可读性与质感 ══ */
+html{color-scheme:light dark}
+:root:not([data-theme="dark"]) #right{background:var(--bg)}
+:root:not([data-theme="dark"]) .quiz,
+:root:not([data-theme="dark"]) details,
+:root:not([data-theme="dark"]) .opt{box-shadow:var(--shadow)}
+:root:not([data-theme="dark"]) body{-webkit-font-smoothing:antialiased}
+:root:not([data-theme="dark"]) h2{letter-spacing:-.1px}
+:root:not([data-theme="dark"]) .one{font-weight:520}
+:root:not([data-theme="dark"]) .pg{color:#fff}
+:root:not([data-theme="dark"]) #strip b.on{background:var(--acc2)}
+/* 主题切换按钮 */
+#themeBtn{min-width:34px;text-align:center;font-size:14px;line-height:1}
+/* ══ EXTRA_CSS:END ══ */
+
+</style>
+</head>
+<body data-key="cs234-2019-l01">
+
+<div id="bar">
+  <h1>M2 T2 · <span>聚类：K-means 与 DBSCAN</span></h1>
+  <button class="btn" id="prev">← 上一页</button>
+  <input id="pnum" value="1" inputmode="numeric">
+  <span id="tot">/ 16</span>
+  <button class="btn" id="next">下一页 →</button>
+  <div class="sp"></div>
+  <span id="revChip">复习模式 <b></b><button id="revOff">退出</button></span>
+  <button class="btn" id="wrongBtn">错题本</button>
+  <button class="btn" id="themeBtn" title="切换主题">☾</button>
+  <button class="btn" id="help">打不开？</button>
+</div>
+
+<div id="strip"></div>
+
+
+<div id="wrongPanel"><div id="wrongBox">
+  <h3>错题本</h3>
+  <p class="sub">错过的题<b>连着答对两次就毕业</b>，自动从这里和复习模式里退出。<br>
+  还没毕业的排在前面，最近错得多的更靠前。点任意一行跳到那一页重看。</p>
+  <div class="tally" id="wrongTally"></div>
+  <div id="wrongList"></div>
+  <div id="wrongFoot">
+    <button class="btn" id="revOn">只复习这些页</button>
+    <button class="btn" id="wrongClose">关闭</button>
+    <button class="btn" id="wrongReset">清空全部记录</button>
+  </div>
+</div></div>
+
+<div id="main">
+  <div id="left">
+    <div id="stage"><iframe id="pdf" title="原课件"></iframe></div>
+    <div id="miss">
+      <p><b>左边没显示课件？</b></p>
+      <p>本页直接引用同目录下的 <code>slides/M2T2_Clustering.pdf</code>。</p>
+      <p>确认文件在即可。若浏览器拦本地 iframe 读 PDF，在 <code>精读</code> 目录下执行
+      <code>python -m http.server 8080</code>，再访问
+      <code>http://127.0.0.1:8080/M2T2-精读.html</code>。</p>
+    </div>
+  </div>
+  <div id="drag"></div>
+  <div id="right"><div id="card"></div></div>
+</div>
+
+<script>
+
+/* ══ 主题切换：浅色默认，记住选择 ══ */
+(function(){
+  var KEY = "mlreader-theme";
+  var root = document.documentElement, btn = document.getElementById("themeBtn");
+  function apply(t){
+    root.setAttribute("data-theme", t);
+    if (btn) btn.textContent = (t === "dark" ? "☀" : "☾");
+    if (btn) btn.title = (t === "dark" ? "切到浅色" : "切到暗色");
+  }
+  var saved;
+  try { saved = localStorage.getItem(KEY); } catch(e){}
+  apply(saved === "dark" ? "dark" : "light");
+  if (btn) btn.addEventListener("click", function(){
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next);
+    try { localStorage.setItem(KEY, next); } catch(e){}
+  });
+})();
+
+/* 每页一条。r:[起,止] = 这几页是同一张图的不同阶段，点哪页都显示同一条。
+   one 一句话 · pts 要点 · say CS229 / 讲义补充（课件上没有）· tip 提醒 */
+
+/* ══ 题库。键 = 该单元的起始页；a 是正确项下标；why 是判完给的解释 ══ */
+var Q = {"1": [{"q": "K-means 和 DBSCAN 对「一个组」的定义有什么根本不同？", "o": ["前者用密度，后者用距离", "前者用到质心的距离，后者用密度连通；而且只有 DBSCAN 允许点不属于任何簇", "前者需要标签，后者不需要", "两者定义相同，只是实现不同"], "a": 1, "why": "K-means 把每个点分给<b>最近的质心</b>，所有点<b>必须</b>有标签。DBSCAN 用<b>密度连通</b>生长簇，稀疏区域的点可以被标为<b>噪声（−1）</b>。两者的适用形状也因此不同。"}], "2": [{"q": "路线图把「相似」单独列成一段，原因是什么？", "o": ["因为距离与缩放定义了「近」的含义，后面所有计算都建立在这个选择上", "因为距离公式不好记", "因为相似度必须由专家给定", "因为聚类不需要目标函数"], "a": 0, "why": "换一个缩放，两点之间的距离关系就可能颠倒，分组随之改变。<b>相似是建模选择</b>——这也是为什么几乎每道聚类评价题都要你先检查尺度。"}], "3": [{"q": "关于 PCA 与聚类的输出，正确的是？", "o": ["两者都产生簇标签", "PCA 产生标签，聚类产生坐标", "两者输出相同", "PCA 产生连续的新坐标（得分），不产生任何簇标签；聚类产生离散的分组"], "a": 3, "why": "PCA 的输出是<b>方向和得分</b>——是新的连续坐标系，里面<b>没有任何分组信息</b>。聚类的输出是<b>离散的组归属</b>。常见做法是先 PCA 再聚类，但那是两个各自需要论证的决定。"}, {"q": "某人说「我用 PCA 把数据降到两维，就得到了两个簇」。这句话的问题是？", "o": ["PCA 只能用于有标签的数据", "两维太少，必须保留三维", "PCA 不能降到两维", "PCA 只产生新坐标轴，不产生任何分组；簇要另外用聚类算法得到"], "a": 3, "why": "PCA 的输出是<b>方向与得分</b>——一组新的连续坐标，里面<b>没有任何分组信息</b>。图上看着分成两团是视觉印象，要得到簇标签必须再跑 k-means / DBSCAN / GMM。"}], "4": [{"q": "K-means 的目标 J = Σᵢ‖xᵢ − μ_c(i)‖² 直接鼓励的是什么？", "o": ["簇的个数尽可能少", "簇的大小尽可能均衡", "簇之间尽可能分开", "每个点离自己的质心尽可能近，即簇内紧凑"], "a": 3, "why": "J 只对「点到<b>自己那个</b>质心的平方距离」求和，所以它直接优化的是<b>簇内紧凑度</b>。它<s>没有</s>显式地最大化簇间分离，也不保证簇大小均衡或对应真实类别。"}, {"q": "两次聚类分别在原始数据和标准化后的数据上跑，比较它们的 inertia 得出「标准化后更好」。问题在哪？", "o": ["两者的特征尺度不同，inertia 不在同一量纲上，不可比", "应该用 k=3 而不是 k=2", "inertia 越大越好", "inertia 只适用于 DBSCAN"], "a": 0, "why": "inertia 是<b>带量纲的平方距离之和</b>。标准化改变了距离的单位，两个数字根本不在同一尺度上。要比较必须<b>固定特征与缩放</b>，只变 k 或初始化。"}, {"q": "关于 k-means 的目标函数 J，下列哪项正确？", "o": ["它等于各簇方差的平均", "它随 k 增大而增大", "它只惩罚点到自己质心的平方距离，即只鼓励簇内紧凑", "它同时最大化簇间距离"], "a": 2, "why": "J = Σ‖xᵢ − μ_c(i)‖² 只对「点到<b>自己那个</b>质心」求和。它<b>没有</b>显式的簇间分离项；而且 k 越大 J 越小（全局最优意义下），不是越大。"}], "5": [{"q": "sklearn 里 n_init=10 的含义是？", "o": ["保留 10 个候选簇", "用 10 组不同的初始质心各做一次完整拟合，保留 inertia 最小的那次", "迭代 10 轮后停止", "最多允许 10 个簇"], "a": 1, "why": "<b>n_init 是独立重启的次数，不是迭代次数</b>。因为 J 非凸、不同起点会落到不同局部极小，多次重启并<b>取 inertia 最低</b>的结果是标准防护手段。"}, {"q": "为什么「更新步取均值」能保证目标不增加？", "o": ["因为在簇内固定的情况下，均值正是使平方距离之和最小的那个点", "因为均值总是比中位数小", "因为均值一定落在簇的边界上", "因为均值计算更快"], "a": 0, "why": "这是最小二乘的基本性质：对固定的一组点，<b>使 Σ‖xᵢ − c‖² 最小的 c 就是它们的均值</b>。所以把质心换成均值只可能让 J 不增。分配步同理——每个点去最近的质心，距离只会不增。"}, {"q": "同一份数据、同一个 k，两次运行得到明显不同的分组。最合理的解读是？", "o": ["算法没有收敛", "k 一定选错了", "J 非凸，不同初始质心收敛到了不同的局部极小", "数据有错误"], "a": 2, "why": "k-means 必然<b>收敛</b>，但收敛到的是<b>局部</b>极小，落点取决于初始质心。这是有用的诊断信息（说明存在多个竞争解），应对办法是 k-means++ 加多次重启并取 inertia 最低的那次。"}], "6": [{"q": "下面哪种数据最可能让 K-means 给出误导性的结果？", "o": ["两团大小相近的球形点云", "样本数远大于特征数的数据", "已标准化的高维数据", "两条弯曲的、互相缠绕的带状结构"], "a": 3, "why": "K-means 的假设是<b>紧凑的、以质心为中心的（偏凸形）</b>组。弯曲的带状结构没有一个有意义的「中心」，K-means 会<b>横切</b>它们。这正是 DBSCAN 的密度连通更合适的情形。"}, {"q": "数据由两条弯曲的带状结构组成。用 k-means（k=2）最可能出现什么？", "o": ["报错无法收敛", "把两条带子横切开，得到两个与真实结构无关的簇", "自动增加簇数到 4", "完美分开两条带子"], "a": 1, "why": "k-means 假设簇是<b>紧凑、以质心为中心（偏凸形）</b>的。弯曲带状结构没有有意义的「中心」，算法会沿某个方向<b>横切</b>。这正是 DBSCAN 的密度连通更合适的情形。"}], "7": [{"q": "为什么不能用「inertia 最小」来选择 k？", "o": ["因为 inertia 只对球形簇有效", "inertia 计算不准确", "因为 inertia 随 k 增大必然下降，极端情况每点一簇时为 0", "因为 inertia 和 silhouette 总是矛盾"], "a": 2, "why": "k 越大，质心越多、每个点离自己的质心越近，<b>全局最优的 inertia 不会上升</b>；k = n 时每点自成一簇、J = 0。所以只能看<b>肘部</b>（判断而非规则），并结合 silhouette、稳定性和领域意义。"}, {"q": "关于 silhouette 系数，下列哪项正确？", "o": ["取值范围是 0 到 1", "它衡量簇数是否正确", "它对密度型簇最有利", "取值范围是 −1 到 1，负值表示该点可能更该属于另一个簇"], "a": 3, "why": "范围是 <b>−1 到 1</b>：近 1 = 匹配得好，近 0 = 边界/重叠，<b>负值 = 更接近另一个簇</b>。它<b>偏爱凸形簇</b>，对弯曲或密度型结构反而会给出误导排序。"}, {"q": "评估 DBSCAN 的结果时使用 silhouette，必须先做什么？", "o": ["把所有点归到最近的簇", "先做 PCA 降维", "排除标签为 −1 的噪声点，并报告被排除的比例", "把噪声点也算进去"], "a": 2, "why": "噪声点不属于任何簇，算 silhouette 没有意义。讲义要求<b>排除 −1 的点</b>、<b>报告排除比例</b>，并检查剩下的数据是否仍满足「簇数在 2 到 n−1 之间」的计算条件。"}], "8": [{"q": "取 ε=0.6、MinPoints=3（邻域含自身），点 A=0, B=0.5, C=1.0, D=3.0, E=3.4 的角色分别是？", "o": ["全部是 core", "A、B、C 都是 core，D、E 是 border", "B 是 core，A 和 C 是 border，D 和 E 是 noise", "没有 core 点"], "a": 2, "why": "邻域（含自己）：A{A,B}=2、B{A,B,C}=3、C{B,C}=2、D{D,E}=2、E{D,E}=2。只有 <b>B 达到 3</b> 所以是 core；A 和 C 不够但落在 core 点 B 的邻域内 ⇒ <b>border</b>；D、E 既不够也不挨着任何 core ⇒ <b>noise</b>。最终簇 = {A,B,C}。"}, {"q": "ε=1、MinPts=4（含自身）。已知 |Nε(q)| = 3，且 q 落在某个核心点 p 的 ε 邻域内。q 的角色是？", "o": ["噪声点", "边界点", "无法判断", "核心点"], "a": 1, "why": "q 自己的邻域只有 3 个点，<b>不够 MinPts=4</b>，所以不是 core；但它<b>落在核心点 p 的邻域内</b>，因此是 <b>border</b>。border 点属于簇，但<b>不能继续扩张</b>。"}, {"q": "DBSCAN 在密度差异很大的数据上表现不好，根本原因是？", "o": ["它只能用欧氏距离", "它需要预先指定簇数", "它不能处理高维数据", "一组全局的 (ε, MinPts) 无法同时描述稀疏区和稠密区的「稠密」"], "a": 3, "why": "DBSCAN 用<b>一组全局参数</b>定义什么叫稠密。若一处簇很密、另一处很疏，同一个 ε 要么把稀疏簇整个判成噪声，要么把稠密簇连成一片。<s>它不需要预先指定簇数</s>，那是 k-means 的限制。"}], "9": [{"q": "在 scikit-learn 的 DBSCAN 结果里，怎么认出噪声点？", "o": ["labels_ 等于 0", "labels_ 等于 −1", "labels_ 等于簇的个数", "它们不出现在 labels_ 里"], "a": 1, "why": "<b>−1 就是噪声标签</b>。簇的个数 = 去掉 −1 之后不同标签值的个数。另外 <b>core_sample_indices_</b> 给出核心点，剩下既不是核心、标签又不是 −1 的点就是<b>边界点</b>。"}, {"q": "在 scikit-learn 的 DBSCAN 输出里，簇的个数应该怎么数？", "o": ["core_sample_indices_ 的长度", "去掉 −1 之后不同标签值的个数", "len(set(labels_))", "labels_ 的最大值"], "a": 1, "why": "<b>−1 是噪声标签</b>，不算一个簇。所以簇数 = 不同标签值的个数减去噪声那一类。core_sample_indices_ 数的是<b>核心点个数</b>，不是簇数。"}], "10": [{"q": "K-means 手算题开始前，为什么要先声明「平局怎么办」？", "o": ["因为 sklearn 要求这么做", "因为平局会让算法崩溃", "因为平局说明 k 选错了", "因为某点到两个质心可能一样近，不先定规则会导致过程无法复核"], "a": 3, "why": "等距时归给谁会影响后续质心，进而影响整轮结果。<b>先声明约定</b>（例如归编号小的簇）既保证你自己前后一致，也让阅卷能复核你的过程——这是看得见的过程分。"}, {"q": "手算 k-means 时先声明「平局归编号小的簇」，主要作用是？", "o": ["保证过程前后一致且可复核——等距点归谁会影响后续质心", "避免出现空簇", "让算法收敛更快", "满足 sklearn 的要求"], "a": 0, "why": "某点到两个质心恰好等距时，归属会影响更新后的质心，进而影响整轮结果。<b>先定规则</b>既保证你自己一致，也让阅卷能复核——这是明确的过程分。"}], "11": [{"q": "Tutorial 要求「写出距离或足够的过程」，主要是为了什么？", "o": ["凑字数", "练习计算器操作", "让每一个分配决定都有可复核的依据", "因为答案很长"], "a": 2, "why": "聚类题的分数大量落在<b>过程</b>上：距离表、平局约定、每轮更新后的质心。只给最终分组，即使结果对，也拿不到这些分。"}], "12": [{"q": "做一轮 K-means 时，下面哪种做法是错的？", "o": ["把距离列成表格再判断", "分配过程中一旦某个簇有了新点就立刻更新质心，再继续分配后面的点", "只比较平方距离，不开根号", "更新时对坐标逐维求平均"], "a": 1, "why": "K-means 的分配步必须<b>基于同一组固定的质心</b>把所有点分完，然后才统一更新。边分边更新是另一种算法（在线/序贯版本），会得到不同结果。比较平方距离和列表格都是正确且省时的做法。"}, {"q": "一维观测 {1, 2, 8, 9}，k=2，初始质心 1 和 8。完成一轮后两个质心是？", "o": ["2 和 9", "4.5 和 5.5", "1 和 8", "1.5 和 8.5"], "a": 3, "why": "分配：{1,2} 归质心 1，{8,9} 归质心 8。更新取均值：<b>(1+2)/2 = 1.5</b>，<b>(8+9)/2 = 8.5</b>。此时 J = 0.5²×4 = 1，再分配一次分组不变即收敛。"}, {"q": "下列哪种做法会让「一轮 k-means」的结果出错？", "o": ["只比较平方距离不开根号", "把距离列成表格再判断", "分配过程中某个簇一有新点就立即更新质心，再继续分配后面的点", "更新时对坐标逐维求平均"], "a": 2, "why": "标准 k-means 的分配步必须<b>基于同一组固定的质心</b>把所有点分完，然后统一更新。边分边更新是另一种算法（序贯版），会得到不同结果。比较平方距离、列表格、逐维平均都是正确做法。"}], "13": [{"q": "DBSCAN 中，为什么一个点先被标成噪声、后来又变成边界点？", "o": ["因为 ε 被自动调整了", "因为算法有随机性", "因为它的邻域点数增加了", "因为后来遍历到的某个点被认出是核心点，而这个点落在它的 ε 邻域内"], "a": 3, "why": "噪声标签在遍历过程中<b>只是临时的</b>。当某个后来访问的点满足核心条件并开始扩张时，落在它邻域里的非核心点就被<b>吸收为边界点</b>。点的坐标和 ε 都没变，变的只是「是否已经发现了旁边的核心点」。"}, {"q": "关于 DBSCAN 的边界点，下列哪项正确？", "o": ["它一定会被标成 −1", "它能像核心点一样继续扩张簇", "它的邻域一定为空", "它属于簇但不再往外传递可达性；若同时够得着两个簇，归属可能取决于遍历顺序"], "a": 3, "why": "<b>只有核心点能继续密度可达链</b>。border 点加入簇但不扩张；而且它可能同时落在两个簇的可达范围内，<b>最终归属取决于遍历顺序</b>——所以解读孤立的 border 归属要谨慎，core 点组成的连通块才稳定。"}], "14": [{"q": "要在 K-means 和 DBSCAN 之间做选择，最完整的论证角度是？", "o": ["只看数据量大小", "只看哪个跑得快", "只看哪个 silhouette 高", "几何形状、噪声处理、特征尺度、参数含义与敏感性"], "a": 3, "why": "这正是 Q3 要求的四个角度。<b>只看 silhouette 是陷阱</b>——它偏爱紧凑凸形簇，在弯曲结构上可能反而偏袒 K-means，而 DBSCAN 才恢复了有意义的形状。"}, {"q": "在弯曲簇上比较 k-means 与 DBSCAN，下列哪项是合理的判据组合？", "o": ["看哪个跑得更快", "只看 silhouette", "比较两者的 inertia", "把标签画回散点图看形状 + 看噪声点比例 + 看邻近参数下的稳定性"], "a": 3, "why": "silhouette <b>偏爱凸形簇</b>，在弯曲结构上可能反而偏袒 k-means。必须补上<b>几何检视</b>和<b>噪声比例</b>。<s>inertia 不能跨算法比</s>——DBSCAN 根本不优化它。"}], "15": [{"q": "Practical Q4 在弯曲簇上比较两个算法时，除了 silhouette 还应该看什么？", "o": ["只需要看运行时间", "看 inertia 的绝对值", "看图上的几何形状，以及被标为噪声的点数", "看特征的个数"], "a": 2, "why": "silhouette 对弯曲结构有偏见，所以必须补上<b>几何检视</b>（形状是否被正确跟随）和<b>噪声比例</b>（DBSCAN 是不是把大量有效点丢成了 −1）。inertia 在两个算法之间<b>不可比</b>，因为 DBSCAN 根本不优化它。"}], "16": [{"q": "notebook 强调「按顺序运行、先缩放公共数据集」，原因是？", "o": ["因为 sklearn 会报错", "因为两个算法都基于距离，缩放决定了后面所有距离与邻域的含义", "为了让图好看", "因为缩放能提高运行速度"], "a": 1, "why": "K-means 的欧氏距离和 DBSCAN 的 ε 邻域<b>都直接依赖特征单位</b>。不先统一缩放，后面比较 k、比较 ε、比较两个算法就<b>失去了共同基准</b>。"}]};
+
+var N = [{"r": [1, 1], "t": "这一讲要回答什么", "star": 1, "one": "没有类别标签的时候，怎么把观测分成有用的组？", "pts": ["<b>副标题里的 assumptions 是关键词</b>：这一讲真正要你掌握的不是两个算法的步骤，而是<b>它们各自假设了「一个组」长什么样</b>。步骤十分钟能学会，假设才是考点。", "<b>K-means 认「到质心的距离」，DBSCAN 认「密度连通」</b>——这是两种<b>完全不同的「组」的定义</b>。所以它们在同一份数据上给出不同答案是<b>必然的</b>，不是谁算错了。", "<b>和 T1 的关系</b>：PCA 换<b>表示</b>（连续的新坐标轴），聚类给<b>分组</b>（离散的组归属）。两者都无监督、都没有 ground truth，但<b>输出的类型根本不同</b>。", "⚠️ 这一讲会反复出现一句话：<b>聚类结果是模型产出的摘要，不是自动发现的真实类别</b>。大题的最后一步就靠它。"], "tip": {"t": "与考试的关系", "v": "M2 测验里聚类部分的手算几乎一定是：<b>K-means 一轮分配+更新</b>，或 <b>DBSCAN 判 core/border/noise</b>。两个都要练到不用想。"}, "exam": "开场定调句：<b>「聚类没有供给的答案，所以判断一个分组好不好必须综合多类证据」</b>。后面三道大题都能接上。", "ng": "<b>k-means 从零听</b>：Lecture 13 的开头到 18:00 就是完整的 k-means。<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=7s\" target=\"_blank\">00:00</a> 起讲算法本身，<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=780s\" target=\"_blank\">13:00</a> 讲<b>为什么一定收敛</b>，<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=941s\" target=\"_blank\">15:41</a> 讲<b>会卡在局部极小</b>。⚠️ <b>DBSCAN 在 CS229 完全没有讲</b>，那部分只能看 Canvas 讲义。<span class='src'>视频：CS229 Lecture 13 前 18 分钟 · 讲义：main_notes.pdf 第 147–149 页（本地 CS229/notes/ch10_kmeans.txt）</span>", "quote": "<b>Clustering</b> — <em>K-means, DBSCAN and the assumptions behind groups</em>", "say": "把这一讲放进 CS229 那张 2×2 地图：横轴是<b>建不建模 P(x)</b>，纵轴是<b>数据住在低维子空间还是聚成团</b>。聚类占的是<b>「团」那一行</b>——非概率的是 <b>K-means</b>，概率的是 <b>GMM</b>（T3 的内容）。所以 <b>K-means 和 GMM 是同一行的两格</b>，差别只在建不建模概率；而 <b>DBSCAN 连这张表都进不去</b>，因为它既不建模 P(x)、也不假设「绕某个中心聚成团」，它只认<b>密度连通</b>。⚠️ 还有一件事要先知道：<b>DBSCAN 完全不在 CS229 的范围内</b>（Ng 的无监督只讲 k-means、GMM/EM、因子分析、PCA、ICA），所以这份精读里 DBSCAN 那几页的深度来自<b>课程自己的讲义</b>，不是 CS229。"}, {"r": [2, 2], "t": "六段路线图", "one": "什么是聚类 → 相似 → K-means → 选 k → DBSCAN → tutorial 与 practical。", "pts": ["⭐ <b>第 2 段的小标题是这一讲的枢纽</b>：<em>Distance and scaling define what “close” means</em>——<b>距离和缩放定义了「近」是什么意思</b>。换句话说，<b>「相似」不是数据自带的性质，是你选出来的</b>。", "<b>第 4 段把三种依据并列</b>：inertia、silhouette、<b>领域含义</b>。注意第三个——官方把「讲不讲得通」和两个数值指标放在同等地位。", "<b>第 5 段点出了 DBSCAN 的三个专有名词</b>：稠密区、<b>边界点</b>、<b>噪声</b>。后两个是 K-means 完全没有的概念。", "<b>路线图就是答题顺序</b>：被问「怎么做聚类」，按「定义相似 → 选算法 → 拟合 → 用多类证据选参数 → 解释与局限」写即可。"], "tip": {"t": "读法建议", "v": "第 ② 段（相似/缩放）看起来最像废话，其实是大题最常见的采分点：几乎每道聚类评价题都要你指出尺度问题。"}, "exam": "「解释每一段如何引出下一段」是官方 Study check。一条干净的串法：<b>没有标签 ⇒ 必须自己定义「近」⇒ 定义好了才能跑算法 ⇒ 算法要一个 k ⇒ 选 k 需要多类证据 ⇒ 但 K-means 的假设不总成立 ⇒ 引出 DBSCAN</b>。", "quote": "<b>M2 T2 Roadmap</b>：1 What Is Clustering? — <em>Grouping without supplied class labels</em> · 2 Similarity — <em>Distance and scaling define what “close” means</em> · 3 K-means · 4 Choosing k — <em>Inertia, silhouette and domain meaning</em> · 5 DBSCAN — <em>Dense regions, border points and noise</em>", "tbl": [{"cap": "五段 ↔ 各自回答什么", "head": ["段", "小标题", "回答的问题"], "rows": [["1", "What Is Clustering?", "没有标签的情况下「分组」是什么意思"], ["2", "<b>Similarity</b>", "<b>「近」由距离与缩放定义</b>"], ["3", "K-means", "分配与更新两步、目标 J"], ["4", "Choosing k", "inertia / silhouette / <b>领域含义</b>"], ["5", "DBSCAN", "稠密区、边界点、<b>噪声</b>"]]}], "say": "路线图第 2 段「Similarity」为什么要单独占一段、而不是塞进「What is clustering」里？因为<b>它是唯一一个「你做的决定」而不是「算法做的事」</b>。第 3、5 段讲的是算法怎么跑，第 4 段讲怎么挑参数——<b>只有第 2 段完全由你说了算</b>：选哪些特征、要不要缩放、用什么距离。⭐ 这也是为什么后面评价一个聚类结果时，第一句话几乎总是从这里开始（「两个特征量程相差三个数量级，欧氏距离会被 X 主导」）。<b>把它当成一个独立的决策点，而不是数据清洗的附属品。</b>", "ng": "Ng 讲 k-means 的顺序和这张路线图前三段几乎一致，但<b>开场先给用途再给算法</b>：<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=97s\" target=\"_blank\">01:37</a> 他说聚类<b>最常见的用途之一是市场细分</b>；<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=223s\" target=\"_blank\">03:43</a> 讲两步（<em>找出所有蓝点的均值，把蓝色质心搬过去</em>）；<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=749s\" target=\"_blank\">12:29</a> 写出代价函数；<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=813s\" target=\"_blank\">13:33</a> 回答「k 怎么选」。⚠️ <b>路线图第 5 段的 DBSCAN 他完全没讲</b>。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [3, 3], "t": "PCA 和聚类解决的是不同问题", "star": 2, "one": "PCA 换的是表示（连续新坐标轴）；聚类给的是分组（离散标签）。", "pts": ["⭐ <b>「No cluster labels are produced」这句要原样记住</b>：<b>PCA 不产生任何簇标签</b>。「PCA 降到二维就看见两个簇了」是<b>视觉印象</b>，簇必须另外用聚类算法算出来。", "<b>共同点</b>（Study check 第一问）：两者都是无监督、都没有 ground truth、都依赖特征表示、都会被尺度影响、结果都需要解释。", "<b>最重要的差别</b>（第二问）：<b>输出的类型不同</b>——PCA 给<b>连续</b>的新坐标，聚类给<b>离散</b>的组归属。", "<b>什么时候这个差别会改变你的决定</b>（第三问）：当你要的是「把相关特征压缩掉」→ PCA；要的是「把样本分成几伙来分别对待」→ 聚类。⚠️ <b>「先 PCA 再聚类」是两个各自需要论证的决定</b>，不是一个。"], "tip": {"t": "高频失分点", "v": "<b>「PCA 降到二维就得到了两个簇」</b>——错。PCA <b>不产生任何簇标签</b>；图上看起来分开只是投影后的视觉效果，簇要另外算。", "w": 1}, "exam": "概念选择题常客。大题若出现「先 PCA 再聚类」的流程，记得指出<b>这是两个决定，各自都要论证</b>。", "quote": "<b>PCA and Clustering Solve Different Problems</b> — <em>PCA changes the representation; clustering assigns group structure.</em> · PCA: <em>Builds new continuous axes · Preserves high-variance directions · <b>No cluster labels are produced</b></em> · Clustering: <em>Builds discrete group assignments</em>", "tbl": [{"cap": "两边对照（课件原表）", "head": ["", "PCA", "聚类"], "rows": [["造什么", "<b>连续</b>的新坐标轴", "<b>离散</b>的组归属"], ["对特征做什么", "压缩相关特征", "把近的/密度连通的点归到一起"], ["保住什么", "高方差方向", "组内相似、组间不相似"], ["产不产生簇标签", "<b>不产生</b>", "产生"]]}], "say": "「先 PCA 再聚类」这个流程在实践中很常见，但它<b>横跨这张对照表的两边</b>，所以是<b>两个各自需要论证的决定</b>：① <b>为什么要降维</b>——是为了可视化、还是为了提速省内存？（CS229 里 Ng 明确只背书这两个理由）② <b>为什么在降维后的空间里聚类是合理的</b>——PCA 保住的是<b>高方差方向</b>，而<b>区分不同组的关键方向未必方差大</b>。⚠️ 换句话说，<b>降维可能恰好把区分组的那个方向丢掉了</b>。要论证这一步，最直接的办法是<b>对照</b>：降维前后各聚一次，比较成员与内部指标。", "ng": "⭐ <b>Ng 用一张 2×2 把 PCA 和聚类的关系讲得比这一页更透</b>——<a href=\"https://www.youtube.com/watch?v=dyb_cFywuik&t=2947s\" target=\"_blank\">49:07</a> 起他在课上让同学一起填这张表：横轴是<b>建不建模 P(x)</b>，纵轴是<b>你假设数据长什么样</b>。<b>PCA 占「低维子空间 × 非概率」，K-means 占「聚成团 × 非概率」</b>——<b>两者同在「非概率」这一列，但纵轴完全不同</b>。⭐ 这正是这一页想说的：<b>它们的差别不在于用不用概率，而在于假设数据长什么样</b>。到 <a href=\"https://www.youtube.com/watch?v=dyb_cFywuik&t=3110s\" target=\"_blank\">51:50</a> 他补了一句：<b>EM 管的是整个「概率」列</b>，这也顺带解释了 K-means 为什么没有 EM 步骤。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [4, 4], "t": "K-means 最小化簇内平方距离", "star": 3, "one": "目标函数 J（也叫 inertia / WCSS）就是「每个点到自己质心的平方距离之和」。", "eq": "J(c, μ) = Σᵢ ‖ xᵢ − μ_c(i) ‖²\n分配：c(i) ← argmin_j ‖xᵢ − μⱼ‖²      （固定 μ，动 c）\n更新：μⱼ ← (1/|Cⱼ|) Σ_{i∈Cⱼ} xᵢ      （固定 c，动 μ）", "pts": ["<b>J 的读法</b>：每个点到<b>它自己被分到的那个</b>质心的平方距离，全部加起来。下标 c(i) 就是「第 i 个点归哪一簇」。", "<b>三个名字同一个东西</b>：CS229 叫 <b>distortion function（失真函数）</b>，你们课件和 sklearn 叫 <b>inertia</b> 或 <b>WCSS</b>（within-cluster sum of squares）。", "⚠️ <b>J 直接鼓励的只有「簇内紧凑」</b>——它<s>没有</s>任何一项显式要求簇与簇之间离得远，更没有任何一项在保证「这些簇对应真实类别」。<b>低 J 只说明点离各自质心近。</b>", "⚠️ <b>J 是求和不是平均</b>，点越多越大 ⇒ <b>只能在同一份数据、同一套特征与缩放下比较</b>。拿标准化前后的 inertia 比大小是没有意义的，两者不在同一量纲上。"], "say": "⭐ 上表这个互补结构不是巧合。CS229 讲义点破了它：<b>K-means 其实是对 J 做「坐标下降」</b>——J 有两组变量（分配 c 与质心 μ），同时优化很难，但<b>固定一组、优化另一组都有闭式最优解</b>。固定 μ 优化 c，答案是「选最近的」＝分配步；固定 c 优化 μ，答案是「取均值」＝更新步。<b>所以更新步取均值不是经验做法，而是「对一组固定的点，使 Σ‖xᵢ−c‖² 最小的 c 就是均值」这个最小二乘性质的直接结果。</b>", "tip": {"t": "容易答错", "v": "<b>「J 越小说明簇分得越好」</b>——只在<b>同一份数据、同一个 k、同一套缩放</b>下才成立。k 越大 J 越小（k=n 时 J=0），所以 <s>不能用「J 最小」选 k</s>。", "w": 1}, "exam": "大题常问「这两步在减小什么」——答 <b>J（inertia / WCSS）</b>，并补一句它只说明紧凑、不证明分组有意义。若问「为什么更新取均值」，答<b>均值是使簇内平方和最小的点</b>，比说「因为要取中心」高一个层次。", "ng": "目标函数在 CS229 里叫 <b>distortion function（失真函数）</b>，就是这一页的 J。他还点出一个本课课件没说的视角：<b>k-means 是对 J 做坐标下降</b>——先固定质心对分配求最优，再固定分配对质心求最优。<span class='src'>视频：CS229 Lecture 13 前段 · 讲义：ch10_kmeans.txt</span>", "quote": "<b>K-means Minimises Within-Cluster Squared Distance</b> — <em>Each point is assigned to one centroid, then centroids move to cluster means.</em> · <b>J = Σᵢ ‖xᵢ − μ_c(i)‖²</b> · <em>Assignment chooses the nearest centroid. Update replaces each centroid with the mean of its assigned observations.</em>", "tbl": [{"cap": "两步的「固定什么 / 动什么」正好互补", "head": ["步", "固定", "优化", "结果"], "rows": [["分配", "质心 μ", "每点的归属 c", "每点去<b>最近</b>的质心"], ["更新", "归属 c", "质心 μ", "质心搬到该簇<b>均值</b>"]]}]}, {"r": [5, 5], "t": "两个简单步骤轮流跑", "star": 3, "one": "初始化 → 分配 → 更新 → 停止；每一步都不会让目标变大。", "pts": ["⭐ <b>「The objective cannot increase」只是收敛论证的前半句。</b> 单调不增本身推不出「会停下来」——一个每次减一半的数列也单调不增，但永远不停。", "<b>完整论证还需要后半句</b>：<b>把 n 个点分到 k 个簇的方式只有有限多种</b>（至多 kⁿ），而每个确定的分配对应一个确定的 J 值 ⇒ <b>J 只能取有限多个值</b> ⇒ 不可能无限下降 ⇒ <b>必然在有限步内停下</b>。<b>答大题时两句都要写。</b>", "⚠️ <b>n_init=10 是十次独立重启</b>（<em>ten starts</em>），每次都跑到收敛，最后保留 <b>inertia 最低</b>的那一次。<s>不是迭代十轮</s>——迭代上限是 <code>max_iter</code>。这是高频混淆点。", "<b>k-means++ 做的是另一件事</b>：让<b>起始质心互相远离</b>（第一个随机取自数据，之后按距离平方加权抽样）。它改善<b>单次</b>的起点质量，n_init 用<b>重复</b>兜底，两者互补。⚠️ <b>但都只是降低风险，不保证全局最优。</b>"], "say": "CS229 课上 Ng 的措辞其实很谨慎，他说的是 <em>this shows k-means must converge, <b>or at least this function must converge</b></em>——<b>他自己留了余地</b>，因为「非负 + 单调下降」严格说只能推出 J 这个<b>数列</b>收敛。讲义里那版「分配方式有限」才是更强的论证。另外他补了一条很实在的：超大数据上 J 降得太慢就<b>直接切断</b>，「也许它还没完全收敛，我们就切掉，叫它 good enough」——那就是 <code>max_iter</code> 的现实意义。", "tip": {"t": "必考的一句", "v": "「为什么 k-means 一定收敛」标准答法：<b>两步都不增加 J，且分配方式有限，所以必然停下；但 J 非凸，停下的地方只是局部极小。</b>"}, "exam": "「为什么 K-means 一定收敛」是高频问答。标准答法：<b>①两步都不增加 J ②分配方式有限所以 J 只能取有限个值 ⇒ 必然有限步停下</b>；再补一句<b>「但 J 非凸，停的地方只是局部极小」</b>。", "ng": "收敛性论证在 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=780s\" target=\"_blank\">13:00</a>：J 单调不增，<b>而且把 n 个点分到 k 个簇的方式只有有限多种</b>，所以必然停下。紧接着 <a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=941s\" target=\"_blank\">15:41</a> 他说「k-means get stuck on local minima」——<b>J 非凸，所以要多次随机初始化</b>。这两段合起来就是本页那道必考问答的完整答案。<span class='src'>视频：CS229 Lecture 13 · 讲义：ch10_kmeans.txt</span>", "quote": "<b>K-means Alternates Two Simple Steps</b> — <em>The objective cannot increase after a correct assignment or update step.</em> · 1 Initialise — <em>use k-means++ for spread-out starts; <b>n_init=10 runs ten starts and keeps the lowest-inertia result</b></em> → 2 Assign → 3 Update", "tbl": [{"cap": "两道防线 · 别混淆的三个参数", "head": ["参数", "管什么", "常见误解"], "rows": [["<code>init='k-means++'</code>", "让起始质心<b>散开</b>", "以为它保证全局最优"], ["<code>n_init=10</code>", "<b>独立重启 10 次</b>，取 inertia 最低", "<s>误以为是迭代 10 轮</s>"], ["<code>max_iter</code>", "<b>单次</b>拟合的迭代上限", "—"]]}, {"cap": "收敛论证的两半（缺一不可）", "head": ["", "说了什么", "够不够"], "rows": [["课件给的", "两步都不增加 J", "<b>不够</b>——单调不增可以永不停止"], ["还需要补", "分配方式有限 ⇒ J 取值有限", "<b>合起来才推出有限步内停下</b>"]]}]}, {"r": [6, 6], "t": "K-means 适合什么、怕什么", "star": 2, "one": "适合紧凑的、以质心为中心的球状组；怕尺度、形状、离群点和坏的初始化。", "pts": ["<b>五条软肋就是评价 K-means 结果的现成清单</b>：k 要事先给、尺度、初始化、形状、离群点。大题问「这个结果可靠吗」，逐条点名即可。", "<b>还有一条课件没列但同样重要</b>：<b>每个点必须有标签</b>——K-means 没有「噪声」这个选项。一个明显的离群点会被硬塞进某个簇，<b>还会把那个簇的均值质心拽偏</b>。<b>双重伤害。</b>", "<b>「形状」那条的机制</b>：K-means 假设簇是<b>紧凑、以质心为中心</b>的。两条互相缠绕的弯弧各自<b>没有有意义的「中心」</b>，于是算法会沿某个方向<b>横切</b>，得到的两个簇与真实结构完全无关。", "<b>「初始化」那条的后果</b>：同一份数据两次运行可以得到明显不同的分组。<b>这不是 bug，是 J 非凸的表现</b>——存在多个局部极小，落到哪个取决于初始质心。"], "say": "四点例子（A(−2,−1) B(−2,1) C(2,−1) D(2,1)）值得记住，因为它同时说明两件事：<b>①「上下分」那个 J=16 的解同样满足「再迭代也不变」</b>——它是个货真价实的局部极小，算法到那儿就停了不会自己爬出来；<b>②落到哪一个完全取决于初始质心</b>。这就是 J 非凸的实际后果：<b>算法必然停下，但不保证停对</b>。", "tip": {"t": "答题句式", "v": "评价 K-means 结果时，这五条（k / 尺度 / 初始化 / 形状 / 离群点）就是现成的检查清单，逐条点名即可。"}, "exam": "「同一份数据两次运行结果不同说明什么」——答 <b>J 非凸、存在多个局部极小、结果依赖初始化</b>，再给应对（k-means++ 与多次重启），并注明<b>不保证全局最优</b>。", "quote": "<b>K-means Works Best for Compact Centroid-Based Groups</b> — k: <em>Must be specified before fitting</em> · Scale: <em>Large-unit features dominate Euclidean distance</em> · Initialisation: <em>Different starts can reach different local optima</em> · Shape: <em>Non-spherical groups can be split incorrectly</em> · Outliers: <em>Extreme points pull centroids</em>", "tbl": [{"cap": "四点例子：两个都「稳定」的解，质量差四倍", "head": ["分法", "质心", "每点到质心", "J"], "rows": [["{A,B} | {C,D}（左右分）", "(−2,0) 与 (2,0)", "都是 1", "<b>4</b>"], ["{A,C} | {B,D}（上下分）", "(0,−1) 与 (0,1)", "都是 2", "<b>16</b>"]]}, {"cap": "五条软肋 · 机制与应对", "head": ["软肋", "机制", "应对"], "rows": [["k 要事先给", "算法不会告诉你有几类", "多证据选 k（见 p7）"], ["尺度", "大量纲特征独占欧氏距离", "比较缩放前后；必要时标准化"], ["初始化", "J 非凸，多个局部极小", "<b>k-means++ + n_init</b>"], ["形状", "假设紧凑绕质心", "弯曲结构改用 <b>DBSCAN</b>"], ["离群点", "拽偏均值质心，且<b>必被分入某簇</b>", "先查离群点；或用 DBSCAN 的 noise"]]}], "ng": "五条软肋里，<b>Ng 课上明确确认过的是「初始化」这一条</b>。<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=906s\" target=\"_blank\">15:06</a> 有学生问 k-means 会不会卡住，他答：<em>Well, k-means get stuck on local minima</em>——<b>会</b>。应对办法他讲得很直接：<b>从不同的随机初始质心跑 10 次、100 次、甚至 1000 次，然后挑代价函数最低的那一次</b>。⭐ 这就是 sklearn 里 <code>n_init</code> 的由来。<br>⚠️ 另外注意一个措辞差别：课件说 <em>Different starts can reach different local optima</em>（可能），Ng 说的是 <em>get stuck</em>（会）。<b>答题按课件的中性说法写</b>，但心里知道这在实践中很常见。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [7, 7], "t": "证据一致才可信", "star": 3, "one": "内部证据 / 稳定性 / 几何 / 表示 / 有用性——五路证据大体一致，结论才站得住。", "pts": ["⭐ <b>页标题就是答题原则</b>：<b>只有当多类证据一致时，才信这个聚类结果。</b>", "⚠️ <b>Geometry 那一行里藏着最重要的警告</b>：<em>silhouette can favour compact convex groups</em>——<b>silhouette 偏爱紧凑的凸形簇</b>。在弯曲结构上它可能<b>反而偏袒 K-means</b>，给出与几何事实相反的排序。<b>这句话几乎是每道聚类评价大题的必写句。</b>", "<b>官方 Study check 直接给了一个情形</b>：k=4 的 silhouette 最高但产生一个不稳定的小簇，k=3 稳定且可解释——<b>哪个更站得住？</b> 答：<b>k=3</b>。理由是<b>单一指标最高不足以取胜</b>，不稳定意味着那个划分可能只是某次初始化的偶然产物。", "<b>收尾必须写的那一句</b>：这是 <b>a reasoned judgement, not proof</b>（有依据的判断，不是证明）——评估框架页的原话。"], "say": "两张表要分清出处：<b>上表来自聚类讲义</b>（k=3 在两个指标上都最好），<b>下表来自评估框架页</b>（k=4 的 silhouette 最高却不稳定，最终仍选 k=3）。<b>下表才是考点</b>——它演示的正是「单一指标最高不等于最好」。<br>另外有一条容易忽略的细节：<b>全局最优</b>的 inertia 随 k 增大不会上升，但<b>实际拟合</b>的多次运行会落进不同局部极小，所以<b>你观测到的 inertia 未必随 k 单调下降</b>——那不是 bug，应提高 <code>n_init</code> 后再比较。", "tip": {"t": "必背", "v": "silhouette 在 −1 到 1 之间；接近 1 = 匹配得好，接近 0 = 边界/重叠，<b>负值 = 这个点可能更该属于别的簇</b>。对 DBSCAN 评估时要<b>先排除噪声点（标签 −1）</b>并报告被排除的比例。", "w": 1}, "exam": "「该选哪个 k」的大题按四条扫：<b>内部指标 + 稳定性 + 几何与表示 + 领域有用性</b>，最后写 <b>a reasoned judgement, not proof</b>。<b>只报一个 silhouette 就下结论最多拿一半分。</b>", "ng": "<b>CS229 没有对应内容。</b> 「多证据框架」「silhouette」「肘部法」都是<b>本课自己的教学内容</b>，CS229 这一讲没有涉及。只能按 Canvas 的评估页来准备。<span class='src'>来源：Canvas「Evaluating Unsupervised Learning」，本地 M2材料/Canvas讲义/T1-A_总览与评估框架.txt</span>", "quote": "<b>Trust a Clustering Result Only When Evidence Agrees</b> — Internal evidence · Stability — <em>Compare initialisations, samples and nearby parameter values</em> · Geometry — <em>Inspect plots; <b>silhouette can favour compact convex groups</b></em> · Representation — <em>Recheck scaling</em>", "tbl": [{"cap": "讲义示例：同一份数据不同 k", "head": ["k", "inertia", "silhouette", "解读"], "rows": [["2", "142", "0.58", "较粗的分组"], ["3", "<b>76</b>", "<b>0.64</b>", "<b>有力的候选</b>"], ["4", "55", "0.52", "更细但分离更差"]]}, {"cap": "评估框架页的决策表（注意结论）", "head": ["候选", "内部证据", "稳定性", "应用证据"], "rows": [["k=2", "silhouette 0.58", "稳定", "<b>合并了专家要区分的两组</b>"], ["k=3", "silhouette 0.55", "稳定", "三组解释得通 ⇒ <b>最终选它</b>"], ["k=4", "silhouette <b>0.59（最高）</b>", "<b>不稳定</b>", "有个小组每次都在变"]]}]}, {"r": [8, 8], "t": "DBSCAN：核心点扩张，边界点只加入", "star": 3, "one": "core 能长出簇，border 只能被吸进来，noise 两者都不是。", "eq": "Nε(x) = { z : ‖z − x‖ ≤ ε }        ⚠ 含 x 自己，且距离等于 ε 也算\ncore：|Nε(x)| ≥ MinPts\nborder：自己不够 core，但落在某个 core 点的 ε 邻域内\nnoise：两者都不是（sklearn 标 −1）", "pts": ["⚠️ <b>两个必须记死的约定</b>：ε 邻域<b>包含 x 自己</b>；距离<b>等于 ε 也算在内</b>（取等号）。手算题里错一个，整题的角色判定全错。", "⭐ <b>页标题就是最核心的规则</b>：<b>边界点加入簇，但不扩张簇。</b> 只有核心点能让簇继续长大——这是 DBSCAN 与 K-means 最结构性的差别。", "<b>为什么只有核心点能扩张</b>：因为「直接密度可达」的定义是「q 在 p 的邻域里<b>且 p 是核心点</b>」。<b>那个「且」就是一切的源头。</b>", "<b>噪声只是临时标签</b>：遍历时如果先访问到一个还没被认出邻居的点，它会被<b>暂时标成噪声</b>；等后面发现某个核心点的邻域包含它，它就<b>改判为边界点</b>。<b>噪声标签在遍历过程中不是终局。</b>"], "say": "⭐ 这组算例有个很好的敏感性练习（官方 Study check）：<b>把 ε 放大到 1.1、MinPts 仍是 3 会怎样？</b> 算一下——A 的邻域变成 {A,B,C} 共 3 个，<b>A 也成了核心点</b>；C 同理。于是三个点都是 core。但 D、E 的邻域仍只有 {D,E}=2，<b>仍是噪声</b>。<b>结果：角色变了，但最终分组没变（还是 {A,B,C} + 两个噪声）。</b> 这正是大题要你做的那种参数敏感性分析。<br>另外注意 D、E 之间虽然只差 0.4（很近），但<b>两个点凑不够 MinPts=3</b>，所以它们形不成自己的簇。", "tip": {"t": "高频失分点", "v": "<b>邻域不含自身</b>是最常见的错，会让每个计数少 1，角色判定全部偏一位。<b>距离等于 ε 不算</b>也错——本课与 sklearn 都取 ≤。", "w": 1}, "exam": "判角色是最可能出现的手算题之一。答题<b>列成表</b>：点 → 邻域集合 → 个数 → 角色，最后写出簇与噪声。<b>务必在开头声明「邻域含自身、距离取等也算」</b>。", "ng": "⚠️ <b>CS229 完全没有讲 DBSCAN</b>——Ng 的无监督部分只覆盖 k-means、GMM/EM、因子分析、PCA、ICA。所以这一页<b>没有 Andrew Ng 的对应资源</b>，要补基础只能看 Canvas 的 DBSCAN 页（core/border/noise 三类点、密度可达、参数敏感性都在那里，而且写得比 PPT 细）。<span class='src'>来源：Canvas「DBSCAN」，本地 M2材料/Canvas讲义/T2-B_DBSCAN与Python工作流.txt</span>", "quote": "<b>DBSCAN Border Points Join but Do Not Expand Clusters</b> — <em>Core-point connectivity grows a cluster; border points inherit membership only.</em> · Core-point rule: <b>|Nε(x)| ≥ MinPoints</b> · <em>A border point has too few neighbours to be core but lies within ε of a core point.</em> · <em><b>Only core points extend density reachability</b></em>", "tbl": [{"cap": "三类点 · 判定与能力", "head": ["角色", "判定条件", "能扩张簇吗", "属于簇吗"], "rows": [["<b>core</b>", "|Nε(x)| ≥ MinPts", "<b>能</b>", "是"], ["<b>border</b>", "不够 core，但在某 core 的 ε 内", "<b>不能</b>", "是"], ["<b>noise</b>", "两者都不是", "—", "<b>否</b>（sklearn 标 −1）"]]}, {"cap": "算例：A=0 B=0.5 C=1.0 D=3.0 E=3.4，ε=0.6，MinPts=3（已复算）", "head": ["点", "ε 邻域（含自身）", "个数", "角色"], "rows": [["A = 0", "{A, B}", "2", "border"], ["B = 0.5", "{A, B, C}", "<b>3</b>", "<b>core</b>"], ["C = 1.0", "{B, C}", "2", "border"], ["D = 3.0", "{D, E}", "2", "<b>noise</b>"], ["E = 3.4", "{D, E}", "2", "<b>noise</b>"]]}]}, {"r": [9, 9], "t": "Checkpoint：五个必须能默写的点", "star": 2, "one": "距离先缩放 / 分配取最近 / 更新取均值 / core 含自己 / 噪声是 −1。", "pts": ["<b>五个必须能默写的点</b>，Study check 要求 <em>without looking</em>。", "⚠️ <b>第一条就是顺序问题</b>：<em>scale features <b>before</b> neighbourhood methods</em>——<b>先缩放，再用基于邻域的方法</b>。因为 ε 是一个带量纲的距离阈值，缩放一变它的含义就全变了。", "⭐ <b>第四条官方特意写了 including self</b>——这是最容易错的约定，课件把它放进 Checkpoint 说明它是考点。", "<b>要能说出一条连接</b>（Study check 的要求）：最容易说的是——<b>K-means 的「最近质心」和 DBSCAN 的「ε 邻域」用的是同一个距离，所以两者都受缩放影响；但前者强制每点有标签，后者允许标 −1</b>。"], "tip": {"t": "主动回忆", "v": "盖住右边自己说一遍。说不全就回到第 5 页和第 8 页，那是两个算法各自的核心机制。"}, "exam": "Checkpoint 的五点<b>就是手算大题会用到的全部约定</b>。考前默写一遍能确认没漏洞。", "quote": "<b>M2 T2 Checkpoint</b>：Distance — <em>scale features before neighbourhood methods</em> · K-means assignment — <em>nearest centroid</em> · Centroid update — <em>mean of assigned points</em> · DBSCAN core — <em><b>count ε-neighbours including self</b></em> · Noise — <em>label −1 in scikit-learn</em>", "tbl": [{"cap": "五点默写自检（盖住右列）", "head": ["量", "定义"], "rows": [["Distance", "<b>先缩放</b>再用邻域方法"], ["K-means 分配", "最近的质心（质心此刻不动）"], ["质心更新", "该簇点的<b>均值</b>"], ["DBSCAN core", "|Nε(x)| ≥ MinPts，<b>邻域含自身</b>"], ["Noise", "sklearn 里标签 <b>−1</b>"]]}], "say": "这五个量之间可以串成一条线，Study check 要的就是这种连接：<b>距离是地基</b>——K-means 的「最近质心」和 DBSCAN 的「ε 邻域」<b>用的是同一个欧氏距离</b>，所以<b>两者都受缩放影响</b>，这就是为什么第一条写「先缩放」。但两者<b>用距离的方式不同</b>：K-means 拿它<b>比较</b>（离哪个质心更近），DBSCAN 拿它<b>设阈值</b>（是不是在 ε 以内）。⭐ 这个差别有个实际后果：<b>K-means 只关心相对远近，等比例缩放全部特征不改变分组</b>；而 <b>DBSCAN 的 ε 是绝对阈值，等比例缩放会彻底改变结果</b>。这就是讲义反复强调「<b>ε 必须在缩放之后选</b>」的原因。", "ng": "这五个量里，<b>CS229 只覆盖中间两个</b>：<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=223s\" target=\"_blank\">03:43</a> 讲 k-means 的分配与质心更新。<br><b>另外三个他都没讲</b>：<b>DBSCAN 的 core 与 noise</b> 不在 CS229 范围；而<b>「先缩放再用邻域方法」这条顺序要求</b>是本课自己的口径——Ng 讲 PCA 时倒是强调过缩放（<a href=\"https://www.youtube.com/watch?v=dyb_cFywuik&t=408s\" target=\"_blank\">06:48</a>），但那是针对协方差矩阵说的，<b>和「ε 是带量纲的绝对阈值」不是同一个理由</b>。<br>⭐ 值得区分清楚：<b>K-means 只比较相对远近，等比例缩放全部特征不改变分组</b>；<b>DBSCAN 的 ε 是绝对阈值，等比例缩放会彻底改变结果</b>。<b>后面这条才是「先缩放」的真正理由。</b><span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [10, 10], "t": "第一部分小结 + 进 tutorial 前的清单", "star": 2, "one": "五条要点 + 五个手算前必须确认的动作。", "pts": ["<b>第四条是本页最该记的</b>：<em>Inertia always falls as k grows</em>——<b>inertia 随 k 增大必然下降</b>，所以<b>不能用「inertia 最小」选 k</b>（k=n 时 J=0）。后半句 <em>so context still matters</em> 指的就是领域含义。", "<b>第一条定调</b>：<em>no supplied answer key</em>——没有供给的答案。这是所有「必须多证据」论证的根。", "<b>第五条是 DBSCAN 的两个独有能力</b>：<b>找到噪声</b>、<b>找到非质心形状的簇</b>。K-means 两样都做不到。", "⚠️ <b>但第四条有个更细的版本值得知道</b>：严格说，是<b>全局最优</b>的 inertia 随 k 不上升；<b>实际拟合</b>因为会落进不同局部极小，<b>观测到的 inertia 未必单调</b>。看到 k 变大 inertia 反而上升，<s>那不是 bug</s>。"], "tip": {"t": "送分动作", "v": "平局约定和「每轮质心」这两条，是阅卷时看得见的过程分。写上去几乎不花时间。"}, "exam": "小结页的五句话每句都能当采分句。尤其<b>「inertia 随 k 必降，所以还要看语境」</b>。", "quote": "<b>Section 1 Complete: Clustering</b> — Key Takeaways：<em>Clustering has no supplied answer key</em> · <em>Distance and scaling encode similarity</em> · <em>K-means alternates assignment and mean update</em> · <em><b>Inertia always falls as k grows, so context still matters</b></em> · <em>DBSCAN can find noise and non-centroid-shaped clusters</em>", "tbl": [{"cap": "五条小结 · 各自的考试用途", "head": ["小结", "在大题里怎么用"], "rows": [["没有供给的答案", "开头定调句"], ["距离与缩放编码相似", "评价第一句：量纲不可比就该讨论缩放"], ["分配与均值更新交替", "手算题的流程"], ["<b>inertia 随 k 必降</b>", "否掉「用 inertia 最小选 k」"], ["DBSCAN 能找噪声与非凸簇", "选算法的理由"]]}], "say": "五条小结里<b>第 4 条最该细看</b>：<em>Inertia always falls as k grows, so context still matters</em>。严格说这句话有个前提——<b>「随 k 下降」说的是全局最优的 inertia</b>。而<b>你实际跑出来的 inertia 因为会落进不同的局部极小，未必单调</b>。⚠️ 所以看到「k 从 4 增到 5，inertia 反而上升了」<b>不是 bug</b>，正确的应对是<b>提高 n_init 让每个 k 都尽量接近它自己的最优，再做比较</b>。<b>这个区分讲义里写了，PPT 上没有，但它正是「为什么要多次重启」最硬的理由。</b>", "ng": "⭐ <b>关于「k 怎么选」，Ng 的答案可能和你预期的不一样</b>。<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=813s\" target=\"_blank\">13:33</a> 他说这是他被问得最多的问题，然后回答：<b>「我用 k-means 的时候，通常还是手工选 k」</b>——理由是<b>无监督本身就是歧义的</b>（同一张散点图有人看到 2 个簇、有人看到 4 个）。他还明说<b>倾向不用 AIC/BIC</b>，而是看<b>这个聚类最后要拿来干什么</b>：营销团队<b>有精力设计 4 套方案但做不了 100 套</b>，这就是选 4 的好理由。<br>⚠️ <b>但别误读成「AIC/BIC 不用学」——你们 T3 的 GMM 里它是考点。</b>正确的理解是：<b>这是 Ng 的实务偏好，而且它恰好印证了本课四类证据里「领域有用性」那一条的分量。</b><span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [11, 11], "t": "Tutorial 三道题各在考什么", "star": 1, "one": "Q1 一轮 K-means，Q2 DBSCAN 判角色，Q3 选算法并解释尺度与参数。", "pts": ["<b>三问的分工很清楚</b>：Q1 手算 K-means 一轮；Q2 判 DBSCAN 角色；Q3 <b>论证选哪个算法</b>。前两问考计算，<b>第三问考判断</b>。", "<b>Q3 才是分值密度最高的</b>——它要你从<b>几何、噪声处理、尺度、参数含义</b>四个角度论证。这四个词就是答题提纲。", "⚠️ <b>评分要求是 Show diagnostic working</b>：要展示中间步骤。Q1 要写出每点的两个距离比较，Q2 要写出每点的邻域集合。", "<b>Q3 的标准三段式</b>：<b>①这份数据的什么特征决定了选择 ②因此选谁、为什么它的假设更匹配 ③这个选择的代价是什么、还需要检查什么</b>。只写「DBSCAN 更好」没有分。"], "tip": {"t": "时间分配", "v": "手算题里 Q1 最花时间（要算 n×k 个距离）。建议列成表格算，比逐点写快且不易错。"}, "exam": "Q3 型大题的答题提纲：<b>几何 → 噪声处理 → 尺度 → 参数含义</b>，最后补代价与还需检查什么。", "quote": "<b>Section 2: M2 T2 Tutorial Activity</b> — <em>Three core questions compare centroid and density-based clustering</em> · Q1 <em>performs one complete K-means assignment/update step</em> · Q2 <em>applies DBSCAN neighbourhood, core, border and noise rules</em> · Q3 <em>chooses an algorithm and explains scaling and parameter effects</em>", "tbl": [{"cap": "三问 ↔ 对应的知识点页", "head": ["问", "测什么", "回看哪一页"], "rows": [["Q1", "K-means 一轮（分配 + 更新）", "p4、p5"], ["Q2", "DBSCAN 的邻域/core/border/noise", "p8"], ["Q3", "<b>选算法并论证</b>", "p6、p7、p8"]]}], "say": "三问的<b>难度和分值分布不均匀</b>，时间要相应分配。Q1 和 Q2 是<b>机械计算</b>——流程记熟了就是送分题，但<b>必须展示中间步骤</b>（题干明确要求 <em>Show diagnostic working</em>）：Q1 要写出每个点到两个质心的距离比较，Q2 要写出每个点的邻域集合与计数。<b>Q3 才是拉开差距的地方</b>：它没有标准答案，考的是<b>能不能用四个角度把选择论证清楚</b>。⚠️ 这里最常见的失分不是选错算法，而是<b>只给结论不给理由</b>——「这份数据是弯曲的所以用 DBSCAN」只答了一半，还要说清<b>为什么 K-means 的假设在这里不成立</b>（它假设簇绕质心、弯弧没有有意义的中心）以及<b>选 DBSCAN 的代价</b>（ε 与 MinPts 更难设、密度差异大时会失效）。", "ng": "Tutorial 的 Q1（K-means 走一轮）在 CS229 里有完整对应——<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=223s\" target=\"_blank\">03:43</a> 起 Ng 把两步演示了一遍，<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=749s\" target=\"_blank\">12:29</a> 写出代价函数并论证收敛。<br>⚠️ <b>Q2（DBSCAN 判角色）在 CS229 里没有任何对应</b>；<b>Q3（比较两个算法）也只有一半</b>——K-means 那半有，DBSCAN 那半没有。<br>⭐ 所以这份 Tutorial 里，<b>CS229 能帮你的是「为什么 k-means 这么做」，帮不了你的是「DBSCAN 怎么判」</b>。后者只能靠讲义和这份精读。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [12, 12], "t": "Q1：先分配，再取均值更新", "star": 3, "one": "整个分配步里，当前质心保持不动。", "eq": "分配：c(i) = argmin_j ‖xᵢ − μⱼ‖²　（比平方距离即可）\n更新：μⱼ ← (1/|Cⱼ|) Σ_{i∈Cⱼ} xᵢ", "pts": ["⭐ <b>第一句是评分点</b>：<em>Keep the current centroids fixed throughout each assignment step</em>——<b>整个分配步里质心保持不动</b>。边分边更新是<em>序贯版本</em>，会得到不同结果。", "<b>第 1 步写着 use the supplied initial centroids</b>——<b>用题目给的初始质心</b>，别自己选。", "<b>第 4 步 Explain objective 单独列出来</b>，说明<b>光算对不给满分</b>：还要说出这两步在<b>减小 J</b>。", "<b>手算技巧</b>：比较距离时<b>可以只比平方距离</b>，不用开根号（平方是单调变换，不改变大小关系）。"], "say": "⚠️ 这个例子的收尾有一句容易被忽略但很重要的话：<b>这个计算说明了两步为什么不会增加 J，它并不证明 k=2 对这份数据是「正确」的簇数</b>——那是另一个问题（见 p7）。另外注意质心<b>移到了两点中间</b>（1.5 不是原数据点），<b>质心不必是实际观测</b>。", "tip": {"t": "高频失分点", "v": "<b>边分配边更新质心。</b> 标准 K-means 是<b>批量</b>的：基于同一组固定质心把所有点分完，再统一取均值。", "w": 1}, "exam": "Q1 原型。必写：<b>题目给的初始质心 → 每点的两个距离比较 → 更新后的质心 → 这两步在减小 J</b>。", "ng": "手算一轮 k-means 的流程，CS229 在 Lecture 13 开头用图示走过一遍（<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=7s\" target=\"_blank\">00:00</a>–08:00），比纯文字好懂。<span class='src'>视频：CS229 Lecture 13 开头 · 讲义：ch10_kmeans.txt</span>", "quote": "<b>Question 1: Assignment, Then Mean Update</b> — <em><b>Keep the current centroids fixed throughout each assignment step.</b></em> · 1 Initialise — <em>use the supplied initial centroids</em> → 2 Assign — <em>compare each point’s two distances</em> → 3 Update — <em>average coordinates within each cluster</em> → 4 Explain objective", "tbl": [{"cap": "标准例子 {1, 2, 8, 9}，k=2，初始质心 1 与 8（已复算）", "head": ["点", "到 μ₁=1", "到 μ₂=8", "归谁"], "rows": [["1", "0", "7", "μ₁"], ["2", "1", "6", "μ₁"], ["8", "7", "0", "μ₂"], ["9", "8", "1", "μ₂"]]}, {"cap": "更新与收敛", "head": ["量", "计算", "结果"], "rows": [["μ₁", "(1+2)/2", "<b>1.5</b>"], ["μ₂", "(8+9)/2", "<b>8.5</b>"], ["J", "4 × 0.5²", "<b>1</b>"], ["再分配一次", "分组不变", "<b>已收敛</b>"]]}]}, {"r": [13, 13], "t": "Q2：核心点扩张密度连通集", "star": 3, "one": "临时标签会变——先标成噪声的点后来可能变成边界点。", "eq": "Nε(x) = { z : ‖z − x‖ ≤ ε }　（含 x 自己）\ncore ⟺ |Nε(x)| ≥ MinPoints", "pts": ["⚠️ <b>官方把「including x」单独写成一句</b>，说明这是考点。<b>MinPoints 数的是邻域全部成员，包括 x 自己。</b>", "⭐ <b>页标题的 tentative labels 是关键词</b>：<b>临时标签会随着密度连通被探索而改变。</b> 一个点可能先被标成噪声，后来被改判为边界点。", "<b>为什么会这样</b>：遍历时先访问 A，那时还没发现 B 是核心点，A 自己邻域不够 ⇒ 暂标噪声；继续遍历访问到 B，发现它是核心点并开始扩张，而 B 的邻域里有 A ⇒ <b>A 被吸收，改判为边界点</b>。", "<b>四个检查</b>（课件列的）：算距离 → 数邻域 → 判角色 → 追踪连通性。<b>按这个顺序做不会乱。</b>"], "tip": {"t": "边界点的不确定性", "v": "一个 border 点可能同时落在<b>两个簇</b>的可达范围内，最终归属会<b>取决于遍历顺序</b>。而 core 点组成的连通块是稳定的——所以解读孤立的 border 归属要谨慎。", "w": 1}, "exam": "Q2 原型。<b>务必列成上面那张表</b>，并在开头声明「邻域含自身、距离取等也算」。若问「为什么先标噪声的点后来变成边界点」，答<b>后来访问到的某点被认出是核心点，而它的邻域包含这个点</b>。", "ng": "<b>CS229 没有对应内容。</b> 同第 8 页：DBSCAN 不在 CS229 范围内。<span class='src'>来源：Canvas「DBSCAN」，本地 M2材料/Canvas讲义/T2-B_DBSCAN与Python工作流.txt</span>", "quote": "<b>Question 2: Core Points Expand Density-Connected Sets</b> — <em>Track how tentative labels can change as density connectivity is explored.</em> · <b>Nε(x) = {z : ‖z−x‖ ≤ ε}</b> · <em><b>MinPoints counts all members of Nε(x), including x.</b></em> · <em>Only core points expand a cluster; border points belong without expansion.</em>", "tbl": [{"cap": "答题模板：一行一个点", "head": ["点", "ε 邻域（含自身）", "个数", "≥MinPts?", "角色"], "rows": [["A = 0", "{A, B}", "2", "否", "border（挨着 core B）"], ["B = 0.5", "{A, B, C}", "3", "<b>是</b>", "<b>core</b>"], ["C = 1.0", "{B, C}", "2", "否", "border"], ["D = 3.0", "{D, E}", "2", "否", "noise"], ["E = 3.4", "{D, E}", "2", "否", "noise"]]}, {"cap": "⚠ 边界点的两个性质", "head": ["性质", "后果"], "rows": [["属于簇但<b>不扩张</b>", "簇的生长完全由 core 点驱动"], ["可能<b>同时够得着两个簇</b>", "最终归谁取决于<b>遍历顺序</b> ⇒ 解读孤立边界点要谨慎"]]}], "say": "相比之下，<b>核心点组成的连通块是稳定的</b>，不受遍历顺序影响；不稳定的只有孤立边界点的归属。这一点在写「局限」时可以用：<b>「边界点的归属可能依赖遍历顺序，但核心结构是稳定的」</b>。"}, {"r": [14, 14], "t": "Q3：比较两个算法的假设", "star": 2, "one": "从几何、噪声处理、尺度、参数含义四个角度论证你的选择。", "pts": ["⭐ <b>四个论证角度就写在标题里</b>：<b>几何（geometry）、噪声处理（noise handling）、尺度（scale）、参数含义（parameter meaning）</b>。答题时四个都点到，分就齐了。", "<b>最后那句对比是核心</b>：<em>compare forced assignment with noise labelling</em>——<b>「强制每点都有标签」对比「允许标为噪声」</b>。这是两个算法最实用的一条差别。", "<b>几何角度</b>：K-means 假设紧凑、绕质心（偏凸形）；DBSCAN 认密度连通，<b>能沿弯曲形状一路长过去</b>，因为它从不需要一个「中心」。", "⚠️ <b>比较时的两个陷阱</b>：<s>别用 silhouette 做唯一裁判</s>（它偏爱凸形，在弯曲结构上可能反而偏袒 K-means）；<s>别跨算法比 inertia</s>（DBSCAN 根本不优化它）。"], "tip": {"t": "对照表", "v": "必须指定的参数：K-means 是 <b>k</b>，DBSCAN 是 <b>ε 与 min_samples</b>；典型几何：质心凸形 vs 连通稠密区；未分配观测：K-means <b>没有</b>，DBSCAN <b>有（−1）</b>。"}, "exam": "Q3 三段式：<b>①这份数据的什么特征决定了选择 ②因此选谁、为什么假设更匹配 ③代价是什么、还需检查什么</b>。补上两个比较陷阱，基本满分。", "quote": "<b>Question 3: Compare Algorithm Assumptions</b> — <em>Justify a choice using geometry, noise handling, scale and parameter meaning.</em> · 1 K-means — <em>what shape and assignment assumptions apply?</em> → 2 DBSCAN — <em>what density and noise behaviour is relevant?</em> → Scale — <em>could one feature dominate distance?</em> → <em>compare forced assignment with noise labelling</em>", "tbl": [{"cap": "两算法对比（Q3 的现成骨架）", "head": ["问题", "K-means", "DBSCAN"], "rows": [["必须指定的参数", "簇数 k", "ε 与 min_samples"], ["典型几何", "紧凑、凸形、绕质心", "连通稠密区，<b>可弯曲</b>"], ["未分配观测", "<b>没有</b>，每点必有标签", "<b>有</b>，稀疏点记 −1"], ["主要敏感性", "初始化、k、离群点、尺度", "邻域参数、<b>密度差异</b>、尺度"], ["优化目标", "最小化 WCSS", "<b>没有全局目标函数</b>"]]}], "say": "⚠️ 最后一行值得单独说：<b>DBSCAN 没有全局目标函数</b>——它不是在优化某个数值，而是按「密度连通」这个<em>定义</em>直接把簇构造出来。这解释了为什么<b>拿 inertia 去比较两个算法是没有意义的</b>。<br>还有一条能直接拿分的：<b>当不同真实簇的密度差异很大时，一组全局的 (ε, MinPts) 无法同时描述两边的「稠密」</b>——往稀疏那边调，稠密的几个簇就连成一片；往稠密那边调，稀疏的那个簇整个被判成噪声。<b>这是方法的内在限制，不是参数没调好。</b>", "ng": "⚠️ <b>DBSCAN 完全不在 CS229 的范围内</b>——Ng 的无监督部分只覆盖 k-means、混合高斯与 EM、因子分析、PCA、ICA。这一页的内容<b>只能看课程自己的讲义</b>（<code>M2材料/Canvas讲义/T2-B_DBSCAN与Python工作流.txt</code>，比 PPT 细很多）。<br>⭐ <b>不过 K-means 那一半 Ng 讲得很实在</b>，可以直接用进 Q3 的论证：<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=813s\" target=\"_blank\">13:33</a> 他说选 k 要看<b>下游用途</b>；<a href=\"https://www.youtube.com/watch?v=rVfZHWTwXSA&t=906s\" target=\"_blank\">15:06</a> 确认 k-means <b>会卡在局部极小</b>，要多次重启。<br>把这两条和课件的「几何 / 噪声处理 / 尺度 / 参数含义」四角度合起来，<b>K-means 这边的理由就很充分了</b>；DBSCAN 那边的理由全部来自讲义。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [15, 15], "t": "Practical 五题各在练什么", "star": 1, "one": "K-means 基线 → 用证据选 k → 调密度参数与尺度 → 弯曲组对比 → 按运营需求推荐方法。", "pts": ["<b>Practical 四问的重点在 Q4</b>：<em>compare algorithms on curved groups</em>——<b>在弯曲的组上比较两个算法</b>。这正是 K-means 会失败、DBSCAN 会成功的经典场景。", "⚠️ <b>Q4 的陷阱</b>：在弯曲数据上，<b>silhouette 可能反而给 K-means 更高的分</b>，因为它偏爱凸形。所以评价时必须<b>把标签画回散点图看形状</b>，不能只看分数。", "<b>「consistent scaling workflow」是贯穿要求</b>：整个 notebook 用同一套缩放流程，否则各问的结果不可比。", "<b>Q3 要 explain point roles</b>——解释 core / border / noise 各自是什么、各占多少。<b>报告噪声比例是评估 DBSCAN 的必要一步。</b>"], "tip": {"t": "和大题的关系", "v": "Q4 那种「弯曲组上谁更好」的对比，正是大题最爱考的情形：<b>silhouette 可能偏袒 K-means，而 DBSCAN 才恢复了有意义的形状</b>。"}, "exam": "Practical 的结论常被搬进大题。记住：<b>弯曲结构上 silhouette 可能偏袒 K-means</b>，必须补几何检视。", "quote": "<b>Section 3: Clustering Practical</b> — <em>Use supplied synthetic data and a consistent scaling workflow</em> · Q1 <em>fit K-means and inspect inertia</em> · Q2 <em>compare candidate k values with silhouette evidence</em> · Q3 <em>test density parameters and scaling; explain point roles</em> · Q4 <em>compare algorithms on curved groups</em>", "tbl": [{"cap": "四问 · 用什么证据", "head": ["问", "做什么", "用什么证据"], "rows": [["Q1", "拟合 K-means", "inertia"], ["Q2", "比较候选 k", "<b>silhouette</b>"], ["Q3", "测密度参数与缩放", "<b>三类点的角色与比例</b>"], ["Q4", "弯曲组上比较两算法", "<b>几何检视 + 噪声比例 + 稳定性</b>"]]}], "say": "Practical 四问里，<b>Q4「在弯曲的组上比较两个算法」是整份材料设计得最巧的一问</b>——因为它<b>故意制造了一个「指标和事实打架」的场景</b>：<br>几何上明显是 DBSCAN 赢（它能沿着弯弧长过去），但 <b>silhouette 很可能给 K-means 更高的分</b>，因为 silhouette 的构造完全建立在「到簇内/簇外点的平均距离」上，<b>天然偏爱紧凑的凸形簇</b>。⭐ <b>这一问考的就是你会不会在指标和几何冲突时相信自己的眼睛</b>——正确做法是<b>把标签画回散点图</b>，并在报告里写明「silhouette 在此类结构上会给出误导性排序」。", "ng": "⚠️ <b>Practical 的内容 CS229 完全不覆盖</b>：DBSCAN 不在范围内，而 <b>sklearn 也不讲</b>——CS229 是 2018 年的课，作业用的是学生自己实现的算法，不教 scikit-learn 的 API。<br>⭐ <b>但有一条 Ng 的方法论直接适用</b>：<a href=\"https://www.youtube.com/watch?v=dyb_cFywuik&t=2661s\" target=\"_blank\">44:21</a> 他说用一个复杂模块之前，<b>先看看不用它的基线表现如何</b>，并把默认加上复杂步骤类比成<b>过早优化</b>。放到这里就是：<b>比较两个算法时，先各自跑出最朴素的版本作基线，再谈调参。</b><span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}, {"r": [16, 16], "t": "怎么走这本 notebook", "star": 1, "one": "按顺序跑 → 选 k → 看 DBSCAN 三种角色 → 弯曲组对比与反思。", "pts": ["<b>第 1 步 create and scale the common dataset</b>——<b>先建好并缩放公共数据集</b>，后面各问都用它。这保证了各问结果可比。", "<b>第 3 步的动词是 separate</b>：把 core、border、noise <b>分开</b>来看。sklearn 里核心点的下标在 <code>core_sample_indices_</code>，噪声是 <code>labels_ == -1</code>。", "⚠️ <b>官方 Study check 问了一个重要的方法论问题</b>：<em>how will you avoid using test data to make development decisions?</em>——<b>怎么避免用测试数据做开发决策。</b> 这是泄漏问题在聚类语境下的版本。", "<b>答案</b>：调参（选 k、选 ε）只能用<b>训练数据或验证数据</b>；测试数据留到最后一次性评估。缩放也只能在训练数据上 fit。"], "tip": {"t": "能直接迁移到考试", "v": "notebook 里那套「改一个参数 → 看角色/分组怎么变 → 解释为什么」的流程，就是大题里「识别流程问题」那一类题的原型。"}, "exam": "「怎么避免用测试数据做开发决策」是可以直接问的概念题。答：<b>选 k 与选 ε 只用训练/验证数据，缩放只在训练数据上 fit，测试数据留到最后一次性评估</b>。", "quote": "<b>How to Work Through the Clustering Notebook</b> — 1 Run in order — <em>create and scale the common dataset</em> → 2 Choose k — <em>fit K-means and compare silhouette scores</em> → 3 Inspect DBSCAN roles — <em>separate core, border and noise</em> → 4 Compare and interpret", "tbl": [{"cap": "四步 · 每步的输出与检查", "head": ["步", "做什么", "看什么"], "rows": [["1 按顺序跑", "建数据、<b>统一缩放</b>", "各问可比"], ["2 选 k", "拟合并比 silhouette", "别只看一个数"], ["3 <b>分开看三类点</b>", "core / border / noise", "<b>噪声比例</b>"], ["4 比较与解释", "两算法在弯曲组上", "<b>把标签画回散点图</b>"]]}], "say": "这一页的 Study check 问的是个<b>方法论问题而不是技术问题</b>：<em>how will you avoid using test data to make development decisions?</em>——在<b>无监督</b>的语境下，这个问题比监督学习更容易被忽略，因为「没有标签、没有测试集」的错觉很强。<br>⭐ 但泄漏一样会发生：<b>如果你用全部数据反复试 ε、试 k、试缩放，最后报出来的那个「最好的结果」已经被你挑选过了</b>——它反映的是「在这份数据上碰巧最好看的设置」，而不是这个方法的真实表现。<b>正确做法：调参只用训练/验证数据，留出的部分只在最后看一次。缩放也只在训练数据上 fit。</b>", "ng": "⚠️ <b>sklearn 的用法 CS229 不讲</b>（2018 年的课，作业是自己实现算法）。<br>⭐ <b>但「不要用测试数据做开发决策」这件事，Ng 用了一整讲</b>：<b>Lecture 8 · Data Splits, Models &amp; Cross-Validation</b>（<a href=\"https://www.youtube.com/watch?v=rjbkWSTjHzM\" target=\"_blank\">L8</a>，本地有完整字幕 <code>CS229/transcripts/L8.txt</code>）。那一讲讲的是监督学习的切分纪律，但<b>「一旦你用某份数据做过选择，它就不再是干净的评估集」</b>这个原则<b>在无监督里同样成立</b>——你们 T1 的 PCA 泄漏题考的就是它。<span class=\"src\">CS229/transcripts/ · 本地已下载全部 20 讲</span>"}];
+
+(function(){
+  var PDF="slides/M2T2_Clustering.pdf", MAX=16;
+  var frame=document.getElementById("pdf"), card=document.getElementById("card"),
+      pnum=document.getElementById("pnum"), strip=document.getElementById("strip"),
+      right=document.getElementById("right");
+  var cur=0, map={}, cells=[];
+
+  /* 存档键带课程前缀 —— file:// 下所有本地页面共用一个 origin，
+     两门课都用 "m2t2quiz" 会互相覆盖。 */
+  var KEY = document.body.dataset.key;
+  try {                       // 一次性迁移：早期版本用的是不带课程前缀的键
+    if(!localStorage.getItem(KEY+"quiz")){
+      var _old = localStorage.getItem("m2t2quiz");
+      if(_old){
+        localStorage.setItem(KEY+"quiz", _old);
+        var _p = localStorage.getItem("m2t2p");
+        if(_p) localStorage.setItem(KEY+"p", _p);
+      }
+      /* 搬完就把旧键删掉。不删的话它会一直躺在那儿，
+         用户「清空全部记录」之后下次打开又被复活一遍。 */
+      localStorage.removeItem("m2t2quiz");
+      localStorage.removeItem("m2t2p");
+    }
+  } catch(e) {}
+
+  N.forEach(function(n,i){ for(var p=n.r[0];p<=n.r[1];p++) map[p]=i; });
+
+  for(var p=1;p<=MAX;p++){
+    var b=document.createElement("b");
+    b.title="第 "+p+" 页";
+    if(map[p]!=null) b.className="has";
+    b.onclick=(function(x){ return function(){ go(x); }; })(p);
+    strip.appendChild(b); cells.push(b);
+  }
+
+  function navHtml(){
+    return '<div class="nav"><button class="btn" id="p2">← 上一页</button>'+
+           '<button class="btn" id="n2">下一页 →</button></div>';
+  }
+  function bindNav(){
+    var a=document.getElementById("p2"), b=document.getElementById("n2");
+    if(a) a.onclick=function(){ step(-1); };
+    if(b) b.onclick=function(){ step(1); };
+  }
+  function render(p){
+    var i=map[p];
+    if(i==null){
+      card.innerHTML='<div class="empty">这一页没有单独的讲解。<br>'+
+        '它多半是上一页的<b>增量构建</b>——往前翻一页即可。</div>'+navHtml();
+      bindNav(); return;
+    }
+    var n=N[i], multi=n.r[0]!==n.r[1], h="";
+    h+='<span class="pg'+(multi?" multi":"")+'">p'+n.r[0]+(multi?"–"+n.r[1]:"")+'</span>';
+    h+='<h2>'+n.t+(n.star?'<span class="star">'+Array(n.star+1).join("★")+'</span>':'')+
+        qBadge(n.r[0])+'</h2>';
+    if(n.one) h+='<div class="one">'+n.one+'</div>';
+    if(n.quote) h+='<div class="quote"><span class="t">课件原话</span>'+n.quote+'</div>';
+    if(n.eq)  h+='<span class="eq">'+n.eq.replace(/\n/g,"<br>")+'</span>';
+    if(n.pts) h+='<ul>'+n.pts.map(function(x){ return "<li>"+x+"</li>"; }).join("")+'</ul>';
+    if(n.tbl) h+=n.tbl.map(function(T){var s='<div class="tw">'+(T.cap?'<div class="tc">'+T.cap+'</div>':"")+'<table class="nt">';if(T.head) s+='<thead><tr>'+T.head.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead>';s+='<tbody>'+T.rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>';}).join("")+'</tr>';}).join("")+'</tbody></table></div>';return s;}).join("");
+    if(n.say) h+='<div class="say"><span class="t">CS229 / 讲义补充</span>'+n.say+'</div>';
+    if(n.ng) h+='<div class="ng"><span class="t">从零补基础 · Andrew Ng CS229</span>'+n.ng+'</div>';
+    if(n.exam) h+='<div class="exam"><span class="t">与考试的联系</span>'+n.exam+'</div>';
+    if(n.tip) h+='<div class="tip'+(n.tip.w?" w2":"")+'"><span class="t">'+n.tip.t+'</span>'+n.tip.v+'</div>';
+    card.innerHTML=h+quizHtml(n.r[0])+navHtml();
+    bindNav();
+    bindQuiz();
+    bindBadge();
+  }
+  function go(p){
+    p=Math.max(1,Math.min(MAX,parseInt(p,10)||1));
+    if(p===cur) return;
+    cur=p; pnum.value=p;
+    // 只改 #hash 不会让 Chrome 内置 PDF 阅读器翻页 —— 实测 src 已是 #page=49
+    // 而工具栏仍停在 1/78。必须让它认为这是一次**新的导航**，所以加查询参数。
+    frame.src=PDF+"?p="+p+"#page="+p+"&toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    render(p);
+    paintStrip();
+    revPaint();
+    right.scrollTop=0;
+    var on=strip.querySelector("b.on");
+    if(on) on.scrollIntoView({block:"nearest",inline:"center"});
+    try{ localStorage.setItem(KEY+"p",p); }catch(e){}
+  }
+
+
+  /* ══ 自测与错题记录 ══════════════════════════════════════════════
+     记录形状： ST["起始页#题号"] = {n:做过几次, w:错过几次, r:[最近 6 次 1/0]}
+     全部存 localStorage，纯本地。 */
+  var ST = {};
+  try { ST = JSON.parse(localStorage.getItem(KEY+"quiz") || "{}") || {}; } catch(e){ ST = {}; }
+  function save(){ try{ localStorage.setItem(KEY+"quiz", JSON.stringify(ST)); }catch(e){} }
+
+  function rec(key, ok){
+    var d = ST[key] || {n:0, w:0, r:[]};
+    d.n++; if(!ok) d.w++;
+    d.r.push(ok ? 1 : 0);
+    if(d.r.length > 6) d.r = d.r.slice(-6);
+    ST[key] = d; save();
+  }
+  /* 最近错次数 —— 薄弱点排序用的就是它，不是历史总错数：
+     一个月前错过三次但最近三次全对，不该再排在最前面。 */
+  function recentWrong(d){ return (d.r||[]).filter(function(x){ return x===0; }).length; }
+  /* 「还算不算薄弱」：错过、且最近两次没有连对。
+     用连对而不是「最近窗口里没有 0」，是为了让规则能一句话说清楚，
+     用户看得见自己离毕业还差几次；也挡住了蒙对一次就算掌握。 */
+  function isWeak(d){
+    if(!d || !d.w) return false;
+    var r = d.r || [];
+    return !(r.length >= 2 && r[r.length-1] === 1 && r[r.length-2] === 1);
+  }
+  function unitWrong(start){
+    var qs = Q[start] || [], rw = 0, w = 0, n = 0, qw = 0;
+    qs.forEach(function(_,i){
+      var d = ST[start+"#"+i]; if(!d) return;
+      rw += recentWrong(d); w += d.w; n += d.n; if(isWeak(d)) qw++;
+    });
+    // rw 数的是最近错的**次数**（只用来排序，谁更该先复习）；
+    // qw 数的是**还没毕业的题数**（给人看，也决定标红和进不进复习队列）。
+    return {rw:rw, w:w, n:n, qw:qw};
+  }
+  function histHtml(d){
+    var h = "";
+    for(var i=0;i<6;i++){
+      var v = d && d.r ? d.r[d.r.length-6+i] : undefined;
+      h += '<i class="'+(v===1?"o":v===0?"x":"")+'"></i>';
+    }
+    return h;
+  }
+
+  function quizHtml(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var h = '<div class="quiz"><h3>自测 <b>'+qs.length+'</b> 题</h3>';
+    qs.forEach(function(q,i){
+      var key = start+"#"+i, d = ST[key];
+      h += '<div class="qq" data-k="'+key+'" data-a="'+q.a+'">';
+      h += '<div class="t">'+q.q+'</div>';
+      q.o.forEach(function(o,j){
+        h += '<button class="opt" data-j="'+j+'">'+o+'</button>';
+      });
+      h += '<div class="why" style="display:none"></div>';
+      h += '<div class="qhist">'+histHtml(d)+
+           '<span style="margin-left:6px">'+
+           (d ? "做过 "+d.n+" 次 · 错 "+d.w : "还没做过")+'</span>'+
+           '<button class="qagain">重做</button></div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  function bindQuiz(){
+    document.querySelectorAll(".qq").forEach(function(box){
+      var key = box.dataset.k, ans = +box.dataset.a;
+      var why = box.querySelector(".why"), opts = box.querySelectorAll(".opt");
+      var qs = Q[key.split("#")[0]], q = qs[+key.split("#")[1]];
+      opts.forEach(function(b){
+        b.onclick = function(){
+          var j = +b.dataset.j, ok = (j === ans);
+          opts.forEach(function(x){
+            x.disabled = true;
+            if(+x.dataset.j === ans){ x.classList.add("ok"); x.innerHTML += '<span class="m">✓</span>'; }
+          });
+          if(!ok){ b.classList.add("no"); b.innerHTML += '<span class="m">✗</span>'; }
+          why.innerHTML = q.why; why.style.display = "block";
+          rec(key, ok);
+          box.querySelector(".qhist").innerHTML =
+            histHtml(ST[key]) + '<span style="margin-left:6px">做过 '+ST[key].n+
+            ' 次 · 错 '+ST[key].w+'</span><button class="qagain">重做</button>';
+          bindAgain(box); paintStrip(); revSync();
+          var bd = document.querySelector('#card>h2 .qbadge');
+          if(bd) bd.outerHTML = qBadge(+key.split('#')[0]);
+          bindBadge();
+        };
+      });
+      bindAgain(box);
+    });
+  }
+  function bindBadge(){
+    var b = document.querySelector("#card>h2 .qbadge");
+    if(b) b.onclick = function(){
+      var q = document.querySelector(".quiz");
+      if(q) q.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+  }
+  function bindAgain(box){
+    var a = box.querySelector(".qagain");
+    if(a) a.onclick = function(){ render(cur); };
+  }
+
+  /* 页条上标红：这一单元最近还在错 */
+  function paintStrip(){
+    cells.forEach(function(c,k){
+      var i = map[k+1];
+      var cls = (i!=null ? "has" : "");
+      if(i!=null){
+        if(unitWrong(N[i].r[0]).qw > 0) cls += " err";
+      }
+      if(k+1===cur) cls += " on";
+      c.className = cls;
+    });
+  }
+
+
+  /* ── 标题角标：不用滚到底就知道这页有没有题、错没错过 ── */
+  function qBadge(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var st = unitWrong(start);
+    return '<span class="qbadge'+(st.qw?" bad":"")+'" title="跳到自测">'+
+      (st.qw ? "还错 "+st.qw+"/"+qs.length+" 题" : qs.length+" 题")+' ↓</span>';
+  }
+
+  /* ── 复习模式：前进/后退只在「最近还在错」的页之间跳 ──
+     用户要的是「专项针对薄弱部分复习」。光有一张错题清单还得自己一条条点，
+     所以把它接到翻页上：开了之后 ← → 就只在这些页里走。
+     依据是**最近**错次，不是累计——早就改对的题不该再拦路。 */
+  var rev = false, revList = [];
+  function weakPages(){
+    return N.filter(function(n){ return unitWrong(n.r[0]).qw > 0; })
+            .map(function(n){ return n.r[0]; });
+  }
+  function revPaint(){
+    var chip = document.getElementById("revChip");
+    chip.classList.toggle("on", rev);
+    if(!rev) return;
+    var i = revList.indexOf(mapStart(cur));
+    chip.querySelector("b").textContent =
+      (i < 0 ? "?" : (i+1)) + " / " + revList.length + " 页";
+  }
+  function mapStart(p){ var i = map[p]; return i==null ? -1 : N[i].r[0]; }
+
+  function step(d){
+    if(!rev) return go(cur + d);
+    if(!revList.length) return exitRev(true);
+    var here = mapStart(cur), i = revList.indexOf(here);
+    if(i < 0){                       // 当前不在清单里：跳到顺着方向最近的一页
+      var t = null;
+      for(var k=0;k<revList.length;k++){
+        if(d > 0 ? revList[k] > cur : revList[k] < cur){ t = revList[k]; if(d>0) break; }
+      }
+      return go(t == null ? revList[d>0 ? 0 : revList.length-1] : t);
+    }
+    go(revList[(i + d + revList.length) % revList.length]);
+  }
+  function enterRev(){
+    revList = weakPages();
+    if(!revList.length){ alert("没有待复习的页——错过的题都连对两次毕业了。"); return; }
+    rev = true; wp.classList.remove("on");
+    go(revList.indexOf(mapStart(cur)) >= 0 ? cur : revList[0]);
+    revPaint();
+  }
+  function exitRev(done){
+    rev = false; revPaint();
+    if(done) alert("待复习的页都毕业了，已退出复习模式。");
+  }
+  document.getElementById("revOff").onclick = function(){ exitRev(false); };
+
+  /* 答完一题就重算一次清单：刚改对的页当场从复习队列里消失。 */
+  function revSync(){
+    if(!rev) return;
+    revList = weakPages();
+    if(!revList.length) exitRev(true); else revPaint();
+  }
+
+  /* 错题本 */
+  var wp = document.getElementById("wrongPanel");
+  function openWrong(){
+    var list = [];
+    N.forEach(function(n){
+      var st = unitWrong(n.r[0]);
+      if(st.n === 0 || st.w === 0) return;
+      list.push({n:n, rw:st.rw, w:st.w, tot:st.n, qw:st.qw});
+    });
+    // 还没毕业的一律排前面；同样没毕业的，最近错得多的更靠前。
+    list.sort(function(a,b){
+      return (b.qw > 0) - (a.qw > 0) || (b.rw - a.rw) || (b.w - a.w); });
+    var box = document.getElementById("wrongList");
+    if(!list.length){
+      box.innerHTML = '<div class="none">还没有错题。<br>做几道自测再回来看。</div>';
+    } else {
+      box.innerHTML = list.map(function(it){
+        var qs = Q[it.n.r[0]] || [];
+        // 每道题的六格单独成一组，多题的单元才不会连成一片看不出边界
+        var h = qs.map(function(_,i){
+          return "<u>"+histHtml(ST[it.n.r[0]+"#"+i])+"</u>"; }).join("");
+        return '<div class="wrow'+(it.qw ? "" : " done")+'" data-p="'+it.n.r[0]+'">'+
+          '<span class="p">p'+it.n.r[0]+'</span>'+
+          '<span class="n2">'+it.n.t+'</span>'+
+          '<span class="h">'+h+'</span>'+
+          '<span class="s">'+(it.qw ? "还差 "+it.qw+" 题毕业" : "已毕业")+
+          ' · 累计错 '+it.w+'/'+it.tot+'</span></div>';
+      }).join("");
+      box.querySelectorAll(".wrow").forEach(function(r){
+        r.onclick = function(){ wp.classList.remove("on"); go(+r.dataset.p); };
+      });
+    }
+    // 总账。三个数分工明确：做了多少、还有多少没过关、一共栽过几次。
+    var done=0, tot=0, weak=0, wsum=0;
+    Object.keys(Q).forEach(function(k){
+      Q[k].forEach(function(_,i){
+        tot++;
+        var d = ST[k+"#"+i]; if(!d) return;
+        done++; wsum += d.w; if(isWeak(d)) weak++;
+      });
+    });
+    document.getElementById("wrongTally").innerHTML =
+      '<span>做过 <b>'+done+'</b> / '+tot+' 题</span>'+
+      '<span>没毕业 <b class="hot">'+weak+'</b> 题</span>'+
+      '<span>累计错 <b>'+wsum+'</b> 次</span>'+
+      '<span>待复习 <b>'+weakPages().length+'</b> 页</span>';
+    document.getElementById("revOn").disabled = !weakPages().length;
+    wp.classList.add("on");
+  }
+  document.getElementById("wrongBtn").onclick = openWrong;
+  document.getElementById("revOn").onclick = enterRev;
+  document.getElementById("wrongClose").onclick = function(){ wp.classList.remove("on"); };
+  document.getElementById("wrongReset").onclick = function(){
+    if(!confirm("清空全部自测记录？此操作不可撤销。")) return;
+    ST = {}; save(); exitRev(false); paintStrip(); openWrong(); render(cur);
+  };
+  wp.onclick = function(e){ if(e.target === wp) wp.classList.remove("on"); };
+
+  document.getElementById("prev").onclick=function(){ step(-1); };
+  document.getElementById("next").onclick=function(){ step(1); };
+  pnum.addEventListener("change",function(){ go(pnum.value); });
+  pnum.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ go(pnum.value); this.blur(); }
+  });
+  document.addEventListener("keydown",function(e){
+    if(document.activeElement===pnum) return;
+    if(e.key==="ArrowLeft"||e.key==="PageUp"){ step(-1); e.preventDefault(); }
+    if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){ step(1); e.preventDefault(); }
+  });
+
+  var miss=document.getElementById("miss");
+  frame.addEventListener("error",function(){ miss.style.display="block"; });
+  frame.addEventListener("load", function(){ miss.style.display="none"; });
+  document.getElementById("help").onclick=function(){
+    miss.style.display = miss.style.display==="block" ? "none" : "block";
+  };
+
+  var drag=document.getElementById("drag"), left=document.getElementById("left"), dragging=0;
+  drag.addEventListener("mousedown",function(){ dragging=1; document.body.style.userSelect="none"; });
+  document.addEventListener("mouseup",function(){ dragging=0; document.body.style.userSelect=""; });
+  document.addEventListener("mousemove",function(e){
+    if(!dragging) return;
+    left.style.width=Math.max(20,Math.min(78,e.clientX/window.innerWidth*100))+"%";
+  });
+
+  var s=1; try{ s=parseInt(localStorage.getItem(KEY+"p"),10)||1; }catch(e){}
+  go(s);
+})();
+</script>
+
+
+
+
+
+
+<!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
+<style>
+#nopdf{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+#nopdf .in{max-width:380px;text-align:center;font-size:14px;line-height:1.85;
+  color:var(--dim,#6a7686)}
+#nopdf b{color:var(--ink,#23272c)}
+#nopdf code{font-size:12.5px}
+</style>
+<script>
+(function(){
+  /* 公开站上 slides/*.pdf 不在仓库里（著作权）。与其让左栏挂一个空 iframe，
+     不如说清楚它去哪了 —— 右栏的讲解和自测题完全不受影响。
+     本地预览同样加 ?public=1 。*/
+  if (!/\.github\.io$/.test(location.hostname)
+      && !/[?&]public=1\b/.test(location.search)) return;
+  function go(){
+    var stage = document.getElementById("stage");
+    var frame = document.getElementById("pdf");
+    if (!stage) return;
+    if (frame) frame.remove();
+    var d = document.createElement("div");
+    d.id = "nopdf";
+    d.innerHTML = '<div class="in"><p><b>原课件不在公开仓库里。</b></p>'
+      + '<p>课件著作权属于学校与各课作者，本仓库不转载。</p>'
+      + '<p>右栏的逐页讲解与自测题是自己写的，<b>照常可用</b>。</p>'
+      + '<p style="opacity:.75">要让这一栏显示出来：把原 PDF 放回 <code>精读/slides/</code>，'
+      + '用本地静态服务器打开即可。</p></div>';
+    stage.appendChild(d);
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+</script>
+<!-- deploy-public-mode : end -->
+</body></html>
