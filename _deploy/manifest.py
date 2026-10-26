@@ -98,6 +98,20 @@ for p in tracked:
 if not bad:
     print("   ✓ 没有命中")
 
+# ── 逐页精读是否都带着「公开站模式」注入 ──
+# ⚠ build_reader.py 是从壳重新生成整份 HTML 的，会把 apply.py 的注入块冲掉。
+#   漏掉一份，公开站上那一份的左栏就是个**空 iframe**（slides/ 不在仓库里）。
+print("\n═══ 逐页精读的公开站模式注入 ═══")
+readers = sorted(p for p in tracked if p.startswith("精读/") and p.endswith("-精读.html"))
+miss_inject = [p for p in readers
+               if "deploy-public-mode" not in io.open(p, encoding="utf-8").read()]
+print("   %d 份精读，缺注入 %d 份%s"
+      % (len(readers), len(miss_inject),
+         "" if not miss_inject else "：" + ", ".join(os.path.basename(p) for p in miss_inject)))
+if miss_inject:
+    print("   ⇒ 重跑 `python _deploy/apply.py`")
+    bad += len(miss_inject)
+
 # ── 大文件 ──
 print("\n═══ 大文件（GitHub 超 50 MB 会警告、100 MB 拒收）═══")
 big = sorted(((os.path.getsize(p), p) for p in tracked

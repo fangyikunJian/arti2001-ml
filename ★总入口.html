@@ -284,7 +284,7 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
   <a class="ti" href="M3材料/Canvas讲义/T0_考纲与考试形式.txt">
     <b>1</b><span>先读考纲那一页</span><i>三个 Topic 的 scope 原文 + 两道示例大题带答案</i></a>
   <a class="ti" href="M3材料/笔记与阅读/M3_总目录.pdf">
-    <b>2</b><span>再读打印资料，按 T1 &rarr; T2 &rarr; T3</span><i>7 册 125 页，含 205 道题与三个完整手算例</i></a>
+    <b>2</b><span>再读打印资料，按 T1 &rarr; T2 &rarr; T3</span><i>7 册 126 页，含 205 道题与三个完整手算例</i></a>
   <a class="ti" href="复习放映厅/M3备考包-速查表与模拟卷.html">
     <b>3</b><span>最后做整卷模拟</span><i>速查表 + 答题模板 + 20 选 4 大题，带进考场那一叠</i></a>
 </div>
@@ -659,6 +659,16 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
     <div class="m">M3材料/</div>
     <div class="d"><b>2026-10-14 已抓取</b>。<code>Canvas讲义/T0_考纲与考试形式.txt</code> 是<b>一手考点来源</b>（三个 Topic 的 scope 原文、Python 期望、<b>两道示例选择题＋两道示例大题带答案</b>）。<code>笔记与阅读/</code> 下的 <b>11 份 markdown（约 5.6 万字）</b>是上面那套打印 PDF 的<b>源文件</b>，内容相同：<b>M3-00 记号表</b>（跨全模块通用）＋ <b>T1 三课</b>（前向传播 / 计算图与链式法则 / <b>完整的一次更新算例</b>）＋ <b>T2 四课</b>（激活函数与导数表 / 损失函数 / <b>隐藏层反向传播算例</b> / batch·epoch·<b>自动微分</b>）＋ <b>T3 三课</b>（数据划分与泄漏 / 混淆矩阵与四指标 / <b>ROC 与 AUC</b>）。⚠ <b>Tutorial 的 PDF 还锁着</b>：T1 到 10-19 零点解锁（堂内纸质 worksheet），T2 到 10-18、T3 到 10-25。</div>
   </a>
+  <a class="card v" href="精读/M3T2-精读.html">
+    <div class="t"><span class="tag n">★★ M3 T2 官方课件</span><span class="tag d">20 页 / 27 题</span>逐页精读 · 训练神经网络</div>
+    <div class="m">精读/M3T2-精读.html</div>
+    <div class="d"><b>2026-10-26 新做。</b>⭐ 这份课件<b>有 pptx，所以有备注讲稿</b>，信息量比正文大得多——<b>好几个考点只写在讲稿里</b>：p10 那句「<b>practical 用的是 MLPClassifier + L-BFGS，不是手算那条梯度下降规则</b>」（所以 notebook 结果和手算对不上是正常的）、p13 那句「<b>只有 Q1–Q3，没有单独的 Q4，extension 不计分</b>」。⭐⭐ 最该掌握的五页：<b>p4 激活函数的两个身份＋三点数值表</b>（含本课 ReLU′(0)=0 的约定）、<b>p7 两种搭配的 logit 梯度</b>（BCE 给 −0.99、半平方只给 −0.0098）、<b>p8 隐藏层梯度一条公式</b> ∂L/∂wⱼᵢ=(p−y)·vⱼ·g′(zⱼ)·xᵢ、<b>p15 四种任务的输出与损失</b>、<b>p18 Q3 要写「两个不同的零梯度」</b>。每页约 1335 字。</div>
+  </a>
+  <a class="card v" href="精读/M3T3-精读.html">
+    <div class="t"><span class="tag n">★★ M3 T3 官方课件</span><span class="tag d">17 页 / 23 题</span>逐页精读 · 模型评估</div>
+    <div class="m">精读/M3T3-精读.html</div>
+    <div class="d"><b>2026-10-26 新做。</b>⚠⚠ <b>读这份查出了一处官方材料内部的冲突</b>：<b>Canvas 讲义页</b>把混淆矩阵写成正类在前（左上角 TP），而<b>这份复习课件画的是负类在前（左上角 TN，和 sklearn 一致）</b>——两份都是官方材料、顺序相反。⇒ <b>不能背摆法，只能先定正类再逐格读行列标签</b>（本站的备考包、走查、题库、讲义整理都已照此更正）。⭐ 其它高价值页：<b>p5 学习率三行是三次独立实验</b>（不是连着走三步）、<b>p6 平均损失降了但有个正例始终判错</b>（p=0.4859）、<b>p9 五个让指标骗人的坑</b>、<b>p16 平局要一起加入、会产生一段斜线</b>。p17 还写明 <b>T3 没有排定的 practical</b>、Week 12 复习、Week 13 考试。</div>
+  </a>
   <a class="card v" href="精读/M3T1-精读.html">
     <div class="t"><span class="tag n">★★ M3 T1 官方课件</span><span class="tag d">35 页 / 33 题</span>逐页精读 · 神经网络</div>
     <div class="m">精读/M3T1-精读.html</div>
@@ -685,7 +695,7 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
   ① 用 Canvas API 把 Key concepts 页面抓成本地文本 <b>✓ 已完成（2026-10-14，18 页）</b> →
   ② 课件 pptx 转 PDF、裁掉致辞与课务页 →
   ③ 生成逐页精读（<code>精读/build_reader.py</code>）→
-  ④ 对照 CS229 相应讲次做深度片 → ⑤ 出备考包与模拟卷 <b>✓ 打印资料与题库已完成（2026-10-17，125 页 / 205 题）</b>，模拟卷待 Tutorial 解锁后再做。
+  ④ 对照 CS229 相应讲次做深度片 → ⑤ 出备考包与模拟卷 <b>✓ 打印资料与题库已完成（2026-10-17，126 页 / 205 题）</b>，模拟卷待 Tutorial 解锁后再做。
 </div>
 </section>
 
@@ -1019,6 +1029,7 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
   });
 })();
 </script>
+
 
 
 

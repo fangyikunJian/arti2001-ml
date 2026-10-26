@@ -385,13 +385,24 @@ A('''<h2 id="t3">T3 · 模型评估 <em>速查</em></h2>
 
 <h3>⚠⚠ 混淆矩阵：先声明正类，再看摆法</h3>
 <table>
-<tr><th style="width:150px">来源</th><th>摆法</th></tr>
-<tr><td class="k"><b>本课（考试按这个）</b></td><td><b>行 = 真实，列 = 预测，正类在前</b> ⇒
-  <code>[[TP, FN], [FP, TN]]</code></td></tr>
-<tr><td>sklearn <code>labels=[0,1]</code></td><td class="w"><b>类别 0 在前</b> ⇒
-  <code>[[TN, FP], [FN, TP]]</code></td></tr>
-<tr><td>CS229 评估指标幻灯</td><td class="w">列 = 真实，和本课<b>转置</b></td></tr>
+<tr><th style="width:170px">来源</th><th>摆法</th><th style="width:76px">左上角</th></tr>
+<tr><td><b>Canvas 讲义页</b></td><td>行 = 真实，列 = 预测，<b>正类在前</b> ⇒
+  <code>[[TP, FN], [FP, TN]]</code></td><td>TP</td></tr>
+<tr><td class="w"><b>M3 T3 复习课件</b></td><td>行 = 真实，列 = 预测，<b>负类在前</b> ⇒
+  <code>[[TN, FP], [FN, TP]]</code></td><td class="w"><b>TN</b></td></tr>
+<tr><td>sklearn <code>labels=[0,1]</code></td><td>同上 ⇒
+  <code>[[TN, FP], [FN, TP]]</code></td><td>TN</td></tr>
+<tr><td>CS229 评估指标幻灯</td><td class="w">列 = 真实，和前面都<b>转置</b></td><td>视定义</td></tr>
 </table>
+<div class="box r">
+  <p style="margin:0">⚠⚠ <b>别背摆法 —— 两份官方材料是反的。</b>
+  <b>Canvas 讲义页</b>把正类放前面（左上角 TP），而 <b>M3 T3 复习课件</b>画的是
+  <code>Pred −/Pred +</code> 作列、<code>Actual −/Actual +</code> 作行，<b>左上角是 TN</b>。
+  ⇒ 照课件自己给的办法做：<b>先定正类，再按「actual ?, predicted ?」逐格认，
+  然后写一句「四格之和 = 样本数」自查。</b>
+  四个计数在两种摆法下<b>完全相同</b>，变的只是位置。
+  <span class="k">知道这件事反而是送分点——无论题目用哪种排法你都不会填反。</span></p>
+</div>
 <div class="eq"><b>Accuracy</b>  = (TP+TN)/总数
 <b>Precision</b> = TP/(TP+FP)      分母 = <b>「我预测为正的」</b>
 <b>Recall</b>    = TP/(TP+FN)      分母 = <b>「真实为正的」</b>
@@ -528,7 +539,7 @@ A('''<h2 id="trap">陷阱清单 <em>考前 10 分钟看这栏</em></h2>
 <tr><td><b>T3</b></td><td>同一个人的记录分散到训练和测试</td><td class="k">用<b>分组划分</b></td></tr>
 <tr><td><b>T3</b></td><td>在测试集上挑阈值 / 挑模型</td><td class="k">用<b>验证集</b>；测试集只评估一次冻结的流程</td></tr>
 <tr><td><b>T3</b></td><td>「训练强验证差 ⇒ 就是方差高」</td><td class="k">先排除<b>分布差异、验证集过小、泄漏</b></td></tr>
-<tr><td><b>T3</b></td><td>照搬 sklearn 的矩阵顺序</td><td class="k"><b>先读行列标签</b>；本课是 [[TP,FN],[FP,TN]]</td></tr>
+<tr><td><b>T3</b></td><td>背死了「左上角是 TP」</td><td class="k"><b>先读行列标签</b>；讲义页左上角是 TP，<b>T3 复习课件左上角是 TN</b></td></tr>
 <tr><td><b>T3</b></td><td>把 F1 里的 P 当成概率</td><td class="k">P 是 <b>precision</b></td></tr>
 <tr><td><b>T3</b></td><td>以为降阈值 precision 一定变好</td><td class="k"><b>recall 不降，precision 可升可降</b></td></tr>
 <tr><td><b>T3</b></td><td>用 AUC 回答「该用哪个阈值」</td><td class="k">AUC <b>不决定阈值、不衡量校准、不编码代价</b></td></tr>

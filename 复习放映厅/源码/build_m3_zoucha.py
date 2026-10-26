@@ -179,7 +179,7 @@ BODY = r"""
   <div class="t"><b>在测试集上挑阈值或挑模型。</b><span class="ok">用验证集</span>；测试集只评估一次冻结的流程。</div>
   <div class="t"><b>看过测试结果后又继续开发。</b><span class="ok">那个测试集已成为开发历史的一部分</span>，新结论需要一次全新的独立评估。</div>
   <div class="t"><b>「训练强验证差 ⇒ 方差高」一口咬定。</b><span class="ok">先排除分布差异、验证集过小、泄漏。</span></div>
-  <div class="t"><b>照搬 sklearn 的混淆矩阵顺序。</b><span class="ok">先读行列标签</span>；本课是 [[TP,FN],[FP,TN]]，sklearn 是 [[TN,FP],[FN,TP]]。</div>
+  <div class="t"><b>背死了「混淆矩阵左上角是 TP」。</b><span class="ok">先定正类再逐格读行列标签</span>——⚠ <b>Canvas 讲义页左上角是 TP，而 M3 T3 复习课件左上角是 TN</b>（同 sklearn）。两份都是官方材料，顺序相反，计数却相同。</div>
   <div class="t"><b>把 F1 里的 P 当成概率。</b><span class="ok">P 是 precision</span>，R 是 recall。</div>
   <div class="t"><b>以为降低阈值 precision 一定变好。</b><span class="ok">recall 不会下降，precision 可升可降。</span></div>
   <div class="t"><b>用 AUC 回答「该用哪个阈值」。</b><span class="ok">AUC 不决定阈值、不衡量校准、不编码代价。</span></div>

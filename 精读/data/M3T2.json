@@ -1,0 +1,1071 @@
+{
+ "tag": "M3T2",
+ "title": "训练神经网络：激活、损失、隐藏层梯度与实现",
+ "sub": "M3 T2",
+ "pdf": "slides/M3T2_Activation_Loss.pdf",
+ "pages": 20,
+ "notes": [
+  {
+   "r": [
+    1,
+    1
+   ],
+   "t": "这一讲把 T1 的那条链加宽",
+   "star": 1,
+   "one": "T1 让一个神经元走完「前向 → 损失 → 梯度 → 更新」；T2 问的是同一个损失怎么喂给隐藏层，以及这件事怎么变成代码。",
+   "quote": "<b>Training Neural Networks</b> — <em>Activation, loss, hidden gradients and implementation</em>（M3 Topic 2）",
+   "pts": [
+    "<b>副标题四个词就是这一讲的四块</b>：<em>activation</em>（激活函数选什么）、<em>loss</em>（损失函数配什么）、<em>hidden gradients</em>（隐藏层怎么拿到梯度）、<em>implementation</em>（这一切在代码里长什么样）。",
+    "<b>和 T1 的关系</b>：讲稿原话——<em>Topic 1 ended with an output-layer update. This topic asks how the same loss supplies gradients to hidden weights.</em> ⭐ <b>注意是「同一个损失」</b>：隐藏层没有自己的目标，它靠链式法则从最终损失那里拿方向。",
+    "⚠️ <b>这一讲的新东西其实只有两个</b>：① 激活与损失的<b>选择与搭配</b>（T1 只用了 sigmoid + BCE 一种）；② 梯度要<b>穿过隐藏层</b>。剩下的 batch/epoch 与自动微分是把前两件事放大到一批数据上。",
+    "⚠️ <b>原课件第 2 页是 Acknowledgement of Country，裁页时已去掉</b>。所以这份精读的页码从第 2 页起比原课件少 1（本页 p2 = 原 p3），每页右下角的页码可以对照。"
+   ],
+   "exam": "M3 测验 110 分钟、20 选择（每题 3 分）+ 4 道扩展题（每题 10 分），<b>开卷</b>，Week 13（11 月 9–15 日）。T2 在考纲里占六条：<b>sigmoid/tanh/ReLU 及导数、饱和与梯度行为、MSE 与交叉熵、四种任务的输出层与损失、部分隐藏层权重的梯度、batch·epoch·自动微分</b>——这六条正好对应本讲 p4、p6、p7、p5/p15、p8、p9/p10。",
+   "tip": {
+    "t": "这一讲最值钱的一页",
+    "v": "如果只看一页，看 <b>p8</b>：它把隐藏层梯度压成一个公式 <b>∂L/∂wⱼᵢ = (p − y)·vⱼ·g′(zⱼ)·xᵢ</b>，扩展题照着它逐因子写就能拿满结构分。",
+    "w": 0
+   }
+  },
+  {
+   "r": [
+    2,
+    2
+   ],
+   "t": "六段路线图，也是复习顺序",
+   "star": 2,
+   "one": "激活 → 损失 → 隐藏梯度 → 批量与 epoch → 实现 → Tutorial 与 Practical，讲稿明确要求按这个顺序学。",
+   "quote": "<b>Study activation function, loss function, how a hidden layer learns, and from one update to a training process in that order.</b>",
+   "pts": [
+    "<b>六段标题本身就是答题提纲</b>：<em>Activation choices</em>（比形状和局部斜率）、<em>Loss choices</em>（匹配目标与输出含义）、<em>Hidden gradients</em>（把损失追过一个隐藏神经元）、<em>Batches and epochs</em>（组织样本与重复更新）、<em>Implementation</em>（公式映射到数组与自动微分）、<em>Tutorial &amp; Practical</em>。",
+    "⭐ <b>第 1 段和第 2 段的措辞要分清</b>：激活比的是「<b>函数形状</b>与<b>局部斜率</b>」——形状管前向、斜率管反向；损失匹配的是「<b>目标</b>与<b>输出的含义</b>」——不是哪个损失更好，是哪个和任务对得上。",
+    "⚠️ <b>讲稿透露了 Tutorial 的结构</b>：<em>The tutorial has its four original questions plus the transferred hidden-layer question</em>——原来的四题<b>加上一道从别处挪过来的隐藏层题</b>。到 p13 讲稿又明确说<b>只有 Q1–Q3，没有单独的 Q4</b>，可见题目被重新合并过。",
+    "<b>Course reading 链接</b>：<code>learn.adelaide.edu.au/courses/30362/pages/module-3-topic-2-overview</code>。本讲每一页讲稿末尾都带这样一条，指向 Canvas 对应页面——<b>本地抓下来的版本在 <code>M3材料/笔记与阅读/</code> 的 11 份 markdown 里</b>。"
+   ],
+   "tbl": [
+    {
+     "cap": "六段 ↔ 它在课件哪几页展开 ↔ 对应考纲哪一条",
+     "head": [
+      "段",
+      "展开在",
+      "考纲条目"
+     ],
+     "rows": [
+      [
+       "1 Activation choices",
+       "p3–p6",
+       "sigmoid、tanh、ReLU 及导数；饱和与梯度行为"
+      ],
+      [
+       "2 Loss choices",
+       "p7",
+       "MSE 与交叉熵；四种任务的输出层与损失"
+      ],
+      [
+       "3 Hidden gradients",
+       "p8",
+       "部分隐藏层权重的梯度"
+      ],
+      [
+       "4 Batches and epochs",
+       "p9",
+       "batch、epoch"
+      ],
+      [
+       "5 Implementation",
+       "p10",
+       "自动微分"
+      ],
+      [
+       "6 Tutorial & Practical",
+       "p13–p20",
+       "（练习，不单独考）"
+      ]
+     ]
+    }
+   ],
+   "exam": "选择题爱考「这一讲和 T1 的分工」。标准答法：<b>T1 在输出层做完一次更新；T2 问同一个损失怎样把梯度送到隐藏权重，再把重复更新变成实现</b>。"
+  },
+  {
+   "r": [
+    3,
+    3
+   ],
+   "t": "没有非线性，叠多少层都还是一层",
+   "star": 3,
+   "one": "W₂(W₁x+b₁)+b₂ 还是一个仿射映射 —— 光加深度，不会多出一条弯的边界。",
+   "quote": "<b>Linear stack</b> — Affine maps collapse. <b>W₂(W₁x+b₁)+b₂ is another affine map.</b> Depth alone adds no curved boundary. Gradients are simple but expressiveness is limited.",
+   "eq": "无激活：  h = W₁x + b₁,  s = W₂h + b₂\n       ⇒ s = W₂W₁x + (W₂b₁ + b₂)  ← 仍是「一个矩阵乘 + 一个偏置」\n\n带数字（讲义版）： h = 2x + 1,  s = 3h + 4\n       ⇒ s = 3(2x+1) + 4 = 6x + 7   ← 两层塌缩成一层",
+   "pts": [
+    "<b>「塌缩」的意思</b>：两层仿射复合起来，<b>仍然是一个仿射函数</b>（affine = 加权和 + 偏置）。所以存在一个单层网络，<b>对任何输入都给出完全相同的输出</b>——多出来的那一层一点表达能力都没加。",
+    "⭐ <b>课件把代价说得很全</b>：<em>Gradients are simple but expressiveness is limited</em>——<b>梯度确实好算，但表达力被限死了</b>。这不是「线性网络算不出来」，而是「它能表示的函数集合太小」。",
+    "<b>插入非线性之后</b>：<em>h = g(Wx+b)</em>，课件说 <em>Different regions can respond differently</em>——<b>不同的输入区域可以有不同的响应</b>。讲义里那个带数字的例子最直观：把 h 换成 <b>max(0, 2x+1)</b> 之后，<b>x ≤ −0.5 那一段是平的（s = 4），x &gt; −0.5 那一段是 6x + 7</b>，两段在 x = −0.5 处接上，<b>出现一个折点</b>。",
+    "⚠️ <b>最后一句是考点</b>：<em>Choice affects gradient flow and output meaning</em>——<b>选哪个激活，同时影响「梯度怎么流」和「输出是什么含义」</b>。这句话把本讲前两块（激活、损失）的因果关系点明了。",
+    "⚠️ <b>别把这条和 T1 的「边界是直线」混为一谈</b>。T1 说的是<b>单个 sigmoid 神经元</b>的决策边界必然是直线；这一页说的是<b>多层但没有隐藏激活</b>时，整个网络塌缩成单层，所以边界<b>还是</b>直线。两者的结论一样，<b>原因是同一个</b>：送进最后那个 sigmoid 之前的分数仍是输入的仿射函数。"
+   ],
+   "say": "⭐ <b>讲义给了一个很漂亮的追问</b>：「只在最后放个 sigmoid 行不行？」答案是<b>不行</b>——sigmoid 让<b>概率输出</b>变成非线性，但它的 0.5 阈值仍然对应<b>分数为零</b>，而那个分数还是输入的仿射函数，所以<b>边界依旧是一条直线</b>。⚠️ 讲义还补了一句措辞很讲究的限定：<b>限制来自「仿射分数 + 单调激活 + 固定阈值」这个组合</b>，不是单纯因为「只有一个神经元」。",
+   "exam": "⭐ <b>这是 T2 最稳的选择题之一</b>。常见干扰项是「加深度就能画出弯边界」「只要最后有 sigmoid 就够了」。标准答法两句：<b>① 仿射复合仍是仿射，等价于一个单层；② 必须有非线性的隐藏激活，输出分数才可能不是输入的仿射函数。</b>扩展题可能让你<b>代一组数字验证塌缩</b>（例如 h = 4x − 1、s = 2h + 5 ⇒ s = 8x + 3）。"
+  },
+  {
+   "r": [
+    4,
+    4
+   ],
+   "t": "激活函数有两个身份：前向的值和反向的斜率",
+   "star": 3,
+   "one": "g(z) 往下一层传，g′(z) 乘在传回来的梯度上 —— 这两件事互不相干，必须分开记。",
+   "quote": "<b>An activation must be understood as both a forward function and a local derivative.</b> … Sigmoid and tanh derivatives approach zero in saturated regions. ReLU positive → gradient remains 1. ReLU negative → zero gradient; <b>dead-unit risk</b>.",
+   "eq": "σ(z) = 1/(1+e^(−z))        σ′(z) = σ(z)·(1−σ(z))\ntanh(z)                    tanh′(z) = 1 − tanh²(z)\nReLU(z) = max(0, z)        ReLU′(z) = 1 (z>0)，0 (z<0)\nLeaky(z) = max(αz, z)      Leaky′(z) = 1 (z>0)，α (z<0)\n\n⚠ 本课约定： ReLU′(0) = 0 ，  LeakyReLU′(0) = α = 0.01",
+   "pts": [
+    "<b>两个身份分别管什么</b>：<em>forward function</em> g(z) 决定<b>往下一层传什么值</b>；<em>local derivative</em> g′(z) 决定<b>反向时乘多少倍</b>。⭐ 讲义把这句话说得更狠：<b>大的输出不代表大的梯度</b>（a large output need not imply a large gradient），两件事互不相干。",
+    "⚠️ <b>z = 0 处的约定必须记死</b>。讲稿原话：<em>At z=0 the mathematical derivative is undefined; the worksheet uses 0 as its implementation convention.</em> —— <b>数学上不可导，本课（和 worksheet）一律用 0</b>。Leaky ReLU 在 0 处则用 α。各家软件约定不同，<b>考试按本课的判</b>。",
+    "<b>饱和（saturation）</b>：sigmoid 和 tanh 在 |z| 很大时导数趋近 0。连乘很多层就产生<b>梯度消失</b>——讲义给的量级感是<b>五个 0.1 连乘 = 0.00001</b>。",
+    "⚠️ <b>但讲稿给了一条很重要的限定</b>：<em>A negative ReLU score blocks this local gradient for this observation; it does not alone prove the neuron is permanently inactive across all inputs.</em> —— <b>「这个样本上梯度被挡住」不等于「这个单元死了」</b>。要在相关的那批输入上<b>一直</b>不激活才叫死亡 ReLU。",
+    "⚠️ <b>tanh 的两个坑</b>：① 它<b>不是</b>三角函数里的正切，是双曲正切 (e^z − e^(−z))/(e^z + e^(−z))，用计算器的 hyperbolic 键；② 讲稿专门加了 <em>Tanh's symmetric range does not guarantee a zero empirical mean</em>——<b>输出范围关于零对称 ≠ 实际激活的均值为零</b>。"
+   ],
+   "tbl": [
+    {
+     "cap": "三个点上的数值表（最可能直接出计算题；每格是「输出 / 导数」）",
+     "head": [
+      "函数",
+      "z = −2",
+      "z = 0",
+      "z = 2",
+      "值域"
+     ],
+     "rows": [
+      [
+       "Sigmoid",
+       "0.119 / 0.105",
+       "0.500 / 0.250",
+       "0.881 / 0.105",
+       "(0, 1)"
+      ],
+      [
+       "tanh",
+       "−0.964 / 0.071",
+       "0 / 1",
+       "0.964 / 0.071",
+       "(−1, 1)"
+      ],
+      [
+       "ReLU",
+       "0 / 0",
+       "0 / 0 ←约定",
+       "2 / 1",
+       "[0, ∞)"
+      ],
+      [
+       "Leaky ReLU (α=0.01)",
+       "−0.02 / +0.01",
+       "0 / 0.01 ←约定",
+       "2 / 1",
+       "(−∞, ∞)"
+      ]
+     ]
+    }
+   ],
+   "say": "⚠️⚠️ <b>Leaky ReLU 在 z = −2 那一格是本讲最爱考的陷阱</b>：<b>输出是负的（−0.02），导数却是正的（+0.01）</b>。讲义原话：<b>输出的符号和斜率的符号是两回事。</b> 配套的自测：传入损失梯度 0.6 时，<b>过 ReLU 传出 0.6 × 0 = 0（这条路径彻底断了）</b>，<b>过 Leaky ReLU 传出 0.6 × 0.01 = 0.006（很小，但没断）</b>。",
+   "exam": "⭐⭐ <b>这张表必须会默写</b>。选择题形态：给一个 z 问输出或导数；给「tanh 输出 −0.6」问导数（答 1 − 0.36 = <b>0.64</b>，别套成 sigmoid 的 g(1−g)）；问 ReLU′(0)（答 <b>0</b>）。扩展题里它是中间步骤——算隐藏层梯度时第 ③ 步就要乘 g′(zⱼ)。",
+   "tip": {
+    "t": "两个最容易写反的导数",
+    "v": "<b>σ′ = g(1−g)</b>（sigmoid），<b>tanh′ = 1 − g²</b>。两个都用「输出本身」表示，所以很容易张冠李戴。记法：sigmoid 的输出在 (0,1)，<b>g 和 1−g 都是正的、相乘才有意义</b>；tanh 输出在 (−1,1)，<b>平方才保证非负</b>。",
+    "w": 1
+   }
+  },
+  {
+   "r": [
+    5,
+    5
+   ],
+   "t": "按「层的角色」选激活：先定输出，再定隐藏",
+   "star": 2,
+   "one": "四步顺序是固定的：认任务 → 定输出层 → 定隐藏层 → 训练中监控。",
+   "quote": "<b>Hidden-layer and output-layer requirements are different.</b> 1 Identify output: continuous, binary, single-label or multi-label → 2 Choose output: linear, sigmoid or softmax as appropriate → 3 Choose hidden: <b>ReLU is a strong baseline</b>; tanh can suit bounded states → 4 Monitor training: inspect saturation, dead units and validation performance.",
+   "pts": [
+    "⭐ <b>顺序不能反</b>：先看<b>目标是什么类型</b>，再定输出层，<b>最后</b>才轮到隐藏层。原因很直白——输出层由<b>任务</b>决定（没得选），隐藏层是<b>调参</b>（有得选）。",
+    "<b>第 3 步的措辞值得记</b>：<em>ReLU is a strong baseline; tanh can suit bounded states</em>——<b>ReLU 是强基线，tanh 适合「有界状态」</b>。⚠️ 注意课件没有说「ReLU 最好」，它说的是 baseline（默认起点）。",
+    "⚠️ <b>第 4 步常被忽略，但它是 T3 的接口</b>：<em>inspect saturation, dead units and validation performance</em>——要看三件事：<b>有没有饱和、有没有死单元、验证表现如何</b>。前两个是本讲的内容，<b>第三个直接指向 T3 的训练/验证证据</b>。",
+    "<b>隐藏层和输出层的根本区别</b>：隐藏层的激活是为了<b>造表示</b>（让后面的层能用上非线性的中间特征）；输出层的激活是为了<b>让输出有正确的含义</b>（概率要落在 (0,1)、多类概率要和为 1）。⚠️ 所以 <b>ReLU 不能做二分类输出层</b>——它的输出无上界，不是概率。"
+   ],
+   "exam": "选择题常考「给一个任务描述，选输出层」。⭐ <b>先问自己三句</b>：目标是连续的还是离散的？离散的话类别<b>互斥</b>吗？互斥的话标签存成<b>整数</b>还是 <b>one-hot</b>？三问答完，输出层和损失就定了（配对表见 p7 和 p15）。"
+  },
+  {
+   "r": [
+    6,
+    6
+   ],
+   "t": "每个常用激活都有代价",
+   "star": 3,
+   "one": "四个激活各有一条短板，课件把它们并排列出来 —— 考试爱考「哪一句描述是对的」。",
+   "quote": "<b>Sigmoid</b> — Saturates and is not zero-centred. <b>Tanh</b> — Zero-centred but still saturates. <b>ReLU</b> — Can create permanently inactive units. <b>Leaky ReLU</b> — Nonzero slope for negative inputs; choose its size. <b>Output mismatch</b> — Wrong range can make predictions uninterpretable.",
+   "pts": [
+    "<b>Sigmoid 的两条短板</b>：<em>saturates</em>（两端导数趋近 0）<b>而且</b> <em>is not zero-centred</em>（输出全是正的，落在 (0,1)）。⚠️ 第二条常被忽略——输出恒正会让后一层的权重梯度<b>符号一致</b>，更新方向受限。",
+    "<b>Tanh</b>：<em>zero-centred but still saturates</em>——<b>解决了「不以零为中心」，没解决饱和</b>。所以 tanh 是 sigmoid 的改良，不是替代品。",
+    "<b>ReLU</b>：<em>can create permanently inactive units</em>——注意措辞是 <b>can</b>（可能），不是 will。配合 p4 讲稿那句「单个观测不激活不等于死了」，<b>这两处合起来才是完整的说法</b>。",
+    "<b>Leaky ReLU</b>：<em>nonzero slope for negative inputs; choose its size</em>——<b>负侧有一个非零斜率，而且这个斜率的大小要你自己选</b>。⚠️ 讲稿补了一句很重要的：<em>The incoming loss gradient is multiplied by alpha; it is not necessarily negative.</em>——<b>传入的梯度乘以 α，结果不一定是负的</b>（乘一个小正数不改变符号）。",
+    "⭐ <b>第五条「Output mismatch」是另一个层级的问题</b>：<em>Wrong range can make predictions uninterpretable</em>——<b>输出范围选错了，预测就没法解释</b>。这不是「训练得慢」，是「算出来的数根本不是你以为的那个东西」。例如用 ReLU 做二分类输出，得到 3.7，它既不是概率也不是类别。"
+   ],
+   "tbl": [
+    {
+     "cap": "四个激活的取舍一览",
+     "head": [
+      "激活",
+      "优点",
+      "短板",
+      "典型用处"
+     ],
+     "rows": [
+      [
+       "Sigmoid",
+       "输出就是概率，落在 (0,1)",
+       "会饱和；输出不以零为中心",
+       "二分类输出层"
+      ],
+      [
+       "tanh",
+       "以零为中心，范围 (−1,1)",
+       "仍然会饱和",
+       "隐藏层（有界状态）"
+      ],
+      [
+       "ReLU",
+       "正半轴不饱和、算得快",
+       "负输入零梯度，可能永久不激活",
+       "隐藏层默认起点"
+      ],
+      [
+       "Leaky ReLU",
+       "负侧保留 α 的斜率，缓解死亡",
+       "α 要自己选；仍非零中心",
+       "ReLU 死单元多时"
+      ]
+     ]
+    }
+   ],
+   "exam": "⭐⭐ <b>「哪一句描述正确」型选择题的高发区</b>。几个标准错项：「tanh 不会饱和」（错，只是零中心）、「ReLU 一定会产生死单元」（错，是 can）、「Leaky ReLU 的负输入会让梯度变成负的」（错，乘正的 α 不改符号）、「输出范围不影响结果，只影响速度」（错，会让预测无法解释）。"
+  },
+  {
+   "r": [
+    7,
+    7
+   ],
+   "t": "损失函数定义「什么算错」",
+   "star": 3,
+   "one": "损失要同时匹配两件事：目标的类型，和输出的含义 —— 搭配错了，梯度会在最需要的地方变得极小。",
+   "quote": "<b>The loss must match the target type and output interpretation.</b> For L_MSE = ½(y−p)² and p = σ(z): <b>∂L/∂z = (p−y)p(1−p)</b>. For sigmoid + BCE: <b>∂L/∂z = p − y</b>. The extra p(1−p) factor can make the MSE gradient small when sigmoid saturates. <b>Integer class labels → sparse categorical CE; one-hot labels → categorical CE.</b>",
+   "eq": "sigmoid + 半平方误差：  ∂L/∂z = (p − y)·p(1−p)      ← 多出来的因子是祸根\nsigmoid + BCE：         ∂L/∂z = p − y               ← 干净\n\n算例  y = 1, p = 0.01（非常自信地判错）：\n  半平方： (0.01 − 1) × 0.01 × 0.99 = −0.009801\n  BCE：    0.01 − 1                = −0.99          ← 相差两个数量级",
+   "pts": [
+    "⭐⭐ <b>这一页最该记的是那两行梯度对比</b>。两者的<b>符号都主张抬高 logit</b>（都是负的，梯度下降会把 z 调大），但<b>半平方误差的幅度小了整整两个数量级</b>——因为 sigmoid 在 p = 0.01 处的斜率 p(1−p) ≈ 0.0099 本身就极小。",
+    "<b>为什么这叫「搭配」问题</b>：BCE 的 −log 恰好把 sigmoid 的 p(1−p) 约掉了，所以<b>对一个「有把握但判错」的预测，BCE 给出的纠正梯度强得多</b>。这不是 BCE 单独的优点，是 <b>sigmoid + BCE 这一对</b>的优点。",
+    "⚠️ <b>限定条件要跟着写</b>：讲义原话——<b>这个优势只针对这一对输出–损失的组合，BCE 并不能阻止深层网络中别处出现小梯度。</b>",
+    "⚠️ <b>「半平方」不是 MSE</b>：ℓ = ½(y−p)² 对 p 的导数是 (p − y)；普通平方误差求导给 <b>2(p−y)</b>，在 N 个观测上取平均还多一个 <b>1/N</b>。<b>推导前先说清用的是哪个约定</b>，否则系数就错了。",
+    "⭐ <b>标签编码那一句是考纲点名的</b>：<em>Integer class labels → sparse categorical CE; one-hot labels → categorical CE.</em> 两者<b>表示的是同一个计算</b>，只是接口不同。⚠️ 整数编码可能是 0–5 也可能是 1–6，<b>永远要核对映射关系</b>。"
+   ],
+   "tbl": [
+    {
+     "cap": "任务 ↔ 输出 ↔ 损失（课件 Match task to loss 那一栏）",
+     "head": [
+      "任务",
+      "输出层",
+      "损失",
+      "要点"
+     ],
+     "rows": [
+      [
+       "连续回归",
+       "线性",
+       "MSE 或 MAE",
+       "MSE 单位是目标单位的平方；MSE→条件均值，MAE→条件中位数"
+      ],
+      [
+       "二分类",
+       "一个 sigmoid",
+       "BCE",
+       "输出表示 P(y=1 | x)"
+      ],
+      [
+       "互斥多类",
+       "softmax",
+       "交叉熵",
+       "概率和为 1；整数标签用 sparse 版"
+      ],
+      [
+       "多标签",
+       "每标签一个 sigmoid",
+       "每标签各一次 BCE",
+       "和不必为 1；标签之间不必统计独立"
+      ]
+     ]
+    }
+   ],
+   "say": "⭐ <b>softmax + 交叉熵的 logit 梯度也化简得很干净</b>：<b>∂ℓ/∂z_k = p_k − y_k</b>，把二分类的 p − y 推广到互斥多类。讲义给的算例：p = (0.1, 0.7, 0.2)、真实类别是 2 ⇒ 梯度 (0.1, <b>−0.3</b>, 0.2)，<b>三项加起来等于 0</b>（很好的自查）。⚠️ 这是<b>对 logit 的</b>导数，不是对概率、也不是对权重的。",
+   "exam": "⭐⭐ <b>考纲逐条点名的两块都在这一页</b>（MSE 与交叉熵、四种任务的输出与损失）。扩展题常见问法：给一个任务描述，要你<b>写出输出层 + 损失 + 一句理由</b>；或者给 y = 1、p = 0.01，要你<b>比较两种搭配的梯度并解释差别的来源</b>。⚠️ 最后那句解释必须点出 <b>p(1−p) 在饱和区极小</b>。"
+  },
+  {
+   "r": [
+    8,
+    8
+   ],
+   "t": "⭐ 隐藏权重通过最终损失学习（一条公式搞定）",
+   "star": 3,
+   "one": "∂L/∂wⱼᵢ = (p − y)·vⱼ·g′(zⱼ)·xᵢ —— 四个因子，每个因子都对应路径上的一步。",
+   "quote": "<b>Scalar chain rule for one observation: ∂L/∂wⱼᵢ = (p − y) vⱼ g′(zⱼ) xᵢ</b>. wⱼᵢ connects input i to hidden unit j; vⱼ connects hidden unit j to the output. <b>All factors use the same forward pass and original parameters. Update only after gradients are ready.</b>",
+   "eq": "路径：  wⱼᵢ → zⱼ → hⱼ → s → p → L\n\n    zⱼ = Σᵢ wⱼᵢ xᵢ + bⱼ        hⱼ = g(zⱼ)\n    s  = Σⱼ vⱼ hⱼ + c          p  = σ(s)        L = BCE(p, y)\n\n逐因子读：\n    p − y    输出分数的敏感度（sigmoid + BCE 化简的结果）\n    vⱼ       这个隐藏单元通往输出的连接权重\n    g′(zⱼ)   隐藏激活在该点的斜率（ReLU 时是 1 或 0）\n    xᵢ       这个权重对应的那个输入",
+   "pts": [
+    "⭐⭐ <b>这四个因子就是四步链式法则</b>，课件把它压成一行。考场上按 <b>① (p−y) → ② ×vⱼ → ③ ×g′(zⱼ) → ④ ×xᵢ</b> 逐步写，每一步说明乘的是哪个局部导数，结构分就拿到了。",
+    "⚠️ <b>为什么上层权重 vⱼ 会出现在下层的梯度里</b>：因为<b>隐藏激活对损失的影响必须穿过输出层</b>，而 vⱼ 正是 s 对 hⱼ 的局部导数。没有它这条链就断了。",
+    "⚠️⚠️ <b>课件专门强调的纪律</b>：<em>All factors use the same forward pass and original parameters. Update only after gradients are ready.</em> —— <b>所有因子都用同一次前向、同一组（更新前的）参数；全部梯度算完之后才更新</b>。中途换用新值，算的就不是这一点处的梯度。",
+    "⭐ <b>ReLU 不激活时整条路径归零</b>：讲稿原话 <em>If hidden g is ReLU and zⱼ&lt;0, this path contributes zero.</em> 这会带来<b>两处「没变」</b>——该隐藏单元的输入权重梯度全为 0，<b>而且</b>它的输出权重梯度 = (p−y)·hⱼ = (p−y)·0 = 0 也是零。",
+    "⚠️ <b>更大的图里要把多条路径相加</b>：<em>In larger graphs, add contributions from all downstream paths.</em> ——<b>一条路径内部相乘，多条路径汇合相加</b>。本讲的两层网络每个隐藏单元只有一条通往输出的路，所以看不到求和；三层以上就会出现。"
+   ],
+   "tbl": [
+    {
+     "cap": "讲义那个完整算例（x = [1,2]，y = 1，η = 0.1；数字已复算）",
+     "head": [
+      "步骤",
+      "计算",
+      "结果"
+     ],
+     "rows": [
+      [
+       "隐藏 1（w=[0.2,0.4], b=0.1, ReLU）",
+       "z₁ = 0.2(1) + 0.4(2) + 0.1",
+       "1.1 ⇒ h₁ = 1.1（激活）"
+      ],
+      [
+       "隐藏 2（w=[−0.5,0.3], b=−0.2, ReLU）",
+       "z₂ = −0.5(1) + 0.3(2) − 0.2",
+       "−0.1 ⇒ h₂ = 0（不激活）"
+      ],
+      [
+       "输出（v=[0.7,−0.4], c=−0.1, sigmoid）",
+       "s = 0.7(1.1) − 0.4(0) − 0.1",
+       "0.67 ⇒ p = 0.661503"
+      ],
+      [
+       "① ∂L/∂s = p − y",
+       "0.661503 − 1",
+       "−0.338497"
+      ],
+      [
+       "② ×v₁ = 0.7",
+       "−0.338497 × 0.7",
+       "−0.236948"
+      ],
+      [
+       "③ ×g′(z₁)，z₁ > 0 ⇒ ×1",
+       "不变",
+       "−0.236948"
+      ],
+      [
+       "④ ×x₂ = 2",
+       "−0.236948 × 2",
+       "−0.473896 ⇒ w₁₂ → 0.447390"
+      ],
+      [
+       "整步更新后重新前向",
+       "新 s ≈ 0.849619",
+       "p = 0.700487，L = 0.355979"
+      ]
+     ]
+    }
+   ],
+   "say": "⚠️ <b>讲稿最后一句点出了和 worksheet 的关系</b>：<em>This scalar rule matches the worksheet's matrix delta rule, where superscripts identify layers.</em> —— <b>这条标量规则和作业纸上的矩阵 δ 规则是同一回事</b>，矩阵版用<b>上标</b>标层号（W₁、W₂ 的下标在讲义里表示「第几层」，<b>不是幂次</b>）。考场上两种写法都可以，<b>标量版更不容易写错</b>。",
+   "exam": "⭐⭐⭐ <b>M3 T2 Tutorial Q3 考的就是这个</b>（见 p18）。扩展题标准结构：① 写出路径 ② 四步逐个代数字 ③ 指出哪些参数这一步完全不动并解释原因 ④ 更新后<b>重新跑完整前向</b>给出新的 p ⑤ 加一句「这只证明在这一个样本上有改进，不是泛化的证据」。",
+   "tip": {
+    "t": "两处最容易丢的分",
+    "v": "① 第 ② 步必须<b>说明那个 0.7 是输出权重</b>（隐藏激活的影响要穿过输出层），只写数字不说来源会扣分；② 算隐藏层梯度时用的是<b>原来的</b> v₁ = 0.7，<b>不是更新后的 0.737235</b>。",
+    "w": 1
+   }
+  },
+  {
+   "r": [
+    9,
+    9
+   ],
+   "t": "batch 与 epoch 是两个不同的单位",
+   "star": 2,
+   "one": "batch 是「算一次更新所用的那组观测」，epoch 是「把训练集完整过一遍」—— 100 个样本、批大小 20，一个 epoch 就是 5 次更新。",
+   "quote": "<b>A batch supplies one update; an epoch describes one pass through the training set.</b> 1 Forward → 2 Backward: calculate <b>fresh</b> gradients from this forward pass → 3 Update → 4 Repeat: use the next batch and <b>recompute all values</b>.",
+   "eq": "一个 epoch 的更新次数 = 训练样本数 ÷ 批大小\n\n  100 个样本 / 批大小 20  ⇒  1 epoch = 5 次更新，3 epoch = 15 次\n  全批量（full-batch）     ⇒  每个 epoch 只更新 1 次\n\n平均损失：  L_batch = (1/N) Σₙ Lₙ        梯度数组 = (P − Y)/N\n⚠ 这个 1/N 只除一次，别在每一层再除一遍",
+   "pts": [
+    "⚠️ <b>讲稿把计数条件说全了</b>：<em>With 100 examples and batches of 20, one epoch contains five updates, <b>assuming no dropped or repeated observations</b>.</em> —— <b>前提是不丢样本也不重复取</b>。考试里如果样本数除不尽批大小，要说明最后一个批次怎么处理。",
+    "<b>四步循环的两个关键词</b>：第 2 步是 <em>fresh</em> gradients（<b>新鲜的</b>梯度，从<b>这一次</b>前向算），第 4 步是 <em>recompute all values</em>（<b>把所有值重算一遍</b>）。⚠️ 复用旧激活或旧梯度，算出来的就不是当前这一点处的下降方向。",
+    "⭐ <b>平均只做一次</b>：<em>For mean loss, divide the sum of individual gradients by the batch size N exactly once.</em> —— 讲稿用了 <b>exactly once</b>，可见这是个常见错误。",
+    "⚠️⚠️ <b>最该带走的一句</b>：<em>Individual examples may favour different parameter changes; decreasing the mean does not mean every example improves.</em> —— <b>平均在降，不代表每个样本都变好</b>。讲义给的数值例子：两个样本对某参数的梯度是 −0.2 和 +0.6，<b>平均 +0.2</b>，梯度下降会<b>减小</b>这个参数——对第一个样本来说方向是反的。",
+    "<b>和 T3 的接口</b>：讲义里那张「连续 100 次更新」的表就是这条的极端版——平均 BCE 从 0.580352 降到 0.369420，<b>但有一个正例的概率从 0.4750 只爬到 0.4859，始终在 0.5 阈值以下，一直判错</b>。原因是它的两个隐藏 ReLU 从一开始就是零。"
+   ],
+   "exam": "⭐ <b>计数题几乎必出，而且是送分题</b>：给样本数和批大小，问一个 epoch 多少次更新、几个 epoch 多少次。⚠️ 概念题的高发点是「平均损失下降 = 每个样本都改善」——<b>这是错的</b>。"
+  },
+  {
+   "r": [
+    10,
+    10
+   ],
+   "t": "公式、数组与自动微分：存法变了，算法没变",
+   "star": 3,
+   "one": "手推把输入当列、代码把观测当行，所以代码里的权重矩阵是手推版本的转置 —— 转置只是行列互换，网络本身没变。",
+   "quote": "<b>The storage convention changes; the underlying computation stays the same.</b> Rows store observations in Python. <b>X: (N,d); W: (d,h); b: (h,)</b>. Z = X @ W + b has shape (N,h). The column-input equation uses Wᵀ. … <b>Record a forward computation and its loss → Autodiff calculates parameter gradients → The optimiser applies the parameter update.</b>",
+   "eq": "N = 批大小，d = 输入特征数，h = 隐藏单元数\n\n  代码（行 = 观测）：  X (N,d)   W (d,h)   b (h,)   ⇒  Z = X @ W + b  是 (N,h)\n  手推（列 = 输入）：  W 的形状是 (h,d)，即代码那个 W 的转置\n\n例： 3 个隐藏单元、2 个输入特征\n  手推矩阵 3×2        代码矩阵 2×3        输出权重的代码矩阵 3×1",
+   "pts": [
+    "⭐ <b>转置的来源只有一个</b>：手推时把一个输入写成<b>列</b>向量，代码里把每个观测存成<b>一行</b>。<b>转置只是行列互换，不改变网络本身</b>。",
+    "⚠️ <b>一个会掩盖问题的巧合</b>：讲义那个例子里 W1 恰好是<b>方阵</b>（2×2），所以转置<b>不改变形状但确实挪动了元素</b>——形状检查通不过的问题被藏住了。换成 3 隐藏单元、2 输入就立刻暴露：手推 3×2，代码 2×3。",
+    "<b>广播</b>：<em>Broadcasting adds the same bias vector to every observation.</em> —— b 的形状是 (h,)，加到 (N,h) 上时 NumPy 自动复制到每一行。",
+    "⭐⭐ <b>自动微分的三个角色必须分清</b>（考纲明确要求）：<b>① 记录</b>——TensorFlow 的 <code>GradientTape</code> 记录涉及 <code>tf.Variable</code> 的前向运算；<b>② 求导</b>——<code>tape.gradient</code> 按链式法则返回梯度，<b>它不更新参数</b>；<b>③ 更新</b>——优化器（<code>assign_sub</code> / <code>optimiser.step</code>）才真正改参数。",
+    "⚠️ <b>PyTorch 那一句是本页独有的</b>：<em>PyTorch loss.backward accumulates gradients. Clear accumulated gradients when the intended update should use only the current batch, and call the optimiser separately.</em> —— <b>backward 是累加的</b>，只想用当前批次时要先清零（<code>zero_grad</code>），而且优化器要<b>单独调用</b>。"
+   ],
+   "say": "⚠️⚠️ <b>这一页讲稿里藏着一句考点级别的话，正文里完全没有</b>：<em>The M3 T2 practical uses MLPClassifier with L-BFGS, which uses gradients but is not the simple gradient-descent rule used by hand.</em> —— <b>Practical 用的是 MLPClassifier + L-BFGS，它用梯度，但不是手算的那条 θ ← θ − η·∂L/∂θ</b>。⭐ 所以<b>「notebook 跑出来的结果和手算对不上」是正常的</b>，不是你算错了。另一句同样只在讲稿里：<em>Inspect array shapes and an intermediate value before trusting the result.</em>——<b>先查形状和一个中间值，再信结果</b>。",
+   "exam": "⭐⭐ <b>自动微分「做什么、不做什么」是考纲明确点名的</b>。标准答法：<b>它追踪一次前向计算里的各个运算并应用链式法则求导数</b>；⚠️ <b>它不替你选一个有用的目标、不修复数据泄漏、也不保证学习率是好的；参数更新是优化器完成的。</b> 形状题也常考：N 个观测、2 个特征、3 个隐藏单元 ⇒ H 是 (N,3)、P 是 (N,1)、Y 是 (N,1)。"
+  },
+  {
+   "r": [
+    11,
+    11
+   ],
+   "t": "Checkpoint：五个词自测",
+   "star": 1,
+   "one": "前向激活 / 局部梯度 / 隐藏梯度 / 批平均损失 / 训练循环 —— 盖住解释，先自己说一遍。",
+   "quote": "Forward activation — compute g(z). Local gradient — compute g′(z). Hidden gradient — <b>multiply path derivatives; sum branches</b>. Batch mean loss — <b>average example losses once</b>. Training cycle — forward → backward → update → repeat.",
+   "pts": [
+    "<b>讲稿给了用法</b>：<em>Use each item as an active-recall prompt: cover the explanation, define the term, then uncover it to check your answer.</em> —— <b>盖住右边，先自己定义，再对答案</b>。这比重读一遍有效得多。",
+    "⭐ <b>第三条把 p8 的规则压成两个动词</b>：<em>multiply path derivatives; <b>sum branches</b></em>——<b>沿路径相乘，遇到分叉相加</b>。这两个动词是整个反向传播的全部。",
+    "<b>第四条那个 once 又出现了</b>：<em>average example losses <b>once</b></em>。课件在两页里重复同一个警告，说明这是高频错误。",
+    "<b>课件原版还有一条「Saturation: large |z| can shrink gradients」</b>（在讲稿里），正文排版时被压掉了——<b>饱和也属于 checkpoint 的五个词之一</b>。"
+   ],
+   "exam": "这一页不出题，但它是<b>考前最后十分钟该看的那一页</b>：五个词能说清楚，T2 的概念题基本不会丢分。"
+  },
+  {
+   "r": [
+    12,
+    12
+   ],
+   "t": "第 1 节收尾：五条要点 + 五条「上 Tutorial 之前先会」",
+   "star": 2,
+   "one": "左栏是知识点总结，右栏是 Tutorial 的入场要求 —— 右栏比左栏更该背。",
+   "quote": "<b>Key Takeaways</b>: Activation and loss must match the task · Hidden weights learn through the final loss · Local slopes can shrink or block gradients · Batches combine examples before an update · Autodiff computes gradients; optimisers use them.<br><b>Ready for the Tutorial</b>: Calculate activation values before derivatives · <b>State the derivative convention at z=0 for ReLU</b> · <b>Distinguish total loss from mean loss</b> · Apply the correct BCE term for each label · Interpret why a confidently wrong prediction is costly.",
+   "pts": [
+    "⭐⭐ <b>右栏那五条是「会被扣分的点」清单</b>，比左栏的总结更值钱，因为它直接说了老师在批改时看什么。",
+    "<b>① Calculate activation values before derivatives</b> —— <b>先算激活值，再算导数</b>。因为 σ′ = g(1−g)、tanh′ = 1 − g² 都要用到<b>输出本身</b>，顺序反了就得重算。",
+    "<b>② State the derivative convention at z = 0 for ReLU</b> —— <b>要把 z=0 处的约定写出来</b>，不是默认它。本课约定 ReLU′(0) = 0、Leaky′(0) = α。⚠️ 这是一个<b>只要写上就有分、不写就没有</b>的点。",
+    "<b>③ Distinguish total loss from mean loss</b> —— <b>区分总损失和平均损失</b>。看公式前面有没有 (1/N)Σ：有就是平均，没有就是单样本或总和。⚠️ 讲义的记号是 <b>ℓᵢ 单样本、L = (1/N)Σℓᵢ 平均</b>；而 <b>T1 里的 L 指的是单个观测</b>——跨 Topic 最容易混。",
+    "<b>④ Apply the correct BCE term for each label</b> —— <b>按标签选对那一项</b>：y = 1 时只剩 −log p，y = 0 时只剩 −log(1−p)。⚠️ y = 0、p = 0.8 时正确类的概率是 <b>0.2</b>，损失 −ln(0.2) ≈ <b>1.609</b>，不是 −ln(0.8)。",
+    "<b>⑤ Interpret why a confidently wrong prediction is costly</b> —— <b>要能解释「自信地判错」为什么代价大</b>。两层含义：损失上 −log(0.01) ≈ 4.6 很大；梯度上 BCE 给 p − y = −0.99 的强信号，而半平方只给 −0.0098。"
+   ],
+   "exam": "⭐ 这五条每一条都能单独成为扩展题的一个<b>得分点</b>。做题时把它们当 checklist：算完先自检「我写了 z=0 的约定吗」「我说清楚用的是总和还是平均吗」。"
+  },
+  {
+   "r": [
+    13,
+    13
+   ],
+   "t": "第 2 节：Tutorial 只有三题（讲稿把结构说死了）",
+   "star": 2,
+   "one": "Q1 激活值与输出/损失选择、Q2 回归与分类损失及 logit 梯度、Q3 隐藏梯度与实现 —— 没有单独的 Q4，extension 不计分。",
+   "quote": "Three core questions and one optional extension. Q1: activation values, behaviour and output/loss choices · Q2: regression and classification losses and logit gradients · Q3: hidden gradient, autodiff and batch/epoch counts · <b>Use the original network supplied within Q3</b> · Extension: full hidden gradients and saturation.",
+   "pts": [
+    "⚠️⚠️ <b>讲稿里三句只有老师会说的话</b>：① <em>Complete and hand in Q1–Q3 in this tutorial. <b>There is no separate continuation or Q4.</b></em> ② <em>Q1 supplies two activation rows; calculate only the missing row.</em> ③ <em>The extension is <b>optional and unmarked</b>.</em>",
+    "⭐ <b>「Use the original network supplied within Q3」这句很关键</b>：Q3 自带网络设定，<b>不要去用别处（比如 Q1）的参数</b>。而且「original」还有第二层意思——<b>所有梯度都对应同一次前向、同一组原始参数</b>。",
+    "<b>Q1 已经给了两行激活值</b>，只要算缺的那一行。讲稿说这是 <em>to reduce repeated calculator work</em>——<b>减少重复按计算器</b>，说明这一题的重点不在算，在<b>比较和解释</b>。",
+    "<b>Q2 的后半段（多分类）也给了后续结果</b>，让你<b>focus on its meaning</b>——同样是重解释轻计算。⚠️ 这个倾向和考纲那句 <b>「只给出正确的最终数字，可能不足以体现所需的理解」</b> 完全一致。",
+    "⚠️ <b>Tutorial 是堂内纸质 worksheet，当堂交</b>（M3-00 记号表里写了：tutor 当场发、课上做完、离开前交给 tutor，<b>不要线上提交</b>）。"
+   ],
+   "tbl": [
+    {
+     "cap": "三道题 ↔ 考纲条目 ↔ 本精读对应页",
+     "head": [
+      "题",
+      "问什么",
+      "考纲条目",
+      "看哪几页"
+     ],
+     "rows": [
+      [
+       "Q1",
+       "算缺的激活值、比较行为、选输出与损失",
+       "sigmoid/tanh/ReLU 及导数；饱和；四种任务的输出与损失",
+       "p4、p6、p7、p14、p15"
+      ],
+      [
+       "Q2",
+       "MSE/MAE、三个 BCE 值、logit 梯度、多分类",
+       "MSE 与交叉熵",
+       "p7、p16、p17"
+      ],
+      [
+       "Q3",
+       "一个隐藏权重的梯度、两处零梯度、自动微分、batch/epoch 计数",
+       "部分隐藏层权重的梯度；batch、epoch、自动微分",
+       "p8、p9、p10、p18"
+      ]
+     ]
+    }
+   ],
+   "exam": "⭐ <b>Tutorial 的三题几乎就是扩展题的原型</b>。考纲页自己写明「去哪儿找类似练习」时点名的就是 <b>M3 T2 Tutorial Q1–3</b>。把这三题做熟，T2 的 10 分题就有底了。"
+  },
+  {
+   "r": [
+    14,
+    14
+   ],
+   "t": "Q1 前半：算激活值与局部导数，再解释行为",
+   "star": 2,
+   "one": "四步 —— 求值 → 求导 → 比较值域 → 解释梯度；重点在第 4 步的两个区分。",
+   "quote": "1 Evaluate: complete only the missing row → 2 Differentiate: use each supplied derivative rule → 3 Compare ranges: connect output range to task meaning → 4 Interpret gradients: <b>distinguish saturation from inactive ReLU</b>.",
+   "pts": [
+    "⭐ <b>第 4 步是这一题的得分点</b>：<em>distinguish saturation from inactive ReLU</em>——<b>把「饱和」和「ReLU 不激活」区分开</b>。两者都让梯度变小，但机制完全不同：",
+    "<b>饱和</b>：sigmoid/tanh 在 |z| 大时导数<b>趋近</b>于 0（但不等于 0），是<b>连续地变小</b>；而且<b>两端都会</b>。<b>ReLU 不激活</b>：z &lt; 0 时导数<b>恰好等于 0</b>，是<b>硬截断</b>；而且<b>只有负半轴</b>。",
+    "⚠️ <b>讲稿要求的两句解释</b>：<em>Explain how small slopes affect a hidden learning signal</em>（小斜率怎样影响隐藏层的学习信号——乘上去之后传下去的梯度变小，层数多了会连乘衰减）和 <em>why inactivity on one observation does not establish a permanently dead unit</em>（<b>单个观测上不激活，不足以认定这个单元永久死亡</b>）。",
+    "<b>计算要求</b>：讲稿说 <em>Calculate the six missing entries only, showing one output and its derivative calculation.</em> —— <b>只算六个缺的格子，而且要展示其中一个输出和它的导数的计算过程</b>。⚠️ 「展示过程」是明确要求，光填表不够。",
+    "<b>Q1 还有后半段</b>（输出与损失选择），在下一页——讲稿特意说 <em>Q1 also asks for output/loss choices, on the following supporting slide</em>，<b>那不是另一道题</b>。"
+   ],
+   "exam": "⭐ 这一题对应的选择题形态：给 z 问输出或导数（照 p4 那张表）；或者给「某隐藏 ReLU 这次输出 0」问能否断定它死了（答<b>不能</b>）。扩展题则要你<b>写出一个完整的求值 + 求导过程</b>，别省步骤。"
+  },
+  {
+   "r": [
+    15,
+    15
+   ],
+   "t": "Q1 后半：四种任务的输出与损失（考纲逐条点名）",
+   "star": 3,
+   "one": "回归 / 二分类 / 多分类 / 多标签，每一种都要给出输出激活 + 损失 + 一句理由。",
+   "quote": "<b>The output range must agree with what the target represents.</b> 1 Regression: identify the required output range → 2 Binary class: decide whether the output must be a probability → 3 Multiclass: consider how mutually exclusive scores are normalised → 4 Multi-label: <b>several labels may be true at once</b>.",
+   "eq": "回归      → 线性输出            + MSE 或 MAE\n二分类    → 一个 sigmoid        + 二元交叉熵 BCE\n互斥多类  → softmax            + 多类交叉熵（整数标签用 sparse 版）\n多标签    → 每标签一个 sigmoid  + 每标签各做一次 BCE\n\n⚠ 软件里数值稳定的损失常直接吃原始 logits，内部自己做激活 —— 别再套第二遍",
+   "pts": [
+    "⭐ <b>第一句就是判据</b>：<em>The output range must agree with what the target represents.</em> —— <b>输出的值域必须和目标代表的东西对得上</b>。回归目标是无约束实数 ⇒ 线性；二分类目标是概率 ⇒ sigmoid；互斥多类要一组和为 1 的概率 ⇒ softmax。",
+    "⚠️⚠️ <b>讲稿点名要你解释的两件事</b>：① <em>why ReLU cannot guarantee a binary probability</em>——<b>ReLU 保证不了二分类概率</b>（输出无上界，可以是 3.7，既不是概率也不是类别）；② <em>why softmax forces competition between co-occurring labels</em>——<b>softmax 会在可共现的标签之间强行制造竞争</b>（概率和必须为 1，一个涨另一个就得跌，而「猫」和「户外」本可以同时为真）。",
+    "<b>多标签的关键区分</b>：<em>several labels may be true at once</em>。所以用<b>各自独立的 sigmoid</b>，和<b>不必</b>等于 1。⚠️ 讲义还补了一句：<b>标签之间不必统计独立</b>——共享的隐藏特征仍然可能捕捉到标签间的关系。",
+    "<b>标签编码要和损失接口匹配</b>：<em>Match integer versus one-hot multiclass labels to the corresponding loss interface.</em> —— <b>整数 ⇒ sparse categorical CE；one-hot ⇒ categorical CE</b>。两者表示同一个计算。",
+    "⚠️ <b>考纲页给的官方示例选择题就是这个</b>：「每张照片恰好属于六个类别中的一个，标签存成整数 0–5」⇒ 答案是 <b>六个 softmax 输出 + sparse categorical cross-entropy</b>。"
+   ],
+   "tbl": [
+    {
+     "cap": "四选一时问自己的三句话",
+     "head": [
+      "问",
+      "若是",
+      "则"
+     ],
+     "rows": [
+      [
+       "目标是连续的吗？",
+       "是",
+       "线性输出 + MSE/MAE，到此为止"
+      ],
+      [
+       "类别互斥吗？",
+       "互斥",
+       "softmax + 交叉熵"
+      ],
+      [
+       "",
+       "可共现",
+       "每标签一个 sigmoid + 各做一次 BCE"
+      ],
+      [
+       "标签怎么存的？",
+       "整数",
+       "sparse categorical CE"
+      ],
+      [
+       "",
+       "one-hot",
+       "categorical CE"
+      ]
+     ]
+    }
+   ],
+   "exam": "⭐⭐⭐ <b>考纲逐条点名、官方示例题直接覆盖的一页</b>。扩展题会给一个场景（比如「一篇新闻可以同时属于体育和国际」），要你<b>写出输出层 + 损失 + 为什么另一个选项不行</b>。⚠️ 最后那句「为什么不行」是分，别省。"
+  },
+  {
+   "r": [
+    16,
+    16
+   ],
+   "t": "Q2 前半：回归损失、三个 BCE 值与两种 logit 梯度",
+   "star": 3,
+   "one": "先算 MSE 与 MAE 并比较对大残差的敏感度，再算三个 BCE、报总和与均值，最后比较两种搭配的 logit 梯度。",
+   "quote": "For y=1, only −log p remains; for y=0, only −log(1−p) remains. <b>BCE logit gradient: dL/dz = p − y</b>. Compare BCE with half-squared error. <b>The latter has an extra sigmoid slope p(1−p)</b>. Four checks: losses · summaries (<b>report total and mean</b>) · interpretation (explain the largest loss) · gradient comparison.",
+   "eq": "回归（讲义算例）： 目标 [3, −1]，预测 [2, 1]  ⇒  残差 [−1, 2]\n    MSE = (1 + 4)/2 = 2.5          MAE = (1 + 2)/2 = 1.5\n    ⚠ 残差从 2 变 4：平方贡献 ×4（4→16），绝对值贡献 ×2（2→4）\n\n分类： y=1 ⇒ L = −log p        y=0 ⇒ L = −log(1−p)\n    −ln(0.8) ≈ 0.2231      −ln(0.7) ≈ 0.3567      −ln(0.2) ≈ 1.6094",
+   "pts": [
+    "⭐ <b>讲稿把做题顺序写死了</b>：<em>Start with the regression part</em>——<b>先做回归那一半</b>（算 MSE 和 MAE，解释哪个对更大的残差更敏感），<b>再</b>算三个 BCE 值和它们的<b>总和与均值</b>，<b>最后</b>比较两种 logit 梯度。",
+    "⚠️ <b>「report total and mean」是明确要求</b>：<b>总和与均值都要报</b>。这正好呼应 p12 那条「Distinguish total loss from mean loss」。",
+    "<b>「explain the largest loss」</b>：三个 BCE 里最大的那个，一定是<b>给观测到的那一类分配了最低概率</b>的那个样本。解释时要点出 <b>−log 在概率趋近 0 时急剧上升</b>。",
+    "⭐⭐ <b>梯度比较是这一题的核心</b>：<b>BCE 给 p − y，半平方给 (p−y)·p(1−p)</b>。讲稿要求 <em>Explain the role of p(1−p) near saturation</em>——<b>解释 p(1−p) 在饱和附近起什么作用</b>（p 接近 0 或 1 时它极小，把梯度压没了）。",
+    "⚠️ <b>讲稿划了两条范围</b>：① <em>No separate probability derivative is required.</em>——<b>不要求单独求对概率的导数</b>（只要对 logit 的）；② <em>The confidently wrong comparison is in the optional extension.</em>——<b>「自信地判错」那个对比属于选做的 extension</b>，不计分。"
+   ],
+   "tbl": [
+    {
+     "cap": "两个最容易混的导数",
+     "head": [
+      "对什么求导",
+      "式子",
+      "说明"
+     ],
+     "rows": [
+      [
+       "对概率 p",
+       "∂ℓ/∂p = −y/p + (1−y)/(1−p)",
+       "本题不要求"
+      ],
+      [
+       "对 logit z（BCE）",
+       "∂ℓ/∂z = p − y",
+       "已含 sigmoid 的链式因子，就是 T1 的 δ"
+      ],
+      [
+       "对 logit z（半平方）",
+       "∂ℓ/∂z = (p − y)·p(1−p)",
+       "多出来的那个因子是祸根"
+      ]
+     ]
+    }
+   ],
+   "exam": "⭐⭐ 扩展题常见形态：给两个残差算 MSE/MAE 并解释敏感度差异；给三个 (y, p) 算 BCE 并报总和与均值；给一个 p 比较两种 logit 梯度。⚠️ <b>每一问都要带一句解释</b>，只给数字拿不满。"
+  },
+  {
+   "r": [
+    17,
+    17
+   ],
+   "t": "Q2 后半：多分类损失与学习信号",
+   "star": 2,
+   "one": "写 one-hot 目标 → 用 −Σ yₖ log pₖ 算损失 → 算 logit 梯度 p − y → 解释给出的后续结果。",
+   "quote": "<b>The one-hot label identifies which class probability enters the loss.</b> 1 Target: write the one-hot vector for the true class → 2 Loss: use −Σₖ yₖ log pₖ <b>with natural logarithms</b> → 3 Gradient: calculate the logit gradient p − y → 4 Comparison: <b>interpret the supplied later result</b>.",
+   "eq": "讲义算例： 概率 p = (0.1, 0.7, 0.2)，真实类别是第 2 类\n    one-hot 目标   y = (0, 1, 0)\n    损失           ℓ = −ln(0.7) ≈ 0.3567     ← 只有正确类那一项留下来\n    logit 梯度     p − y = (0.1, −0.3, 0.2)  ← 三项之和恰好为 0（自查）",
+   "pts": [
+    "⭐ <b>第一句就是整题的钥匙</b>：one-hot 目标<b>指出哪一个类别概率进入损失</b>。因为只有一个分量是 1，所以<b>单样本损失 = 给正确类别那个概率的负对数</b>。",
+    "⚠️ <b>with natural logarithms</b> —— <b>全部用自然对数</b>。课件把这句单独标出来，说明有人用过 log₁₀。",
+    "⭐ <b>梯度的符号要会读</b>：<b>正确类别那一项是负的</b>（梯度下降会<b>抬高</b>那个 logit），<b>其余项是正的</b>（它们的 logit 被<b>压低</b>）。⭐ <b>三项之和为 0</b> 是很好的自查。",
+    "<b>第 4 步是解释题</b>：<em>interpret the supplied later result</em>——后续的损失和梯度<b>题目直接给你</b>，要解释的是<b>正确类的概率提高了、类别判定怎么变</b>，而不是重复一遍算术。",
+    "⚠️ <b>讲稿要求的最后一句</b>：<em>Explain why a parameter gradient needs additional chain-rule factors.</em> —— <b>为什么参数的梯度还需要额外的链式因子</b>。因为 p − y 是<b>对 logit 的</b>导数，要得到对权重的导数还得再乘 ∂z/∂w；而且<b>一个权重可能影响好几个 logit 和好几个观测</b>。"
+   ],
+   "exam": "⭐ 选择题高发点：「p − y 是对什么求导」（答<b>对 logit</b>，不是对概率、不是对权重）；「三项之和等于多少」（答 <b>0</b>）。扩展题要你完整走四步，⚠️ 第 4 步的解释别省。"
+  },
+  {
+   "r": [
+    18,
+    18
+   ],
+   "t": "Q3：隐藏梯度、两处零梯度、自动微分与计数",
+   "star": 3,
+   "one": "一条标量链式梯度 + 一次更新，两个不同的零梯度解释，自动微分与优化器的分工，最后一个 batch/epoch 计数。",
+   "quote": "<b>Use the compact network setup printed directly above Question 3.</b> 1 Original state: use the supplied original network → 2 Hidden gradient: multiply local derivatives along the selected path → 3 Zero gradient: explain the effect of an inactive ReLU on this case → 4 Implementation: explain autodiff, updates and epochs.",
+   "pts": [
+    "⚠️⚠️ <b>讲稿把 Q3 的四个得分块说得非常清楚</b>：<em>Q3 asks for <b>one scalar chain-rule gradient and update</b>, <b>two distinct zero-gradient explanations</b>, and <b>the roles of autodiff and the optimiser</b>. Finish with the short batch/epoch count.</em>",
+    "⭐⭐ <b>「two distinct zero-gradient explanations」是最容易漏的</b>——要写<b>两个不同的</b>零梯度，不是同一个说两遍：<br>① <b>隐藏单元的输入权重梯度为 0</b>：因为 z &lt; 0 ⇒ ReLU 局部导数 g′ = 0，整条路径被截断；<br>② <b>该单元的输出权重梯度也为 0</b>：因为它的梯度 = (p − y)·h，而 <b>h = 0</b>。<br>⚠️ 这两个零的<b>成因不同</b>：一个来自导数为零，一个来自激活值为零。",
+    "<b>第 1 步「Original state」强调两次</b>：用<b>给定的原始网络</b>，而且讲稿说 <em>All gradients refer to the same original forward pass.</em> —— <b>所有梯度都对应同一次原始前向</b>。",
+    "<b>第 4 步要讲清分工</b>：<b>自动微分记录前向运算并按链式法则算出梯度；优化器才执行参数更新</b>。⚠️ 加一句范围：<b>它不替你选目标、不修数据泄漏、不保证学习率合适</b>。",
+    "⚠️ <b>最后那个计数是送分的</b>，别忘了做：样本数 ÷ 批大小 = 每个 epoch 的更新次数，再乘 epoch 数。",
+    "<b>完整的矩阵版隐藏梯度属于 extension</b>：<em>The full hidden matrix calculation is extension work only.</em> —— <b>不计分</b>，时间不够可以跳过。"
+   ],
+   "tbl": [
+    {
+     "cap": "Q3 的四块 ↔ 该写什么 ↔ 对应本精读哪一页",
+     "head": [
+      "块",
+      "该写什么",
+      "看哪页"
+     ],
+     "rows": [
+      [
+       "① 原始状态",
+       "明说所有梯度都用这一次前向、这一组原参数",
+       "p8"
+      ],
+      [
+       "② 隐藏梯度",
+       "(p−y) → ×vⱼ → ×g′(zⱼ) → ×xᵢ，逐因子说明；再做一次更新",
+       "p8"
+      ],
+      [
+       "③ 两处零梯度",
+       "输入权重梯度 = 0（g′ = 0）；输出权重梯度 = 0（h = 0）——成因不同",
+       "p8"
+      ],
+      [
+       "④ 实现",
+       "autodiff 算梯度 / 优化器改参数；加一句它不做什么；再算 batch·epoch",
+       "p9、p10"
+      ]
+     ]
+    }
+   ],
+   "exam": "⭐⭐⭐ <b>这一题和 M3 考纲页给的官方示例扩展题结构几乎一样</b>（前向 → 梯度 → 更新 → 解释自动微分）。官方示例的答案校验是：z = 2、a = 2、L = 2，∂L/∂w = −6、∂L/∂b = −2，η = 0.05 更新后 w = 0.8、b = 0.6。⚠️ <b>两个梯度都用更新前的原参数算</b>。"
+  },
+  {
+   "r": [
+    19,
+    19
+   ],
+   "t": "第 3 节：Practical 的五道题",
+   "star": 1,
+   "one": "Q1 激活值与局部梯度、Q2 比较损失、Q3 前向与改隐藏偏置、Q4 用验证 log loss 选激活、Q5 修输出/损失不匹配。",
+   "quote": "Q1: calculate activation values and local gradients · Q2: compare losses and the penalties they encode · Q3: trace a forward pass and test a hidden-bias change · <b>Q4: select by validation log loss; refit and test once</b> · Q5: diagnose and repair output/loss mismatches.",
+   "pts": [
+    "⭐ <b>Q4 是 T3 的预告，而且是考点</b>：<em>select an activation using validation log loss, refits and evaluates the test data <b>once</b></em>——<b>用验证集的 log loss 选激活函数，重新拟合，然后在测试集上评估一次</b>。⚠️ 这正是 T3「用验证做选择、测试只评一次」那条纪律的具体落地。",
+    "<b>Q5 也值得记</b>：<em>repairs output and loss combinations according to target semantics, including integer versus one-hot class labels</em>——<b>按目标的语义修复输出与损失的搭配，包括整数标签与 one-hot 的区别</b>。这就是 p15 那张配对表的反向用法：给一个错配，让你指出错在哪。",
+    "<b>Q3 的做法很值得学</b>：<em>traces a forward pass, <b>predicts</b> the effect of changing a hidden bias, <b>then checks it</b></em>——<b>先预测改一个隐藏偏置会怎样，再实际算一遍验证</b>。⭐ 「先预测再验证」是本课反复用的方法（T1 的计算图活动也是这个套路）。",
+    "⚠️ <b>Practical 不计分但很值得做</b>：它把 T2 的每个概念都落到一个可运行的例子上，而且 Q4/Q5 的思路直接能搬进扩展题。"
+   ],
+   "exam": "Practical 本身不考，但 <b>Q4 的流程（验证选择 → 重拟合 → 测试评一次）和 Q5 的错配诊断是扩展题的现成素材</b>。"
+  },
+  {
+   "r": [
+    20,
+    20
+   ],
+   "t": "怎么走这个 notebook：按顺序跑、看中间值、用证据下结论",
+   "star": 1,
+   "one": "四步：按顺序算激活与导数 → 比较三种损失的惩罚 → 搭前向 → 验证选择、重拟合、测一次。",
+   "quote": "1 Run in order: calculate activations and local derivatives → 2 Compare penalties: connect MSE, MAE and BCE to errors → 3 Build forward pass: implement <b>affine → activation → output</b> → 4 <b>Validate, refit, test</b>: select activation on validation; test once.",
+   "pts": [
+    "⭐ <b>讲稿点出了 practical 的真正重点</b>：<em>The practical emphasises <b>correct experimental reasoning</b> as well as code.</em> —— <b>正确的实验推理和代码同样重要</b>。接着那句更直接：<em>justify conclusions from evidence rather than from a single score</em>——<b>结论要有证据支撑，不能只看一个分数</b>。",
+    "<b>第 3 步的三段式要记</b>：<b>affine → activation → output</b>。每一层都是「先仿射，再激活」，输出层的激活由任务决定。",
+    "⚠️ <b>Study check 里那句话是 T3 的核心</b>：<em>Which output, plot, or comparison will you use as evidence, and <b>how will you avoid using test data to make development decisions</b>?</em> —— <b>你打算用哪个输出/图/对比当证据，又怎样避免用测试数据做开发决策</b>。",
+    "<b>「inspect intermediate outputs」</b>再次出现（p10 讲稿也说过）。⭐ <b>先查形状和一个中间值，再信结果</b>——这是本讲重复了两次的建议。"
+   ],
+   "exam": "⭐ 最后那句「怎样避免用测试数据做开发决策」<b>就是 T3 扩展题的标准问法</b>。答法：<b>所有选择（模型、超参数、阈值、停止点）都用验证证据做，选定后冻结，最后在没碰过的测试集上评估一次</b>。",
+   "tip": {
+    "t": "T2 收尾，T3 接上",
+    "v": "T2 的最后两页（p19 Q4、p20 Study check）已经完全是 T3 的语言了：<b>验证选择、重拟合、测试只评一次</b>。读完这一讲直接接 <b>M3T3 逐页精读</b>，衔接是连着的。",
+    "w": 0
+   }
+  }
+ ],
+ "quiz": {
+  "2": [
+   {
+    "q": "讲稿要求按什么顺序学 T2 的四页 Canvas 材料？",
+    "o": [
+     "隐藏层怎么学 → 激活函数 → 损失函数 → 从一次更新到训练过程",
+     "从一次更新到训练过程 → 隐藏层怎么学 → 损失函数 → 激活函数",
+     "损失函数 → 激活函数 → 从一次更新到训练过程 → 隐藏层怎么学",
+     "激活函数 → 损失函数 → 隐藏层怎么学 → 从一次更新到训练过程"
+    ],
+    "a": 3,
+    "why": "讲稿原话：<em>Study activation function, loss function, how a hidden layer learns, and from one update to a training process <b>in that order</b></em>。这个顺序是有道理的——先定激活和损失（它们决定梯度长什么样），再追隐藏层，最后扩到批量。"
+   }
+  ],
+  "3": [
+   {
+    "q": "W₂(W₁x+b₁)+b₂ 这个两层无激活的网络，等价于什么？",
+    "o": [
+     "一个仿射映射，也就是一个单层",
+     "一个二次函数",
+     "一个分段线性函数",
+     "一个 sigmoid 函数"
+    ],
+    "a": 0,
+    "why": "课件原话：<em>Affine maps collapse. W₂(W₁x+b₁)+b₂ is another affine map.</em> 展开就是 W₂W₁x + (W₂b₁+b₂)，仍然是「一个矩阵乘 + 一个偏置」。⚠ 课件接着说 <em>Depth alone adds no curved boundary</em>——光加深度不会多出弯边界。"
+   },
+   {
+    "q": "h = 4x − 1、s = 2h + 5，中间不加激活。等价的单层是什么？",
+    "o": [
+     "s = 8x + 4",
+     "s = 8x + 3",
+     "s = 2x + 5",
+     "s = 6x + 4"
+    ],
+    "a": 1,
+    "why": "s = 2(4x − 1) + 5 = 8x − 2 + 5 = <b>8x + 3</b>。⭐ 扩展题可能让你代一组数字验证塌缩，算完记得加一句「所以存在一个单层对任何输入给出完全相同的输出」。"
+   }
+  ],
+  "4": [
+   {
+    "q": "课件说激活函数必须同时理解成哪两样东西？",
+    "o": [
+     "一个矩阵和它的转置",
+     "一个概率分布和一个归一化常数",
+     "一个前向函数和一个局部导数",
+     "一个损失函数和一个优化器"
+    ],
+    "a": 2,
+    "why": "原话 <em>An activation must be understood as both a forward function and a local derivative</em>。g(z) 管往下一层传什么值，g′(z) 管反向乘多少倍。⭐ 讲义把这句说得更狠：<b>大的输出不代表大的梯度</b>。"
+   },
+   {
+    "q": "按本课（和 worksheet）的约定，ReLU 在 z = 0 处的导数取多少？",
+    "o": [
+     "无定义，考试不会涉及",
+     "1",
+     "0.5",
+     "0"
+    ],
+    "a": 3,
+    "why": "讲稿原话：<em>At z=0 the mathematical derivative is undefined; the worksheet uses <b>0</b> as its implementation convention.</em> ⚠ Leaky ReLU 在 0 处则用 α = 0.01。p12 明确要求答题时<b>把这个约定写出来</b>。"
+   }
+  ],
+  "5": [
+   {
+    "q": "课件给的「按层的角色选激活」四步，第一步是什么？",
+    "o": [
+     "先选损失函数，再倒推激活",
+     "先认清输出是什么类型：连续、二元、单标签还是多标签",
+     "选隐藏层激活，ReLU 是强基线",
+     "先跑一遍训练看有没有饱和"
+    ],
+    "a": 1,
+    "why": "四步是 <em>Identify output → Choose output → Choose hidden → Monitor training</em>。⭐ 顺序不能反：输出层由<b>任务</b>决定（没得选），隐藏层才是调参。"
+   }
+  ],
+  "6": [
+   {
+    "q": "关于 tanh，下面哪一句符合课件的说法？",
+    "o": [
+     "以零为中心，而且不会饱和",
+     "以零为中心，但仍然会饱和",
+     "它就是三角函数里的正切，用计算器 tan 键即可",
+     "不以零为中心，但不会饱和"
+    ],
+    "a": 1,
+    "why": "课件原话 <em>Tanh — Zero-centred but still saturates</em>。tanh 是 sigmoid 的改良（解决了非零中心），<b>没有</b>解决饱和。⚠ 另外它是双曲正切，不是普通正切。"
+   },
+   {
+    "q": "传入的损失梯度经过 Leaky ReLU 的负半轴（α = 0.01）之后会怎样？",
+    "o": [
+     "乘以 α，变小但符号不变",
+     "符号反转，变成相反数",
+     "变成 0，这条路径断掉",
+     "乘以 1/α，被放大 100 倍"
+    ],
+    "a": 0,
+    "why": "讲稿原话：<em>The incoming loss gradient is multiplied by alpha; <b>it is not necessarily negative</b>.</em> 乘一个小正数不改变符号。例：0.6 × 0.01 = 0.006（很小但没断）；换成 ReLU 才是 0.6 × 0 = 0。"
+   }
+  ],
+  "7": [
+   {
+    "q": "sigmoid 输出配半平方误差 ½(y−p)² 时，对 logit 的梯度是什么？",
+    "o": [
+     "−y/p + (1−y)/(1−p)",
+     "(p − y)·p(1−p)",
+     "p − y",
+     "p(1−p)"
+    ],
+    "a": 1,
+    "why": "课件写明 <em>For L_MSE=½(y−p)² and p=σ(z): ∂L/∂z=(p−y)p(1−p)</em>。⭐ 多出来的 p(1−p) 就是祸根——sigmoid 饱和时它极小，把梯度压没了。sigmoid + BCE 则化简成干净的 p − y。"
+   },
+   {
+    "q": "类别互斥、标签存成整数 0–5 时，应该用哪种损失接口？",
+    "o": [
+     "均方误差，把类别编号当成数值",
+     "二元交叉熵，对每个类别各做一次",
+     "categorical cross-entropy（要先转 one-hot）",
+     "sparse categorical cross-entropy"
+    ],
+    "a": 3,
+    "why": "课件原话：<em>Integer class labels → sparse categorical CE; one-hot labels → categorical CE.</em> 两者<b>表示的是同一个计算</b>，只是接口不同。⚠ 整数编码可能从 0 开始也可能从 1 开始，永远要核对映射。"
+   }
+  ],
+  "8": [
+   {
+    "q": "课件给的隐藏权重梯度公式 ∂L/∂wⱼᵢ = (p − y)·vⱼ·g′(zⱼ)·xᵢ 里，vⱼ 是什么？",
+    "o": [
+     "第 j 个输入特征的取值",
+     "隐藏单元 j 通往输出的连接权重",
+     "隐藏单元 j 的偏置",
+     "输入 i 到隐藏单元 j 的权重"
+    ],
+    "a": 1,
+    "why": "课件写明 <em>wⱼᵢ connects input i to hidden unit j; vⱼ connects hidden unit j to the output</em>。⭐ 它之所以出现在隐藏层的梯度里，是因为<b>隐藏激活对损失的影响必须穿过输出层</b>，vⱼ 正是 s 对 hⱼ 的局部导数。"
+   },
+   {
+    "q": "讲义算例里 x = [1,2]、隐藏 2 的权重 [−0.5, 0.3]、偏置 −0.2、ReLU 激活。h₂ 等于多少？",
+    "o": [
+     "0",
+     "−0.1",
+     "0.1",
+     "0.3"
+    ],
+    "a": 0,
+    "why": "z₂ = −0.5(1) + 0.3(2) − 0.2 = <b>−0.1</b>，ReLU 输出 <b>0</b>——对这个观测不激活。⚠ 由此带来两处「没变」：它的输入权重梯度全为 0，而且输出权重 v₂ 的梯度 = (p−y)·h₂ = 0。"
+   }
+  ],
+  "9": [
+   {
+    "q": "训练集 240 个观测、批大小 16，跑 4 个 epoch，一共更新多少次？",
+    "o": [
+     "64 次",
+     "15 次",
+     "60 次",
+     "960 次"
+    ],
+    "a": 2,
+    "why": "每个 epoch 240 ÷ 16 = 15 次，4 个 epoch = <b>60 次</b>。⚠ 讲稿加了前提 <em>assuming no dropped or repeated observations</em>——不丢样本也不重复取。"
+   }
+  ],
+  "10": [
+   {
+    "q": "代码里 X 的形状是 (N,d)、W 是 (d,h)，那么 Z = X @ W + b 的形状是什么？",
+    "o": [
+     "(N,h)",
+     "(d,h)",
+     "(N,d)",
+     "(h,N)"
+    ],
+    "a": 0,
+    "why": "课件写明 <em>Z = X @ W + b has shape (N,h)</em>。N 是批大小、d 是输入特征数、h 是隐藏单元数。⚠ 手推用列输入，权重矩阵是 (h,d)，即代码那个的转置——<b>转置只是行列互换，不改变网络本身</b>。"
+   },
+   {
+    "q": "关于自动微分，下面哪一句是对的？",
+    "o": [
+     "它能自动选出合适的学习率",
+     "它会在发现数据泄漏时报错",
+     "它记录前向运算并算出梯度，但参数更新由优化器完成",
+     "它既算梯度也直接更新参数，所以不需要优化器"
+    ],
+    "a": 2,
+    "why": "课件的三段式：<em>Record a forward computation and its loss → Autodiff calculates parameter gradients → <b>The optimiser applies the parameter update</b></em>。⚠ 讲义补的范围：它<b>不替你选目标、不修数据泄漏、不保证学习率合适</b>。"
+   }
+  ],
+  "11": [
+   {
+    "q": "Checkpoint 把隐藏梯度压成两个动词，是哪两个？",
+    "o": [
+     "沿路径相加；遇到分叉相乘",
+     "相加路径导数；取分支的最大值",
+     "沿路径相乘；遇到分叉相加",
+     "取平均；再除以批大小"
+    ],
+    "a": 2,
+    "why": "原话 <em>multiply path derivatives; sum branches</em>。⭐ 这两个动词就是反向传播的全部：<b>一条路径内部相乘，多条路径汇合相加</b>。"
+   }
+  ],
+  "12": [
+   {
+    "q": "课件「Ready for the Tutorial」那五条里，关于 ReLU 的要求是什么？",
+    "o": [
+     "要把所有 ReLU 换成 Leaky ReLU",
+     "要能证明 ReLU 在任意点可导",
+     "要说明 ReLU 一定会产生死单元",
+     "要把 z = 0 处的导数约定写出来"
+    ],
+    "a": 3,
+    "why": "原话 <em>State the derivative convention at z=0 for ReLU</em>。⚠ 这是一个<b>只要写上就有分、不写就没有</b>的点——数学上那里不可导，必须明说你用的是哪个约定（本课是 0）。"
+   }
+  ],
+  "13": [
+   {
+    "q": "讲稿关于 T2 Tutorial 的结构，说了什么？",
+    "o": [
+     "三题全部是选做，不用交",
+     "只有 Q1–Q3，没有单独的 Q4；extension 是选做且不计分",
+     "Q3 要用 Q1 给出的那个网络参数",
+     "共四题，第四题是必做的延伸"
+    ],
+    "a": 1,
+    "why": "讲稿原话：<em>Complete and hand in Q1–Q3 in this tutorial. <b>There is no separate continuation or Q4.</b></em> 以及 <em>The extension is optional and unmarked.</em> ⚠ 另外课件写明 Q3 <b>自带</b>网络设定（Use the original network supplied within Q3）。"
+   }
+  ],
+  "14": [
+   {
+    "q": "Q1 第 4 步要求把哪两件事区分开？",
+    "o": [
+     "饱和与 ReLU 不激活",
+     "权重与偏置",
+     "训练误差和测试误差",
+     "总损失与平均损失"
+    ],
+    "a": 0,
+    "why": "原话 <em>Interpret gradients: distinguish saturation from inactive ReLU</em>。两者都让梯度变小但机制不同：<b>饱和是导数趋近 0（两端都会、连续变小）；ReLU 不激活是导数恰好等于 0（只在负半轴、硬截断）</b>。"
+   }
+  ],
+  "15": [
+   {
+    "q": "一篇新闻可以同时属于「体育」和「国际」。应该用什么输出层与损失？",
+    "o": [
+     "softmax + sparse categorical cross-entropy",
+     "一个线性输出 + 均方误差",
+     "每个标签一个 sigmoid + 对每个标签各做一次 BCE",
+     "一个 sigmoid + 二元交叉熵"
+    ],
+    "a": 2,
+    "why": "这是<b>多标签</b>（several labels may be true at once），不是互斥多类。⚠ 讲稿要你能解释 <em>why softmax forces competition between co-occurring labels</em>——softmax 的概率和必须为 1，一个涨另一个就得跌，而可共现的标签本可以同时为真。"
+   },
+   {
+    "q": "为什么 ReLU 不能用作二分类的输出层？",
+    "o": [
+     "它的输出无上界，不是概率，预测没法解释",
+     "它的导数在负半轴为 0，无法训练",
+     "它不是单调函数",
+     "它只能用于回归任务的隐藏层"
+    ],
+    "a": 0,
+    "why": "讲稿点名要你解释 <em>why ReLU cannot guarantee a binary probability</em>。ReLU 的输出可以是 3.7，既不是概率也不是类别。⭐ 课件把这类问题单列为 <em>Output mismatch — Wrong range can make predictions uninterpretable</em>。"
+   }
+  ],
+  "16": [
+   {
+    "q": "目标 [3, −1]、预测 [2, 1]，MSE 和 MAE 分别是多少？",
+    "o": [
+     "MSE 5.0，MAE 3.0",
+     "MSE 2.5，MAE 1.5",
+     "MSE 1.5，MAE 2.5",
+     "MSE 2.5，MAE 2.5"
+    ],
+    "a": 1,
+    "why": "残差（预测 − 目标）= [−1, 2]。平方 [1, 4] ⇒ MSE = 5/2 = <b>2.5</b>；绝对值 [1, 2] ⇒ MAE = 3/2 = <b>1.5</b>。⚠ 残差从 2 变 4 时，平方贡献 ×4、绝对值贡献 ×2。"
+   },
+   {
+    "q": "y = 0、p = 0.8 时，二元交叉熵损失约等于多少？",
+    "o": [
+     "0.223",
+     "0.105",
+     "1.609",
+     "0.357"
+    ],
+    "a": 2,
+    "why": "y = 0 ⇒ 只剩 −log(1−p) = −ln(0.2) ≈ <b>1.609</b>。⚠ 这正是 p12 那条「Apply the correct BCE term for each label」防的错：套成 −ln(0.8) ≈ 0.223 就错了。⭐ 这也说明「有把握但判错」代价很大。"
+   }
+  ],
+  "17": [
+   {
+    "q": "概率 p = (0.1, 0.7, 0.2)、真实类别是第 2 类，logit 梯度 p − y 是多少？",
+    "o": [
+     "(0, 1, 0)",
+     "(0.1, 0.7, 0.2)",
+     "(−0.1, 0.3, −0.2)",
+     "(0.1, −0.3, 0.2)"
+    ],
+    "a": 3,
+    "why": "one-hot 目标 y = (0,1,0)，p − y = <b>(0.1, −0.3, 0.2)</b>。⭐ 三项之和恰好为 <b>0</b>，是很好的自查。正确类那一项为负 ⇒ 梯度下降会抬高它的 logit。⚠ 这是<b>对 logit 的</b>导数，不是对概率或权重的。"
+   }
+  ],
+  "18": [
+   {
+    "q": "Q3 要求给出「两个不同的零梯度解释」，它们分别是什么？",
+    "o": [
+     "两个都来自 ReLU 的负半轴，只是单元不同",
+     "一个来自学习率为 0，一个来自梯度被裁剪",
+     "一个来自偏置不更新，一个来自权重初始化为 0",
+     "一个来自 ReLU 导数为 0，一个来自隐藏激活值 h = 0"
+    ],
+    "a": 3,
+    "why": "⭐ 两处零的<b>成因不同</b>：① 隐藏单元的输入权重梯度 = 0，因为 z &lt; 0 ⇒ g′ = 0，路径被截断；② 该单元的输出权重梯度 = (p−y)·h = 0，因为 <b>h = 0</b>。讲稿明确写 <em>two distinct zero-gradient explanations</em>。"
+   },
+   {
+    "q": "算隐藏层梯度时，输出权重应该用哪一组值？",
+    "o": [
+     "更新之前的原始值，所有梯度都对应同一次前向",
+     "更新之后的新值，这样更准确",
+     "新旧两组的平均值",
+     "权重用旧值，偏置用新值"
+    ],
+    "a": 0,
+    "why": "课件两处强调：<em>All factors use the same forward pass and original parameters. Update only after gradients are ready.</em> 以及讲稿 <em>All gradients refer to the same original forward pass.</em> ⚠ 中途换用新值，算的就不是这一点处的梯度。"
+   }
+  ],
+  "20": [
+   {
+    "q": "Practical 的 Study check 问「怎样避免用测试数据做开发决策」，标准答法是什么？",
+    "o": [
+     "把训练集和测试集合并，用交叉验证代替",
+     "每次调参后都在测试集上测一遍，取最好的那组",
+     "所有选择都用验证证据做，选定后冻结，最后在没碰过的测试集上评估一次",
+     "把测试集设得足够大，这样多看几次也没关系"
+    ],
+    "a": 2,
+    "why": "Practical Q4 就是这个流程的落地：<em>select by validation log loss; refit and test <b>once</b></em>。⚠ 一旦用测试结果做选择，它就不再是独立的最终评估了——这是 T3 的核心纪律。"
+   }
+  ]
+ }
+}

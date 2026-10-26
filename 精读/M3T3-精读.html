@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M3 T3 · 模型评估：训练证据、停止与泛化 · 逐页精读</title>
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --panel2:#FAF8F4; --sunken:#EDEAE3;
+  --stage:#E9E6DF; --hover:#F0EDE6;
+  --line:#E3DFD6; --line2:#D2CCC0;
+  --dot:#DDD8CE; --dot2:#B9B1A2; --errdot:#D08A8A;
+  --ink:#23272C; --ink2:#111417; --ink3:#4A525C; --dim:#616973;
+  --acc:#0E7355; --acc2:#845808; --warn:#B23540; --blue:#1C6AA6;
+  --mark:#FFF6DC; --codeink:#17506E; --eqink:#1E2833;
+  --okink:#0B5B43; --noink:#8F2A33; --violet:#6A4BA3; --tintviolet:rgba(106,75,163,.07);
+  --okfill:rgba(14,115,85,.10); --nofill:rgba(178,53,64,.09);
+  --missbg:rgba(245,243,238,.97);
+  --tintacc:rgba(14,115,85,.07); --tintacc2:rgba(14,115,85,.05);
+  --tintblue:rgba(28,106,166,.06); --tintwarn:rgba(178,53,64,.05);
+  --tintwarn2:rgba(178,53,64,.06);
+  --lift:rgba(60,54,44,.022); --lift2:rgba(60,54,44,.028);
+  --scrim:rgba(58,52,42,.40);
+  --shadow:0 1px 2px rgba(40,34,20,.05), 0 6px 18px rgba(40,34,20,.05);
+
+  --cjk:"PingFang SC","Microsoft YaHei","微软雅黑","Deng",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --bar:50px; --strip:36px;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f15; --panel:#121823; --panel2:#0d141c; --sunken:#0a0e14;
+  --stage:#070a0f; --hover:#0d141c;
+  --line:#212c3c; --line2:#2a3b4f;
+  --dot:#18212e; --dot2:#2c3c52; --errdot:#7a3a3a;
+  --ink:#e7eef7; --ink2:#f4f8fd; --ink3:#c3d2e3; --dim:#8b9ab0;
+  --acc:#6fd3bb; --acc2:#f2bd63; --warn:#ff8f8f; --blue:#7fb8ff;
+  --mark:#16202e; --codeink:#cfe3f5; --eqink:#dbe8f7;
+  --okink:#d8fff4; --noink:#ffdede; --violet:#B48BF5; --tintviolet:rgba(180,139,245,.08);
+  --okfill:rgba(111,211,187,.13); --nofill:rgba(255,143,143,.12);
+  --missbg:rgba(10,14,20,.97);
+  --tintacc:rgba(111,211,187,.09); --tintacc2:rgba(111,211,187,.07);
+  --tintblue:rgba(127,184,255,.055); --tintwarn:rgba(255,120,120,.055);
+  --tintwarn2:rgba(255,143,143,.08);
+  --lift:rgba(255,255,255,.022); --lift2:rgba(255,255,255,.025);
+  --scrim:rgba(6,9,13,.82);
+  --shadow:0 10px 34px rgba(0,0,0,.55);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--cjk);font-size:15px;line-height:1.75}
+
+#bar{height:var(--bar);display:flex;align-items:center;gap:11px;padding:0 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+#bar h1{margin:0;font-size:14.5px;font-weight:650;white-space:nowrap}
+#bar h1 span{color:var(--acc)}
+.btn{background:var(--sunken);border:1px solid var(--line);border-radius:7px;color:var(--dim);
+  font:13px var(--cjk);padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{color:var(--acc);border-color:var(--acc)}
+#pnum{width:48px;background:var(--sunken);border:1px solid var(--line);border-radius:7px;
+  color:var(--ink);font:13px var(--mono);text-align:center;padding:5px 0}
+#bar .sp{flex:1}
+#tot{font:12px var(--mono);color:var(--dim)}
+
+#strip{height:var(--strip);display:flex;align-items:center;gap:2px;padding:0 14px;
+  background:var(--sunken);border-bottom:1px solid var(--line);overflow-x:auto}
+#strip::-webkit-scrollbar{height:0}
+#strip b{flex:0 0 auto;width:13px;height:16px;border-radius:3px;background:var(--dot);
+  cursor:pointer;font:0/0 a}
+#strip b.has{background:var(--dot2)}
+#strip b.on{background:var(--acc2)}
+#strip b:hover{background:var(--acc)}
+
+#main{display:flex;height:calc(100% - var(--bar) - var(--strip))}
+/* 左栏 = 一块板，板中央摆一张 4:3 的幻灯片。
+   幻灯片本身就是 363×272（4:3），把框裁成同样比例再用 view=FitH，
+   这一页正好铺满框，下一页落到框外 —— 这样才是「一页」，
+   而不是一个能上下滚、还露出半张下一页的阅读器。 */
+#left{width:50%;min-width:280px;position:relative;background:var(--stage);
+  display:flex;align-items:center;justify-content:center;padding:14px}
+#stage{aspect-ratio:4/3;width:100%;max-width:100%;max-height:100%;
+  border-radius:8px;overflow:hidden;background:#fff;
+  box-shadow:var(--shadow)}
+#stage iframe{width:100%;height:100%;border:0;display:block}
+#drag{width:6px;cursor:col-resize;background:var(--line);flex:0 0 6px}
+#drag:hover{background:var(--acc)}
+#right{flex:1;overflow-y:auto;padding:24px 28px 40px}
+
+.pg{font:11.5px var(--mono);color:var(--bg);background:var(--acc2);border-radius:999px;
+  padding:2px 11px;font-weight:700;display:inline-block;margin-bottom:12px}
+.pg.multi{background:var(--blue)}
+h2{margin:0 0 14px;font-size:21px;font-weight:680;line-height:1.4}
+.one{font-size:16.5px;line-height:1.7;color:var(--ink2);border-left:3px solid var(--acc);
+  padding:9px 0 9px 14px;margin:0 0 16px;
+  background:linear-gradient(90deg,var(--tintacc),transparent)}
+ul{margin:0 0 16px;padding-left:0;list-style:none}
+ul li{margin-bottom:11px;padding-left:22px;position:relative;line-height:1.72}
+ul li::before{content:"";position:absolute;left:6px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--acc)}
+b{font-weight:650;color:var(--ink2)}
+.k{color:var(--acc);font-weight:650}
+.w{color:var(--warn);font-weight:650}
+code{font-family:var(--mono);font-size:.9em;background:var(--mark);padding:1.5px 6px;
+  border-radius:4px;color:var(--codeink)}
+.eq{display:block;text-align:center;background:var(--mark);border-radius:8px;padding:12px 8px;
+  margin:14px 0;font-family:var(--mono);font-size:14px;color:var(--eqink);overflow-x:auto}
+.say{border:1px solid var(--line2);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;background:var(--tintblue);font-size:14px;line-height:1.72}
+.say .t{color:var(--blue);font-weight:700;font-size:12.5px;display:block;margin-bottom:5px;
+  letter-spacing:.5px}
+.tip{border:1px solid var(--line);border-radius:9px;padding:11px 15px;margin:14px 0;
+  background:var(--lift2);font-size:14px;line-height:1.72}
+.tip .t{font-weight:700;color:var(--acc);margin-right:7px}
+.tip.w2{border-color:var(--warnline);background:var(--tintwarn)}
+.tip.w2 .t{color:var(--warn)}
+.star{color:var(--acc2);font-size:14px;margin-left:8px;letter-spacing:1px}
+.nav{display:flex;gap:10px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+.nav .btn{flex:1;text-align:center;padding:9px}
+.empty{color:var(--dim);font-size:14px;padding:36px 0;text-align:center;line-height:2}
+#miss{position:absolute;inset:0;background:var(--missbg);z-index:5;display:none;
+  padding:26px;color:var(--dim);font-size:13.5px;line-height:1.9}
+#miss code{background:var(--mark);padding:2px 6px;border-radius:4px;color:var(--acc2)}
+
+
+.qbadge{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;
+  margin-left:9px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 9px;font:11.5px var(--mono);color:var(--acc);cursor:pointer;
+  background:var(--sunken);transition:border-color .12s}
+.qbadge:hover{border-color:var(--acc)}
+.qbadge.bad{color:var(--warn)}
+#wrongBox .tally{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+#wrongBox .tally span{border:1px solid var(--line);border-radius:8px;padding:5px 11px;
+  font-size:12.5px;color:var(--dim);background:var(--sunken)}
+#wrongBox .tally b{color:var(--ink);font-weight:650}
+#wrongBox .tally b.hot{color:var(--warn)}
+.wrow .h{gap:3px}
+.wrow .h u{display:flex;gap:2px;text-decoration:none;
+  padding-right:7px;margin-right:4px;border-right:1px solid var(--line)}
+.wrow .h u:last-child{border-right:0;padding-right:0;margin-right:0}
+#revChip{display:none;align-items:center;gap:9px;border:1px solid var(--warn);
+  border-radius:8px;padding:5px 11px;font-size:12.5px;color:var(--warn);
+  background:var(--tintwarn2);white-space:nowrap}
+#revChip.on{display:inline-flex}
+#revChip b{font:650 12px var(--mono)}
+#revChip button{background:none;border:0;color:var(--dim);cursor:pointer;
+  font:12px var(--cjk);text-decoration:underline;padding:0}
+#revChip button:hover{color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn:disabled:hover{border-color:var(--line)}
+
+/* ── 自测 ── */
+.quiz{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.quiz>h3{margin:0 0 12px;font-size:13px;color:var(--dim);letter-spacing:.16em;
+  display:flex;align-items:center;gap:8px}
+.quiz>h3 b{color:var(--acc2);font-weight:700}
+.qq{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:11px;
+  background:var(--lift)}
+.qq .t{font-size:14.5px;font-weight:600;margin-bottom:10px;line-height:1.6}
+.opt{display:block;width:100%;text-align:left;background:var(--sunken);border:1px solid var(--line);
+  border-radius:8px;color:var(--ink);font:14px var(--cjk);padding:8px 12px;margin-bottom:7px;
+  cursor:pointer;line-height:1.5;transition:border-color .12s,background .12s}
+.opt:hover:not(:disabled){border-color:var(--acc);background:var(--hover)}
+.opt:disabled{cursor:default}
+.opt.ok{border-color:var(--acc);background:var(--okfill);color:var(--okink)}
+.opt.no{border-color:var(--warn);background:var(--nofill);color:var(--noink)}
+.opt .m{float:right;font-weight:700;margin-left:10px}
+.why{font-size:13.5px;line-height:1.7;color:var(--ink3);border-left:3px solid var(--acc);
+  padding:8px 0 8px 12px;margin-top:9px;background:linear-gradient(90deg,var(--tintacc2),transparent)}
+.qhist{font:11px var(--mono);color:var(--dim);margin-top:8px;display:flex;
+  align-items:center;gap:5px}
+.qhist i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.qhist i.o{background:var(--acc)} .qhist i.x{background:var(--warn)}
+.qagain{background:none;border:0;color:var(--dim);font:12px var(--cjk);cursor:pointer;
+  text-decoration:underline;padding:0;margin-left:auto}
+.qagain:hover{color:var(--acc2)}
+#strip b.err{background:var(--errdot)}
+#strip b.err.on{background:var(--acc2)}
+/* 错题本 */
+#wrongPanel{position:fixed;inset:0;background:var(--scrim);z-index:80;display:none;
+  align-items:center;justify-content:center;padding:28px}
+#wrongPanel.on{display:flex}
+#wrongBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  width:min(760px,100%);max-height:84vh;overflow:auto;padding:22px 24px}
+#wrongBox h3{margin:0 0 4px;font-size:18px}
+#wrongBox .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+.wrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;
+  border:1px solid var(--line);margin-bottom:8px;cursor:pointer;background:var(--sunken)}
+.wrow:hover{border-color:var(--acc2)}
+.wrow .p{font:700 12px var(--mono);color:var(--acc2);flex:0 0 52px}
+.wrow.done{opacity:.5}
+.wrow.done .p{color:var(--acc)}
+.wrow .n2{flex:1;font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.wrow .s{font:11.5px var(--mono);color:var(--dim);flex:0 0 auto}
+.wrow .h{display:flex;gap:3px;flex:0 0 auto}
+.wrow .h i{width:9px;height:9px;border-radius:2px;font-style:normal;background:var(--dot)}
+.wrow .h i.o{background:var(--acc)} .wrow .h i.x{background:var(--warn)}
+#wrongBox .none{color:var(--dim);text-align:center;padding:30px 0;line-height:2}
+#wrongFoot{display:flex;gap:10px;margin-top:14px;padding-top:14px;
+  border-top:1px solid var(--line)}
+#wrongFoot .btn{flex:1;text-align:center}
+
+@media (max-width:900px){
+  #main{flex-direction:column} #left{width:100%;height:40%} #drag{display:none}
+  #right{padding:16px 16px 30px}
+}
+
+/* ══ EXTRA_CSS:BEGIN ══ */
+/* ══ 讲解区里的链接兜底 ══
+   ⚠ 2026-10-03 查出来的：原先只给 .ng a 上了色，放在 tip / say / pts / exam 里的链接
+   会退回浏览器默认的 #0000EE —— 浅色下还能看（8.47:1），**暗色下只有 1.95:1**。
+   做 notes2 时第一次往 tip 里放时间码链接就撞上了。这条规则管住所有其它位置。 */
+#card a{color:var(--blue);text-decoration:none;border-bottom:1px solid var(--blue)}
+#card a:hover{opacity:.75}
+
+/* ══ 「从零补基础 · Andrew Ng」栏 ══ */
+.ng{border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintviolet)}
+.ng .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--violet);
+  letter-spacing:.4px;margin-bottom:5px}
+/* ⚠ 要用 #card .ng a 而不是 .ng a —— 上面的兜底规则带了 #card 这个 id，
+   光写 .ng a（0,1,1）会被 #card a（1,0,1）压过去，紫色链接会变蓝。 */
+#card .ng a{color:var(--violet);text-decoration:none;border-bottom:1px solid var(--violet)}
+#card .ng a:hover{opacity:.75}
+.ng .src{display:block;margin-top:6px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+:root:not([data-theme="dark"]) .ng{box-shadow:var(--shadow)}
+
+/* ══ 「课件原话」栏：引官方英文 ══ */
+.quote{border-left:3px solid var(--dim);background:var(--lift2);border-radius:0 8px 8px 0;
+  padding:10px 15px;margin:12px 0;font-size:13px;line-height:1.7;color:var(--ink3)}
+.quote .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--dim);
+  letter-spacing:.4px;margin-bottom:5px}
+.quote b{color:var(--ink2)}
+.quote em{font-style:normal;color:var(--ink2);font-weight:560}
+
+/* ══ 笔记表格：对比表 / 情况表 / 数值表 ══ */
+.tw{margin:13px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.tc{font-size:11.5px;font-family:var(--mono);color:var(--dim);letter-spacing:.3px;
+  padding:7px 12px;background:var(--sunken);border-bottom:1px solid var(--line)}
+table.nt{width:100%;border-collapse:collapse;font-size:12.8px;line-height:1.55}
+table.nt th{text-align:left;font-weight:620;font-size:11.5px;color:var(--dim);
+  background:var(--panel2);padding:7px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.nt td{padding:7px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.nt tbody tr:last-child td{border-bottom:none}
+table.nt td:first-child{font-weight:560;color:var(--ink2)}
+table.nt b{color:var(--ink2)}
+:root:not([data-theme="dark"]) .tw{box-shadow:var(--shadow)}
+
+/* ══ 「与考试的联系」栏 ══ */
+.exam{border:1px solid var(--line);border-left:3px solid var(--acc2);border-radius:0 8px 8px 0;
+  padding:11px 15px;margin:14px 0;font-size:13.5px;line-height:1.72;background:var(--tintacc2)}
+.exam .t{display:block;font-size:11.5px;font-family:var(--mono);color:var(--acc2);
+  letter-spacing:.4px;margin-bottom:5px}
+:root:not([data-theme="dark"]) .exam{box-shadow:var(--shadow)}
+
+/* ══ 双主题补丁：浅色下的可读性与质感 ══ */
+html{color-scheme:light dark}
+:root:not([data-theme="dark"]) #right{background:var(--bg)}
+:root:not([data-theme="dark"]) .quiz,
+:root:not([data-theme="dark"]) details,
+:root:not([data-theme="dark"]) .opt{box-shadow:var(--shadow)}
+:root:not([data-theme="dark"]) body{-webkit-font-smoothing:antialiased}
+:root:not([data-theme="dark"]) h2{letter-spacing:-.1px}
+:root:not([data-theme="dark"]) .one{font-weight:520}
+:root:not([data-theme="dark"]) .pg{color:#fff}
+:root:not([data-theme="dark"]) #strip b.on{background:var(--acc2)}
+/* 主题切换按钮 */
+#themeBtn{min-width:34px;text-align:center;font-size:14px;line-height:1}
+/* ══ EXTRA_CSS:END ══ */
+
+</style>
+</head>
+<body data-key="cs234-2019-l01">
+
+<div id="bar">
+  <h1>M3 T3 · <span>模型评估：训练证据、停止与泛化</span></h1>
+  <button class="btn" id="prev">← 上一页</button>
+  <input id="pnum" value="1" inputmode="numeric">
+  <span id="tot">/ 17</span>
+  <button class="btn" id="next">下一页 →</button>
+  <div class="sp"></div>
+  <span id="revChip">复习模式 <b></b><button id="revOff">退出</button></span>
+  <button class="btn" id="wrongBtn">错题本</button>
+  <button class="btn" id="themeBtn" title="切换主题">☾</button>
+  <button class="btn" id="help">打不开？</button>
+</div>
+
+<div id="strip"></div>
+
+
+<div id="wrongPanel"><div id="wrongBox">
+  <h3>错题本</h3>
+  <p class="sub">错过的题<b>连着答对两次就毕业</b>，自动从这里和复习模式里退出。<br>
+  还没毕业的排在前面，最近错得多的更靠前。点任意一行跳到那一页重看。</p>
+  <div class="tally" id="wrongTally"></div>
+  <div id="wrongList"></div>
+  <div id="wrongFoot">
+    <button class="btn" id="revOn">只复习这些页</button>
+    <button class="btn" id="wrongClose">关闭</button>
+    <button class="btn" id="wrongReset">清空全部记录</button>
+  </div>
+</div></div>
+
+<div id="main">
+  <div id="left">
+    <div id="stage"><iframe id="pdf" title="原课件"></iframe></div>
+    <div id="miss">
+      <p><b>左边没显示课件？</b></p>
+      <p>本页直接引用同目录下的 <code>slides/M3T3_Model_Evaluation.pdf</code>。</p>
+      <p>确认文件在即可。若浏览器拦本地 iframe 读 PDF，在 <code>精读</code> 目录下执行
+      <code>python -m http.server 8080</code>，再访问
+      <code>http://127.0.0.1:8080/M3T3-精读.html</code>。</p>
+    </div>
+  </div>
+  <div id="drag"></div>
+  <div id="right"><div id="card"></div></div>
+</div>
+
+<script>
+
+/* ══ 主题切换：浅色默认，记住选择 ══ */
+(function(){
+  var KEY = "mlreader-theme";
+  var root = document.documentElement, btn = document.getElementById("themeBtn");
+  function apply(t){
+    root.setAttribute("data-theme", t);
+    if (btn) btn.textContent = (t === "dark" ? "☀" : "☾");
+    if (btn) btn.title = (t === "dark" ? "切到浅色" : "切到暗色");
+  }
+  var saved;
+  try { saved = localStorage.getItem(KEY); } catch(e){}
+  apply(saved === "dark" ? "dark" : "light");
+  if (btn) btn.addEventListener("click", function(){
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next);
+    try { localStorage.setItem(KEY, next); } catch(e){}
+  });
+})();
+
+/* 每页一条。r:[起,止] = 这几页是同一张图的不同阶段，点哪页都显示同一条。
+   one 一句话 · pts 要点 · say CS229 / 讲义补充（课件上没有）· tip 提醒 */
+
+/* ══ 题库。键 = 该单元的起始页；a 是正确项下标；why 是判完给的解释 ══ */
+var Q = {"2": [{"q": "讲稿说 Topic 3 和 Topic 2 的分工是什么？", "o": ["T3 只是把 T2 的内容再练一遍，没有新概念", "两者都讲优化，只是 T3 的网络更深", "T2 讲评估指标，T3 讲怎么调参", "T2 解释怎么计算和实现更新，T3 解读由此产生的训练证据并考察泛化"], "a": 3, "why": "讲稿原话：<em>Topic 2 explained how to calculate and implement updates. Topic 3 now <b>interprets</b> the resulting training evidence before examining generalisation.</em> ⭐ T1/T2 是优化，T3 是评估。"}], "3": [{"q": "训练表现很差，可以直接断定是欠拟合吗？", "o": ["可以，训练差就是容量不足", "不可以，还可能是优化不够、预处理差或数据问题", "不可以，训练表现和模型质量无关", "可以，但要先确认学习率小于 0.1"], "a": 1, "why": "讲稿原话：<em>Poor training performance can reflect limited capacity, insufficient optimisation, poor preprocessing or data issues; <b>it does not by itself prove underfitting</b>.</em>"}, {"q": "训练分数和验证分数很接近，这说明什么？", "o": ["一定泛化良好，可以部署", "模型容量恰好合适", "接近也可能是两边都很差，还要和一个合适的基线比", "说明验证集太小，需要重新划分"], "a": 2, "why": "讲稿有一句很容易被忽略的话：<em><b>Similar scores can both be poor.</b></em> 接着要求 <em>Compare the same metric on comparable populations and examine an appropriate baseline.</em> ⭐ 没有基线就判断不了「好」。"}], "4": [{"q": "课件说「拿测试数据做决定」会导致什么？", "o": ["没有影响，只要只做一次决定", "需要把学习率调小来补偿", "它就变成了验证数据", "测试结果会偏悲观"], "a": 2, "why": "副标题原话：<em>Reusing test data for decisions <b>turns it into validation data</b>.</em> ⭐ 不是「不太好」，是<b>性质变了</b>——它不再是独立的最终估计。"}, {"q": "下面哪一项属于「验证集负责的决定」？", "o": ["判定阈值和停止的检查点", "测试集的样本量", "缩放器的均值和标准差", "隐藏层权重的数值"], "a": 0, "why": "讲稿列的是 <em>architecture, learning rate, <b>threshold</b> and <b>stopping checkpoint</b></em>。⚠ 权重和缩放参数是<b>训练集</b>拟合的（讲稿写明 <em>including preprocessing parameters</em>）。"}], "5": [{"q": "学习率表里 η = 0.1、10、100 三行的关系是什么？", "o": ["是三个不同网络各走一步", "是连续走的三步，参数一步步累积", "是同一个 η 在三个 epoch 的结果", "是三次独立实验，每次都重置回同一组初始参数"], "a": 3, "why": "课件原话：<em>Reset to the same initial parameters for each row … <b>These are separate experiments, not successive updates.</b></em> ⭐ 控制变量：数据、起点、初始批梯度都相同，<b>只有 η 变</b>。"}, {"q": "讲稿说非常大的学习率可能造成什么后果？", "o": ["只会让收敛变慢，不会有别的影响", "会过冲，或者改变哪些 ReLU 单元是激活的", "会让梯度变成 NaN，必须重新初始化", "会让损失函数从 BCE 变成 MSE"], "a": 1, "why": "原话：<em>A very large step can <b>overshoot</b> or <b>change which ReLU units are active</b>.</em> ⭐ 后半句很关键：步子太大会把 z 推过 0，整个网络「哪条路通」都变了。"}], "6": [{"q": "连续训练 100 次之后，样本 [−1,−2]（y = 1）的概率是 0.4859。为什么它一直学不动？", "o": ["它的两个隐藏 ReLU 激活都是 0，分数只取决于输出偏置", "它的标签标错了", "它离决策边界太远，sigmoid 已经饱和", "它的学习率被单独设小了"], "a": 0, "why": "讲稿原话：<em>After 100 updates its <b>two hidden ReLU activations are zero</b>, so its score depends on the output bias.</em> ⚠ 平均 BCE 从 0.580352 降到 0.369420，但这个正例始终 < 0.5 阈值，<b>一直判成类 0</b>。"}, {"q": "「跑满 100 次更新就停」这件事能证明什么？", "o": ["什么都不能证明，它只是一个预算", "证明找到了全局最优", "证明已经收敛", "证明能泛化到新数据"], "a": 0, "why": "讲稿三连否定：<em>Stopping at a budget of 100 updates does not prove <b>convergence</b>, <b>global optimality</b> or <b>generalisation</b>.</em>"}], "7": [{"q": "早停时应该保留哪一组参数？", "o": ["前一半 epoch 的平均", "训练损失最低的那一组", "训练结束时的最后一组", "验证证据最好的那个检查点"], "a": 3, "why": "原话：<em>Retain the parameters with <b>best validation evidence</b></em>，讲稿补充 <em>rather than automatically the last step</em>。⚠ 另外：<b>永远不要用测试集来选停止时间。</b>"}], "8": [{"q": "课件给的评估四步里，第 1 步「定义目标」要定哪三样？", "o": ["学习率、批大小和 epoch 数", "正类、两类错误的代价、部署时面对的人群", "训练集、验证集和测试集的比例", "准确率、精确率和召回率的目标值"], "a": 1, "why": "原话：<em>Define target: <b>positive class, costs and deployment population</b></em>。⭐ 后两样决定了最后该选什么阈值、该报什么指标。"}], "9": [{"q": "课件列的五个「指标会骗人」的坑里，Sampling（抽样）指的是什么？", "o": ["随机按行划分可能让同一个人、同一时段或同一地点的记录跨越划分", "正负样本比例不均衡", "未来数据的分布会变", "样本量太小导致估计不稳"], "a": 0, "why": "原话：<em>Sampling — Random rows may <b>duplicate people, time or locations</b></em>。⇒ 这正是要「按真正的抽样单位分组划分」的原因。⚠ 不平衡是 Imbalance，分布变是 Shift，都是另外的条目。"}, {"q": "五个坑里，哪一个是「任何数据划分都防不住」的？", "o": ["不平衡", "泄漏", "分布漂移", "阈值"], "a": 2, "why": "Shift：<em>Future data may differ from the evaluation distribution</em>。⚠ 讲义的说法是：设计良好的划分给出的是<b>对未见数据表现的估计</b>，<b>不保证泛化，也不保证分布漂移下的稳健性</b>。"}], "10": [{"q": "这份复习课件把混淆矩阵的四个格子怎么摆？", "o": ["行=预测、列=真实，左上角是 TN", "行=真实、列=预测，且正类在前，左上角是 TP", "行=预测、列=真实，左上角是 TP", "行=真实、列=预测，但负类在前，左上角是 TN"], "a": 3, "why": "课件画的是 <code>Pred − / Pred +</code> 作列、<code>Actual − / Actual +</code> 作行，<b>左上角是 TN = 5</b>，即 [[TN, FP], [FN, TP]]——和 sklearn 的顺序相同。⚠⚠ <b>而 Canvas 讲义页用的是正类在前</b>（左上角 TP）。<b>两份官方材料顺序相反</b>，所以不能背摆法，只能<b>先读行列标签</b>。"}, {"q": "拿到一张混淆矩阵，按课件的要求第一件事做什么？", "o": ["先把概率按 0.5 阈值转成硬判定", "先算准确率当基准", "先定正类，再按「actual ?, predicted ?」逐格认", "先检查类别是否平衡"], "a": 2, "why": "课件原话 <em>Fix the positive class first</em>，右栏给了构造规则（TP = actual +, predicted + …）。讲稿还要求 <em>Compare actual and predicted labels one observation at a time</em>，并且 <em><b>Only after this check</b> should metrics be calculated</em>——先做四格之和 = 样本数的自查。"}], "12": [{"q": "课件「Ready for the Tutorial」五条里，关于 ROC 的要求是什么？", "o": ["要把 ROC 的坐标轴按正确顺序画（FPR 横、TPR 纵）", "要能证明 AUC 等于配对概率", "要用梯形法而不是配对法", "要画出至少 10 个阈值点"], "a": 0, "why": "原话 <em>Plot ROC axes in the correct order</em>。⚠ 画反了整道题就废了。记法：<b>TPR 就是 recall，是「好事」，所以在纵轴</b>。"}], "13": [{"q": "讲稿说 T3 Tutorial 的三题连成一条什么样的链条？", "o": ["激活 → 损失 → 梯度", "前向 → 反向 → 更新", "训练 → 验证 → 测试", "数据划分 → 指标 → ROC/AUC"], "a": 3, "why": "原话：<em>Three core questions connect <b>data splits → metrics → ROC/AUC</b></em>。⚠ 另外讲稿写明：先自己做，tutor 讲完后修订，<b>最终的 worksheet 是计分的</b>。"}], "14": [{"q": "Q1 要求「识别哪些操作从留出数据里学了东西」。下面哪一个属于这类操作？", "o": ["在测试集上计算准确率", "在划分之后只用训练集拟合缩放器", "在划分之前用全部数据拟合缩放器", "在验证集上比较两个模型"], "a": 2, "why": "关键词是 <em>learn</em>：缩放器、填补器、PCA 都在<b>学参数</b>，<b>即使不用标签</b>。在划分前用全部数据拟合，留出样本就参与了「连训练数据怎么表示」这件事。⚠ 正确顺序是<b>先划分 → 只在训练集上算 → 应用到验证/测试</b>。"}], "15": [{"q": "Q2 除了三个指标，讲稿说还要算哪两样？", "o": ["AUC 和 ROC 点", "全判负的准确率基线，以及两个阈值的验证代价", "训练损失和验证损失", "学习率和 epoch 数"], "a": 1, "why": "原话：<em>Also compare <b>the all-negative baseline</b> and <b>validation error costs at the two thresholds</b>.</em> ⚠ 代价的算法：<em>Multiply each error count by its stated cost, then add.</em>"}, {"q": "讲稿对「代价比」加了什么限定？", "o": ["它只在类别平衡时成立", "它说明 precision 永远比 recall 重要", "它必须等于正负样本比例", "它只描述这道练习的优先级，不是普遍偏好"], "a": 3, "why": "原话：<em>The cost ratio describes <b>this exercise's priorities</b>, not a universal preference for precision or recall.</em> ⭐ 讲义那个算例也印证了这点：代价 5:1 时阈值 0.3 更优（22 vs 34），<b>代价相等时结论翻转</b>（10 vs 14）。"}], "16": [{"q": "建 ROC 点时遇到分数相同的观测，应该怎么处理？", "o": ["只保留其中一个", "按标签排序后逐个加入", "必须一起加入，于是产生一段斜线", "随机打乱后逐个加入"], "a": 2, "why": "讲稿原话：<em>move tied cases together (<b>this gives a diagonal segment</b>)</em>。⚠ 平局时 TP 和 FP 同时增加，点<b>同时往上又往右</b>，画出来是斜线而不是阶梯。"}, {"q": "用配对法核对 AUC 时，平局怎么算？", "o": ["不计入分母", "算半次胜", "整对作废", "算一次胜"], "a": 1, "why": "原话：<em>counting correctly ordered positive–negative pairs, <b>with a tie counting half</b></em>。⭐ 配对法不需要选任何阈值，和梯形法互相验算：四样本例子两种方法都给 <b>0.75</b>。"}], "17": [{"q": "关于 Topic 3 的 practical，课件怎么说？", "o": ["和 T1/T2 一样有排定的 practical", "没有排定的 practical，只有两个选做、不计分的 notebook", "practical 并入 Tutorial 一起做", "practical 改成线上提交"], "a": 1, "why": "原话 <em><b>No scheduled coding practical in Topic 3</b></em>，两个 notebook 是 <em>ungraded self-study, with worked solutions</em>。⚠ 但 <b>Tutorial 仍然按时在课上进行，而且要交</b>。"}]};
+
+var N = [{"r": [1, 1], "t": "评估回答的是另一个问题", "star": 1, "one": "前两讲都在问「怎么把参数调好」，这一讲问的是「调好之后，凭什么相信它在新数据上也行」。", "quote": "<b>Model Evaluation</b> — <em>Training evidence, stopping and generalisation</em>（M3 Topic 3）", "pts": ["<b>副标题三个词就是三块</b>：<em>training evidence</em>（训练过程留下的证据怎么读）、<em>stopping</em>（什么时候停）、<em>generalisation</em>（泛化——在没见过的数据上的表现）。", "⭐ <b>讲稿把这一讲的全部依赖列全了</b>：<em>Reliable conclusions depend on <b>protected data splits</b>, <b>correctly constructed metrics</b>, <b>appropriate thresholds</b>, and awareness of <b>leakage, imbalance, sampling, and shift</b>.</em> —— 可靠的结论依赖四件事：<b>受保护的数据划分、正确构造的指标、合适的阈值</b>，以及对<b>泄漏 / 不平衡 / 抽样 / 漂移</b>这四种坑的警觉。", "⚠️ <b>和 T1、T2 的分工</b>：T1 和 T2 讲的是<b>优化</b>（怎么把损失降下去），T3 讲的是<b>评估</b>（降下去之后说明了什么）。讲稿第 2 页说得很直接：<em>Topic 2 explained how to calculate and implement updates. Topic 3 now <b>interprets</b> the resulting training evidence.</em>", "⚠️ <b>原课件第 2 页是致辞页，裁页时已去掉</b>，所以本页 p2 = 原 p3，后面每页都少 1。"], "exam": "T3 在考纲里占六条：<b>训练/验证/测试的角色与泄漏、欠拟合过拟合的证据、学习率证据、重复训练证据、基于验证集的早停、混淆矩阵与四个指标、ROC/AUC 与阈值权衡</b>——几乎这一讲的每一页都对应一条。"}, {"r": [2, 2], "t": "六段路线图：从训练证据走到 ROC", "star": 2, "one": "训练证据 → 划分与停止 → 混淆矩阵 → precision/recall → ROC/AUC → Tutorial 与复习。", "quote": "1 Training evidence: Learning rate and repeated updates · 2 Splits and stopping: Development decisions and <b>a protected test set</b> · 3 Confusion Matrix: Count four kinds of outcomes · 4 Precision and Recall: <b>Different views of error</b> · 5 ROC and AUC: <b>Ranking across thresholds</b> · 6 Tutorial &amp; Revision: Calculate metrics; prepare for the <b>Week 13 test</b>.", "pts": ["⭐ <b>每一段的副标题都点出了那一段的「一句话」</b>：划分那段是「<b>受保护的</b>测试集」；precision/recall 那段是「<b>对误差的不同视角</b>」；ROC 那段是「<b>跨阈值的排序</b>」。这三句分别是三块最该记的定性结论。", "<b>讲稿交代了学习顺序</b>：<em>Study data roles and stopping, then confusion-matrix metrics and ROC/AUC.</em> —— <b>先数据角色与停止，再指标，最后 ROC</b>。", "⚠️⚠️ <b>讲稿还交代了 Python 练习的安排，和 T1/T2 不一样</b>：<em>Optional Python practice includes <b>Q3 of the M3 T1 notebook</b> for learning-rate experiments, then the <b>M3 T3 evaluation notebook</b>.</em> —— T3 <b>没有排定的 practical</b>（p17 会再说一次），这两个 notebook 都是<b>选做、不计分</b>。", "<b>「The tutorial questions are unchanged」</b> —— T3 的 Tutorial 题目<b>没有改动</b>（对照 T2 那边「四题合并成三题」的说明）。"], "exam": "选择题可能考「T3 有没有 practical」（答<b>没有排定的</b>，只有选做 notebook）。更重要的是这六段就是 T3 扩展题的分类框架。"}, {"r": [3, 3], "t": "训练和评估回答的是不同的问题", "star": 3, "one": "优化拟合参数，评估估计未来行为 —— 而且课件对每一种「表现」都加了限定，别一口咬定。", "quote": "<b>Optimisation fits parameters; evaluation estimates future behaviour.</b> Training: Poor training fit — inspect capacity and optimisation. <b>Strong training performance alone is not enough.</b> Evaluation: Uses validation/test data not used for fitting. <b>A large train–validation gap needs investigation.</b> Compare against a baseline and the intended use.", "pts": ["⭐⭐ <b>这一页的价值全在讲稿的限定词里</b>，正文反而是概括。逐条抄下来：", "<b>① 训练表现差</b>：<em>Poor training performance can reflect limited capacity, insufficient optimisation, poor preprocessing or data issues; <b>it does not by itself prove underfitting</b>.</em> —— 可能是<b>容量不足 / 优化不够 / 预处理差 / 数据问题</b>，<b>本身不能证明欠拟合</b>。", "<b>② 训练–验证差距大</b>：<em>A train–validation gap can suggest overfitting, <b>but also check sampling and distribution differences</b>.</em> —— 可以<b>提示</b>过拟合，但<b>还要检查抽样和分布差异</b>。", "<b>③ 两边分数接近</b>：<em><b>Similar scores can both be poor.</b></em> —— <b>接近也可能是「两边都很差」</b>。⚠️ 这条最容易被忽略：很多人看到训练和验证接近就下「泛化良好」的结论，其实要先看<b>这个数值本身够不够好</b>。", "<b>④ 怎么才算好</b>：<em>Compare the same metric on comparable populations and examine <b>an appropriate baseline</b>.</em> —— <b>在可比的人群上比同一个指标，并且要看一个合适的基线</b>。基线是什么？对不平衡的二分类，最常用的就是「全判多数类」的准确率。"], "tbl": [{"cap": "三种「训练–验证」模式的标准答法（照这个措辞写）", "head": ["看到什么", "可以说", "⚠ 必须补的限定"], "rows": [["训练差、验证也差", "可能欠拟合或优化困难", "可能是容量、优化、预处理或数据问题；<b>本身不证明欠拟合</b>"], ["训练强、验证明显更差", "可能过拟合", "归因于方差之前要先查<b>分布差异、验证集过小、泄漏</b>"], ["两边都强且接近", "学到的模式迁移到了未见样本", "⚠ <b>接近也可能两边都差</b>；要和<b>基线</b>比"]]}], "exam": "⭐⭐ <b>扩展题最爱考的一页</b>。给一组训练/验证分数让你诊断。<b>满分结构 = 判定 + 机制 + 限定 + 下一步（都在验证集上做）</b>。⚠️ 只写「这是过拟合」最多一半分。", "tip": {"t": "一句万能的收尾", "v": "任何诊断题的最后都可以加这一句：<b>这些是诊断模式，不是证明；要把差距归因于方差之前，还需要排除分布差异、验证样本过小和数据泄漏。</b>", "w": 0}}, {"r": [4, 4], "t": "每个数据划分只有一个主要角色", "star": 3, "one": "训练拟合、验证选择、测试估计 —— 一旦拿测试结果做决定，它就变成验证集了。", "quote": "<b>Reusing test data for decisions turns it into validation data.</b> train → fit; validation → choose; test → estimate. <b>Hyperparameters and thresholds are decisions and therefore belong before the final test.</b> Cross-validation supports development choices; <b>keep a separate final test set</b>. … future data — <b>may still shift from all splits</b>.", "pts": ["⭐⭐ <b>副标题那句是整讲最该背的一句</b>：<em>Reusing test data for decisions <b>turns it into</b> validation data.</em> —— 拿测试数据做决定，<b>它就变成了验证数据</b>。不是「不太好」，是<b>性质变了</b>。", "<b>训练集拟合的不只是权重</b>：讲稿写明 <em>Training fits parameters, <b>including preprocessing parameters</b>.</em> —— <b>包括预处理的参数</b>（缩放的均值方差、缺失值填补的值）。这是泄漏最常见的入口。", "<b>验证集管哪些决定</b>：<em>architecture, learning rate, <b>threshold</b> and <b>stopping checkpoint</b></em> —— 结构、学习率、<b>判定阈值</b>、<b>停止的检查点</b>。⚠️ 阈值和停止点是<b>决定</b>，不是参数，所以归验证管。", "⚠️⚠️ <b>测试集也不是真相</b>：<em>A held-out estimate <b>still has sampling uncertainty</b> and depends on whether its cases represent the intended population.</em> —— 留出估计<b>仍带抽样不确定性</b>，而且取决于它的样本能不能代表目标人群。", "⭐ <b>第四列那个 future data 是课件自己加的第四种「数据」</b>：<em>may still shift from all splits</em> —— <b>未来的数据可能和三个划分全都不一样</b>。这就是 p9 要讲的 shift（分布漂移）。", "<b>交叉验证的位置</b>：<em>Cross-validation supports development choices; <b>keep a separate final test set</b>.</em> 而且 <em>Cross-validation folds must also keep preprocessing <b>inside each training fold</b>.</em> —— <b>每一折的预处理都要在那一折的训练部分里拟合</b>。"], "eq": "防泄漏五步（讲义版，顺序不能乱）：\n  1. 先划分成 训练 / 验证 / 测试\n  2. 只用训练集算填补与缩放参数\n  3. 把学到的参数**应用**到验证集和测试集 —— 不要重新拟合\n  4. 用验证结果选择模型与超参数（含阈值、停止点）\n  5. 所有选择固定之后，在没碰过的测试集上评估**一次**", "exam": "⭐⭐⭐ <b>考纲第一条就是这个</b>。官方示例选择题（阈值那道）的正确答案就是这句话的改写：<b>测试集已经影响了模型选择；阈值应当用验证数据选，测试集留给最终评估。</b>"}, {"r": [5, 5], "t": "学习率：三行是三次互相独立的实验，不是三步", "star": 3, "one": "每一行都从同一组初始参数重置后只走一步 —— 所以「η=10 这一步最低」不能推出「η=10 最好」。", "quote": "<b>Reset to the same initial parameters for each row; use the same full-batch gradient.</b> η = 0.1 → 0.574996 · η = 10 → 0.371611 · η = 100 → 9.965953. Initial mean BCE = 0.580352. <b>These are separate experiments, not successive updates.</b> <b>The best one-step result does not establish the best rate for a full run or new data.</b>", "eq": "θ_new = θ − η·∇L        ← η 乘在梯度上\n\n起始平均 BCE = 0.580352\n  η = 0     ⇒ 0.580352（参数没变）\n  η = 0.1   ⇒ 0.574996\n  η = 1     ⇒ 0.533347\n  η = 10    ⇒ 0.371611   ← 这一步最低\n  η = 100   ⇒ 9.965953   ← 飞了", "pts": ["⚠️⚠️ <b>这一页最容易误读</b>：三行不是「连着走了三步」，而是<b>三次独立实验</b>——每次都回到同一个起点，只改 η。课件在正文和讲稿里各强调了一次。", "⭐ <b>讲稿把控制变量列全了</b>（课件右栏也有）：<b>data</b> 同样四个观测、<b>start</b> 同样的初始参数、<b>gradient</b> 同样的初始批梯度、<b>change</b> 只有学习率。⇒ 这是一个标准的受控实验，<b>答题时可以照着说「唯一变化的是 η」</b>。", "<b>那四个观测是什么</b>：讲稿写明 <em>([1,2],1), ([-1,-2],1), ([2,-1],0), ([-2,1],0)</em>，网络是<b>隐藏层那一课的初始两隐藏单元 ReLU 网络 + sigmoid 输出 + 平均 BCE</b>。⇒ 和 T2 p8 那个算例<b>是同一个网络</b>。", "⚠️ <b>η = 100 为什么会飞</b>：<em>A very large step can overshoot <b>or change which ReLU units are active</b>.</em> —— <b>过冲，或者改变「哪些 ReLU 单元是激活的」</b>。后半句很精彩：步子太大会把 z 推过 0，整个网络的「哪条路通」都变了。", "⚠️⚠️ <b>两条限定必须写进答案</b>：① <em>These data have <b>no validation/test sample</b>, so the table demonstrates <b>optimisation behaviour only</b>.</em>——<b>这组数据没有验证/测试样本，所以这张表只说明优化行为</b>，和泛化无关；② <em>A rate that helps now may fail later as gradients and activation regions change.</em>——<b>现在管用的学习率，后面可能失效</b>。"], "exam": "⭐⭐ 选择题：「η=10 在表里最低，它是最佳学习率吗」（答<b>不是</b>，这只是单步结果）。扩展题：给这张表让你<b>解释它能说明什么、不能说明什么</b>——「能说明优化对步长敏感；不能说明泛化，因为没有留出数据，也不能确定普适最佳步长」。"}, {"r": [6, 6], "t": "平均损失下降，会掩盖不均衡的进展", "star": 3, "one": "一次连续训练：平均 BCE 从 0.580352 降到 0.369420，但有一个正例始终停在 0.5 阈值以下，一直判错。", "quote": "<b>One continuous run</b>: four training examples, full-batch mean BCE and η = 0.1. Mean BCE: <b>0.580352 → 0.369420</b>. p([1,2]): 0.6615 → 0.9592. <b>p([−1,−2]): 0.4750 → 0.4859. The second remains below threshold 0.5.</b>", "eq": "更新次数    平均 BCE     p([1,2]) y=1    p([−1,−2]) y=1\n    0       0.580352      0.6615          0.4750\n    1       0.574996      0.6664          0.4749\n   10       0.527730      0.7158          0.4750\n   50       0.406138      0.8987          0.4788\n  100       0.369420      0.9592          0.4859   ← 仍 < 0.5，判成类 0", "pts": ["⚠️ <b>先把它和上一页区分开</b>：讲稿第一句就是 <em>This table follows <b>one uninterrupted run</b>, unlike the independent learning-rate comparisons.</em> —— 这一张是<b>一次不间断的训练</b>，上一张是<b>互相独立的对比</b>。两张表长得像，含义完全不同。", "<b>这里一次全批量更新 = 一个 epoch</b>：<em>One full-batch update equals one epoch here.</em> 所以 100 次更新就是 100 个 epoch。", "⭐⭐ <b>第二个正例为什么学不动</b>：讲稿给了机制——<em>After 100 updates its <b>two hidden ReLU activations are zero</b>, so its score depends on the <b>output bias</b>.</em> —— 它的两个隐藏 ReLU 激活都是 0，所以它的分数<b>只取决于输出偏置</b>，隐藏层那条路对它完全没用。", "⭐ <b>三种证据给的是不同的信息</b>：<em>Average loss, per-example probabilities and accuracy provide <b>different evidence</b>.</em> —— <b>平均损失、逐样本概率、准确率</b>是三种不同的证据，不能互相替代。", "⚠️⚠️ <b>最后那条限定三连</b>：<em>Stopping at a budget of 100 updates does not prove <b>convergence</b>, <b>global optimality</b> or <b>generalisation</b>.</em> —— 跑满 100 次就停，<b>既不证明收敛、也不证明全局最优、更不证明泛化</b>。"], "exam": "⭐⭐⭐ <b>这是 T3 最锋利的一页</b>。扩展题问法：「平均损失一直在降，能说明模型变好了吗」——标准答法：<b>平均在降不代表每个样本都改善</b>，举这个例子（100 次更新后仍有一个正例 p = 0.4859 < 0.5 判错），再给机制（它的隐藏 ReLU 全为 0），最后加那三条限定。"}, {"r": [7, 7], "t": "停止要用开发证据，固定预算不是收敛的证明", "star": 2, "one": "四步：按约定间隔监控 → 事先定好「改善」和 patience → 保留验证最好的检查点 → 冻结后再评测试集。", "quote": "<b>A fixed update budget is a stopping choice, not proof of convergence.</b> 1 Monitor: track training and validation at agreed intervals → 2 Choose a rule: <b>define improvement and patience before the final test</b> → 3 Keep a checkpoint: <b>retain the parameters with best validation evidence</b> → 4 Evaluate: freeze the procedure, then assess the held-out test set.", "pts": ["<b>patience 的定义</b>（讲稿给的）：<em>the number of validation checks without sufficient improvement that you allow before stopping</em> —— <b>允许连续多少次验证检查没有足够改善才停</b>。⚠️ 单位是「检查次数」，不是 epoch 数。", "⭐ <b>「改善」要自己定义</b>：<em>Specify <b>what metric and direction</b> define improvement.</em> —— <b>说清楚用哪个指标、往哪个方向算改善</b>（损失是越小越好，AUC 是越大越好）。", "⭐⭐ <b>保留最好的，不是最后的</b>：<em>Retain the <b>best validation checkpoint</b> rather than automatically the last step.</em> —— 这是早停最容易做错的一步：训练结束时的参数未必是验证表现最好的那一组。", "⚠️ <b>训练损失几乎不动，说明不了什么</b>：<em>Tiny training-loss changes can mean <b>stabilisation</b>, <b>a small learning rate</b> or <b>stalled optimisation</b>. They do not prove a global optimum.</em> —— 可能是稳定了、可能是步长太小、也可能是<b>卡住了</b>。", "⚠️⚠️ <b>一句硬规定</b>：<em><b>Never use the test set to choose the stopping time.</b></em>"], "exam": "⭐ 考纲点名「基于验证集的早停」。标准答法四句：<b>定期在验证集上监控；事先定义改善与 patience；保留验证最好的检查点；测试集留到最后只评一次。</b>"}, {"r": [8, 8], "t": "评估是一套纪律，不是一个指标", "star": 2, "one": "四步的顺序本身就是防止「结论过于乐观」的机制。", "quote": "<b>The order of decisions prevents optimistic conclusions.</b> 1 Define target: <b>positive class, costs and deployment population</b> → 2 Split safely: <b>stratify or group by the real sampling unit</b> → 3 Develop: fit and tune using training/validation only → 4 Evaluate once: <b>report test metrics, uncertainty and limitations</b>.", "pts": ["⭐ <b>第 1 步要定三样</b>，不只是正类：<b>正类是谁、两类错误的代价、部署时面对的人群</b>。后两样决定了你最后该选什么阈值、该报什么指标。", "<b>第 2 步的措辞很关键</b>：<em>stratify or group by <b>the real sampling unit</b></em> —— 按<b>真正的抽样单位</b>分层或分组。⚠️ 「真正的抽样单位」可能不是一行数据：同一个病人的 10 条记录，抽样单位是<b>病人</b>不是<b>记录</b>，所以要用分组划分。", "<b>第 4 步要报三样</b>：<em>test metrics, <b>uncertainty</b> and <b>limitations</b></em> —— 指标、<b>不确定性</b>、<b>局限</b>。⚠️ 只报一个数字是不完整的答案。", "⭐ <b>为什么顺序能防乐观</b>：因为每一步都把「做选择」关在测试集之前。顺序一乱（比如先看测试结果再定阈值），乐观偏差就进来了。"], "exam": "⭐ 扩展题「说明如何选定并报告这个阈值」就照这四步答，重点在第 3、4 步：<b>用训练/验证做开发 → 冻结 → 在测试集上评估一次，并报告不确定性与局限</b>。"}, {"r": [9, 9], "t": "没有上下文，指标会骗人：五个坑", "star": 3, "one": "泄漏 / 不平衡 / 阈值 / 抽样 / 漂移 —— 课件把它们并列成一张表，每一个都能单独出一道题。", "quote": "<b>Leakage</b> — Information crosses the intended split boundary. <b>Imbalance</b> — Accuracy can hide failure on a rare class. <b>Threshold</b> — Precision and recall change together. <b>Sampling</b> — Random rows may duplicate people, time or locations. <b>Shift</b> — Future data may differ from the evaluation distribution.", "pts": ["<b>① Leakage（泄漏）</b>：<em>Information crosses the intended split boundary</em>——<b>信息越过了你打算划的那条边界</b>。⚠️ 讲义强调：<b>不用标签也会泄漏</b>（训练值 [0,2] 均值是 1，把留出的 100 混进来算就变成 34，连训练数据的表示方式都被改了）。", "<b>② Imbalance（不平衡）</b>：<em>Accuracy can <b>hide failure on a rare class</b></em>——准确率会<b>掩盖在稀有类上的失败</b>。⭐ 极端例子：正例占 2%，全判负的准确率就有 98%，但 recall = 0。", "<b>③ Threshold（阈值）</b>：<em>Precision and recall <b>change together</b></em>——它们<b>一起变</b>。⚠️ 但方向不同：降阈值时 <b>recall 不会下降</b>，<b>precision 可升可降</b>。", "<b>④ Sampling（抽样）</b>：<em>Random rows may <b>duplicate people, time or locations</b></em>——随机按行划分，可能让<b>同一个人、同一时段、同一地点</b>的记录同时出现在训练和测试里。⇒ 这正是 p8 说的「按真正的抽样单位分组」。", "<b>⑤ Shift（漂移）</b>：<em>Future data may differ from the evaluation distribution</em>——<b>未来的数据可能和评估时的分布不一样</b>。⚠️ 这一条<b>任何划分都挡不住</b>，所以讲义说「划分给出的是估计，不保证分布漂移下的稳健性」。"], "tbl": [{"cap": "五个坑 ↔ 它让哪个结论失效 ↔ 怎么防", "head": ["坑", "让什么失效", "怎么防"], "rows": [["Leakage 泄漏", "整个留出估计都偏乐观", "先划分，预处理只在训练折内拟合"], ["Imbalance 不平衡", "accuracy 失去信息量", "和「全判多数类」基线比，看 precision/recall"], ["Threshold 阈值", "单个工作点的指标不代表模型", "在验证集上按代价选，选定后冻结"], ["Sampling 抽样", "测试集其实不是「新」样本", "按真正的抽样单位分组划分"], ["Shift 漂移", "部署后表现与评估时不同", "⚠ 划分防不住，只能说明局限"]]}], "exam": "⭐⭐ <b>「这个评估流程有什么问题」型扩展题的素材库</b>。看到题目描述里出现「随机划分」「同一个病人」「准确率 95%」「在测试集上调阈值」，就对应到这五条里的某一条。"}, {"r": [10, 10], "t": "⚠ 先建混淆矩阵再算指标（这一页有个必须知道的冲突）", "star": 3, "one": "先定正类 → 逐个观测归格 → 四格之和要等于样本数 → 才轮到算指标。", "quote": "<b>Rows are actual classes; columns are predicted classes. Fix the positive class first.</b><br>　　　　　　　Pred −　　Pred +<br>Actual −　　TN = 5　　FP = 2<br>Actual +　　FN = 1　　TP = 4<br><b>Check the total: 5 + 2 + 1 + 4 = 12 observations.</b> Accuracy = 9/12 = .75; Precision = 4/6 = .67; Recall = 4/5 = .80; F1 ≈ .73", "eq": "构造规则（课件右栏，逐格给的）：\n  TP = actual +, predicted +      FN = actual +, predicted −\n  FP = actual −, predicted +      TN = actual −, predicted −\n\n指标：\n  Accuracy  = (TP+TN)/总数   = (4+5)/12 = 0.75\n  Precision = TP/(TP+FP)     = 4/6 ≈ 0.667   ← 分母是「我预测为正的」\n  Recall    = TP/(TP+FN)     = 4/5 = 0.80    ← 分母是「真实为正的」\n  F1        = 2PR/(P+R) = 2TP/(2TP+FP+FN) = 8/11 ≈ 0.727", "pts": ["⚠️⚠️⚠️ <b>这一页和 Canvas 讲义页的摆法不一致，必须知道</b>：<br>· <b>Canvas 讲义页</b>（Accuracy, precision, recall 那一页）给的是<b>正类在前</b>：<code>[[TP, FN], [FP, TN]]</code>；<br>· <b>这份复习课件</b>给的是<b>负类在前</b>：<code>[[TN, FP], [FN, TP]]</code>——<b>和 sklearn 的 <code>labels=[0,1]</code> 输出顺序相同</b>。<br>⇒ <b>两份都是官方材料，顺序却相反。</b>", "⭐⭐ <b>所以不能背「本课固定某一种摆法」</b>。课件自己给的办法才是唯一安全的：<em>Rows are actual classes; columns are predicted classes. <b>Fix the positive class first.</b></em> ——<b>先定正类，再逐个读行列标签，按构造规则（actual ?, predicted ?）把每个格子认出来</b>。四个计数（TP=4, FN=1, FP=2, TN=5）在两种摆法下<b>完全相同</b>，变的只是位置。", "<b>讲稿把流程说得很死</b>：<em>Compare actual and predicted labels <b>one observation at a time</b> and place each case into <b>exactly one cell</b>.</em> 然后 <em><b>Only after this check</b> should metrics be calculated.</em> —— <b>先逐个归格、先做合计自查，再算指标。</b>", "⭐ <b>两个分母的「条件」说法要记</b>：<em>Precision <b>conditions on</b> predicted positives, 4/(4+2). Recall <b>conditions on</b> actual positives, 4/(4+1).</em> —— precision 的条件是「我预测为正的那一组」，recall 的条件是「真实为正的那一组」。<b>两组有重叠但不是同一组。</b>", "⚠️ <b>换正类，格子的名字就全变了</b>：<em>Changing the positive class changes the names of the cells and therefore precision and recall. <b>State the convention every time.</b></em> —— <b>每次都要声明约定。</b>"], "tbl": [{"cap": "⚠ 三套摆法并列（计数相同，位置不同）", "head": ["来源", "摆法", "左上角是"], "rows": [["Canvas 讲义页", "行=真实，列=预测，正类在前 ⇒ [[TP, FN], [FP, TN]]", "TP"], ["本复习课件（这一页）", "行=真实，列=预测，负类在前 ⇒ [[TN, FP], [FN, TP]]", "TN"], ["sklearn labels=[0,1]", "同上 ⇒ [[TN, FP], [FN, TP]]", "TN"], ["CS229 评估指标幻灯", "列=真实（和前面都转置）", "视定义而定"]]}], "say": "⭐ <b>这个不一致其实是个送分点，只要你知道</b>：考场上拿到一张混淆矩阵，<b>第一件事是读轴标签</b>，第二件事是用构造规则逐格确认（「这个格子是 actual + 还是 actual −？predicted 是哪边？」）。这样无论题目用哪种排法你都不会填反。⚠️ <b>最危险的做法是背「左上角一定是 TP」</b>——在这份官方复习课件里，<b>左上角是 TN</b>。", "exam": "⭐⭐⭐ <b>必考，而且这是最可能因为「背错摆法」而整题全废的地方</b>。答题模板：<b>① 声明正类 → ② 读行列标签 → ③ 逐个观测归格 → ④ 四格之和 = 样本数（写出来） → ⑤ 套公式 → ⑥ 结合代价解释</b>。考纲官方示例大题给的数就是这个套路：TP=18, FP=12, FN=6, TN=164 ⇒ accuracy 0.91、precision 0.60、recall 0.75、F1 = 2/3 ≈ 0.667。", "tip": {"t": "F1 用计数版更稳", "v": "<b>F1 = 2TP/(2TP + FP + FN)</b>。好处是<b>避免先把 precision/recall 四舍五入再算</b>——本页例子用计数版得 8/11 ≈ 0.727，和 2PR/(P+R) 一致。⚠️ F1 <b>不含 TN</b>。", "w": 1}}, {"r": [11, 11], "t": "Checkpoint：五个词自测", "star": 1, "one": "训练证据 / 验证决定 / 测试集 / 混淆矩阵 / ROC 点 —— 盖住右边先自己说。", "quote": "Training evidence — check progress across updates. Validation decisions — <b>choose settings, threshold and stopping</b>. Test set — estimate final generalisation. Confusion matrix — map TP, FP, FN, TN. <b>ROC point — FPR on x; TPR on y.</b>", "pts": ["⭐ <b>第二条把验证集管的三件事列全了</b>：<b>设置、阈值、停止点</b>。考试里问「这个决定该用哪部分数据做」，答案基本都落在这三样里。", "⚠️ <b>最后一条是送分也是陷阱</b>：<b>FPR 在横轴，TPR 在纵轴</b>。画反了整道题就废了。记法：<b>TPR 就是 recall，是「好事」，所以在上面（纵轴）</b>。", "<b>讲稿版本还多一条</b>：正文写「Training evidence」，讲稿里是 <em>Training set — fit model parameters</em>。两个版本合起来看更完整：<b>训练集拟合参数，训练证据看进展</b>。"], "exam": "不出题，但<b>考前最后十分钟该看的一页</b>。特别是最后那条坐标轴方向。"}, {"r": [12, 12], "t": "第 1 节收尾：五条要点 + 五条「上 Tutorial 之前先会」", "star": 2, "one": "右栏五条是评分点清单：写正类、逐格映射、分母对题、ROC 轴别画反、用代价解释阈值。", "quote": "<b>Key Takeaways</b>: Training loss can fall while some cases remain wrong · Choose settings and stopping with validation evidence · Keep test data separate from development · Precision and recall describe different errors · <b>AUC measures ranking, not calibration or error cost</b>.<br><b>Ready for the Tutorial</b>: <b>Write the positive class explicitly</b> · Map every confusion-matrix cell before calculating · <b>Keep denominators tied to the metric question</b> · <b>Plot ROC axes in the correct order</b> · Explain the threshold using error costs.", "pts": ["⭐⭐ <b>右栏那五条直接对应扣分点</b>，逐条拆：", "<b>① Write the positive class explicitly</b> —— <b>把正类显式写出来</b>。不是心里知道，是要写在答卷上。", "<b>② Map every confusion-matrix cell before calculating</b> —— <b>先把每个格子映射好再算</b>（呼应 p10 的「Only after this check」）。", "<b>③ Keep denominators tied to the metric question</b> —— <b>分母要和问题对应</b>：问「我说是正的时候对了多少」就用 TP+FP；问「真正的正例找到了多少」就用 TP+FN。", "<b>④ Plot ROC axes in the correct order</b> —— <b>ROC 的轴别画反</b>（FPR 横、TPR 纵）。", "<b>⑤ Explain the threshold using error costs</b> —— <b>用错误代价解释阈值</b>，不能只说「0.3 比 0.5 好」。", "⭐ <b>左栏第五条是 AUC 的边界</b>：<em>AUC measures <b>ranking</b>, not <b>calibration</b> or <b>error cost</b>.</em> 讲稿版本还多一个词：<em>not calibration or <b>business value</b></em>——<b>也不衡量业务价值</b>。"], "exam": "⭐ 这五条每条都是独立的得分点。做完题自检一遍：<b>正类写了吗？格子映射写了吗？分母对题吗？轴画对了吗？阈值解释里提代价了吗？</b>"}, {"r": [13, 13], "t": "第 2 节：Tutorial 三题（而且这份是要交的）", "star": 2, "one": "Q1 数据角色与训练证据、Q2 计数与指标与代价、Q3 从分数建 ROC 并估 AUC；extension 讲稀有正例与 PR。", "quote": "Three core questions connect <b>data splits → metrics → ROC/AUC</b>. Q1: data roles, training evidence and stopping · Q2: counts, metrics, baseline and validation error costs · Q3: build ROC points from scores, estimate AUC and discuss thresholds · Interpret metrics in the context of error costs · The optional extension considers <b>rare positives and precision–recall</b>.", "pts": ["⚠️⚠️ <b>讲稿交代了做法和评分</b>：<em>Work independently first, then revise your answers after the tutor's walkthrough and hand in Q1–Q3; <b>the final worksheet is marked</b>.</em> —— <b>先自己做，tutor 讲完之后修订，然后交 Q1–Q3；最终的 worksheet 是计分的</b>。⚠️ 这一点和 T2 不同（T2 的 extension 不计分，但这里说<b>最终 worksheet 要批改</b>）。", "⭐ <b>三题的链条很清楚</b>：<b>数据划分 → 指标 → ROC/AUC</b>。这也是 T3 扩展题最可能的三种形态。", "<b>讲稿把每题的考点说细了</b>：<br>· <b>Q1</b> 分配 train/validation/test 角色并<b>识别泄漏</b>；<br>· <b>Q2</b> 先<b>识别给定的计数</b>再算 precision/recall/F1；<br>· <b>Q3</b> 从打分的案例建 ROC 点（<b>包含一个平局</b>）、<b>用配对计数核对 AUC</b>、再对给定曲线估 AUC 并讨论阈值。", "⭐ <b>extension 的主题值得看一眼</b>：<em>rare positives and precision–recall</em>——<b>稀有正例与 precision–recall</b>。这正是讲义那个 1000 个里 10 个正例、recall 80% 但 precision 只有 7.5% 的算例。"], "exam": "⭐ 考纲页点名「去哪儿找类似练习」时列的就是 <b>M3 T3 Tutorial Q1–3</b>：数据划分与诊断、混淆矩阵指标与错误代价、从分数得到 ROC 上的点与 AUC 阈值决策。<b>这三题就是扩展题的原型。</b>"}, {"r": [14, 14], "t": "Q1：数据角色、泄漏、拟合诊断与停止", "star": 2, "one": "四步：算各子集大小并说明用途 → 指出哪些操作从留出数据里学了东西 → 对照基线诊断拟合 → 比较单步学习率证据并用验证来停。", "quote": "1 Split roles: calculate counts and explain each subset's purpose → 2 Leakage: <b>identify which operations learn from held-out data</b> → 3 Fit patterns: compare training and validation <b>with the benchmark</b> → 4 Rate and stopping: compare one-step evidence; <b>use validation to stop</b>.", "pts": ["⭐ <b>第 2 步的措辞是判据</b>：<em>identify which <b>operations learn from</b> held-out data</em> —— 找出<b>哪些操作从留出数据里「学」了东西</b>。⚠️ 关键词是 learn：缩放器、填补器、PCA 都在「学」参数，<b>即使不用标签</b>。", "⚠️⚠️ <b>讲稿给了两条「不要推出」</b>：<em><b>Do not infer a universal rate</b> or <b>correct predictions for every observation</b> from a lower mean loss.</em> —— 从更低的平均损失，<b>既不能推出普适的学习率，也不能推出每个观测都预测对了</b>。这两条正好对应 p5 和 p6。", "<b>第 3 步要「对照基线」</b>：<em>compare training and validation <b>with the benchmark</b></em>。⇒ 呼应 p3 那句「Similar scores can both be poor」——没有基线就判断不了「好」。", "<b>讲稿提到预处理的解释被合并进泄漏那一问</b>：<em>The preprocessing explanation is integrated into the leakage part to avoid duplication.</em> ⇒ 答泄漏时<b>要把预处理顺序一并写出来</b>（防泄漏五步）。"], "exam": "⭐ 扩展题形态：给一个开发流程描述，问「这里有什么问题」。按 <b>① 指出哪一步越过了边界 ② 说明它学了什么 ③ 给出正确顺序（五步） ④ 加一句限定（划分只给估计，不保证泛化与漂移稳健性）</b> 作答。"}, {"r": [15, 15], "t": "Q2：先把四个计数命名，再谈公式", "star": 3, "one": "公式只有在正类固定之后才可靠 —— 而且这一题还要算全判负的基线和两个阈值的验证代价。", "quote": "<b>Metric formulas are reliable only after the positive class is fixed.</b> P=TP/(TP+FP), R=TP/(TP+FN), F1=2PR/(P+R). <b>Precision conditions on predicted positive; recall conditions on actual positive.</b> Also compare <b>the all-negative baseline</b> and <b>validation error costs at the two thresholds</b>.", "eq": "代价比较（讲义算例）：漏一个次品代价 5，一次不必要检验代价 1\n    总代价 = 5·FN + 1·FP\n    阈值 0.5： FN=6, FP=4  ⇒ 5(6)+4 = 34\n    阈值 0.3： FN=2, FP=12 ⇒ 5(2)+12 = 22   ← 更优\n\n⚠ 代价改成相等： 6+4 = 10  vs  2+12 = 14   ← 结论翻转，0.5 更优", "pts": ["⭐ <b>三件事都要做，别漏</b>：① 三个指标；② <b>全判负的准确率基线</b>；③ <b>两个阈值的验证代价比较</b>。讲稿用了 <em>Also</em> 起头，说明后两样是容易漏掉的部分。", "<b>代价怎么算</b>：<em>Multiply each error count by its stated cost, then add.</em> —— <b>每类错误的计数乘它的代价，然后相加</b>。就这么简单，但必须把式子写出来。", "⚠️⚠️ <b>两条纪律</b>：① <em>Select the threshold using <b>validation</b> evidence; <b>do not consult the test results</b> to make this choice.</em>；② <em>The cost ratio describes <b>this exercise's priorities</b>, not a universal preference for precision or recall.</em> —— <b>这个代价比只属于这道题，不是「precision 比 recall 重要」的普遍结论</b>。", "<b>基线为什么重要</b>：正例稀少时「全判负」的准确率可能比模型还高。讲义那个 300 件产品的例子：模型 accuracy = 0.8267，而<b>全判非次品的基线是 0.8667</b>——<b>比模型还高</b>。", "⚠️ <b>F1 要和计数保持一致</b>：<em>Calculate F1 consistently with these counts.</em> ⇒ 用 <b>2TP/(2TP+FP+FN)</b> 最稳，避免中途四舍五入。"], "exam": "⭐⭐⭐ <b>考纲官方示例大题就是这一题的形态</b>（TP=18, FP=12, FN=6, TN=164）。四问：算四个指标并写公式 / 解释为什么只看 accuracy 不够 / 降阈值的权衡 / 如何在不动测试集的前提下选阈值并评估。"}, {"r": [16, 16], "t": "Q3：按阈值顺序建 ROC 点，再估 AUC", "star": 3, "one": "四步：按每个不同分数列出 (FPR, TPR)（平局一起进）→ 从严到松连起来 → 梯形求和 → 解释排序质量与代价。", "quote": "<b>As the threshold falls, both true and false positive rates can increase.</b> 1 Build: list (FPR, TPR) at each distinct score; <b>ties enter together</b> → 2 Connect: follow thresholds from strict to permissive → 3 Estimate AUC: <b>sum trapezoid areas</b> → 4 Interpret: ranking quality plus cost-based threshold choice.", "eq": "两个固定不变的分母： 真实正例数、真实负例数\n\n起点 (0,0) 全判负 → 阈值下降 → 终点 (1,1) 全判正\n    加入一个正例 ⇒ 点往上走      加入一个负例 ⇒ 点往右走\n    ⚠ 分数相同的观测必须一起加入 ⇒ 同时往上又往右 ⇒ **一段斜线**\n\n梯形法：  面积 = 宽 × (两个高的平均)\n    ⚠ 竖直段宽度为 0，面积为 0\n配对法：  AUC = P[随机正例分数 > 随机负例分数]，⭐ 平局算半胜", "pts": ["⭐⭐ <b>平局产生斜线，这是这一题的特色</b>：讲稿写明 <em>move tied cases together (<b>this gives a diagonal segment</b>)</em>。⚠️ 平局时 TP 和 FP 同时增加，所以点<b>同时往上和往右</b>，画出来是一条斜线而不是阶梯。", "<b>讲稿把 Q3 拆成两部分</b>：<b>前半</b>用六个打分案例自己建点（<em>Start with the six scored cases: fix the positive and negative totals</em>）；<b>后半</b>换一个分类器，<b>给定几个阈值</b>让你算梯形面积——<em>Q3 supplies the first two areas; calculate the remaining segments and <b>add all five</b>.</em> ⚠️ <b>题目给前两块面积，你算剩下的，最后五块全加起来。</b>", "⭐ <b>配对法是核对手段</b>：<em>Check the area by counting correctly ordered positive–negative pairs, <b>with a tie counting half</b>.</em> —— <b>数「正例分数高于负例」的配对数，平局算半个</b>。两种方法应当一致，考场上互相验算。", "<b>轴的方向再强调一次</b>：<em>place false-positive rate on the <b>horizontal</b> axis and true-positive rate on the <b>vertical</b> axis</em>。", "⚠️⚠️ <b>最后一句划清了 AUC 的边界</b>：<em>AUC describes ranking across thresholds. <b>An operating threshold still requires a decision about error costs and the intended setting.</b></em> —— <b>AUC 说的是跨阈值的排序；真正要用的那个阈值，仍然要靠错误代价和应用场景来定。</b>"], "tbl": [{"cap": "讲义四样本算例（A 0.90 正 / B 0.80 负 / C 0.40 正 / D 0.10 负）", "head": ["阈值", "被判为正", "FPR", "TPR", "ROC 点"], "rows": [["高于 0.90", "无", "0", "0", "(0, 0)"], ["0.85", "A", "0", "0.5", "(0, 0.5)"], ["0.60", "A, B", "0.5", "0.5", "(0.5, 0.5)"], ["0.30", "A, B, C", "0.5", "1", "(0.5, 1)"], ["0.05", "全部", "1", "1", "(1, 1)"]]}], "say": "⭐ <b>那个四样本例子的 AUC 两种算法都给 0.75</b>：梯形 0.5×0.5 + 0.5×1 = 0.25 + 0.50 = <b>0.75</b>；配对 A&gt;B ✓、A&gt;D ✓、C&lt;B ✗、C&gt;D ✓ ⇒ <b>3 胜 / 4 对 = 0.75</b>。⚠️ 注意 FPR 没变化的那几段<b>宽度为 0，面积为 0</b>，别把它们算进去。", "exam": "⭐⭐⭐ <b>考纲点名「从分数得到 ROC 上的点、AUC 与阈值决策」</b>。扩展题标准结构：① 固定两个分母 ② 列出全部 ROC 点（<b>平局要一起加并说明产生斜线</b>） ③ 梯形算 AUC ④ <b>用配对法复核</b> ⑤ 讨论工作阈值要靠代价决定。⚠️ 第 ④ 步写出来是加分项。"}, {"r": [17, 17], "t": "第 3 节：复习与备考（时间和材料都在这一页）", "star": 2, "one": "T3 没有排定的 practical；两个 notebook 选做；Week 12 复习，Week 13（11 月 9–15 日）考试。", "quote": "<b>No scheduled coding practical in Topic 3.</b> Optional: M3 T1 notebook Q3 explores learning rates · Optional: M3 T3 notebook practises evaluation · <b>Week 12: review and revision</b> · <b>Week 13 (9–15 November): Module 3 test</b> · <b>Confirm your session and permitted materials on Canvas.</b>", "pts": ["⚠️ <b>T3 和 T1/T2 不一样：没有排定的 practical</b>。两个 notebook 都是 <em>ungraded self-study, with worked solutions for review</em>——<b>不计分的自学材料，但有参考答案</b>。", "⭐ <b>两个 notebook 各练什么（讲稿写明）</b>：<b>M3 T1 notebook 的 Q3</b> 练<b>学习率实验</b>（正好对应 p5）；<b>M3 T3 notebook</b> 练<b>泄漏防范、指标、验证选择与阈值代价</b>（对应 p4、p10、p15）。", "<b>Tutorial 仍然按时在课上进行</b>：<em>The tutorial remains scheduled in class.</em>", "⚠️⚠️ <b>最后那句是行动项，别忽略</b>：<em>Confirm <b>your session</b> and <b>permitted materials</b> on Canvas.</em> —— <b>到 Canvas 上确认你自己那一场的时间，以及允许带什么材料</b>。考纲页说的是普通非编程非图形科学计算器 + 任意印刷或手写材料，但<b>以你那一场的公告为准</b>。"], "tbl": [{"cap": "M3 测验的硬信息（考纲页 + 本页）", "head": ["项", "内容"], "rows": [["时间", "Week 13，2026 年 11 月 9–15 日，在排定的 assessment / practical 课时"], ["时长与分值", "110 分钟 · 100 分"], ["题型", "Q1–Q20 单选每题 3 分；Q21–Q24 扩展题每题 10 分"], ["资料", "开卷：任意印刷或手写笔记；考试期间不得互相传阅"], ["计算器", "普通非编程、非图形科学计算器"], ["⚠ 提醒", "Canvas 的 due-date 字段是空的，<b>不代表考试没排</b>；自己确认场次"]]}], "exam": "这一页不出题，但<b>它是行动清单</b>：① 去 Canvas 确认自己那一场；② 把两个选做 notebook 至少看一遍参考答案；③ Week 12 是官方给的复习周，别排别的事。", "tip": {"t": "三讲读完之后", "v": "T1 讲一个神经元走完整条链，T2 把链加宽到隐藏层与批量，T3 退后一步问「凭什么可信」。⭐ 接下来直接用 <b>《M3 备考包》</b>（速查表 + 答题模板 + 整卷模拟）和 <b>《M3 考前框架走查》</b>（考试当天早上 50 分钟）收口。", "w": 0}}];
+
+(function(){
+  var PDF="slides/M3T3_Model_Evaluation.pdf", MAX=17;
+  var frame=document.getElementById("pdf"), card=document.getElementById("card"),
+      pnum=document.getElementById("pnum"), strip=document.getElementById("strip"),
+      right=document.getElementById("right");
+  var cur=0, map={}, cells=[];
+
+  /* 存档键带课程前缀 —— file:// 下所有本地页面共用一个 origin，
+     两门课都用 "m3t3quiz" 会互相覆盖。 */
+  var KEY = document.body.dataset.key;
+  try {                       // 一次性迁移：早期版本用的是不带课程前缀的键
+    if(!localStorage.getItem(KEY+"quiz")){
+      var _old = localStorage.getItem("m3t3quiz");
+      if(_old){
+        localStorage.setItem(KEY+"quiz", _old);
+        var _p = localStorage.getItem("m3t3p");
+        if(_p) localStorage.setItem(KEY+"p", _p);
+      }
+      /* 搬完就把旧键删掉。不删的话它会一直躺在那儿，
+         用户「清空全部记录」之后下次打开又被复活一遍。 */
+      localStorage.removeItem("m3t3quiz");
+      localStorage.removeItem("m3t3p");
+    }
+  } catch(e) {}
+
+  N.forEach(function(n,i){ for(var p=n.r[0];p<=n.r[1];p++) map[p]=i; });
+
+  for(var p=1;p<=MAX;p++){
+    var b=document.createElement("b");
+    b.title="第 "+p+" 页";
+    if(map[p]!=null) b.className="has";
+    b.onclick=(function(x){ return function(){ go(x); }; })(p);
+    strip.appendChild(b); cells.push(b);
+  }
+
+  function navHtml(){
+    return '<div class="nav"><button class="btn" id="p2">← 上一页</button>'+
+           '<button class="btn" id="n2">下一页 →</button></div>';
+  }
+  function bindNav(){
+    var a=document.getElementById("p2"), b=document.getElementById("n2");
+    if(a) a.onclick=function(){ step(-1); };
+    if(b) b.onclick=function(){ step(1); };
+  }
+  function render(p){
+    var i=map[p];
+    if(i==null){
+      card.innerHTML='<div class="empty">这一页没有单独的讲解。<br>'+
+        '它多半是上一页的<b>增量构建</b>——往前翻一页即可。</div>'+navHtml();
+      bindNav(); return;
+    }
+    var n=N[i], multi=n.r[0]!==n.r[1], h="";
+    h+='<span class="pg'+(multi?" multi":"")+'">p'+n.r[0]+(multi?"–"+n.r[1]:"")+'</span>';
+    h+='<h2>'+n.t+(n.star?'<span class="star">'+Array(n.star+1).join("★")+'</span>':'')+
+        qBadge(n.r[0])+'</h2>';
+    if(n.one) h+='<div class="one">'+n.one+'</div>';
+    if(n.quote) h+='<div class="quote"><span class="t">课件原话</span>'+n.quote+'</div>';
+    if(n.eq)  h+='<span class="eq">'+n.eq.replace(/\n/g,"<br>")+'</span>';
+    if(n.pts) h+='<ul>'+n.pts.map(function(x){ return "<li>"+x+"</li>"; }).join("")+'</ul>';
+    if(n.tbl) h+=n.tbl.map(function(T){var s='<div class="tw">'+(T.cap?'<div class="tc">'+T.cap+'</div>':"")+'<table class="nt">';if(T.head) s+='<thead><tr>'+T.head.map(function(c){return '<th>'+c+'</th>';}).join("")+'</tr></thead>';s+='<tbody>'+T.rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>';}).join("")+'</tr>';}).join("")+'</tbody></table></div>';return s;}).join("");
+    if(n.say) h+='<div class="say"><span class="t">CS229 / 讲义补充</span>'+n.say+'</div>';
+    if(n.ng) h+='<div class="ng"><span class="t">从零补基础 · Andrew Ng CS229</span>'+n.ng+'</div>';
+    if(n.exam) h+='<div class="exam"><span class="t">与考试的联系</span>'+n.exam+'</div>';
+    if(n.tip) h+='<div class="tip'+(n.tip.w?" w2":"")+'"><span class="t">'+n.tip.t+'</span>'+n.tip.v+'</div>';
+    card.innerHTML=h+quizHtml(n.r[0])+navHtml();
+    bindNav();
+    bindQuiz();
+    bindBadge();
+  }
+  function go(p){
+    p=Math.max(1,Math.min(MAX,parseInt(p,10)||1));
+    if(p===cur) return;
+    cur=p; pnum.value=p;
+    // 只改 #hash 不会让 Chrome 内置 PDF 阅读器翻页 —— 实测 src 已是 #page=49
+    // 而工具栏仍停在 1/78。必须让它认为这是一次**新的导航**，所以加查询参数。
+    frame.src=PDF+"?p="+p+"#page="+p+"&toolbar=0&navpanes=0&scrollbar=0&view=FitH";
+    render(p);
+    paintStrip();
+    revPaint();
+    right.scrollTop=0;
+    var on=strip.querySelector("b.on");
+    if(on) on.scrollIntoView({block:"nearest",inline:"center"});
+    try{ localStorage.setItem(KEY+"p",p); }catch(e){}
+  }
+
+
+  /* ══ 自测与错题记录 ══════════════════════════════════════════════
+     记录形状： ST["起始页#题号"] = {n:做过几次, w:错过几次, r:[最近 6 次 1/0]}
+     全部存 localStorage，纯本地。 */
+  var ST = {};
+  try { ST = JSON.parse(localStorage.getItem(KEY+"quiz") || "{}") || {}; } catch(e){ ST = {}; }
+  function save(){ try{ localStorage.setItem(KEY+"quiz", JSON.stringify(ST)); }catch(e){} }
+
+  function rec(key, ok){
+    var d = ST[key] || {n:0, w:0, r:[]};
+    d.n++; if(!ok) d.w++;
+    d.r.push(ok ? 1 : 0);
+    if(d.r.length > 6) d.r = d.r.slice(-6);
+    ST[key] = d; save();
+  }
+  /* 最近错次数 —— 薄弱点排序用的就是它，不是历史总错数：
+     一个月前错过三次但最近三次全对，不该再排在最前面。 */
+  function recentWrong(d){ return (d.r||[]).filter(function(x){ return x===0; }).length; }
+  /* 「还算不算薄弱」：错过、且最近两次没有连对。
+     用连对而不是「最近窗口里没有 0」，是为了让规则能一句话说清楚，
+     用户看得见自己离毕业还差几次；也挡住了蒙对一次就算掌握。 */
+  function isWeak(d){
+    if(!d || !d.w) return false;
+    var r = d.r || [];
+    return !(r.length >= 2 && r[r.length-1] === 1 && r[r.length-2] === 1);
+  }
+  function unitWrong(start){
+    var qs = Q[start] || [], rw = 0, w = 0, n = 0, qw = 0;
+    qs.forEach(function(_,i){
+      var d = ST[start+"#"+i]; if(!d) return;
+      rw += recentWrong(d); w += d.w; n += d.n; if(isWeak(d)) qw++;
+    });
+    // rw 数的是最近错的**次数**（只用来排序，谁更该先复习）；
+    // qw 数的是**还没毕业的题数**（给人看，也决定标红和进不进复习队列）。
+    return {rw:rw, w:w, n:n, qw:qw};
+  }
+  function histHtml(d){
+    var h = "";
+    for(var i=0;i<6;i++){
+      var v = d && d.r ? d.r[d.r.length-6+i] : undefined;
+      h += '<i class="'+(v===1?"o":v===0?"x":"")+'"></i>';
+    }
+    return h;
+  }
+
+  function quizHtml(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var h = '<div class="quiz"><h3>自测 <b>'+qs.length+'</b> 题</h3>';
+    qs.forEach(function(q,i){
+      var key = start+"#"+i, d = ST[key];
+      h += '<div class="qq" data-k="'+key+'" data-a="'+q.a+'">';
+      h += '<div class="t">'+q.q+'</div>';
+      q.o.forEach(function(o,j){
+        h += '<button class="opt" data-j="'+j+'">'+o+'</button>';
+      });
+      h += '<div class="why" style="display:none"></div>';
+      h += '<div class="qhist">'+histHtml(d)+
+           '<span style="margin-left:6px">'+
+           (d ? "做过 "+d.n+" 次 · 错 "+d.w : "还没做过")+'</span>'+
+           '<button class="qagain">重做</button></div>';
+      h += '</div>';
+    });
+    return h + '</div>';
+  }
+
+  function bindQuiz(){
+    document.querySelectorAll(".qq").forEach(function(box){
+      var key = box.dataset.k, ans = +box.dataset.a;
+      var why = box.querySelector(".why"), opts = box.querySelectorAll(".opt");
+      var qs = Q[key.split("#")[0]], q = qs[+key.split("#")[1]];
+      opts.forEach(function(b){
+        b.onclick = function(){
+          var j = +b.dataset.j, ok = (j === ans);
+          opts.forEach(function(x){
+            x.disabled = true;
+            if(+x.dataset.j === ans){ x.classList.add("ok"); x.innerHTML += '<span class="m">✓</span>'; }
+          });
+          if(!ok){ b.classList.add("no"); b.innerHTML += '<span class="m">✗</span>'; }
+          why.innerHTML = q.why; why.style.display = "block";
+          rec(key, ok);
+          box.querySelector(".qhist").innerHTML =
+            histHtml(ST[key]) + '<span style="margin-left:6px">做过 '+ST[key].n+
+            ' 次 · 错 '+ST[key].w+'</span><button class="qagain">重做</button>';
+          bindAgain(box); paintStrip(); revSync();
+          var bd = document.querySelector('#card>h2 .qbadge');
+          if(bd) bd.outerHTML = qBadge(+key.split('#')[0]);
+          bindBadge();
+        };
+      });
+      bindAgain(box);
+    });
+  }
+  function bindBadge(){
+    var b = document.querySelector("#card>h2 .qbadge");
+    if(b) b.onclick = function(){
+      var q = document.querySelector(".quiz");
+      if(q) q.scrollIntoView({behavior:"smooth", block:"start"});
+    };
+  }
+  function bindAgain(box){
+    var a = box.querySelector(".qagain");
+    if(a) a.onclick = function(){ render(cur); };
+  }
+
+  /* 页条上标红：这一单元最近还在错 */
+  function paintStrip(){
+    cells.forEach(function(c,k){
+      var i = map[k+1];
+      var cls = (i!=null ? "has" : "");
+      if(i!=null){
+        if(unitWrong(N[i].r[0]).qw > 0) cls += " err";
+      }
+      if(k+1===cur) cls += " on";
+      c.className = cls;
+    });
+  }
+
+
+  /* ── 标题角标：不用滚到底就知道这页有没有题、错没错过 ── */
+  function qBadge(start){
+    var qs = Q[start];
+    if(!qs || !qs.length) return "";
+    var st = unitWrong(start);
+    return '<span class="qbadge'+(st.qw?" bad":"")+'" title="跳到自测">'+
+      (st.qw ? "还错 "+st.qw+"/"+qs.length+" 题" : qs.length+" 题")+' ↓</span>';
+  }
+
+  /* ── 复习模式：前进/后退只在「最近还在错」的页之间跳 ──
+     用户要的是「专项针对薄弱部分复习」。光有一张错题清单还得自己一条条点，
+     所以把它接到翻页上：开了之后 ← → 就只在这些页里走。
+     依据是**最近**错次，不是累计——早就改对的题不该再拦路。 */
+  var rev = false, revList = [];
+  function weakPages(){
+    return N.filter(function(n){ return unitWrong(n.r[0]).qw > 0; })
+            .map(function(n){ return n.r[0]; });
+  }
+  function revPaint(){
+    var chip = document.getElementById("revChip");
+    chip.classList.toggle("on", rev);
+    if(!rev) return;
+    var i = revList.indexOf(mapStart(cur));
+    chip.querySelector("b").textContent =
+      (i < 0 ? "?" : (i+1)) + " / " + revList.length + " 页";
+  }
+  function mapStart(p){ var i = map[p]; return i==null ? -1 : N[i].r[0]; }
+
+  function step(d){
+    if(!rev) return go(cur + d);
+    if(!revList.length) return exitRev(true);
+    var here = mapStart(cur), i = revList.indexOf(here);
+    if(i < 0){                       // 当前不在清单里：跳到顺着方向最近的一页
+      var t = null;
+      for(var k=0;k<revList.length;k++){
+        if(d > 0 ? revList[k] > cur : revList[k] < cur){ t = revList[k]; if(d>0) break; }
+      }
+      return go(t == null ? revList[d>0 ? 0 : revList.length-1] : t);
+    }
+    go(revList[(i + d + revList.length) % revList.length]);
+  }
+  function enterRev(){
+    revList = weakPages();
+    if(!revList.length){ alert("没有待复习的页——错过的题都连对两次毕业了。"); return; }
+    rev = true; wp.classList.remove("on");
+    go(revList.indexOf(mapStart(cur)) >= 0 ? cur : revList[0]);
+    revPaint();
+  }
+  function exitRev(done){
+    rev = false; revPaint();
+    if(done) alert("待复习的页都毕业了，已退出复习模式。");
+  }
+  document.getElementById("revOff").onclick = function(){ exitRev(false); };
+
+  /* 答完一题就重算一次清单：刚改对的页当场从复习队列里消失。 */
+  function revSync(){
+    if(!rev) return;
+    revList = weakPages();
+    if(!revList.length) exitRev(true); else revPaint();
+  }
+
+  /* 错题本 */
+  var wp = document.getElementById("wrongPanel");
+  function openWrong(){
+    var list = [];
+    N.forEach(function(n){
+      var st = unitWrong(n.r[0]);
+      if(st.n === 0 || st.w === 0) return;
+      list.push({n:n, rw:st.rw, w:st.w, tot:st.n, qw:st.qw});
+    });
+    // 还没毕业的一律排前面；同样没毕业的，最近错得多的更靠前。
+    list.sort(function(a,b){
+      return (b.qw > 0) - (a.qw > 0) || (b.rw - a.rw) || (b.w - a.w); });
+    var box = document.getElementById("wrongList");
+    if(!list.length){
+      box.innerHTML = '<div class="none">还没有错题。<br>做几道自测再回来看。</div>';
+    } else {
+      box.innerHTML = list.map(function(it){
+        var qs = Q[it.n.r[0]] || [];
+        // 每道题的六格单独成一组，多题的单元才不会连成一片看不出边界
+        var h = qs.map(function(_,i){
+          return "<u>"+histHtml(ST[it.n.r[0]+"#"+i])+"</u>"; }).join("");
+        return '<div class="wrow'+(it.qw ? "" : " done")+'" data-p="'+it.n.r[0]+'">'+
+          '<span class="p">p'+it.n.r[0]+'</span>'+
+          '<span class="n2">'+it.n.t+'</span>'+
+          '<span class="h">'+h+'</span>'+
+          '<span class="s">'+(it.qw ? "还差 "+it.qw+" 题毕业" : "已毕业")+
+          ' · 累计错 '+it.w+'/'+it.tot+'</span></div>';
+      }).join("");
+      box.querySelectorAll(".wrow").forEach(function(r){
+        r.onclick = function(){ wp.classList.remove("on"); go(+r.dataset.p); };
+      });
+    }
+    // 总账。三个数分工明确：做了多少、还有多少没过关、一共栽过几次。
+    var done=0, tot=0, weak=0, wsum=0;
+    Object.keys(Q).forEach(function(k){
+      Q[k].forEach(function(_,i){
+        tot++;
+        var d = ST[k+"#"+i]; if(!d) return;
+        done++; wsum += d.w; if(isWeak(d)) weak++;
+      });
+    });
+    document.getElementById("wrongTally").innerHTML =
+      '<span>做过 <b>'+done+'</b> / '+tot+' 题</span>'+
+      '<span>没毕业 <b class="hot">'+weak+'</b> 题</span>'+
+      '<span>累计错 <b>'+wsum+'</b> 次</span>'+
+      '<span>待复习 <b>'+weakPages().length+'</b> 页</span>';
+    document.getElementById("revOn").disabled = !weakPages().length;
+    wp.classList.add("on");
+  }
+  document.getElementById("wrongBtn").onclick = openWrong;
+  document.getElementById("revOn").onclick = enterRev;
+  document.getElementById("wrongClose").onclick = function(){ wp.classList.remove("on"); };
+  document.getElementById("wrongReset").onclick = function(){
+    if(!confirm("清空全部自测记录？此操作不可撤销。")) return;
+    ST = {}; save(); exitRev(false); paintStrip(); openWrong(); render(cur);
+  };
+  wp.onclick = function(e){ if(e.target === wp) wp.classList.remove("on"); };
+
+  document.getElementById("prev").onclick=function(){ step(-1); };
+  document.getElementById("next").onclick=function(){ step(1); };
+  pnum.addEventListener("change",function(){ go(pnum.value); });
+  pnum.addEventListener("keydown",function(e){
+    if(e.key==="Enter"){ go(pnum.value); this.blur(); }
+  });
+  document.addEventListener("keydown",function(e){
+    if(document.activeElement===pnum) return;
+    if(e.key==="ArrowLeft"||e.key==="PageUp"){ step(-1); e.preventDefault(); }
+    if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){ step(1); e.preventDefault(); }
+  });
+
+  var miss=document.getElementById("miss");
+  frame.addEventListener("error",function(){ miss.style.display="block"; });
+  frame.addEventListener("load", function(){ miss.style.display="none"; });
+  document.getElementById("help").onclick=function(){
+    miss.style.display = miss.style.display==="block" ? "none" : "block";
+  };
+
+  var drag=document.getElementById("drag"), left=document.getElementById("left"), dragging=0;
+  drag.addEventListener("mousedown",function(){ dragging=1; document.body.style.userSelect="none"; });
+  document.addEventListener("mouseup",function(){ dragging=0; document.body.style.userSelect=""; });
+  document.addEventListener("mousemove",function(e){
+    if(!dragging) return;
+    left.style.width=Math.max(20,Math.min(78,e.clientX/window.innerWidth*100))+"%";
+  });
+
+  var s=1; try{ s=parseInt(localStorage.getItem(KEY+"p"),10)||1; }catch(e){}
+  go(s);
+})();
+</script>
+
+<!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
+<style>
+#nopdf{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+#nopdf .in{max-width:380px;text-align:center;font-size:14px;line-height:1.85;
+  color:var(--dim,#6a7686)}
+#nopdf b{color:var(--ink,#23272c)}
+#nopdf code{font-size:12.5px}
+</style>
+<script>
+(function(){
+  /* 公开站上 slides/*.pdf 不在仓库里（著作权）。与其让左栏挂一个空 iframe，
+     不如说清楚它去哪了 —— 右栏的讲解和自测题完全不受影响。
+     本地预览同样加 ?public=1 。*/
+  if (!/\.github\.io$/.test(location.hostname)
+      && !/[?&]public=1\b/.test(location.search)) return;
+  function go(){
+    var stage = document.getElementById("stage");
+    var frame = document.getElementById("pdf");
+    if (!stage) return;
+    if (frame) frame.remove();
+    var d = document.createElement("div");
+    d.id = "nopdf";
+    d.innerHTML = '<div class="in"><p><b>原课件不在公开仓库里。</b></p>'
+      + '<p>课件著作权属于学校与各课作者，本仓库不转载。</p>'
+      + '<p>右栏的逐页讲解与自测题是自己写的，<b>照常可用</b>。</p>'
+      + '<p style="opacity:.75">要让这一栏显示出来：把原 PDF 放回 <code>精读/slides/</code>，'
+      + '用本地静态服务器打开即可。</p></div>';
+    stage.appendChild(d);
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+</script>
+<!-- deploy-public-mode : end -->
+</body></html>

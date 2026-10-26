@@ -699,4 +699,40 @@ var N = [{"r": [1, 1], "t": "这一讲的承诺就写在副标题里", "star": 1
   go(s);
 })();
 </script>
+
+<!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
+<style>
+#nopdf{height:100%;display:flex;align-items:center;justify-content:center;padding:28px}
+#nopdf .in{max-width:380px;text-align:center;font-size:14px;line-height:1.85;
+  color:var(--dim,#6a7686)}
+#nopdf b{color:var(--ink,#23272c)}
+#nopdf code{font-size:12.5px}
+</style>
+<script>
+(function(){
+  /* 公开站上 slides/*.pdf 不在仓库里（著作权）。与其让左栏挂一个空 iframe，
+     不如说清楚它去哪了 —— 右栏的讲解和自测题完全不受影响。
+     本地预览同样加 ?public=1 。*/
+  if (!/\.github\.io$/.test(location.hostname)
+      && !/[?&]public=1\b/.test(location.search)) return;
+  function go(){
+    var stage = document.getElementById("stage");
+    var frame = document.getElementById("pdf");
+    if (!stage) return;
+    if (frame) frame.remove();
+    var d = document.createElement("div");
+    d.id = "nopdf";
+    d.innerHTML = '<div class="in"><p><b>原课件不在公开仓库里。</b></p>'
+      + '<p>课件著作权属于学校与各课作者，本仓库不转载。</p>'
+      + '<p>右栏的逐页讲解与自测题是自己写的，<b>照常可用</b>。</p>'
+      + '<p style="opacity:.75">要让这一栏显示出来：把原 PDF 放回 <code>精读/slides/</code>，'
+      + '用本地静态服务器打开即可。</p></div>';
+    stage.appendChild(d);
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", go);
+  else go();
+})();
+</script>
+<!-- deploy-public-mode : end -->
 </body></html>
