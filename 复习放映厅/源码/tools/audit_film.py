@@ -38,7 +38,11 @@ AXES  = re.compile(r"axes\(\{([^}]*)\}\)")
 MATRX = re.compile(r"matrix\(\{rows:(\d+),\s*cols:(\d+).*?var t=(\[\[.*?\]\]);", re.S)
 ODD   = re.compile(r"[\u0400-\u04FF\uAC00-\uD7AF\u3040-\u30FF\u0600-\u06FF]")
 
-Y_LIMIT = 405
+Y_LIMIT = 390     # 2026-10-27 实测：讲解条（#cap）顶边稳定在画布 y=403。
+                  # ⚠ 之前记的「遮挡从 457 起」是在标题帧上量的，字幕当时是空的，不作数。
+                  # ⚠ 字幕被下方的讲解文字顶上来，所以讲解越长字幕越高；403 是实测的下限。
+NOTE_Y    = 386   # note 的文字框是 [y-14, y+4]，y<=399 底边才 <=403
+EQTOP_MIN = 196    # setEq(…,"top") 的方程底边实测 194，内容不得高于这一行
 AX_OK = {"x0", "x1", "y0", "y1", "l", "r", "t", "b"}
 # "d" 是全体基类统一的「无修饰」约定：落回基础样式。
 # 四个基础样式都可读（.pt=ink / .fit=blue / .box=中性灰 / .slbl=--dim 7.51:1）。
@@ -66,8 +70,8 @@ def audit(path):
 
     for m in NOTE.finditer(body):
         y = float(m.group(3))
-        if y > Y_LIMIT:
-            bad.append("③ note 的 y=%g 超过 %d: %s" % (y, Y_LIMIT, m.group(1)[:42]))
+        if y > NOTE_Y:
+            bad.append("③ note 的 y=%g 超过 %d: %s" % (y, NOTE_Y, m.group(1)[:42]))
 
     for m in MATRX.finditer(body):
         want = int(m.group(1))
@@ -147,6 +151,24 @@ def audit(path):
                                   "sqrt", "min", "max", "abs", "round", "floor"))
     for c in missing:
         bad.append("⑪ 调用了未定义的函数 %s()" % c)
+
+    # ⑫ setEq(…,"top") 的方程占到画布 y=194（2026-10-27 在 1440×860 实测：
+    #    顶部对齐的两行公式占 y 48→194），所以同一镜的内容不能高于 EQTOP_MIN。
+    #    上线片子里最高的是 y=196，这条线和它一致。
+    for m in re.finditer(r"clearScene\(\);(.*?)(?=clearScene\(\);|\Z)", body, re.S):
+        blk = m.group(1)
+        if not re.search(r'setEq\(".*?",\s*"top"\s*\)', blk):
+            continue
+        ys = []
+        for pat in (r"note\(\s*\"[^\"]*\"\s*,\s*-?\d+\s*,\s*(\d+)",
+                    r"boxNode\(\s*-?\d+\s*,\s*(\d+)",
+                    r"matrix\(\{rows:\d+,\s*cols:\d+,\s*cw:\d+,\s*ch:\d+,\s*x:-?\d+,\s*y:(\d+)",
+                    r"axes\(\{x0:\d+,x1:\d+,y0:\d+,y1:(\d+)"):
+            ys += [int(x) for x in re.findall(pat, blk)]
+        if ys and min(ys) < EQTOP_MIN:
+            cap = re.search(r'setCap\("([^"]*)"\)', blk)
+            bad.append('⑫ setEq(…,"top") 那一镜的内容从 y=%d 开始，高过 %d：%s'
+                       % (min(ys), EQTOP_MIN, (cap.group(1) if cap else "?")[:30]))
 
     kp = len(re.findall(r'KP\("', body))
     sh = len(re.findall(r"S\(\d+,function", body))

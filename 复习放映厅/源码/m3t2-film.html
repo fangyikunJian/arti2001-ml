@@ -1,0 +1,969 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M3 T2 · 训练神经网络（精读动画版）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"M3 T2 · 训练神经网络（精读动画版）",
+  subtitle:"激活 · 损失 · 隐藏层梯度 · 实现 · 全程一个两层算例 · 空格推进 · N 讲解",
+  video:""};
+
+/* ── 引课件/讲稿原话（课程片没有讲课视频，所以不是 says）── */
+function cite(en,y){ note("📄 课件原话  «"+en+"»",640,y||150,"g"); }
+
+/* ── 2 输入 → 2 隐藏 → 1 输出 的小网络 ── */
+function net2(cx,cy,lab){
+  boxNode(cx-520,cy-70,150,46,lab[0],"b");
+  boxNode(cx-520,cy+24,150,46,lab[1],"b");
+  boxNode(cx-240,cy-70,190,46,lab[2],"v");
+  boxNode(cx-240,cy+24,190,46,lab[3],"v");
+  boxNode(cx+110,cy-23,210,46,lab[4],"g");
+  link(cx-370,cy-47,cx-240,cy-47); link(cx-370,cy-47,cx-240,cy+47);
+  link(cx-370,cy+47,cx-240,cy-47); link(cx-370,cy+47,cx-240,cy+47);
+  link(cx-50,cy-47,cx+110,cy); link(cx-50,cy+47,cx+110,cy);
+}
+
+/* ── 激活函数曲线（画在 axes 里；z 从 −4 到 4）── */
+function actcurve(kind,x0,x1,ybase,ytop,mid){
+  var span=ybase-ytop, zc=mid!=null?mid:(ybase+ytop)/2;
+  return fn(function(x){
+    var z=-4+8*(x-x0)/(x1-x0), v;
+    if(kind==="sig"){ v=1/(1+Math.exp(-z)); return ybase-span*v; }
+    if(kind==="tanh"){ v=Math.tanh(z); return zc-(span/2)*v; }
+    if(kind==="relu"){ v=Math.max(0,z)/4; return ybase-span*Math.min(1,v); }
+    if(kind==="leaky"){ v=(z>0?z:0.35*z)/4; return zc-(span/2)*Math.max(-1,Math.min(1,v*2)); }
+    return ybase;
+  },x0,x1,90);
+}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("M3 T2 · 训练神经网络","激活 · 损失 · 隐藏层梯度 · 实现",
+      "同一个损失，怎么喂给隐藏层");},
+    "T1 讲完了<b>一个神经元</b>怎么走完「前向 → 损失 → 梯度 → 更新」。<b>T2 问的是同一条链上的下一个问题：同一个损失，怎么把梯度送给隐藏层。</b><br><b>⭐ 讲稿的原话值得抄下来</b>：<b>Topic 1 ended with an output-layer update. This topic asks how the same loss supplies gradients to hidden weights.</b>——注意是「<b>同一个</b>损失」：<b>隐藏层没有自己的目标，它靠链式法则从最终损失那里拿方向</b>。<br><b>⚠ 这一讲真正的新东西只有两个</b>：<b>① 激活和损失的选择与搭配</b>（T1 只用了 sigmoid + BCE 一种）；<b>② 梯度要穿过隐藏层</b>。<b>剩下的 batch/epoch 和自动微分，是把前两件事放大到一批数据、再放进代码里。</b><br><b>⭐ 全片还是只用一个算例</b>：<b>x = [1, 2]、y = 1、两个 ReLU 隐藏单元、一个 sigmoid 输出</b>。<b>其中第二个隐藏单元恰好不激活</b>——这个设计很妙，它让「ReLU 归零」在同一个例子里就能看见。<br><b>⚠ 考试：110 分钟、100 分、开卷；20 道选择每题 3 分，4 道扩展题每题 10 分。T2 在考纲里占六条，这一讲每一块都对得上。</b>");
+});
+KP("1 · ★ T2 和 T1 的分工：同一个损失往回走",function(){
+  S(0,function(){clearScene();setEq(null);setCap("T1 停在输出层，T2 往里走一层");
+       cite("This topic asks how the same loss supplies gradients to hidden weights.",150);
+       boxNode(130,206,470,56,"T1：一个神经元","b");
+       boxNode(130,270,470,56,"前向 → 损失 → 梯度 → 更新（输出层）","b");
+       boxNode(690,206,470,56,"★ T2：同一个损失","g");
+       boxNode(690,270,470,56,"怎么把梯度送到隐藏权重","g");
+       note("⭐ 隐藏层没有自己的目标 —— 它靠链式法则从最终损失那里拿方向",640,350,"y");
+       note("⚠ 副标题四个词就是四块：activation · loss · hidden gradients · implementation",640,386,"r");},"<b>先把这一讲摆在 T1 旁边看，分工非常清楚。</b><br><b>T1 做完的事</b>：拿一个神经元，走完<b>前向 → 损失 → 梯度 → 更新</b>，而那次更新发生在<b>输出层</b>。<br><b>T2 问的是下一个问题</b>，讲稿原话是：<b>这一讲问的是同一个损失怎样把梯度供给隐藏权重。</b><br><b>⭐ 请注意「同一个」这三个字，它是整讲的关键。</b><b>隐藏层没有自己的目标值</b>——没人告诉第一个隐藏单元「你应该输出 0.8」。<b>它的方向完全是靠链式法则，从最终那个损失一路传回来的。</b><br><b>⚠ 副标题的四个词就是这一讲的四块</b>：<b>activation</b>（激活函数选什么）、<b>loss</b>（损失函数配什么）、<b>hidden gradients</b>（隐藏层怎么拿到梯度）、<b>implementation</b>（这一切在代码里长什么样）。<br><b>⭐ 而真正的新内容只有两块</b>：<b>激活与损失的搭配</b>，以及<b>梯度穿过隐藏层</b>。<b>后两块是把它们放大到一批数据、再落到代码。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("全片的算例：两个隐藏单元，其中一个故意不激活");
+       net2(600,276,["x₁ = 1","x₂ = 2","隐藏 1：ReLU","隐藏 2：ReLU","输出：sigmoid"]);
+       note("隐藏1  w=[0.2, 0.4]  b=0.1  ⇒  z₁ = 1.1  ⇒  h₁ = 1.1　激活",640,364,"g");
+       note("⚠ 隐藏2  w=[−0.5, 0.3]  b=−0.2  ⇒  z₂ = −0.1  ⇒  h₂ = 0　不激活",640,386,"r");},"<b>全片只用一个算例，和 T1 一样，但网络宽了一层。</b><br><b>两个输入 x = [1, 2]，两个 ReLU 隐藏单元，一个 sigmoid 输出，目标 y = 1。</b><br><b>隐藏单元 1</b>：w = [0.2, 0.4]、b = 0.1 ⇒ <b>z₁ = 0.2×1 + 0.4×2 + 0.1 = 1.1</b>，<b>正数，所以 ReLU 原样放过，h₁ = 1.1</b>。<br><b>隐藏单元 2</b>：w = [−0.5, 0.3]、b = −0.2 ⇒ <b>z₂ = −0.5×1 + 0.3×2 − 0.2 = −0.1</b>，<b>负数，所以 ReLU 压成 0，h₂ = 0</b>。<br><b>⭐⭐ 这个设计很妙，值得专门指出来：课件故意让第二个隐藏单元落在负半边。</b><b>于是「ReLU 不激活会发生什么」不需要另举例子，在同一个算例里就能看见</b>——而且<b>它会同时造成两处梯度归零</b>，后面会专门讲。<br><b>⚠ 注意 z₂ 只有 −0.1，离 0 很近。</b><b>差一点点就激活了，但 ReLU 不管差多少，负的就是 0。</b>");
+  SUM(0,1,{h:"★ T2：同一个损失，怎么喂给隐藏层",k:"讲稿原话：<b>Topic 1 ended with an output-layer update. This topic asks how the same loss supplies gradients to hidden weights.</b>",m:"⭐ <b>隐藏层没有自己的目标</b>——它靠链式法则<b>从最终损失那里拿方向</b>。副标题四个词＝四块：<b>激活 · 损失 · 隐藏梯度 · 实现</b>。",w:"<b>全片算例</b>：<b>x = [1,2]、y = 1</b>，两个 ReLU 隐藏单元 + 一个 sigmoid 输出。<b>隐藏1 z₁ = 1.1 ⇒ h₁ = 1.1（激活）</b>；<b>隐藏2 z₂ = −0.1 ⇒ h₂ = 0（不激活）</b>。",e:"⭐⭐ <b>课件故意让第二个单元落在负半边</b>，于是「ReLU 不激活会怎样」在同一个算例里就能看见——而且它会<b>同时造成两处梯度归零</b>。"});
+  QUIZ(0,1,{t:"隐藏层的「方向」是从哪来的？",o:["由激活函数本身决定","从最终损失经链式法则传回来 —— 隐藏层没有自己的目标","由学习率决定","每个隐藏单元有自己的目标值"],a:1,w:"⭐ 讲稿原话：<b>同一个损失怎样把梯度供给隐藏权重</b>。⚠ <b>没人告诉隐藏单元「你应该输出多少」</b>；<b>学习率只管步长，不管方向</b>。"});
+});
+KP("2 · ★ 六段路线图，也是答题提纲",function(){
+  S(0,function(){clearScene();setEq(null);setCap("讲稿明确要求按这个顺序学");
+       matrix({rows:7,cols:3,cw:360,ch:28,x:110,y:188,
+         cell:function(i,j){var t=[["段","在课件哪几页展开","对应考纲哪一条"],
+           ["1 Activation choices","p3–p6","sigmoid/tanh/ReLU 及导数；饱和"],
+           ["2 Loss choices","p7","MSE 与交叉熵；四种任务的配对"],
+           ["3 Hidden gradients","p8","部分隐藏层权重的梯度"],
+           ["4 Batches and epochs","p9","batch、epoch"],
+           ["5 Implementation","p10","自动微分"],
+           ["6 Tutorial & Practical","p13–p20","（练习，不单独考）"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});},"<b>课件第二页给了六段路线图，而讲稿明确要求按这个顺序学。</b><br><b>① Activation choices</b>：<b>比的是函数形状和局部斜率</b>。<b>② Loss choices</b>：<b>匹配目标与输出的含义</b>。<b>③ Hidden gradients</b>：<b>把损失追过一个隐藏神经元</b>。<b>④ Batches and epochs</b>：<b>组织样本、重复更新</b>。<b>⑤ Implementation</b>：<b>公式映射到数组与自动微分</b>。<b>⑥ Tutorial &amp; Practical</b>。<br><b>⭐ 第 1 段和第 2 段的措辞要分清</b>：<b>激活比的是「形状与局部斜率」——形状管前向、斜率管反向</b>；<b>而损失匹配的是「目标与输出的含义」——不是哪个损失更好，是哪个和任务对得上</b>。<br><b>⚠ 这张表右边一列很值钱</b>：它把六段和<b>考纲的六条</b>一一对上了。<b>也就是说，这一讲没有哪一段是「背景介绍」，每一段都直接对应一条考点。</b><br><b>⭐ 而高亮那一行（第 3 段）是全讲最硬的一条。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("选择题爱考「这一讲和 T1 的分工」");
+       boxNode(170,206,980,50,"问：T2 和 T1 的分工是什么？","b");
+       boxNode(170,274,980,50,"① T1 在输出层做完一次更新","g");
+       boxNode(170,332,980,50,"② T2 问同一个损失怎样把梯度送到隐藏权重，再把重复更新变成实现","g");
+       note("⭐ 这两句就是标准答法 —— 背下来，选择题和扩展题开头都能用",640,386,"y");},"<b>这个分工本身就是考点，而且答法是固定的两句。</b><br><b>① T1 在输出层做完一次更新。</b><b>② T2 问同一个损失怎样把梯度送到隐藏权重，再把重复更新变成实现。</b><br><b>⭐ 为什么值得专门背这两句？</b>因为<b>扩展题的开头常常要你「说明这一讲在整个训练流程里的位置」</b>，而<b>阅卷时这种结构性的句子是给分点</b>。<br><b>⚠ 还有一个细节值得知道</b>：<b>课件原本的第 2 页是 Acknowledgement of Country（致辞页）</b>，做精读时裁掉了。<b>所以精读里的页码从第 2 页起，比原课件少 1</b>——<b>本片引用的页码跟精读版走</b>，对照原课件时记得加 1。<br><b>⭐ 另外讲稿透露了 Tutorial 的结构</b>：<b>原来的四题加上一道从别处挪过来的隐藏层题</b>，但后面又说<b>只有 Q1–Q3</b>——<b>题目被重新合并过</b>，所以不用去找那个不存在的 Q4。");
+  SUM(0,2,{h:"★ 六段路线图 ＝ 复习顺序 ＝ 答题提纲",k:"<b>① 激活（形状与局部斜率）② 损失（匹配目标与输出含义）③ 隐藏梯度 ④ 批量与 epoch ⑤ 实现 ⑥ Tutorial</b>。讲稿要求<b>按这个顺序学</b>。",m:"⭐ <b>措辞要分清</b>：<b>激活比形状和斜率</b>（形状管前向、斜率管反向）；<b>损失不是哪个更好，是哪个和任务对得上</b>。",w:"⚠ <b>六段正好对上考纲六条</b>——<b>这一讲没有哪一段是背景介绍</b>。",e:"⭐ <b>「T2 和 T1 的分工」标准答法两句</b>：<b>① T1 在输出层做完一次更新 ② T2 问同一个损失怎样把梯度送到隐藏权重，再把重复更新变成实现。</b>"});
+  QUIZ(0,2,{t:"课件说「激活函数的选择」要比较什么？",o:["函数形状与局部斜率 —— 形状管前向，斜率管反向","参数个数","计算速度与内存占用","输出值的平均大小"],a:0,w:"⭐ 对照<b>损失</b>那一条：<b>匹配目标与输出的含义</b>。⚠ 两条的措辞不能互换——<b>激活比的是形状和斜率，损失比的是和任务对不对得上</b>。"});
+});
+KP("3 · ★★★ 线性塌缩：叠多少层都还是一层",function(){
+  S(0,function(){clearScene();setEq("$$W_2\\big(W_1x+b_1\\big)+b_2 \\;=\\; (W_2W_1)\\,x \\;+\\; (W_2b_1+b_2)$$","top");
+       setCap("两个仿射映射复合，还是一个仿射映射");
+       cite("Depth alone adds no curved boundary.",206);
+       boxNode(130,246,470,52,"没有激活：h = W₁x + b₁","b");
+       boxNode(130,310,470,52,"s = W₂h + b₂","b");
+       boxNode(690,246,470,52,"⚠ 展开后","r");
+       boxNode(690,310,470,52,"仍是「一个矩阵乘 + 一个偏置」","r");
+       note("⭐ 带数字：h = 2x+1，s = 3h+4 ⇒ s = 3(2x+1)+4 = 6x+7",640,386,"y");},"<b>⭐⭐ 这是 T2 最稳的选择题之一，而证明只要一次代入展开。</b><br><b>设两层都不加激活</b>：第一层 <b>h = W₁x + b₁</b>，第二层 <b>s = W₂h + b₂</b>。<b>代入展开</b>：<b>s = W₂W₁x + (W₂b₁ + b₂)</b>。<br><b>⇒ 这仍然是「一个矩阵乘一个输入，再加一个偏置」——也就是一个仿射映射。</b><br><b>「塌缩」的意思就是：存在一个单层网络，对任何输入都给出完全相同的输出。</b><b>多出来的那一层，一点表达能力都没加。</b><br><b>带数字的版本更直观</b>：<b>h = 2x + 1，s = 3h + 4 ⇒ s = 3(2x+1) + 4 = 6x + 7</b>，还是一条直线。<br><b>⭐ 课件把代价说得很全</b>：<b>梯度确实好算，但表达力被限死了。</b>⚠ 注意这不是「线性网络算不出来」，<b>而是「它能表示的函数集合太小」</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 别和 T1 那句「边界是直线」混为一谈");
+       matrix({rows:3,cols:3,cw:360,ch:44,x:110,y:206,
+         cell:function(i,j){var t=[["","T1 说的","T2 这一页说的"],
+           ["对象","单个 sigmoid 神经元","多层、但隐藏层没有激活"],
+           ["结论","决策边界必然是直线","整个网络塌缩成单层，边界还是直线"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 结论一样，原因也是同一个：送进最后那个 sigmoid 之前的分数仍是输入的仿射函数",640,350,"y");
+       note("⚠ 最后一句是考点：选哪个激活，同时影响「梯度怎么流」和「输出是什么含义」",640,386,"r");},"<b>⚠ 这一页和 T1 的「边界是直线」很像，但说的不是一回事，要分清。</b><br><b>T1 说的是</b>：<b>单个 sigmoid 神经元</b>的决策边界必然是直线。<b>T2 这一页说的是</b>：<b>多层但隐藏层没有激活</b>时，整个网络塌缩成单层。<br><b>⭐ 两者的结论一样，而且原因确实是同一个</b>：<b>送进最后那个 sigmoid 之前的分数，仍然是输入的仿射函数</b>。<b>sigmoid 是单调的，所以 p ≥ 0.5 等价于那个仿射分数 ≥ 0，画出来就是一条直线。</b><br><b>插入非线性之后会怎样？</b>课件说：<b>不同的输入区域可以有不同的响应。</b>把 h 换成 <b>max(0, 2x+1)</b>，<b>x ≤ −0.5 那一段是平的（s = 4），x &gt; −0.5 那一段是 6x + 7</b>，两段在 x = −0.5 处接上，<b>出现一个折点</b>。<br><b>⚠ 而这一页最后一句是考点</b>：<b>选哪个激活，同时影响「梯度怎么流」和「输出是什么含义」</b>——<b>这句话把本讲前两块的因果关系点明了</b>。");
+  SUM(0,3,{h:"★★★ 仿射复合仍是仿射 ⇒ 光加深度没用",k:"<b>W₂(W₁x+b₁)+b₂ = (W₂W₁)x + (W₂b₁+b₂)</b>，<b>仍是一个矩阵乘 + 一个偏置</b>。带数字：<b>3(2x+1)+4 = 6x+7</b>。",m:"课件：<b>Depth alone adds no curved boundary</b>；<b>梯度好算，但表达力被限死</b>。⚠ 不是算不出来，<b>是能表示的函数集合太小</b>。",w:"⚠ <b>和 T1 那句分清</b>：T1 说<b>单个 sigmoid 神经元</b>的边界是直线；这里说<b>多层但隐藏层无激活</b>会塌缩成单层。<b>原因同一个：最后那个 sigmoid 之前的分数仍是仿射的。</b>",e:"⭐ <b>考点句</b>：<b>选哪个激活，同时影响「梯度怎么流」和「输出是什么含义」</b>——它把激活与损失两块的因果关系点明了。"});
+  QUIZ(0,3,{t:"h = 4x − 1、s = 2h + 5（都没有激活），等价的单层是什么？",o:["不存在等价的单层","s = 8x − 5","s = 6x + 4","s = 8x + 3"],a:3,w:"<b>s = 2(4x−1) + 5 = 8x − 2 + 5 = 8x + 3</b>。⚠ 常见干扰项是<b>漏掉 2 要乘进 −1</b>（得 8x+4）或<b>只乘不加</b>。⭐ 这类代数验证题课件明确提示过会考。"});
+});
+KP("4 · ★★★ 激活的两个身份：前向的值、反向的斜率",function(){
+  S(0,function(){clearScene();setEq(null);setCap("g(z) 往下传，g′(z) 乘在传回来的梯度上");
+       cite("An activation must be understood as both a forward function and a local derivative.",150);
+       boxNode(130,206,470,56,"身份一：前向函数 g(z)","b");
+       boxNode(130,270,470,56,"决定往下一层传什么值","b");
+       boxNode(690,206,470,56,"身份二：局部导数 g′(z)","v");
+       boxNode(690,270,470,56,"决定反向时乘多少倍","v");
+       note("⭐ 讲义说得很狠：大的输出不代表大的梯度 —— 两件事互不相干",640,350,"y");
+       note("⚠ σ(2) = 0.881 很大，可 σ′(2) = 0.105 很小 —— 同一个点，两个身份",640,386,"r");},"<b>⭐⭐ 这是整讲最该先立住的观念：一个激活函数有两个身份，必须分开记。</b><br><b>身份一是前向函数 g(z)</b>：它<b>决定往下一层传什么值</b>。<b>身份二是局部导数 g′(z)</b>：它<b>决定反向传播时，传回来的梯度要乘多少倍</b>。<br><b>⭐ 讲义把这件事说得很狠</b>：<b>大的输出不代表大的梯度</b>——<b>这两件事互不相干</b>。<br><b>举个本例就有的证据</b>：<b>σ(2) = 0.881，输出很大</b>；<b>但 σ′(2) = 0.105，斜率很小</b>。<b>同一个点、同一个函数，两个身份给出完全不同的量级。</b><br><b>⚠ 为什么这个区分这么要紧？</b>因为<b>「饱和」这个概念完全建立在它上面</b>：sigmoid 在 z 很大时<b>输出接近 1（很大）</b>，但<b>导数接近 0（几乎没有）</b>。<b>⇒ 如果你只盯着输出，会以为这个单元「很活跃」；实际上它已经学不动了。</b>");
+  S(0,function(){clearScene();setEq("$$\\sigma'(z)=\\sigma(z)\\big(1-\\sigma(z)\\big) \\qquad \\tanh'(z)=1-\\tanh^2(z)$$","top");
+       setCap("⚠ 两个最容易写反的导数");
+       boxNode(130,206,470,56,"sigmoid：g′ = g(1 − g)","b");
+       boxNode(130,270,470,56,"输出在 (0,1)，g 和 1−g 都是正的","b");
+       boxNode(690,206,470,56,"tanh：g′ = 1 − g²","v");
+       boxNode(690,270,470,56,"输出在 (−1,1)，平方才保证非负","v");
+       note("⭐ 记法：两个都用「输出本身」表示，所以极容易张冠李戴",640,350,"y");
+       note("⚠ 典型陷阱：给「tanh 输出 −0.6」问导数 —— 答 1 − 0.36 = 0.64，不是 g(1−g)",640,386,"r");},"<b>⚠ 这两个导数是最容易写反的一对，原因很具体：它们都用「输出本身」来表示。</b><br><b>sigmoid 的导数是 g(1 − g)</b>；<b>tanh 的导数是 1 − g²</b>。<b>两个式子长得都像「用输出算导数」，所以张冠李戴特别常见。</b><br><b>⭐ 一个能当场判断的记法</b>：<b>sigmoid 的输出落在 (0, 1)，所以 g 和 1 − g 都是正的，相乘才有意义</b>；<b>tanh 的输出落在 (−1, 1)，可能是负的，所以必须先平方才保证结果非负</b>。<b>⇒ 看到负的输出还想套 g(1−g)，就知道一定错了。</b><br><b>⚠ 考试最爱的具体形态是这样的</b>：<b>给你「tanh 的输出是 −0.6」，问导数</b>。<b>正确答案是 1 − (−0.6)² = 1 − 0.36 = 0.64</b>。<b>而套成 sigmoid 的会算出 (−0.6)(1+0.6) = −0.96</b>——<b>一个负的导数，本身就说明错了，因为 tanh 是单调递增的，导数必须为正。</b>");
+  SUM(0,4,{h:"★★★ 两个身份：g(z) 管前向，g′(z) 管反向",k:"<b>前向函数 g(z) 决定往下一层传什么值</b>；<b>局部导数 g′(z) 决定反向时乘多少倍</b>。⭐ 讲义：<b>大的输出不代表大的梯度</b>。",m:"<b>证据</b>：<b>σ(2) = 0.881 很大，σ′(2) = 0.105 很小</b>。⇒ <b>只盯输出会以为单元很活跃，其实它已经学不动了</b>——「饱和」就建立在这个区分上。",w:"⚠ <b>两个最容易写反的导数</b>：<b>sigmoid g′ = g(1−g)</b>（输出在 (0,1)，两项都正）；<b>tanh g′ = 1 − g²</b>（输出在 (−1,1)，平方才非负）。",e:"⚠ <b>典型陷阱</b>：「tanh 输出 −0.6，导数是多少」⇒ <b>1 − 0.36 = 0.64</b>。套成 g(1−g) 会得 <b>−0.96</b>，<b>负导数本身就说明错了</b>（tanh 单调递增）。"});
+  QUIZ(0,4,{t:"某个 tanh 单元的输出是 −0.6，它在这一点的导数是多少？",o:["−0.96","−0.6","0.64","0.24"],a:2,w:"<b>tanh′ = 1 − g² = 1 − 0.36 = 0.64</b>。⚠ <b>−0.96 是错套了 sigmoid 的 g(1−g)</b>——而且<b>负的导数本身就不可能</b>，tanh 单调递增。"});
+});
+KP("5 · ★★★ 三个激活的数值表（默写级）",function(){
+  S(0,function(){clearScene();setEq(null);setCap("每格是「输出 / 导数」—— 这张表必须会默写");
+       matrix({rows:5,cols:5,cw:224,ch:34,x:100,y:196,
+         cell:function(i,j){var t=[["函数","z = −2","z = 0","z = 2","值域"],
+           ["Sigmoid","0.119 / 0.105","0.500 / 0.250","0.881 / 0.105","(0, 1)"],
+           ["tanh","−0.964 / 0.071","0 / 1","0.964 / 0.071","(−1, 1)"],
+           ["ReLU","0 / 0","0 / 0 ←约定","2 / 1","[0, ∞)"],
+           ["Leaky ReLU α=0.01","−0.02 / 0.01","0 / 0.01 ←约定","2 / 1","(−∞, ∞)"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2&&i>0?"hl":"";}});
+       note("⭐ 中间那一列（z = 0）最该记：σ′ 在这里取到最大值 0.25，tanh′ 取到 1",640,386,"y");},"<b>⭐⭐ 这张表是 T2 的默写级内容，选择题可以直接从里面出。</b><br><b>Sigmoid</b>：z = −2 时 <b>0.119 / 0.105</b>；z = 0 时 <b>0.500 / 0.250</b>；z = 2 时 <b>0.881 / 0.105</b>；值域 <b>(0, 1)</b>。<br><b>tanh</b>：<b>−0.964 / 0.071</b>、<b>0 / 1</b>、<b>0.964 / 0.071</b>；值域 <b>(−1, 1)</b>。<br><b>ReLU</b>：<b>0 / 0</b>、<b>0 / 0（约定）</b>、<b>2 / 1</b>；值域 <b>[0, ∞)</b>。<br><b>Leaky ReLU（α = 0.01）</b>：<b>−0.02 / 0.01</b>、<b>0 / 0.01（约定）</b>、<b>2 / 1</b>；值域 <b>(−∞, ∞)</b>。<br><b>⭐ 中间那一列最该记牢</b>：<b>σ′ 在 z = 0 处取到它的最大值 0.25</b>，<b>tanh′ 在 z = 0 处取到 1</b>。<br><b>⚠ 注意 sigmoid 和 tanh 的导数都是对称的</b>：<b>z = −2 和 z = 2 的导数一模一样</b>（0.105 和 0.071）。<b>这是因为两个函数都关于某个中心对称，导数自然也对称。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("三条曲线放在一起看形状");
+       axes({x0:230,x1:1050,y0:368,y1:206});
+       curve(actcurve("sig",240,1040,366,208),"b");
+       curve(actcurve("tanh",240,1040,366,208,287),"v");
+       curve(actcurve("relu",240,1040,366,208),"y");
+       curve([[240,287],[1040,287]],"d");
+       note("蓝 sigmoid：两端都压平 ⇒ 两端饱和",300,196,"b");
+       note("紫 tanh：中心在 0，两端还是压平",640,196,"v");
+       note("黄 ReLU：负半边压成 0，正半边一路放过",980,196,"y");
+       note("⭐ 看形状就能读出导数：曲线越平，导数越接近 0",640,386,"y");},"<b>把三条曲线画在一起，形状本身就说明了导数。</b><br><b>蓝色是 sigmoid</b>：从 0 爬到 1，<b>两端都被压平</b>。<b>压平就意味着斜率接近 0</b>——<b>这就是饱和</b>。<br><b>紫色是 tanh</b>：形状和 sigmoid 几乎一样，<b>但中心在 0、范围是 (−1, 1)</b>。<b>⚠ 注意它两端同样被压平——tanh 解决的是「零中心」，没有解决饱和。</b><br><b>黄色是 ReLU</b>：<b>负半边直接压成 0（完全平，导数就是 0），正半边是一条 45 度的直线（导数恒为 1）</b>。<br><b>⭐ 这张图能让你当场读出导数</b>：<b>曲线越平，导数越接近 0；曲线越陡，导数越大。</b><br><b>⇒ 对照数值表看</b>：sigmoid 在 z = 0 处最陡（导数 0.25），往两边越来越平（z = ±2 时只剩 0.105）。<b>而 ReLU 正半边一直保持同样的斜率，不管 z 多大，导数永远是 1</b>——<b>这正是它不饱和的意思。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 一张「只看输出猜不出导数」的对照");
+    matrix({rows:4,cols:4,cw:270,ch:40,x:100,y:206,
+      cell:function(i,j){var t=[["","输出 g(z)","导数 g′(z)","读法"],
+        ["sigmoid 在 z=0","0.500　中等","★ 0.250　最大","输出不起眼，梯度最强"],
+        ["sigmoid 在 z=2","0.881　很大","★ 0.105　很小","输出很大，梯度已经弱了"],
+        ["sigmoid 在 z=6","0.9975　接近 1","0.0025　几乎没有","看着最「活跃」，其实学不动"]];return t[i][j];},
+      dim:function(i,j){return i===0;},
+      hl:function(i,j){return j===2&&i>0?"hl":"";}});
+    note("⭐ 从上往下：输出一路变大，导数一路变小 —— 两个身份走的是反方向",640,386,"y");},"<b>⭐ 把 sigmoid 在三个点上的「输出」和「导数」并排列出来，两个身份的反差就一目了然。</b><br><b>z = 0 时</b>：<b>输出 0.500，不起眼</b>；<b>但导数 0.250，是它能取到的最大值</b>。<b>⇒ 输出最平庸的地方，恰恰是梯度最强的地方。</b><br><b>z = 2 时</b>：<b>输出 0.881，已经很大了</b>；<b>但导数只剩 0.105，掉到原来的 42%</b>。<br><b>z = 6 时</b>：<b>输出 0.9975，接近 1，看起来「最活跃」</b>；<b>导数只有 0.0025，几乎没有了</b>。<br><b>⭐ 从上往下看这张表：输出一路变大，导数一路变小。</b><b>两个身份走的是完全相反的方向。</b><br><b>⚠ 这就是为什么「大的输出不代表大的梯度」这句话要专门强调</b>——<b>直觉会把「输出大」和「影响大」联系起来，而在 sigmoid 这里，这个直觉正好是反的。</b>");
+  SUM(0,5,{h:"★★★ 三个激活在 z = −2 / 0 / 2 的「输出 / 导数」",k:"<b>Sigmoid</b>：0.119/0.105、<b>0.500/0.250</b>、0.881/0.105，值域 (0,1)。<b>tanh</b>：−0.964/0.071、<b>0/1</b>、0.964/0.071，值域 (−1,1)。",m:"<b>ReLU</b>：0/0、<b>0/0（约定）</b>、2/1，值域 [0,∞)。<b>Leaky（α=0.01）</b>：−0.02/0.01、<b>0/0.01（约定）</b>、2/1，值域 (−∞,∞)。",w:"⭐ <b>z = 0 那一列最该记</b>：<b>σ′ 在这里取到最大值 0.25</b>，<b>tanh′ 取到 1</b>。⚠ <b>两者的导数都是对称的</b>（z = ±2 给出同一个值）。",e:"⭐ <b>看形状就能读导数</b>：<b>曲线越平导数越接近 0</b>。ReLU <b>正半边斜率恒为 1，不管 z 多大</b>——这就是「不饱和」。"});
+  QUIZ(0,5,{t:"sigmoid 的导数在哪里取到最大值，是多少？",o:["在 z → +∞ 处，趋近 1","在 z = 0 处，等于 0.25","在 z = 0 处，等于 0.5","在 z = 1 处，等于 0.197"],a:1,w:"<b>σ′ = σ(1−σ)</b>，在 <b>σ = 0.5</b>（即 <b>z = 0</b>）时取到最大值 <b>0.5 × 0.5 = 0.25</b>。⚠ <b>0.5 是输出不是导数</b>；<b>z 越大导数越接近 0，不是 1</b>。"});
+});
+KP("6 · ⚠⚠ z = 0 处的约定：本课一律用 0",function(){
+  S(0,function(){clearScene();setEq(null);setCap("数学上不可导，本课有明确约定");
+       cite("At z=0 the mathematical derivative is undefined; the worksheet uses 0.",150);
+       boxNode(130,206,470,56,"ReLU′(0)","r");
+       boxNode(130,270,470,56,"★ 本课约定 = 0","r");
+       boxNode(690,206,470,56,"LeakyReLU′(0)","y");
+       boxNode(690,270,470,56,"★ 本课约定 = α（本讲 0.01）","y");
+       note("⭐ 为什么会不可导：左边斜率 0、右边斜率 1，两边不相等",640,350,"y");
+       note("⚠ 各家软件约定不同（有的用 1，有的用 0.5）—— 考试按本课的判",640,386,"r");},"<b>⚠⚠ ReLU 在 z = 0 处的导数，是一个必须记死的约定。</b><br><b>先说为什么会有问题</b>：<b>ReLU 在 0 的左边斜率是 0，右边斜率是 1，两边不相等</b>——<b>按定义，导数在这一点不存在</b>。<br><b>讲稿的原话很直接</b>：<b>在 z = 0 处数学导数未定义；worksheet 采用 0 作为它的实现约定。</b><br><b>⇒ 所以本课一律写 ReLU′(0) = 0。</b>而<b>Leaky ReLU 在 0 处用 α</b>，本讲 α = 0.01，<b>所以 LeakyReLU′(0) = 0.01</b>。<br><b>⚠ 这里要特别小心，因为各家软件的约定不一样</b>：有的框架用 1，有的用 0.5。<b>⇒ 考试按本课的判，别拿别处记来的数字答题。</b><br><b>⭐ 一个帮助记忆的角度</b>：<b>选 0 是和「负半边」一致</b>——<b>ReLU 在 z ≤ 0 的整段都给 0，把端点也归进去最自然。</b>");
+  S(0,function(){clearScene();setEq("$$\\mathrm{ReLU}(z)=\\max(0,z) \\qquad \\mathrm{LeakyReLU}(z)=\\begin{cases} z & z>0\\\\ \\alpha z & z\\le 0\\end{cases}$$","top");
+       setCap("两个分段函数的完整写法");
+       matrix({rows:3,cols:4,cw:270,ch:44,x:100,y:206,
+         cell:function(i,j){var t=[["","z > 0","z = 0","z < 0"],
+           ["ReLU：值 / 导数","z / 1","★ 0 / 0","0 / 0"],
+           ["Leaky：值 / 导数","z / 1","★ 0 / α","αz / α"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2&&i>0?"hl":"";}});
+       note("⚠ 讲稿另一句易漏的：传入的梯度乘以 α，结果不一定是负的",640,350,"r");
+       note("⇒ 乘一个小的正数（0.01）不改变符号，只是把幅度缩小",640,386,"y");},"<b>把两个分段函数完整写一遍，三段都要能说清。</b><br><b>ReLU</b>：<b>z &gt; 0 时值是 z、导数是 1</b>；<b>z = 0 时按约定值 0、导数 0</b>；<b>z &lt; 0 时值 0、导数 0</b>。<br><b>Leaky ReLU</b>：<b>z &gt; 0 时和 ReLU 一样</b>；<b>z = 0 时值 0、导数 α</b>；<b>z &lt; 0 时值是 αz、导数是 α</b>。<br><b>⚠ 讲稿这里还有一句很容易漏掉的话</b>：<b>传入的损失梯度会乘以 α，结果不一定是负的。</b><br><b>为什么要专门说这句？</b>因为<b>很多人看到 Leaky ReLU「负半边有斜率」，就以为梯度会变成负的</b>。<b>不会——α 是一个小的正数（0.01），乘上去只会把幅度缩小 100 倍，符号一点不变。</b><br><b>⇒ 这正是 Leaky ReLU 的设计意图</b>：<b>在负半边留一条细细的通路，让梯度还能传一点点回去</b>，而不是像 ReLU 那样直接归零。");
+  SUM(0,6,{h:"⚠⚠ ReLU′(0) = 0，LeakyReLU′(0) = α",k:"<b>ReLU 在 0 的左边斜率 0、右边斜率 1，两边不等 ⇒ 数学上不可导</b>。讲稿：<b>worksheet 采用 0 作为实现约定</b>。",m:"<b>本课一律：ReLU′(0) = 0</b>；<b>LeakyReLU′(0) = α</b>（本讲 0.01）。⚠ <b>各家软件约定不同，考试按本课的判。</b>",w:"<b>三段完整写法</b>：ReLU <b>z&gt;0 → z/1；z≤0 → 0/0</b>。Leaky <b>z&gt;0 → z/1；z=0 → 0/α；z&lt;0 → αz/α</b>。",e:"⚠ 讲稿易漏的一句：<b>传入的梯度乘以 α，结果不一定是负的</b>——<b>α 是小正数，只缩小幅度不改符号</b>。这正是 Leaky 的设计意图：<b>在负半边留一条细通路</b>。"});
+  QUIZ(0,6,{t:"按本课的约定，ReLU 在 z = 0 处的导数是多少？",o:["0.5","未定义，题目不会这样问","1","0"],a:3,w:"⚠ <b>数学上确实未定义</b>（左斜率 0、右斜率 1），<b>但讲稿明确说 worksheet 用 0</b>，考试按这个判。⭐ <b>Leaky ReLU 在 0 处则用 α。</b>"});
+});
+KP("7 · ⚠ 饱和与梯度消失：五个 0.1 连乘",function(){
+  S(0,function(){clearScene();setEq(null);setCap("饱和区的导数趋近 0，连乘就消失了");
+       cite("Sigmoid and tanh derivatives approach zero in saturated regions.",150);
+       boxNode(170,206,980,50,"σ′(2) = 0.105　σ′(4) = 0.018　σ′(6) = 0.0025　…越往外越小","b");
+       boxNode(170,270,980,50,"五层连乘：0.1 × 0.1 × 0.1 × 0.1 × 0.1 = 0.00001","r");
+       boxNode(170,328,980,50,"⇒ 最前面那几层几乎收不到任何方向","r");
+       note("⭐ 这就是「梯度消失」—— 不是算错了，是数值本身被乘没了",640,386,"y");},"<b>饱和（saturation）指的是：当 |z| 很大时，sigmoid 和 tanh 的导数趋近于 0。</b><br><b>看具体数字</b>：<b>σ′(2) = 0.105</b>，<b>σ′(4) = 0.018</b>，<b>σ′(6) = 0.0025</b>——<b>越往外越小，而且掉得很快</b>。<br><b>⚠ 单独一个 0.1 看起来不吓人，但反向传播是把一路上的局部导数乘起来的。</b><br><b>讲义给的量级感非常直观</b>：<b>五个 0.1 连乘 = 0.00001</b>。<b>⇒ 如果一个五层网络每层都处在饱和区，那么传到最前面那一层的梯度，只有输出层的十万分之一。</b><br><b>⭐ 这就是「梯度消失」。</b><b>⚠ 要强调的是：这不是算错了，也不是程序有 bug——数值本身就是被一路乘没的。</b><br><b>⇒ 而 ReLU 的正半边导数恒为 1，连乘多少次都还是 1，这正是它在隐藏层受欢迎的根本原因。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("为什么饱和在反向才致命，前向却看不出来");
+       boxNode(130,206,470,56,"前向看：σ(6) = 0.9975","b");
+       boxNode(130,270,470,56,"输出很大，看起来「很活跃」","b");
+       boxNode(690,206,470,56,"⚠ 反向看：σ′(6) = 0.0025","r");
+       boxNode(690,270,470,56,"梯度几乎为零，这个单元学不动","r");
+       note("⭐ 回到那句话：大的输出不代表大的梯度",640,350,"y");
+       note("⚠ 所以诊断饱和要看 z 的分布，不能只看激活值大不大",640,386,"r");},"<b>⚠ 饱和最阴险的地方在于：它在前向完全看不出来。</b><br><b>拿 z = 6 举例</b>：<b>σ(6) = 0.9975</b>，<b>输出接近 1，看起来这个单元「非常活跃」</b>。<br><b>但同一个点的导数 σ′(6) = 0.0025</b>——<b>梯度几乎为零，这个单元实际上学不动了</b>。<br><b>⭐ 这正好回到前面那句话：大的输出不代表大的梯度。</b><b>两个身份在饱和区分道扬镳，而且是往相反方向走的。</b><br><b>⇒ 所以诊断饱和的正确做法，是看 z（激活前的分数）的分布，而不是看激活值大不大。</b><b>如果很多 z 落在 |z| &gt; 4 的区域，那就是饱和了。</b><br><b>⚠ 这一条也是 T2 第 5 页第四步「监控训练」要你看的三件事之一</b>——<b>inspect saturation</b>，<b>它和「死单元」「验证表现」并列。</b>");
+  SUM(0,7,{h:"⚠ 饱和：|z| 大时导数趋近 0，连乘就消失",k:"<b>σ′(2)=0.105、σ′(4)=0.018、σ′(6)=0.0025</b>——越往外掉得越快。<b>五个 0.1 连乘 = 0.00001</b>。",m:"⇒ <b>五层都在饱和区，传到最前面的梯度只有输出层的十万分之一</b>。⚠ <b>这不是算错，是数值被一路乘没的。</b>",w:"⚠ <b>饱和在前向看不出来</b>：<b>σ(6)=0.9975 看起来很活跃，σ′(6)=0.0025 其实学不动</b>。⇒ <b>诊断要看 z 的分布，不是看激活值大不大。</b>",e:"⭐ <b>ReLU 正半边导数恒为 1，连乘多少次还是 1</b>——这是它在隐藏层受欢迎的根本原因。⚠ 「监控训练」三件事之一就是 <b>inspect saturation</b>。"});
+  QUIZ(0,7,{t:"某个 sigmoid 单元输出 0.9975，关于它下面哪句是对的？",o:["它已经饱和了：σ′ ≈ 0.0025，梯度几乎为零，学不动","输出大说明这个单元已经死了","输出大说明梯度也大，这个单元在快速学习","无法判断，必须知道学习率"],a:0,w:"⭐ <b>大的输出不代表大的梯度</b>。⚠ <b>「死单元」是 ReLU 的说法</b>（负输入零梯度），<b>sigmoid 这里叫饱和</b>；<b>学习率只影响步长，不改变导数。</b>"});
+});
+KP("8 · ⚠⚠ 死亡 ReLU 的正确说法",function(){
+  S(0,function(){clearScene();setEq(null);setCap("课件用的是 can，不是 will");
+       cite("A negative ReLU score blocks this local gradient for this observation;",150);
+       cite("it does not alone prove the neuron is permanently inactive.",192);
+       boxNode(130,234,470,56,"✗ 错误说法","r");
+       boxNode(130,298,470,56,"这个样本不激活 ⇒ 这个单元死了","r");
+       boxNode(690,234,470,56,"✓ 正确说法","g");
+       boxNode(690,298,470,56,"要在相关的那批输入上一直不激活","g");
+       note("⭐ 课件原文是 can create permanently inactive units —— 可能，不是必然",640,386,"y");},"<b>⚠⚠ 「死亡 ReLU」是一个非常容易被说过头的概念，课件在两处都做了限定。</b><br><b>第一处在激活取舍表里</b>：ReLU <b>can create permanently inactive units</b>——<b>注意措辞是 can（可能），不是 will（必然）</b>。<br><b>第二处是讲稿里一句更明确的限定</b>：<b>一个负的 ReLU 分数会挡住「这个观测」上的局部梯度；但这件事本身并不能证明这个神经元在所有输入上都永久不激活。</b><br><b>⇒ 所以正确的说法是：要在相关的那批输入上一直不激活，才叫死亡 ReLU。</b><br><b>回到本片的算例</b>：<b>第二个隐藏单元的 z₂ = −0.1，在 x = [1, 2] 这个样本上确实不激活</b>。<b>⚠ 但不能据此说「这个单元死了」</b>——<b>换一个输入，z₂ 完全可能是正的</b>。<br><b>⭐ 判断死单元需要的是「一批输入上的统计」，不是单个样本的观察。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("那什么时候真的会「死」");
+       boxNode(170,206,980,50,"如果某个单元在整批相关输入上 z 都 < 0","r");
+       boxNode(170,270,980,50,"⇒ 它的梯度恒为 0 ⇒ 它的权重再也不会被更新","r");
+       boxNode(170,328,980,50,"⇒ 于是它永远保持 z < 0 —— 这是一个自锁的死循环","r");
+       note("⭐ 关键在「自锁」：梯度为 0 让权重不动，权重不动又保证梯度继续为 0",640,386,"y");},"<b>那什么情况才真的会「死」？逻辑是一个自锁的循环。</b><br><b>如果某个 ReLU 单元在整批相关输入上 z 都小于 0</b>，那么<b>它的局部导数 g′(z) 恒为 0</b>。<br><b>⇒ 乘进链式法则，它所有输入权重的梯度都是 0。</b><b>⇒ 梯度为 0，梯度下降就不会改动这些权重。</b><b>⇒ 权重不变，下一轮 z 还是负的。</b><br><b>⭐ 关键就在这个「自锁」：梯度为 0 让权重不动，而权重不动又保证梯度继续为 0。</b><b>没有外力能把它拉回来——这才是「永久不激活」的含义。</b><br><b>⚠ 注意偏置也一样被锁住</b>：<b>∂L/∂bⱼ 同样带着 g′(zⱼ) 这个因子，所以也是 0</b>。<b>⇒ 连「把 b 调大一点让它重新激活」这条路都走不通。</b><br><b>⇒ 这正是 Leaky ReLU 的用武之地：负半边留一个 α 的斜率，梯度就不会被彻底掐断，自锁也就解开了。</b>");
+  SUM(0,8,{h:"⚠⚠ 死亡 ReLU：can，不是 will",k:"课件措辞是 <b>can create permanently inactive units</b>（可能，不是必然）。讲稿：<b>负分数挡住的是「这个观测」上的梯度，不能证明神经元永久不激活</b>。",m:"⇒ <b>要在相关的那批输入上一直不激活，才叫死亡 ReLU</b>。本例 <b>z₂ = −0.1 只说明这个样本不激活</b>，换个输入可能就是正的。",w:"<b>真的会死的逻辑是自锁</b>：<b>z 恒为负 ⇒ g′ 恒为 0 ⇒ 权重梯度全为 0 ⇒ 权重不动 ⇒ z 还是负的</b>。",e:"⚠ <b>偏置也被锁住</b>（∂L/∂bⱼ 同样带 g′ 因子），<b>连「把 b 调大重新激活」都走不通</b>。⇒ 这正是 <b>Leaky ReLU</b> 的用武之地。"});
+  QUIZ(0,8,{t:"某个 ReLU 单元在当前这个样本上 z = −0.1，下面哪句说法是准确的？",o:["它的导数按本课约定是 1","这个单元已经死了","在这个观测上它的局部梯度被挡住了；但这不足以证明它永久不激活","它的输出会是 −0.1"],a:2,w:"⭐ 讲稿的限定：<b>负分数挡住的是「这个观测」上的梯度</b>。⚠ <b>输出是 0 不是 −0.1</b>（ReLU 压平负半边）；<b>导数是 0 不是 1</b>。"});
+});
+KP("9 · ★★ tanh 的两个坑",function(){
+  S(0,function(){clearScene();setEq("$$\\tanh(z)=\\frac{e^{z}-e^{-z}}{e^{z}+e^{-z}}$$","top");
+       setCap("⚠ 它不是三角函数里的正切");
+       boxNode(130,206,470,56,"坑一：别当成 tan","r");
+       boxNode(130,270,470,56,"是双曲正切 —— 用计算器的 hyperbolic 键","r");
+       boxNode(690,206,470,56,"坑二：零中心 ≠ 零均值","r");
+       boxNode(690,270,470,56,"范围关于 0 对称，不保证实际激活的均值为 0","r");
+       note("⭐ 讲稿专门加了这句：Tanh's symmetric range does not guarantee a zero empirical mean",640,350,"y");
+       note("⚠ 「零中心」说的是函数的值域，「零均值」说的是你这批数据上的统计",640,386,"r");},"<b>tanh 有两个坑，课件和讲稿都专门点了名。</b><br><b>坑一：它不是三角函数里的正切。</b><b>tanh 是双曲正切</b>，定义是 <b>(eᶻ − e⁻ᶻ) / (eᶻ + e⁻ᶻ)</b>。<b>⚠ 考场上用计算器一定要按 hyperbolic 键</b>，按成 tan 会得到一个完全无关的数。<br><b>坑二更微妙：零中心不等于零均值。</b><br><b>讲稿专门加了一句</b>：<b>tanh 对称的值域并不保证经验均值为零。</b><br><b>⭐ 这两个词说的是不同的东西</b>：<b>「零中心」说的是这个函数的值域关于 0 对称（范围是 (−1, 1)，tanh(0) = 0）</b>；<b>而「零均值」说的是你手上这批数据过了 tanh 之后，实际算出来的平均值</b>。<br><b>⇒ 如果你的输入恰好全是正的，那 tanh 的输出也会全是正的，均值远离 0。</b><b>值域对称是函数的性质，均值为零是数据的性质，两者没有必然关系。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("tanh 到底解决了什么、没解决什么");
+       matrix({rows:3,cols:3,cw:360,ch:44,x:110,y:206,
+         cell:function(i,j){var t=[["","sigmoid","tanh"],
+           ["是否以零为中心","✗ 输出全正，落在 (0,1)","✓ 范围 (−1,1)，tanh(0)=0"],
+           ["是否会饱和","✗ 会，两端导数趋近 0","✗ 还是会，两端照样压平"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 课件原话：Tanh — Zero-centred but still saturates",640,350,"y");
+       note("⚠ 所以 tanh 是 sigmoid 的改良，不是替代品 —— 典型错项「tanh 不会饱和」",640,386,"r");},"<b>把 tanh 和 sigmoid 并排比，它解决了什么、没解决什么就一清二楚。</b><br><b>解决了的：零中心。</b><b>sigmoid 的输出全是正的、落在 (0, 1)</b>；<b>tanh 的范围是 (−1, 1)，而且 tanh(0) = 0</b>。<br><b>⚠ sigmoid 输出恒正这一点为什么是缺点？</b>因为<b>后一层每个权重的梯度都要乘上这个（恒正的）激活值</b>，<b>于是同一个神经元所有输入权重的梯度符号就被绑在一起了</b>——<b>要么一起增大，要么一起减小，更新方向受限</b>。<br><b>没解决的：饱和。</b>课件原话是 <b>Tanh — Zero-centred but still saturates</b>。<b>看数值表就知道：tanh 在 z = ±2 处导数只剩 0.071，比 sigmoid 的 0.105 还小。</b><br><b>⇒ 所以 tanh 是 sigmoid 的改良，不是替代品。</b><b>⚠ 「tanh 不会饱和」是选择题的典型错项。</b>");
+  SUM(0,9,{h:"★★ tanh：双曲正切；零中心但仍饱和",k:"<b>坑一</b>：<b>tanh 是双曲正切 (eᶻ−e⁻ᶻ)/(eᶻ+e⁻ᶻ)，不是三角函数的 tan</b>——计算器按 hyperbolic 键。",m:"<b>坑二</b>：讲稿原话 <b>对称的值域并不保证经验均值为零</b>。<b>「零中心」是函数值域的性质，「零均值」是你这批数据的统计</b>，两者无必然关系。",w:"<b>解决了零中心</b>（范围 (−1,1)，tanh(0)=0）；<b>没解决饱和</b>——课件：<b>Zero-centred but still saturates</b>，z=±2 时导数只剩 <b>0.071</b>，比 sigmoid 的 0.105 还小。",e:"⚠ <b>sigmoid 输出恒正为什么是缺点</b>：后一层权重的梯度都乘这个正数 ⇒ <b>同一神经元的输入权重梯度符号被绑在一起</b>，更新方向受限。⚠ 典型错项：<b>「tanh 不会饱和」</b>。"});
+  QUIZ(0,9,{t:"关于 tanh，下面哪句是课件的原意？",o:["它以零为中心，而且不会饱和","它不以零为中心，但不会饱和","它以零为中心，但仍然会饱和","它和 sigmoid 完全等价"],a:2,w:"课件原话：<b>Tanh — Zero-centred but still saturates</b>。⚠ 数值上 <b>tanh 在 z=±2 的导数只有 0.071</b>，<b>比 sigmoid 的 0.105 还小</b>——饱和得更快。"});
+});
+KP("10 · ★★ 选激活的四步：先定输出，再定隐藏",function(){
+  S(0,function(){clearScene();setEq(null);setCap("顺序是固定的，不能反");
+       boxNode(60,206,270,52,"① 认任务","b");
+       boxNode(60,268,270,52,"连续 / 二分类 / 单标签多类 / 多标签","b");
+       boxNode(350,206,270,52,"② 定输出层","g");
+       boxNode(350,268,270,52,"linear / sigmoid / softmax","g");
+       boxNode(640,206,270,52,"③ 定隐藏层","v");
+       boxNode(640,268,270,52,"ReLU 是强基线；tanh 适合有界状态","v");
+       boxNode(930,206,290,52,"④ 训练中监控","y");
+       boxNode(930,268,290,52,"饱和 · 死单元 · 验证表现","y");
+       note("⭐ 为什么不能反：输出层由任务决定（没得选），隐藏层是调参（有得选）",640,350,"y");
+       note("⚠ 课件说的是 ReLU is a strong baseline —— 是默认起点，不是「最好」",640,386,"r");},"<b>选激活有一个固定的四步顺序，课件把它写得很死。</b><br><b>① 认任务</b>：目标是<b>连续的、二分类的、单标签多类的，还是多标签的</b>。<b>② 定输出层</b>：<b>linear、sigmoid 还是 softmax</b>。<b>③ 定隐藏层</b>：<b>ReLU 是强基线；tanh 适合有界状态</b>。<b>④ 训练中监控</b>：<b>看饱和、看死单元、看验证表现</b>。<br><b>⭐ 顺序为什么不能反？理由很直白：输出层是由任务决定的，你没得选</b>——<b>二分类就必须用 sigmoid，否则输出根本不是概率</b>。<b>而隐藏层是调参，你有得选。</b><b>⇒ 先把没得选的定下来，再去调有得选的。</b><br><b>⚠ 第 3 步的措辞要抠准</b>：课件说的是 <b>ReLU is a strong baseline</b>——<b>强基线，也就是默认起点，不是「最好」</b>。<b>选择题会拿「ReLU 是最好的激活函数」当错项。</b><br><b>⚠ 第 4 步常被忽略，但它是通往 T3 的接口</b>：<b>前两件事（饱和、死单元）是本讲的内容，第三件（验证表现）直接指向 T3。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("隐藏层和输出层，为什么根本不同");
+       boxNode(130,206,470,56,"隐藏层的激活","v");
+       boxNode(130,270,470,56,"是为了造表示 —— 让后面的层能用上非线性","v");
+       boxNode(690,206,470,56,"输出层的激活","g");
+       boxNode(690,270,470,56,"是为了让输出有正确的含义","g");
+       note("⭐ 概率要落在 (0,1)；多类概率还要和为 1",640,350,"y");
+       note("⚠ 所以 ReLU 不能做二分类输出层 —— 它的输出无上界，不是概率",640,386,"r");},"<b>隐藏层和输出层的激活，目的根本不同——这是四步顺序背后的道理。</b><br><b>隐藏层的激活是为了造表示</b>：<b>让后面的层能用上非线性的中间特征</b>。<b>它的输出长什么样不重要，重要的是梯度能不能顺畅地流回去</b>——<b>所以才偏好 ReLU（导数恒为 1，不衰减）</b>。<br><b>输出层的激活是为了让输出有正确的含义</b>：<b>概率必须落在 (0, 1)；多类概率还必须和为 1</b>。<b>这里不是「哪个梯度好」的问题，是「算出来的数是不是你要的那个东西」。</b><br><b>⚠ 所以 ReLU 不能做二分类的输出层</b>：<b>它的输出没有上界，可能是 3.7</b>——<b>而 3.7 既不是概率，也不是类别，它什么都不是。</b><br><b>⭐ 这正好对应取舍表里的第五条「Output mismatch」</b>：<b>输出范围选错了，预测就没法解释</b>。<b>⚠ 这不是「训练得慢」，是「结果根本不可读」。</b>");
+  SUM(0,10,{h:"★★ 四步：认任务 → 定输出 → 定隐藏 → 监控",k:"<b>① 认任务</b>（连续/二分类/单标签多类/多标签）<b>② 定输出层</b>（linear/sigmoid/softmax）<b>③ 定隐藏层</b>（ReLU 强基线，tanh 适合有界状态）<b>④ 监控</b>（饱和·死单元·验证表现）。",m:"⭐ <b>顺序不能反</b>：<b>输出层由任务决定（没得选），隐藏层是调参（有得选）</b>——先定没得选的。",w:"<b>两者目的根本不同</b>：<b>隐藏层的激活是为了造表示</b>（看梯度流得顺不顺）；<b>输出层的激活是为了让输出有正确的含义</b>（概率落在 (0,1)、多类和为 1）。",e:"⚠ <b>所以 ReLU 不能做二分类输出层</b>——输出无上界，<b>3.7 既不是概率也不是类别</b>。⚠ 课件说的是 <b>strong baseline</b>（默认起点），<b>不是「ReLU 最好」</b>。"});
+  QUIZ(0,10,{t:"为什么「先定输出层，再定隐藏层」这个顺序不能反？",o:["因为输出层参数更多","因为输出层由任务决定、没得选，隐藏层是调参、有得选","因为隐藏层的激活不影响结果","因为输出层先于隐藏层计算"],a:1,w:"⭐ <b>二分类就必须用 sigmoid</b>，否则输出不是概率——这是任务定死的。⚠ <b>前向顺序是隐藏层在先</b>；<b>隐藏层激活当然影响结果</b>（没有它整个网络会塌缩）。"});
+});
+KP("11 · ★★ 四个激活的取舍：「哪句描述对」高发区",function(){
+  S(0,function(){clearScene();setEq(null);setCap("课件把短板并排列出来");
+       matrix({rows:5,cols:4,cw:280,ch:34,x:80,y:196,
+         cell:function(i,j){var t=[["激活","优点","短板","典型用处"],
+           ["Sigmoid","输出就是概率，落在 (0,1)","会饱和；输出不以零为中心","二分类输出层"],
+           ["tanh","以零为中心，范围 (−1,1)","★ 仍然会饱和","隐藏层（有界状态）"],
+           ["ReLU","正半轴不饱和、算得快","★ 负输入零梯度，可能永久不激活","隐藏层默认起点"],
+           ["Leaky ReLU","负侧保留 α 的斜率","α 要自己选；仍非零中心","ReLU 死单元多时"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2&&i>0?"hl":"";}});
+       note("⭐ 第五条是另一个层级：Output mismatch —— 输出范围错了，预测没法解释",640,386,"y");},"<b>⭐⭐ 这张取舍表是「哪一句描述正确」型选择题的高发区。</b><br><b>Sigmoid</b>：优点是<b>输出就是概率</b>；短板有两条——<b>会饱和</b>，而且<b>输出不以零为中心</b>。<br><b>tanh</b>：<b>以零为中心</b>，但<b>仍然会饱和</b>。<br><b>ReLU</b>：<b>正半轴不饱和、算得快</b>，但<b>负输入零梯度，可能永久不激活</b>。<br><b>Leaky ReLU</b>：<b>负侧保留 α 的斜率</b>，但<b>α 要你自己选，而且仍然不是零中心的</b>。<br><b>⭐ 课件还有第五条，它属于另一个层级</b>：<b>Output mismatch —— 输出范围选错了，预测就没法解释。</b><br><b>⚠ 这一条和前四条不同：前四条说的是「训练好不好做」，第五条说的是「算出来的数到底是什么」。</b><b>用 ReLU 做二分类输出得到 3.7，那不是训练得慢的问题，是这个数根本没有意义。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 四个标准错项，逐个记住");
+       boxNode(130,206,1020,48,"✗「tanh 不会饱和」　—— 错，它只是零中心，照样饱和","r");
+       boxNode(130,262,1020,48,"✗「ReLU 一定会产生死单元」　—— 错，课件说的是 can","r");
+       boxNode(130,318,1020,48,"✗「Leaky 的负输入会让梯度变成负的」　—— 错，乘正的 α 不改符号","r");
+       note("✗「输出范围不影响结果，只影响速度」—— 错，它会让预测根本无法解释",640,386,"r");},"<b>把四个标准错项逐个过一遍，这是最划算的复习。</b><br><b>错项一：「tanh 不会饱和」。</b>错。<b>它解决的是零中心，饱和一点没解决</b>——<b>z = ±2 时导数只剩 0.071</b>。<br><b>错项二：「ReLU 一定会产生死单元」。</b>错。<b>课件用的是 can（可能）</b>，<b>而且讲稿明说单个观测不激活不等于死了</b>。<br><b>错项三：「Leaky ReLU 的负输入会让梯度变成负的」。</b>错。<b>α 是一个小的正数，乘上去只缩小幅度，不改符号</b>。<br><b>错项四：「输出范围不影响结果，只影响速度」。</b>错。<b>它会让预测根本无法解释</b>——<b>这是「结果不可读」而不是「训练变慢」。</b><br><b>⭐ 这四个错项有一个共同的出题套路：把课件里带限定词的句子，去掉限定词变成绝对化的说法。</b><b>⇒ 所以读课件时，像 can、still、not necessarily 这些词要特别留意，它们往往就是考点所在。</b>");
+  SUM(0,11,{h:"★★ 四个激活的取舍 ＋ 四个标准错项",k:"<b>Sigmoid</b>：输出是概率 / <b>会饱和 + 不以零为中心</b>。<b>tanh</b>：零中心 / <b>仍然饱和</b>。<b>ReLU</b>：正半轴不饱和、快 / <b>负输入零梯度，可能永久不激活</b>。<b>Leaky</b>：负侧有 α / <b>α 要自己选，仍非零中心</b>。",m:"⭐ <b>第五条属于另一个层级</b>：<b>Output mismatch —— 输出范围错了，预测没法解释</b>（不是训练慢，是结果不可读）。",w:"⚠ <b>四个标准错项</b>：「tanh 不会饱和」「ReLU 一定会产生死单元」「Leaky 的负输入让梯度变负」「输出范围只影响速度」。",e:"⭐ <b>出题套路</b>：<b>把课件里带限定词的句子去掉限定词、变成绝对化说法</b>。⇒ 读课件时 <b>can、still、not necessarily</b> 这些词要特别留意。"});
+  QUIZ(0,11,{t:"下面哪一句关于 Leaky ReLU 是正确的？",o:["负侧有一个非零斜率 α，传入的梯度乘以 α，符号不变只是幅度缩小","负输入会让传回来的梯度变成负数","它既是零中心的，又不会饱和","α 由训练自动学出来，不需要你选"],a:0,w:"⭐ 讲稿原话：<b>传入的梯度乘以 α，结果不一定是负的</b>——α 是小正数。⚠ 课件说 <b>choose its size</b>（α 要你自己选）；<b>Leaky 仍然不是零中心的</b>。"});
+});
+KP("12 · ★★★ 损失要匹配两件事",function(){
+  S(0,function(){clearScene();setEq(null);setCap("目标的类型，和输出的含义");
+       cite("The loss must match the target type and output interpretation.",150);
+       boxNode(130,206,470,56,"匹配一：目标的类型","b");
+       boxNode(130,270,470,56,"连续？二分类？互斥多类？多标签？","b");
+       boxNode(690,206,470,56,"匹配二：输出的含义","v");
+       boxNode(690,270,470,56,"这个数是概率？是实数？还是一组和为 1 的概率？","v");
+       note("⭐ 不是「哪个损失更好」，是「哪个和任务对得上」",640,350,"y");
+       note("⚠ 搭配错了，梯度会在最需要的地方变得极小 —— 下一屏就是证据",640,386,"r");},"<b>损失函数定义的是「什么算错」，而课件给的判据有两条，必须同时满足。</b><br><b>匹配一：目标的类型。</b>目标是<b>连续的、二分类的、互斥多类的，还是多标签的</b>？<br><b>匹配二：输出的含义。</b>你的输出<b>是一个概率、一个无约束的实数，还是一组和为 1 的概率</b>？<br><b>⭐ 这里的措辞要抠准：课件问的不是「哪个损失更好」，而是「哪个和任务对得上」。</b><b>⇒ 所以这类题没有「通用最优解」，只有「配对关系」。</b><br><b>⚠ 搭配错了会怎样？</b>不只是「效果差一点」——<b>梯度会在最需要的地方变得极小</b>。<br><b>下一个知识点就是这件事的具体证据</b>：<b>同一个预测、同一个目标，换一个损失，梯度差了整整 101 倍。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("为什么必须两条都对上");
+       boxNode(170,206,980,50,"只对上「目标类型」：比如二分类配 sigmoid，但损失用了 MSE","y");
+       boxNode(170,264,980,50,"⇒ 类型是对的（都是二分类），可梯度在饱和区几乎消失","r");
+       boxNode(170,322,980,50,"只对上「输出含义」：比如输出是概率，但目标其实是多标签","r");
+       note("⇒ 每个标签本可以独立判断，softmax 却逼它们抢同一份概率",640,386,"r");},"<b>为什么课件要把这两条分开说？因为只对上一条也会出事。</b><br><b>只对上「目标类型」的例子</b>：二分类任务，输出层用了 sigmoid（对的），<b>但损失用了 MSE</b>。<b>⇒ 类型没错，两边都是二分类</b>，<b>可是梯度在饱和区几乎消失</b>——这正是下一个知识点要算的那个 101 倍。<br><b>只对上「输出含义」的例子</b>：输出是一组概率（看起来没毛病），<b>但目标其实是多标签的</b>。<b>⇒ softmax 会强迫这些概率加起来等于 1</b>，<b>于是「猫」和「户外」这两个本可以同时为真的标签，被逼着抢同一份概率</b>——<b>一个涨，另一个就得跌。</b><br><b>⭐ 这两个例子说明一件事：配对不是形式上的手续，它直接决定梯度对不对、输出读不读得通。</b>");
+  SUM(0,12,{h:"★★★ 损失要同时匹配「目标类型」和「输出含义」",k:"课件原话：<b>The loss must match the target type and output interpretation.</b>⭐ <b>不是「哪个损失更好」，是「哪个和任务对得上」。</b>",m:"<b>只对上目标类型</b>（二分类 + sigmoid 却配 MSE）⇒ <b>梯度在饱和区几乎消失</b>。",w:"<b>只对上输出含义</b>（输出是概率，目标却是多标签）⇒ <b>softmax 逼着概率和为 1</b>，<b>「猫」和「户外」被迫抢同一份概率</b>。",e:"⭐ <b>配对不是形式手续</b>——它<b>直接决定梯度对不对、输出读不读得通</b>。"});
+  QUIZ(0,12,{t:"课件说损失函数必须匹配哪两件事？",o:["网络深度和学习率","训练速度和内存占用","batch 大小和 epoch 数","目标的类型，和输出的含义"],a:3,w:"⭐ 原话：<b>The loss must match the target type and output interpretation.</b>⚠ 注意这不是「哪个损失更好」的问题，<b>是配对关系</b>——所以没有通用最优解。"});
+});
+KP("13 · ★★★ MSE 配 sigmoid 的梯度，差 101 倍",function(){
+  S(0,function(){clearScene();setEq("$$\\text{半平方：}\\;\\frac{\\partial L}{\\partial z}=(p-y)\\,p(1-p) \\qquad \\text{BCE：}\\;\\frac{\\partial L}{\\partial z}=p-y$$","top");
+       setCap("同一个预测，换一个损失，梯度差两个数量级");
+       boxNode(130,206,1020,48,"算例：y = 1，p = 0.01（非常自信地判错）","y");
+       boxNode(130,262,490,48,"半平方：(0.01−1) × 0.01 × 0.99","r");
+       boxNode(130,318,490,48,"= −0.009801","r");
+       boxNode(660,262,490,48,"BCE：0.01 − 1","g");
+       boxNode(660,318,490,48,"= −0.990000","g");
+       note("⭐ 两者都主张抬高 logit（都是负的），但幅度正好差 101 倍",640,386,"y");},"<b>⭐⭐ 这是 T2 最该记住的一组数字，扩展题常见问法就是「比较两种搭配的梯度并解释差别的来源」。</b><br><b>算例</b>：<b>y = 1，p = 0.01</b>——也就是<b>非常自信地判错了</b>：真实是 1，模型却只给了 1% 的概率。<br><b>半平方误差配 sigmoid</b>：<b>∂L/∂z = (p−y)·p(1−p) = (0.01−1) × 0.01 × 0.99 = −0.009801</b>。<br><b>BCE 配 sigmoid</b>：<b>∂L/∂z = p − y = 0.01 − 1 = −0.990000</b>。<br><b>⭐ 先看相同的地方：两者都是负的</b>，<b>说明它们都主张把 logit 调大</b>——<b>方向是一致的，没有谁指错路</b>。<br><b>⭐ 再看不同的地方：幅度差了整整 101 倍。</b><b>⇒ 在这个「最需要大幅修正」的时刻，半平方误差给出的推力几乎为零。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("祸根是那个多出来的 p(1−p)");
+       boxNode(130,206,1020,48,"p = 0.01 时，sigmoid 的斜率 p(1−p) = 0.01 × 0.99 ≈ 0.0099","r");
+       boxNode(130,262,1020,48,"⇒ 半平方的梯度被这个极小的因子压掉了约 100 倍","r");
+       boxNode(130,318,1020,48,"⇒ 而 BCE 的 −log 恰好把 p(1−p) 约掉了，所以干净","g");
+       note("⚠ 限定条件要跟着写：这是 sigmoid + BCE 这一对的优点，不是 BCE 单独的优点",640,386,"r");},"<b>差别的来源只有一个：那个多出来的 p(1−p)。</b><br><b>p = 0.01 时，sigmoid 在这一点的斜率是 p(1−p) = 0.01 × 0.99 ≈ 0.0099</b>——<b>本身就极小</b>。<b>⇒ 半平方误差的梯度被它压掉了大约 100 倍。</b><br><b>⭐ 而 BCE 为什么干净？</b>因为<b>BCE 的 −log 求导给出 −1/p，和 sigmoid 的 p(1−p) 相乘时，分母的 p 正好把分子的 p 约掉</b>——<b>这正是 T1 里 δ = p − y 那个捷径的来源。</b><br><b>⚠⚠ 这里有一个限定条件必须跟着写，否则扩展题会丢分</b>：<b>讲义原话说，这个优势只针对这一对输出–损失的组合；BCE 并不能阻止深层网络中别处出现小梯度。</b><br><b>⇒ 所以正确的说法是「sigmoid + BCE 这一对配得好」，而不是「BCE 这个损失更好」。</b><b>⚠ 答题时点出 p(1−p) 在饱和区极小，是必须的得分点。</b>");
+  SUM(0,13,{h:"★★★ y=1、p=0.01：半平方 −0.009801 vs BCE −0.990000",k:"<b>半平方 ∂L/∂z = (p−y)p(1−p) = −0.009801</b>；<b>BCE ∂L/∂z = p − y = −0.990000</b>。<b>方向相同（都主张抬高 logit），幅度差 101 倍。</b>",m:"<b>祸根是多出来的 p(1−p)</b>：p = 0.01 时它只有 <b>0.0099</b>，<b>把梯度压掉约 100 倍</b>。",w:"⭐ <b>BCE 为什么干净</b>：<b>−log 求导给 −1/p，和 p(1−p) 相乘时 p 正好约掉</b>——这就是 T1 里 <b>δ = p − y</b> 的来源。",e:"⚠⚠ <b>限定条件必须跟着写</b>：这是 <b>sigmoid + BCE 这一对</b>的优点，<b>不是 BCE 单独的优点</b>；<b>BCE 阻止不了深层网络别处出现小梯度</b>。"});
+  QUIZ(0,13,{t:"y = 1、p = 0.01 时，半平方误差配 sigmoid 的 ∂L/∂z 为什么这么小？",o:["因为半平方误差的方向错了","因为 p = 0.01 本身就很小","因为多出来的因子 p(1−p) 在 p 接近 0 时极小（≈0.0099），把梯度压掉约 100 倍","因为学习率太小"],a:2,w:"⭐ <b>方向没错</b>——两者都是负的，都主张抬高 logit。⚠ 差的是<b>幅度</b>：<b>−0.009801 vs −0.990000，正好 101 倍</b>。<b>学习率与此无关。</b>"});
+});
+KP("14 · ⚠ 半平方不是 MSE；回归还要会比 MSE 和 MAE",function(){
+  S(0,function(){clearScene();setEq("$$\\ell=\\tfrac12 (y-p)^2 \\;\\Rightarrow\\; \\frac{\\partial \\ell}{\\partial p}=p-y \\qquad \\ell=(y-p)^2 \\;\\Rightarrow\\; \\frac{\\partial \\ell}{\\partial p}=2(p-y)$$","top");
+       setCap("⚠ 系数约定不说清，整道题的系数就错了");
+       boxNode(130,206,470,56,"半平方 ℓ = ½(y−p)²","b");
+       boxNode(130,270,470,56,"对 p 求导给 (p − y)　← 干净，所以课件用它","b");
+       boxNode(690,206,470,56,"普通平方误差 (y−p)²","r");
+       boxNode(690,270,470,56,"求导给 2(p − y)，N 个观测取平均还多一个 1/N","r");
+       note("⭐ 推导前先写一句「本题用半平方误差」，这一句本身就是得分点",640,350,"y");
+       note("⚠ 那个 ½ 存在的唯一理由就是：求导时把 2 约掉",640,386,"r");},"<b>⚠ 「半平方误差」和「MSE」不是一回事，讲义专门提醒过。</b><br><b>半平方误差 ℓ = ½(y−p)²</b>：<b>对 p 求导给 (p − y)</b>——<b>很干净，所以课件在推导时用它</b>。<br><b>普通平方误差 (y−p)²</b>：<b>求导给 2(p − y)</b>；<b>而 MSE 要在 N 个观测上取平均，还要再多一个 1/N</b>。<br><b>⭐ 那个 ½ 存在的唯一理由就是：求导时把 2 约掉。</b>它没有任何统计含义，<b>纯粹是为了式子好看</b>。<br><b>⚠ 所以推导之前先写一句「本题用的是半平方误差 ℓ = ½(y−p)²」</b>——<b>这一句本身就是得分点</b>，<b>否则阅卷无法判断你的系数是对是错</b>。<br><b>⇒ 看到答案里有个 2 又说不清为什么，和看到没有 2 又说不清为什么，都是同一类失分。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("回归部分：MSE 对大残差更敏感");
+       matrix({rows:4,cols:4,cw:270,ch:30,x:100,y:206,
+         cell:function(i,j){var t=[["","目标","预测","残差"],
+           ["观测 1","3","2","−1"],
+           ["观测 2","−1","1","2"],
+           ["★ 结果","MSE = (1+4)/2 = 2.5","MAE = (1+2)/2 = 1.5","MSE 更大"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 残差从 2 变成 4：平方的贡献 ×4（4→16），绝对值的贡献只 ×2（2→4）",640,350,"y");
+       note("⚠ MSE 的单位是目标单位的平方；MSE→条件均值，MAE→条件中位数",640,386,"r");},"<b>回归那一半要会算 MSE 和 MAE，并解释哪个对大残差更敏感。</b><br><b>讲义的算例</b>：<b>目标 [3, −1]，预测 [2, 1]，残差 [−1, 2]</b>。<br><b>MSE = (1 + 4)/2 = 2.5</b>；<b>MAE = (1 + 2)/2 = 1.5</b>。<br><b>⭐ 为什么 MSE 对大残差更敏感？</b>看一个具体的放大实验：<b>把残差从 2 变成 4</b>。<b>平方的贡献从 4 变成 16，涨了 4 倍</b>；<b>而绝对值的贡献从 2 变成 4，只涨了 2 倍</b>。<b>⇒ 残差翻倍，平方项的惩罚翻四倍。</b><br><b>⚠ 还有两条属性要会说</b>：<b>① MSE 的单位是目标单位的平方</b>——<b>如果目标是「元」，MSE 的单位就是「元²」，不能直接和目标比大小</b>。<b>② MSE 最优解对应条件均值，MAE 最优解对应条件中位数</b>。<b>⇒ 这也解释了为什么有离群点时 MAE 更稳：中位数不怕离群点，均值怕。</b>");
+  SUM(0,14,{h:"⚠ 半平方 ≠ MSE；MSE 对大残差更敏感",k:"<b>半平方 ½(y−p)² ⇒ 导数 (p−y)</b>（干净，课件推导用它）；<b>平方误差 (y−p)² ⇒ 导数 2(p−y)</b>，MSE 还多一个 1/N。<b>那个 ½ 的唯一理由就是把 2 约掉。</b>",m:"⭐ <b>推导前先写一句「本题用半平方误差」——这句本身是得分点</b>，否则阅卷判不了你的系数。",w:"<b>回归算例</b>：目标 [3,−1]、预测 [2,1]、残差 [−1,2] ⇒ <b>MSE = 2.5，MAE = 1.5</b>。",e:"⭐ <b>残差从 2 变 4</b>：<b>平方贡献 ×4（4→16），绝对值只 ×2（2→4）</b>。⚠ <b>MSE 单位是目标单位的平方</b>；<b>MSE→条件均值，MAE→条件中位数</b>（所以有离群点时 MAE 更稳）。"});
+  QUIZ(0,14,{t:"目标 [3, −1]、预测 [2, 1]，MSE 和 MAE 分别是多少？",o:["1.25 和 0.75","2.5 和 1.5","1.5 和 2.5","5 和 3"],a:1,w:"残差是 [−1, 2]。<b>MSE = (1+4)/2 = 2.5</b>，<b>MAE = (1+2)/2 = 1.5</b>。⚠ <b>5 和 3 是忘了除以 N</b>（那是总和不是均值）。"});
+});
+KP("15 · ★★★ 四种任务 ↔ 输出层 ↔ 损失",function(){
+  S(0,function(){clearScene();setEq(null);setCap("考纲逐条点名的配对表");
+       cite("The output range must agree with what the target represents.",150);
+       matrix({rows:5,cols:4,cw:280,ch:34,x:80,y:196,
+         cell:function(i,j){var t=[["任务","输出层","损失","要点"],
+           ["连续回归","线性","MSE 或 MAE","目标是无约束实数"],
+           ["二分类","一个 sigmoid","BCE","输出表示 P(y=1 | x)"],
+           ["互斥多类","softmax","多类交叉熵","概率和为 1"],
+           ["多标签","每标签一个 sigmoid","每标签各一次 BCE","和不必为 1"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===1&&i>0?"hl":"";}});
+       note("⭐ 判据就一句：输出的值域必须和目标代表的东西对得上",640,386,"y");},"<b>⭐⭐ 这张配对表是考纲逐条点名的内容，而且判据只有一句。</b><br><b>课件原话：输出的值域必须和目标代表的东西对得上。</b><br><b>连续回归</b>：目标是<b>无约束的实数</b> ⇒ <b>线性输出 + MSE 或 MAE</b>。<br><b>二分类</b>：目标是<b>一个概率</b> ⇒ <b>一个 sigmoid + BCE</b>，<b>输出表示 P(y=1 | x)</b>。<br><b>互斥多类</b>：需要<b>一组和为 1 的概率</b> ⇒ <b>softmax + 多类交叉熵</b>。<br><b>多标签</b>：<b>几个标签可能同时为真</b> ⇒ <b>每个标签一个 sigmoid，每个标签各做一次 BCE</b>，<b>和不必为 1</b>。<br><b>⚠ 多标签这里讲义还补了一句很容易误解的话</b>：<b>标签之间不必统计独立</b>——<b>用独立的 sigmoid 不等于假设标签独立</b>，<b>共享的隐藏特征仍然可能捕捉到标签之间的关系</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("四选一时问自己的三句话");
+       boxNode(90,206,1100,48,"① 目标是连续的吗？　是 ⇒ 线性输出 + MSE/MAE，到此为止","b");
+       boxNode(90,262,1100,48,"② 类别互斥吗？　互斥 ⇒ softmax + 交叉熵　｜　可共现 ⇒ 每标签一个 sigmoid + 各做 BCE","v");
+       boxNode(90,318,1100,48,"③ 标签怎么存的？　整数 ⇒ sparse categorical CE　｜　one-hot ⇒ categorical CE","g");
+       note("⭐ 三问答完，输出层和损失就定了 —— 这是扩展题的标准结构",640,386,"y");},"<b>做这类题有一个固定的三问流程，答完三句，输出层和损失就定了。</b><br><b>第一问：目标是连续的吗？</b><b>是的话 ⇒ 线性输出 + MSE/MAE，到此为止，不用往下问。</b><br><b>第二问：类别互斥吗？</b><b>互斥 ⇒ softmax + 交叉熵</b>；<b>可以共现 ⇒ 每个标签一个 sigmoid，每个标签各做一次 BCE</b>。<br><b>第三问：标签怎么存的？</b><b>整数 ⇒ sparse categorical CE</b>；<b>one-hot ⇒ categorical CE</b>。<br><b>⭐ 考纲页给的官方示例题正好走完这三问</b>：「<b>每张照片恰好属于六个类别中的一个，标签存成整数 0–5</b>」。<b>第一问：不连续。第二问：恰好属于一个 ⇒ 互斥 ⇒ softmax。第三问：整数 ⇒ sparse。</b><br><b>⇒ 答案是「六个 softmax 输出 + sparse categorical cross-entropy」。</b><br><b>⚠ 答扩展题时每一问都要写出来，不要只给结论。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 软件接口上的一个坑");
+    cite("Numerically stable losses often take raw logits and apply the activation inside.",150);
+    boxNode(130,206,1020,46,"很多框架的「稳定版」损失直接吃原始 logits，内部自己做 sigmoid / softmax","y");
+    boxNode(130,262,1020,46,"⇒ 如果你在输出层已经套了一次激活，再喂给它就套了两遍","r");
+    boxNode(130,318,1020,46,"⇒ 结果不报错，但概率被压扁，训练效果莫名其妙地差","r");
+    note("⭐ 记法：看损失函数名里有没有 from_logits / with_logits",640,386,"y");},"<b>这一条是落到代码里才会遇到的坑，但课件专门提了，值得知道。</b><br><b>很多框架提供「数值稳定版」的损失函数，它们直接接收原始的 logits，在内部自己做 sigmoid 或 softmax。</b><br><b>⚠ 问题就来了：如果你在输出层已经套了一次激活，再把结果喂给这种损失，激活就被套了两遍。</b><br><b>⇒ 程序不会报错</b>——<b>σ(σ(z)) 仍然是一个合法的数，仍然落在 (0,1)</b>。<b>但概率被压扁了，训练效果会莫名其妙地差。</b><br><b>⭐ 判断的办法很简单：看损失函数的名字里有没有 from_logits 或 with_logits。</b><b>有，就说明它自己会做激活，你的输出层应该给原始分数。</b><br><b>⚠ 为什么框架要这么设计？因为把 sigmoid 和 log 合起来算，可以避免 log(0) 这类数值问题</b>——<b>这正是「数值稳定」的含义。</b>");
+  SUM(0,15,{h:"★★★ 四种任务的输出层与损失",k:"<b>连续回归 → 线性 + MSE/MAE</b>；<b>二分类 → 一个 sigmoid + BCE</b>；<b>互斥多类 → softmax + 交叉熵</b>；<b>多标签 → 每标签一个 sigmoid + 各做一次 BCE</b>。",m:"⭐ <b>判据一句话</b>：<b>输出的值域必须和目标代表的东西对得上。</b>",w:"⭐ <b>三问流程</b>：<b>① 连续吗（是 ⇒ 线性，到此为止）② 互斥吗（互斥 ⇒ softmax；共现 ⇒ 多个 sigmoid）③ 标签怎么存（整数 ⇒ sparse CE；one-hot ⇒ categorical CE）</b>。",e:"⚠ <b>多标签用独立 sigmoid ≠ 假设标签独立</b>——<b>共享的隐藏特征仍可能捕捉标签间的关系</b>。⭐ 官方示例题答案：<b>六个 softmax 输出 + sparse categorical cross-entropy</b>。"});
+  QUIZ(0,15,{t:"每张照片恰好属于六个类别中的一个，标签存成整数 0–5。输出层与损失该选什么？",o:["一个线性输出 + MSE","六个 sigmoid 输出 + 六次 BCE","六个 softmax 输出 + categorical cross-entropy","六个 softmax 输出 + sparse categorical cross-entropy"],a:3,w:"<b>「恰好属于一个」= 互斥 ⇒ softmax</b>；<b>「存成整数」⇒ sparse 版</b>。⚠ <b>categorical CE 是给 one-hot 标签的</b>；<b>多个 sigmoid 是多标签用的</b>（和不必为 1）。"});
+});
+KP("16 · ⚠⚠ 讲稿点名要你解释的两件事",function(){
+  S(0,function(){clearScene();setEq(null);setCap("为什么 ReLU 保证不了二分类概率");
+       boxNode(130,206,470,56,"ReLU 的输出范围是 [0, ∞)","r");
+       boxNode(130,270,470,56,"没有上界 —— 可以是 3.7","r");
+       boxNode(690,206,470,56,"⇒ 3.7 既不是概率","g");
+       boxNode(690,270,470,56,"也不是类别 —— 它什么都不是","g");
+       note("⭐ 这不是「训练得慢」，是「算出来的数根本不是你以为的那个东西」",640,350,"y");
+       note("⚠ 对照取舍表第五条：Output mismatch —— 输出范围错了，预测没法解释",640,386,"r");},"<b>讲稿点名要你能解释两件事，第一件是：为什么 ReLU 保证不了一个二分类概率。</b><br><b>理由很直接：ReLU 的输出范围是 [0, ∞)，没有上界。</b><b>⇒ 它可能输出 3.7。</b><br><b>而 3.7 是什么？</b><b>它不是概率——概率不能超过 1</b>；<b>它也不是类别——类别只有 0 和 1 两个取值</b>。<b>⇒ 它什么都不是。</b><br><b>⭐ 这一点要和「训练效果差」严格区分开。</b><b>如果只是训练慢，多跑几轮也许能救；而这里的问题是：算出来的那个数根本没有可以解释的含义。</b><br><b>⚠ 这正好对应取舍表的第五条：Output mismatch —— 输出范围选错了，预测就没法解释。</b><br><b>⇒ 答题时要点出「无上界 ⇒ 不是概率」这条因果，光说「ReLU 不适合」不给分。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("为什么 softmax 会在可共现的标签之间制造竞争");
+       boxNode(170,206,980,48,"softmax 强制：所有类别的概率加起来必须等于 1","v");
+       boxNode(170,262,980,48,"⇒ 一个涨，另一个就必须跌 —— 这是结构上的，不是学出来的","r");
+       boxNode(170,318,980,48,"⚠ 可「猫」和「户外」本来可以同时为真","r");
+       note("⭐ 多标签要的是「每个标签各自判断」，所以用独立的 sigmoid，和不必为 1",640,386,"y");},"<b>第二件要解释的是：为什么 softmax 会在可以共现的标签之间强行制造竞争。</b><br><b>原因在 softmax 的定义里：它强制所有类别的概率加起来等于 1。</b><br><b>⇒ 于是一个标签的概率涨，另一个就必须跌。</b><b>⚠ 注意这是结构上的约束，不是模型从数据里学出来的</b>——<b>哪怕数据里「猫」和「户外」总是一起出现，softmax 也不允许两个都给 0.9。</b><br><b>而「猫」和「户外」本来完全可以同时为真。</b><b>⇒ 用 softmax 等于硬塞进去一个数据里并不存在的假设。</b><br><b>⭐ 多标签要的是「每个标签各自独立判断」</b>，所以<b>用一组独立的 sigmoid，每个给自己的概率，和不必为 1</b>。<br><b>⚠ 再强调一次那个容易误解的点：用独立的 sigmoid，不等于假设标签之间统计独立</b>——<b>它们共享同一批隐藏特征，关系仍然学得到</b>。");
+  SUM(0,16,{h:"⚠⚠ 两个必须会解释的「为什么」",k:"<b>① ReLU 保证不了二分类概率</b>：输出范围 <b>[0, ∞) 没有上界</b>，可能是 <b>3.7</b>——<b>既不是概率也不是类别</b>。",m:"⭐ 这是<b>「结果不可读」不是「训练慢」</b>，对应取舍表第五条 <b>Output mismatch</b>。⚠ 答题要点出<b>「无上界 ⇒ 不是概率」</b>这条因果。",w:"<b>② softmax 在可共现标签之间制造竞争</b>：<b>概率和强制为 1 ⇒ 一个涨另一个必跌</b>。⚠ <b>这是结构约束，不是学出来的</b>。",e:"<b>「猫」和「户外」本可同时为真</b> ⇒ 用 softmax 等于<b>硬塞进一个数据里不存在的假设</b>。⭐ 多标签用<b>独立 sigmoid，和不必为 1</b>（但<b>不等于假设标签统计独立</b>）。"});
+  QUIZ(0,16,{t:"为什么多标签任务不能用 softmax？",o:["softmax 强制概率和为 1，使本可同时为真的标签互相竞争","softmax 只能处理两个类别","softmax 计算太慢","softmax 的输出不是概率"],a:0,w:"⭐ <b>这是结构上的约束，不是学出来的</b>——哪怕数据里两个标签总是同时出现，softmax 也不许都给 0.9。⚠ <b>softmax 的输出确实是概率</b>；<b>它能处理任意多类。</b>"});
+});
+KP("17 · ★★★ 隐藏权重的梯度：四个因子",function(){
+  S(0,function(){clearScene();setEq("$$\\frac{\\partial L}{\\partial w_{ji}} \\;=\\; (p-y)\\;\\cdot\\; v_j \\;\\cdot\\; g'(z_j) \\;\\cdot\\; x_i$$","top");
+       setCap("⭐ 这一讲只看一页的话，看这一页");
+       matrix({rows:5,cols:3,cw:360,ch:34,x:110,y:196,
+         cell:function(i,j){var t=[["因子","是什么","在路径的哪一步"],
+           ["p − y","输出分数的敏感度","L ← p ← s"],
+           ["vⱼ","隐藏单元 j 通往输出的权重","s ← hⱼ"],
+           ["g′(zⱼ)","隐藏激活在该点的斜率","hⱼ ← zⱼ"],
+           ["xᵢ","这个权重对应的那个输入","zⱼ ← wⱼᵢ"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⚠ 路径：wⱼᵢ → zⱼ → hⱼ → s → p → L　四个因子就是四步链式法则",640,386,"r");},"<b>⭐⭐⭐ 如果这一讲只看一页，就看这一页：课件把隐藏权重的梯度压成了一行。</b><br><b>∂L/∂wⱼᵢ = (p − y) · vⱼ · g′(zⱼ) · xᵢ</b>。<br><b>这四个因子，正好对应路径上的四步</b>。<b>路径是：wⱼᵢ → zⱼ → hⱼ → s → p → L</b>，<b>反过来读就是四个因子的顺序</b>。<br><b>① (p − y)</b>：<b>输出分数的敏感度</b>——这是 sigmoid + BCE 化简的结果，就是 T1 里的 δ。<br><b>② vⱼ</b>：<b>这个隐藏单元通往输出的连接权重</b>。<br><b>③ g′(zⱼ)</b>：<b>隐藏激活在该点的斜率</b>，ReLU 时是 1 或 0。<br><b>④ xᵢ</b>：<b>这个权重对应的那个输入</b>。<br><b>⭐ 考场上按 ① → ② → ③ → ④ 逐步写，每一步说明乘的是哪个局部导数，结构分就拿到了。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 为什么上层的 vⱼ 会出现在下层的梯度里");
+       boxNode(130,206,470,56,"隐藏激活 hⱼ 对损失的影响","b");
+       boxNode(130,270,470,56,"必须穿过输出层才能到达 L","b");
+       boxNode(690,206,470,56,"★ 而 vⱼ 正是 s 对 hⱼ 的局部导数","g");
+       boxNode(690,270,470,56,"没有它，这条链就断了","g");
+       note("⭐ s = Σⱼ vⱼhⱼ + c ⇒ ∂s/∂hⱼ = vⱼ　—— 就是乘法节点那条规则",640,350,"y");
+       note("⚠ 更大的图里要把所有下游路径的贡献相加；本讲每个隐藏单元只有一条路",640,386,"r");},"<b>⚠ 有一个问题几乎每个人第一次看都会卡住：为什么算下层权重的梯度，式子里会出现上层的权重 vⱼ？</b><br><b>答案是：隐藏激活 hⱼ 对损失的影响，必须穿过输出层才能到达 L。</b><br><b>而输出分数是 s = Σⱼ vⱼhⱼ + c</b>，<b>所以 ∂s/∂hⱼ = vⱼ</b>——<b>这正是 T1 里「乘法节点的局部导数等于另一个因子」那条规则。</b><br><b>⇒ vⱼ 就是这条路径上「从 hⱼ 到 s」那一段的缩放。没有它，链就断了。</b><br><b>⭐ 换个角度理解会更直观：如果 vⱼ 很小，说明这个隐藏单元对最终输出几乎没有影响力</b>，<b>那它的输入权重怎么调，对损失也就没什么影响</b>——<b>梯度小是合理的</b>。<br><b>⚠ 最后一条限定：更大的图里要把所有下游路径的贡献相加。</b><b>本讲的两层网络每个隐藏单元只有一条通往输出的路，所以看不到求和；三层以上就会出现。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("把四个因子画到网络图上");
+    net2(600,268,["x₁ = 1","x₂ = 2","隐藏 1　z₁=1.1","隐藏 2　z₂=−0.1","输出　p=0.661503"]);
+    note("④ ×x₂ = 2",190,196,"y");
+    note("③ ×g′(z₁) = 1",430,196,"v");
+    note("② ×v₁ = 0.7",700,196,"g");
+    note("① (p−y) = −0.338497",960,196,"b");
+    note("⭐ 从右往左读：梯度是从损失那头一路乘回来的",640,364,"y");
+    note("⚠ 第二个隐藏单元 z₂ < 0 ⇒ 它那条路整条断掉，四因子一个都用不上",640,386,"r");},"<b>把四个因子直接标到网络图上，路径就看得见了。</b><br><b>注意标号是从右往左的</b>：<b>① (p − y) 在输出那头产生</b>，<b>② ×v₁ 走过输出层那一段</b>，<b>③ ×g′(z₁) 穿过隐藏单元的激活</b>，<b>④ ×x₂ 落到那个具体的权重上</b>。<br><b>⭐ 这个方向就是「反向传播」里「反向」两个字的意思：梯度是从损失那头一路乘回来的。</b><br><b>⚠ 而图上第二个隐藏单元是一个反例</b>：<b>z₂ = −0.1 &lt; 0，所以 g′(z₂) = 0</b>。<b>⇒ 它那条路在第 ③ 步就断了，后面的 ④ 根本轮不到。</b><br><b>⇒ 四个因子一个都用不上，它的输入权重梯度全是 0。</b><br><b>⭐ 顺带再看一次：它通往输出的那条线上，v₂ 的梯度也是 0——不过那是另一个原因（h₂ = 0），两个零不能混着说。</b>");
+  SUM(0,17,{h:"★★★ ∂L/∂wⱼᵢ = (p − y)·vⱼ·g′(zⱼ)·xᵢ",k:"<b>路径 wⱼᵢ → zⱼ → hⱼ → s → p → L</b>，<b>四个因子就是四步链式法则</b>：<b>(p−y) 输出敏感度 · vⱼ 通往输出的权重 · g′(zⱼ) 隐藏激活斜率 · xᵢ 对应的输入</b>。",m:"⭐ 考场上按 <b>① → ② → ③ → ④ 逐步写，每步说明乘的是哪个局部导数</b>，结构分就拿到了。",w:"⚠ <b>为什么上层的 vⱼ 出现在下层梯度里</b>：<b>hⱼ 对损失的影响必须穿过输出层</b>，而 <b>s = Σⱼ vⱼhⱼ + c ⇒ ∂s/∂hⱼ = vⱼ</b>。<b>没有它链就断了。</b>",e:"⭐ <b>直观理解</b>：vⱼ 很小 ⇒ 这个隐藏单元对输出几乎没影响力 ⇒ 它的输入权重怎么调都无所谓，<b>梯度小是合理的</b>。⚠ <b>更大的图要把所有下游路径相加</b>。"});
+  QUIZ(0,17,{t:"∂L/∂wⱼᵢ = (p−y)·vⱼ·g′(zⱼ)·xᵢ 里，vⱼ 这个因子是从哪来的？",o:["它是 s 对 hⱼ 的局部导数 —— 隐藏激活的影响必须穿过输出层","它是隐藏单元的偏置","它是学习率","它是输入 xⱼ 的另一种写法"],a:0,w:"<b>s = Σⱼ vⱼhⱼ + c ⇒ ∂s/∂hⱼ = vⱼ</b>，就是<b>乘法节点的局部导数等于另一个因子</b>。⚠ 答题时<b>必须说明这个数是输出权重</b>，只写数字会扣分。"});
+});
+KP("18 · ★★★ 四因子算例：逐步代数字",function(){
+  S(0,function(){clearScene();setEq(null);setCap("求 ∂L/∂w₁₂（输入 2 → 隐藏 1）");
+       boxNode(120,206,1040,46,"前向：z₁ = 1.1 ⇒ h₁ = 1.1；z₂ = −0.1 ⇒ h₂ = 0；s = 0.7(1.1) − 0.4(0) − 0.1 = 0.67","b");
+       boxNode(120,262,1040,46,"p = σ(0.67) = 0.661503　　L = −ln(0.661503) = 0.413241","y");
+       boxNode(120,318,1040,46,"① ∂L/∂s = p − y = 0.661503 − 1 = −0.338497","g");
+       note("⭐ 第①步就是 T1 的 δ —— sigmoid + BCE 的那个捷径，直接用",640,386,"y");},"<b>把四因子代进算例，一步一步走。先做前向。</b><br><b>隐藏单元 1</b>：<b>z₁ = 0.2×1 + 0.4×2 + 0.1 = 1.1</b>，正数，<b>ReLU 放过，h₁ = 1.1</b>。<br><b>隐藏单元 2</b>：<b>z₂ = −0.5×1 + 0.3×2 − 0.2 = −0.1</b>，负数，<b>h₂ = 0</b>。<br><b>输出分数</b>：<b>s = 0.7 × 1.1 − 0.4 × 0 − 0.1 = 0.77 − 0.1 = 0.67</b>。<b>⚠ 注意 h₂ = 0 让第二项直接消失，v₂ = −0.4 完全没起作用。</b><br><b>概率</b>：<b>p = σ(0.67) = 0.661503</b>；<b>损失 L = −ln(0.661503) = 0.413241</b>。<br><b>第 ① 步</b>：<b>∂L/∂s = p − y = 0.661503 − 1 = −0.338497</b>。<br><b>⭐ 这一步就是 T1 里的 δ，sigmoid 配 BCE 的那个捷径，直接用，不用重新推。</b>");
+  S(0,function(){clearScene();setEq("$$\\frac{\\partial L}{\\partial w_{12}} = (p-y)\\cdot v_1 \\cdot g'(z_1)\\cdot x_2 = -0.338497 \\times 0.7 \\times 1 \\times 2 = -0.473896$$","top");
+       setCap("②③④ 三步，每步乘一个因子");
+       boxNode(120,206,1040,44,"② × v₁ = 0.7　（输出权重：影响要穿过输出层）　⇒ −0.236948","g");
+       boxNode(120,258,1040,44,"③ × g′(z₁)　z₁ = 1.1 > 0，ReLU 导数 = 1　⇒ 不变，还是 −0.236948","g");
+       boxNode(120,310,1040,44,"④ × x₂ = 2　（这个权重对应的输入）　⇒ −0.473896","g");
+       note("⭐ 更新：w₁₂ ← 0.4 − 0.1 × (−0.473896) = 0.4 + 0.0473896 = 0.447390",640,386,"y");},"<b>接着往下乘，三步，每步乘一个因子。</b><br><b>第 ② 步：乘 v₁ = 0.7。</b><b>−0.338497 × 0.7 = −0.236948</b>。<b>⚠ 答题时必须说明这个 0.7 是输出权重——隐藏激活的影响要穿过输出层</b>，<b>只写数字不说来源会扣分</b>。<br><b>第 ③ 步：乘 g′(z₁)。</b><b>z₁ = 1.1 &gt; 0，ReLU 的导数是 1</b>，<b>所以这一步数值不变，还是 −0.236948</b>。<b>⭐ 但这一步仍然要写出来</b>——<b>写出来才说明你知道这里该乘激活的斜率，只是恰好是 1。</b><br><b>第 ④ 步：乘 x₂ = 2。</b><b>−0.236948 × 2 = −0.473896</b>。<br><b>⭐ 然后做一次更新</b>：<b>w₁₂ ← 0.4 − 0.1 × (−0.473896) = 0.4 + 0.0473896 = 0.447390</b>。<b>⚠ 梯度是负的，减去负数等于加上正数，所以这个权重变大了。</b>");
+  SUM(0,18,{h:"★★★ −0.338497 → ×0.7 → ×1 → ×2 = −0.473896",k:"<b>前向</b>：z₁=1.1 ⇒ h₁=1.1；z₂=−0.1 ⇒ h₂=0；<b>s = 0.7(1.1) − 0.4(0) − 0.1 = 0.67</b>；<b>p = 0.661503，L = 0.413241</b>。",m:"<b>① ∂L/∂s = p − y = −0.338497</b>（就是 T1 的 δ，直接用）<b>② ×v₁ = 0.7 ⇒ −0.236948 ③ ×g′(z₁) = 1 ⇒ 不变 ④ ×x₂ = 2 ⇒ −0.473896</b>。",w:"<b>更新</b>：<b>w₁₂ ← 0.4 − 0.1×(−0.473896) = 0.447390</b>。梯度是负的，<b>减去负数等于加上正数</b>。",e:"⚠ <b>两处最容易丢的分</b>：<b>① 第②步必须说明 0.7 是输出权重</b>（只写数字不说来源会扣分）<b>② 第③步即使导数是 1 也要写出来</b>——写出来才说明你知道这里该乘激活斜率。"});
+  QUIZ(0,18,{t:"算 ∂L/∂w₁₂ 时第 ③ 步乘的 g′(z₁) 等于多少？",o:["0.7，等于 v₁","1.1，等于 h₁","0，因为 ReLU 会压平","1，因为 z₁ = 1.1 > 0"],a:3,w:"<b>z₁ = 1.1 是正的，ReLU 在正半边导数恒为 1</b>。⚠ <b>导数是 1 不是 h₁ = 1.1</b>（那是激活值）；<b>0.7 是第②步的 v₁</b>；<b>0 是第二个隐藏单元的情形</b>。"});
+});
+KP("19 · ⚠⚠ 两条纪律：同一次前向，算完才更新",function(){
+  S(0,function(){clearScene();setEq(null);setCap("课件专门强调的两句");
+       cite("All factors use the same forward pass and original parameters.",150);
+       cite("Update only after gradients are ready.",192);
+       boxNode(130,234,470,56,"纪律一","r");
+       boxNode(130,298,470,56,"所有因子都用同一次前向、更新前的那组参数","r");
+       boxNode(690,234,470,56,"纪律二","r");
+       boxNode(690,298,470,56,"全部梯度算完之后，才统一更新","r");
+       note("⭐ 中途换用新值，算的就不是「这一点处」的梯度了",640,386,"y");},"<b>⚠⚠ 课件在隐藏梯度这一页专门强调了两条纪律，它们是最常见的隐性错误来源。</b><br><b>纪律一：所有因子都用同一次前向、同一组（更新前的）参数。</b><br><b>纪律二：全部梯度算完之后，才统一更新。</b><br><b>⭐ 为什么？因为梯度的定义就是「在当前这一点处的斜率」。</b><b>如果你算 w₁₂ 的梯度时用的是旧的 v₁，算完之后更新了 v₁，再拿新的 v₁ 去算 w₁₁ 的梯度</b>——<b>那这两个梯度就不是在同一个点上算的，合起来不构成一个有意义的下降方向。</b><br><b>⚠ 本例有一个非常具体的陷阱</b>：<b>v₁ 这一步会从 0.7 更新到 0.737235</b>。<b>⇒ 算隐藏层梯度时用的必须是原来的 0.7，不是更新后的 0.737235。</b><br><b>⭐ 这也是 Q3 第一块「Original state」要你明说的那句话：所有梯度都对应同一次原始前向。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("本例里这个陷阱长什么样");
+       matrix({rows:4,cols:3,cw:360,ch:30,x:110,y:206,
+         cell:function(i,j){var t=[["参数","更新前（算梯度用这个）","更新后"],
+           ["v₁","★ 0.7","0.737235"],
+           ["w₁₂","0.4","0.447390"],
+           ["c","−0.1","−0.066150"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1?"hl":"";}});
+       note("⚠ 用 0.737235 去算 ∂L/∂w₁₂ 会得到 −0.499　—— 数字看着像，但是错的",640,350,"r");
+       note("⭐ v₁ 的梯度 = (p−y)·h₁ = −0.338497 × 1.1 = −0.372347 ⇒ 0.7 + 0.0372347",640,386,"y");},"<b>把这个陷阱在本例里摆出来，就非常具体了。</b><br><b>v₁ 的梯度是 (p − y)·h₁ = −0.338497 × 1.1 = −0.372347</b>，<b>所以 v₁ ← 0.7 + 0.0372347 = 0.737235</b>。<br><b>⚠ 如果你先更新了 v₁，再拿 0.737235 去算 ∂L/∂w₁₂</b>，<b>得到的是 −0.338497 × 0.737235 × 1 × 2 ≈ −0.499</b>。<br><b>⭐ 这个数字看起来很像正确答案（−0.473896），差别不大，所以特别容易蒙混过关</b>——<b>但它是错的，而且阅卷能看出来。</b><br><b>⇒ 正确做法：先把所有梯度都算出来（用同一组原参数），然后一次性更新。</b><br><b>⚠ 顺带注意 c 也更新了：c ← −0.1 − 0.1 × (−0.338497) = −0.066150</b>。<b>偏置的梯度就是 (p − y) 本身，因为它相当于乘了一个恒为 1 的输入。</b>");
+  SUM(0,19,{h:"⚠⚠ 同一次前向、同一组原参数；算完才更新",k:"课件两句：<b>All factors use the same forward pass and original parameters.</b>／<b>Update only after gradients are ready.</b>",m:"⭐ <b>理由</b>：梯度的定义是「<b>在当前这一点处的斜率</b>」。<b>中途换新值，几个梯度就不在同一个点上算，合起来不构成有意义的下降方向。</b>",w:"⚠ <b>本例的具体陷阱</b>：<b>v₁ 会从 0.7 更新到 0.737235</b>（梯度 = (p−y)·h₁ = −0.338497×1.1 = −0.372347）。<b>算隐藏梯度必须用原来的 0.7。</b>",e:"⭐ 用 0.737235 会算出 <b>≈ −0.499</b>，<b>和正确的 −0.473896 很接近，特别容易蒙混</b>——但它是错的。⚠ 这就是 Q3 第一块 <b>Original state</b> 要你明说的那句。"});
+  QUIZ(0,19,{t:"算 ∂L/∂w₁₂ 时，v₁ 应该用哪个值？",o:["更新后的 0.737235","取决于学习率","更新前的 0.7","两者的平均"],a:2,w:"课件：<b>All factors use the same forward pass and original parameters.</b>⚠ 用 0.737235 会得到 ≈ <b>−0.499</b>，<b>和正确答案 −0.473896 很接近，所以特别容易蒙混过关</b>。"});
+});
+KP("20 · ⚠⚠ 两处零梯度，成因完全不同",function(){
+  S(0,function(){clearScene();setEq(null);setCap("Q3 最容易漏的得分点");
+       cite("Q3 asks for two distinct zero-gradient explanations.",150);
+       boxNode(130,206,470,56,"零梯度 ①：隐藏 2 的输入权重","r");
+       boxNode(130,270,470,56,"z₂ = −0.1 < 0 ⇒ g′(z₂) = 0 ⇒ 整条路径被截断","r");
+       boxNode(690,206,470,56,"零梯度 ②：隐藏 2 的输出权重 v₂","y");
+       boxNode(690,270,470,56,"∂L/∂v₂ = (p−y)·h₂ = (p−y)×0 = 0","y");
+       note("⭐ 一个来自「导数为零」，一个来自「激活值为零」—— 必须分开写",640,350,"y");
+       note("⚠ 写成同一个理由说两遍，只能拿一半的分",640,386,"r");},"<b>⚠⚠ 讲稿明确要求 Q3 给出「两个不同的零梯度解释」，而这是最容易漏的得分点。</b><br><b>零梯度 ①：隐藏单元 2 的输入权重（w₂₁ 和 w₂₂）梯度为 0。</b><b>原因是 z₂ = −0.1 &lt; 0，ReLU 的局部导数 g′(z₂) = 0</b>，<b>这个因子一乘进去，整条路径就被截断了</b>。<br><b>零梯度 ②：隐藏单元 2 的输出权重 v₂ 梯度也为 0。</b><b>原因是 ∂L/∂v₂ = (p − y)·h₂，而 h₂ = 0</b>，<b>所以整个乘积是 0</b>。<br><b>⭐⭐ 关键在这里：这两个零的成因完全不同。</b><b>第一个来自「导数为零」（g′ = 0）</b>；<b>第二个来自「激活值为零」（h = 0）</b>。<br><b>⚠ 如果你写成「因为 ReLU 不激活所以都是 0」，那是同一个理由说了两遍，只能拿一半的分。</b><br><b>⇒ 答题时要分别点出 g′(z₂) = 0 和 h₂ = 0 这两个不同的来源。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("这一步里到底哪些参数一动不动");
+       matrix({rows:5,cols:3,cw:360,ch:34,x:110,y:196,
+         cell:function(i,j){var t=[["参数","这一步的梯度","变了吗"],
+           ["w₁₁, w₁₂, b₁（隐藏1）","非零","★ 变了"],
+           ["w₂₁, w₂₂, b₂（隐藏2）","0　因为 g′(z₂) = 0","✗ 一动不动"],
+           ["v₁","(p−y)·h₁ = −0.372347","★ 变了"],
+           ["v₂","0　因为 h₂ = 0","✗ 一动不动"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2||i===4?"hl":"";}});
+       note("⭐ 输出偏置 c 也变了：梯度就是 (p−y) = −0.338497 ⇒ c ← −0.066150",640,386,"y");},"<b>把这一步里所有参数过一遍，谁动谁不动就清清楚楚。</b><br><b>隐藏单元 1 的三个参数（w₁₁、w₁₂、b₁）：梯度非零，都变了。</b>因为 <b>z₁ = 1.1 &gt; 0，g′(z₁) = 1，路径是通的</b>。<br><b>隐藏单元 2 的三个参数（w₂₁、w₂₂、b₂）：梯度全是 0，一动不动。</b>因为 <b>g′(z₂) = 0</b>。<br><b>输出权重 v₁：梯度是 (p−y)·h₁ = −0.372347，变了。</b><br><b>输出权重 v₂：梯度是 0，一动不动。</b>因为 <b>h₂ = 0</b>。<br><b>⭐ 输出偏置 c 也变了</b>：<b>它的梯度就是 (p − y) = −0.338497</b>，<b>所以 c ← −0.1 + 0.0338497 = −0.066150</b>。<br><b>⚠ 注意一个很值得体会的后果：隐藏单元 2 这一轮完全没有参与学习</b>——<b>它既不接收梯度，也不向外传递梯度，等于整轮被跳过了。</b>");
+  SUM(0,20,{h:"⚠⚠ 两个零梯度：一个因 g′=0，一个因 h=0",k:"<b>① 隐藏 2 的输入权重梯度 = 0</b>：<b>z₂ = −0.1 < 0 ⇒ g′(z₂) = 0 ⇒ 整条路径被截断</b>。",m:"<b>② 隐藏 2 的输出权重 v₂ 梯度 = 0</b>：<b>∂L/∂v₂ = (p−y)·h₂ = (p−y)×0 = 0</b>。",w:"⭐⭐ <b>两个零的成因完全不同</b>：<b>一个来自「导数为零」，一个来自「激活值为零」</b>。⚠ <b>写成同一个理由说两遍只能拿一半的分。</b>",e:"<b>这一步动了的</b>：w₁₁、w₁₂、b₁、v₁（梯度 −0.372347）、c（梯度 −0.338497 ⇒ −0.066150）。<b>一动不动的</b>：w₂₁、w₂₂、b₂、v₂。⚠ <b>隐藏单元 2 整轮被跳过。</b>"});
+  QUIZ(0,20,{t:"隐藏单元 2 的输出权重 v₂ 这一步梯度为 0，直接原因是什么？",o:["因为 v₂ 是负数","因为 ∂L/∂v₂ = (p−y)·h₂ 而 h₂ = 0","因为 g′(z₂) = 0","因为学习率太小"],a:1,w:"⭐⭐ <b>两个零梯度成因不同</b>：<b>输入权重</b>为 0 是因为 <b>g′(z₂) = 0</b>；<b>输出权重 v₂</b> 为 0 是因为 <b>h₂ = 0</b>。⚠ 混用这两个理由是 Q3 最常见的失分。"});
+});
+KP("21 · ★★ 更新之后：重跑一次完整前向",function(){
+  S(0,function(){clearScene();setEq(null);setCap("第五步 Check：拿新参数从头算一遍");
+       matrix({rows:5,cols:3,cw:360,ch:34,x:110,y:196,
+         cell:function(i,j){var t=[["量","更新前","更新后"],
+           ["z₁","1.100000","1.242169"],
+           ["输出分数 s","0.670000","0.849619"],
+           ["概率 p","0.661503","0.700487　↑"],
+           ["损失 L","0.413241","0.355979　↓"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i>=3?"hl":"";}});
+       note("⚠ z₂ 还是 −0.1，h₂ 还是 0 —— 隐藏 2 的参数没动，所以它完全没变",640,386,"r");},"<b>更新完要重跑一次完整的前向，这是扩展题的标准收尾。</b><br><b>新的 z₁</b>：<b>用新的 w₁ = [0.223695, 0.447390]、b₁ = 0.123695</b>，<b>算得 z₁ = 1.242169</b>。<br><b>新的输出分数</b>：<b>s = 0.737235 × 1.242169 − 0.4 × 0 − 0.066150 = 0.849619</b>。<br><b>新的概率</b>：<b>p = σ(0.849619) = 0.700487</b>，<b>比原来的 0.661503 更接近 y = 1</b>。<br><b>新的损失</b>：<b>L = 0.355979</b>，<b>比原来的 0.413241 小</b>。<br><b>⚠ 特别注意 z₂ 还是 −0.1，h₂ 还是 0。</b>因为<b>隐藏单元 2 的参数这一轮完全没动</b>，<b>而输入也没变，所以它算出来还是同一个数</b>。<br><b>⭐ 收尾一定要加一句：这只证明在这一个样本上有改进，不是泛化的证据。</b><b>这句话是明确的得分点。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("扩展题的标准五步结构");
+       boxNode(130,206,1020,44,"① 写出路径：wⱼᵢ → zⱼ → hⱼ → s → p → L，并声明用同一次原始前向","b");
+       boxNode(130,258,1020,44,"② 四个因子逐个代数字，每一步说明乘的是哪个局部导数","g");
+       boxNode(130,310,1020,44,"③ 指出哪些参数这一步完全不动，并给出两个不同的理由","y");
+       note("④ 更新后重跑完整前向给出新的 p　⑤ 加一句「这只是单样本的改进，不是泛化的证据」",640,386,"r");},"<b>把 Q3 这类扩展题的标准结构固定下来，照着写就不会漏。</b><br><b>① 写出路径</b>：<b>wⱼᵢ → zⱼ → hⱼ → s → p → L</b>，<b>并明说所有梯度都用同一次原始前向、同一组原参数</b>。<br><b>② 四个因子逐个代数字</b>，<b>每一步说明乘的是哪个局部导数</b>——<b>尤其是 v₁ = 0.7 要说明它是输出权重</b>。<br><b>③ 指出哪些参数这一步完全不动</b>，<b>并给出两个不同的理由（g′ = 0 和 h = 0）</b>。<br><b>④ 更新后重跑完整前向，给出新的 p。</b><br><b>⑤ 加一句「这只证明在这一个样本上有改进，不是泛化的证据」。</b><br><b>⭐ 这五步里，第 ③ 步和第 ⑤ 步是最容易整段漏掉的</b>，<b>而它们恰恰是区分「会算」和「理解了」的地方</b>。");
+  SUM(0,21,{h:"★★ 更新后 p 从 0.661503 升到 0.700487",k:"<b>新 z₁ = 1.242169</b>（用新的 w₁、b₁）；<b>新 s = 0.849619</b>（用新的 v₁ = 0.737235、c = −0.066150）；<b>新 p = 0.700487</b>；<b>新 L = 0.355979</b>。",m:"⚠ <b>z₂ 还是 −0.1、h₂ 还是 0</b>——隐藏单元 2 的参数这一轮没动，输入也没变，<b>所以它算出来完全一样</b>。",w:"⭐ <b>扩展题标准五步</b>：<b>① 写路径 + 声明用同一次原始前向 ② 四因子逐个代数字并说明来源 ③ 指出哪些参数不动、给两个不同理由 ④ 重跑前向给新 p ⑤ 加一句单样本限定</b>。",e:"⭐ <b>第③步和第⑤步最容易整段漏掉</b>，而它们恰恰<b>区分「会算」和「理解了」</b>。"});
+  QUIZ(0,21,{t:"这一步更新之后重跑前向，z₂ 会变吗？",o:["会变成 0.1","会变成 0，因为 ReLU 把它压平了","不会变，还是 −0.1 —— 隐藏 2 的参数梯度全为 0，一个都没动","会变大，因为所有参数都更新了"],a:2,w:"<b>隐藏单元 2 的 w₂₁、w₂₂、b₂ 梯度全是 0</b>（g′(z₂) = 0），<b>参数没动，输入也没变 ⇒ z₂ 算出来完全一样</b>。⚠ <b>ReLU 压平的是 h₂，不是 z₂。</b>"});
+});
+KP("22 · ★★ batch 与 epoch：计数题是送分的",function(){
+  S(0,function(){clearScene();setEq("$$\\text{一个 epoch 的更新次数} \\;=\\; \\frac{\\text{训练样本数}}{\\text{批大小}}$$","top");
+       setCap("两个不同的单位，别混用");
+       cite("A batch supplies one update; an epoch describes one pass through the training set.",206);
+       boxNode(130,246,470,52,"batch（批）","b");
+       boxNode(130,310,470,52,"算一次更新所用的那组观测","b");
+       boxNode(690,246,470,52,"epoch（轮）","v");
+       boxNode(690,310,470,52,"把训练集完整过一遍","v");
+       note("⭐ 100 个样本、批大小 20 ⇒ 1 个 epoch = 5 次更新，3 个 epoch = 15 次",640,386,"y");},"<b>batch 和 epoch 是两个不同的单位，课件把定义写得很干净。</b><br><b>batch 是「算一次更新所用的那组观测」</b>；<b>epoch 是「把训练集完整过一遍」</b>。<br><b>⇒ 换算关系：一个 epoch 的更新次数 = 训练样本数 ÷ 批大小。</b><br><b>标准算例</b>：<b>100 个样本、批大小 20 ⇒ 一个 epoch 包含 5 次更新</b>；<b>3 个 epoch 就是 15 次</b>。<br><b>⚠ 讲稿把前提条件也说全了</b>：<b>假设没有丢弃或重复的观测</b>。<b>⇒ 如果样本数除不尽批大小，答题时要说明最后一个批次怎么处理</b>（通常是留一个更小的批，或者丢掉）。<br><b>⭐ 另一个极端是全批量（full-batch）：批大小等于整个训练集，那么每个 epoch 只更新 1 次。</b><br><b>⚠ 这类计数题几乎必出，而且是送分的——别算错，也别忘了做。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("四步循环：两个关键词");
+       boxNode(60,206,270,52,"① Forward","b");
+       boxNode(350,206,270,52,"② Backward","v");
+       boxNode(640,206,270,52,"③ Update","g");
+       boxNode(930,206,290,52,"④ Repeat","y");
+       boxNode(60,268,270,52,"算出这一批的预测","b");
+       boxNode(350,268,270,52,"★ fresh gradients","v");
+       boxNode(640,268,270,52,"照着梯度改参数","g");
+       boxNode(930,268,290,52,"★ recompute all values","y");
+       note("⭐ 第②步「新鲜的梯度」：从这一次前向算，不能复用上一批的",640,350,"y");
+       note("⚠ 平均只做一次：梯度数组 = (P − Y)/N —— 别在每一层再除一遍",640,386,"r");},"<b>训练循环有四步，其中两个词是课件特意标出来的。</b><br><b>① Forward</b>：算出这一批的预测。<b>② Backward</b>：<b>从这一次前向算出新鲜的梯度（fresh gradients）</b>。<b>③ Update</b>：照着梯度改参数。<b>④ Repeat</b>：<b>换下一批，把所有值重算一遍（recompute all values）</b>。<br><b>⭐ 这两个词都在强调同一件事：不要复用旧的东西。</b><b>⚠ 复用上一批的激活或梯度，算出来的就不是当前这一点处的下降方向。</b><br><b>⚠ 还有一个很常见的实现错误，讲稿用了 exactly once 来强调</b>：<b>求平均损失时，把各个样本的梯度之和除以批大小 N，正好除一次。</b><br><b>⇒ 写成数组就是 梯度 = (P − Y)/N</b>。<b>⚠ 别在每一层再除一遍——那样每多一层就多除一次 N，梯度会小得离谱。</b>");
+  SUM(0,22,{h:"★★ batch 供一次更新，epoch 是过一遍训练集",k:"<b>一个 epoch 的更新次数 = 样本数 ÷ 批大小</b>。<b>100 个样本、批 20 ⇒ 1 epoch = 5 次，3 epoch = 15 次</b>。<b>全批量 ⇒ 每 epoch 只更新 1 次。</b>",m:"⚠ 讲稿的前提：<b>假设没有丢弃或重复的观测</b>。<b>除不尽时要说明最后一个批次怎么处理。</b>",w:"<b>四步循环</b>：<b>① Forward ② Backward（fresh gradients，从这一次前向算）③ Update ④ Repeat（recompute all values）</b>。⚠ <b>复用旧激活或旧梯度，算的就不是当前点的下降方向。</b>",e:"⚠ 讲稿用 <b>exactly once</b> 强调：<b>求平均时把梯度之和除以 N，正好除一次</b>（数组形式 <b>(P − Y)/N</b>）。<b>别在每一层再除一遍。</b>"});
+  QUIZ(0,22,{t:"800 个训练样本、批大小 32，跑 4 个 epoch，一共更新多少次？",o:["25","100","4","128"],a:1,w:"<b>800 ÷ 32 = 25 次/epoch</b>，<b>× 4 = 100 次</b>。⚠ <b>25 是只算了一个 epoch</b>；<b>4 是把 epoch 当成了更新次数</b>。⭐ 前提是<b>不丢弃也不重复样本</b>。"});
+});
+KP("23 · ⚠⚠ 平均损失在降，不等于每个样本都变好",function(){
+  S(0,function(){clearScene();setEq(null);setCap("讲稿最该带走的一句");
+       cite("Decreasing the mean does not mean every example improves.",150);
+       boxNode(130,206,470,56,"样本 A 对某参数的梯度","b");
+       boxNode(130,270,470,56,"−0.2　（它希望这个参数变大）","b");
+       boxNode(690,206,470,56,"样本 B 对同一个参数","r");
+       boxNode(690,270,470,56,"+0.6　（它希望这个参数变小）","r");
+       note("⭐ 平均 = (−0.2 + 0.6)/2 = +0.2 ⇒ 梯度下降会把这个参数减小",640,350,"y");
+       note("⚠ 对样本 A 来说，这个方向是反的 —— 它这一步会变差",640,386,"r");},"<b>⚠⚠ 这是这一节最该带走的一句话，而且讲义给了一个很具体的数值例子。</b><br><b>讲稿原话：单个样本可能偏好不同的参数改动；平均值下降不代表每个样本都改善。</b><br><b>看这个例子</b>：<b>两个样本对同一个参数的梯度分别是 −0.2 和 +0.6</b>。<br><b>样本 A 的梯度是负的，意思是「把这个参数调大会降低我的损失」</b>；<b>样本 B 的梯度是正的，意思正相反</b>。<br><b>⭐ 平均下来是 (−0.2 + 0.6)/2 = +0.2，是正的</b>，<b>所以梯度下降会把这个参数减小</b>——<b>这对样本 B 有利</b>。<br><b>⚠ 但对样本 A 来说，这个方向是反的，它这一步反而会变差。</b><br><b>⇒ 批量训练优化的是「平均」，个体可以被牺牲。这不是算法出错，是目标函数本来就是这么定义的。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("讲义那个 100 次更新的极端例子");
+       boxNode(130,206,1020,46,"连续 100 次更新后：平均 BCE 从 0.580352 降到 0.369420","g");
+       boxNode(130,262,1020,46,"⚠ 可有一个正例的概率只从 0.4750 爬到 0.4859","r");
+       boxNode(130,318,1020,46,"⇒ 始终在 0.5 阈值以下，100 次更新之后仍然一直判错","r");
+       note("⭐ 原因：它的两个隐藏 ReLU 从一开始就是零 —— 梯度根本传不到它身上",640,386,"y");},"<b>讲义还给了一个极端版本，它把这条道理推到了尽头。</b><br><b>连续做 100 次更新之后</b>：<b>平均 BCE 从 0.580352 降到 0.369420</b>——<b>从总体看，训练很成功</b>。<br><b>⚠ 但其中有一个正例，它的概率只从 0.4750 爬到 0.4859</b>。<b>⇒ 始终在 0.5 这条阈值以下，100 次更新之后仍然一直被判错。</b><br><b>⭐ 原因讲义也说了：这个样本的两个隐藏 ReLU 从一开始就是零。</b><b>⇒ 梯度根本传不到它身上</b>——<b>前面讲的「两处零梯度」在这里变成了一个持续 100 轮的问题。</b><br><b>⚠ 这个例子把三件事串起来了</b>：<b>死亡 ReLU（梯度被截断）、平均与个体的分歧（总体在降）、以及阈值判别（0.4859 和 0.5 的差距）</b>。<br><b>⭐ 而它也正是通往 T3 的桥：光看平均损失不够，必须看每一类的表现——这就是混淆矩阵存在的理由。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("这条和 T3 的接口");
+    boxNode(130,206,470,56,"T2 看到的现象","b");
+    boxNode(130,270,470,56,"平均损失在降，可有样本一直判错","b");
+    boxNode(690,206,470,56,"★ T3 给的工具","g");
+    boxNode(690,270,470,56,"混淆矩阵、每一类的表现、ROC","g");
+    note("⭐ 一个只看平均的指标，看不见「哪一类一直错」",640,350,"y");
+    note("⚠ 而这正是 T1 那句「准确率分不出 0.75 和 0.90」的同一类问题",640,386,"r");},"<b>这一条值得单独拎出来，因为它是 T2 通往 T3 的那座桥。</b><br><b>T2 看到的现象是</b>：<b>平均损失一路在降，可是有的样本从头到尾都被判错。</b><br><b>⇒ 问题在于「平均」这个动作本身把信息抹掉了</b>——<b>一个只看平均的指标，看不见「哪一类一直错」。</b><br><b>⭐ 而 T3 给的正是这件事的工具</b>：<b>混淆矩阵把预测按真实类别拆开看</b>、<b>每一类各自的精确率和召回率</b>、<b>以及 ROC 曲线</b>。<br><b>⚠ 再往回看，这和 T1 里那句「准确率分不出 p = 0.75 和 p = 0.90」其实是同一类问题</b>：<b>都是一个汇总指标丢掉了内部的差异</b>。<br><b>⇒ 三个 Topic 在这一点上是连着的：T1 说汇总指标会丢信息，T2 给出一个活生生的例子，T3 提供替代的工具。</b>");
+  SUM(0,23,{h:"⚠⚠ 平均在降 ≠ 每个样本都改善",k:"讲稿：<b>单个样本可能偏好不同的参数改动；平均值下降不代表每个样本都改善。</b>",m:"<b>数值例子</b>：两个样本对同一参数的梯度 <b>−0.2 和 +0.6</b>，<b>平均 +0.2 ⇒ 梯度下降把参数减小</b>——<b>对第一个样本方向是反的</b>。",w:"<b>极端版本</b>：100 次更新后<b>平均 BCE 从 0.580352 降到 0.369420</b>，<b>但有一个正例的概率只从 0.4750 爬到 0.4859</b>，<b>始终在 0.5 以下，一直判错</b>。",e:"⭐ <b>原因</b>：它的<b>两个隐藏 ReLU 从一开始就是零</b>，梯度传不到。⇒ 这串起了<b>死亡 ReLU、平均与个体的分歧、阈值判别</b>三件事，也是通往 <b>T3 混淆矩阵</b>的桥。"});
+  QUIZ(0,23,{t:"训练中平均损失持续下降，下面哪句是对的？",o:["不一定：个别样本的梯度方向可能和平均相反，它反而会变差","说明在测试集上也一定更好","说明模型已经收敛","说明每个训练样本的预测都在改善"],a:0,w:"⭐ 讲义例子：梯度 <b>−0.2 和 +0.6，平均 +0.2</b>，对第一个样本方向是反的。⚠ 更极端的：<b>100 次更新后仍有正例一直判错</b>（它的隐藏 ReLU 一直是零）。"});
+});
+KP("24 · ★★★ 形状与转置：代码里的 W 是手推的转置",function(){
+  S(0,function(){clearScene();setEq("$$Z = X W + b \\quad\\Rightarrow\\quad (N,d)\\times(d,h) + (h,) \\;=\\; (N,h)$$","top");
+       setCap("代码把观测存成行，手推把输入写成列");
+       cite("The storage convention changes; the underlying computation stays the same.",206);
+       boxNode(130,246,470,52,"代码（行 = 观测）","b");
+       boxNode(130,310,470,52,"X (N,d)　W (d,h)　b (h,)","b");
+       boxNode(690,246,470,52,"手推（列 = 输入）","v");
+       boxNode(690,310,470,52,"W 的形状是 (h,d) —— 代码那个 W 的转置","v");
+       note("⭐ 转置只是行列互换，网络本身一点没变",640,386,"y");},"<b>公式和代码之间差一个转置，而原因只有一个。</b><br><b>手推的时候，我们把一个输入写成列向量</b>；<b>代码里，每个观测存成一行</b>。<b>⇒ 两种存法，于是权重矩阵就差了一个转置。</b><br><b>代码的形状</b>：<b>X 是 (N, d)、W 是 (d, h)、b 是 (h,)</b>，<b>于是 Z = X @ W + b 的形状是 (N, h)</b>。<br><b>手推的形状</b>：<b>W 是 (h, d)</b>，<b>正好是代码那个 W 的转置</b>。<br><b>⭐ 课件原话说得很到位：存储约定变了，底层的计算没变。</b><b>⇒ 转置只是行列互换，网络本身一点没变。</b><br><b>⚠ 还有一个细节：b 的形状是 (h,)，加到 (N, h) 上时靠的是广播</b>——<b>NumPy 自动把同一个偏置向量复制到每一行</b>。<b>这正对应「每个观测都加同一个偏置」。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 一个会掩盖问题的巧合");
+       boxNode(130,206,1020,46,"讲义例子里 W₁ 恰好是方阵（2×2）⇒ 转置不改变形状，但确实挪动了元素","y");
+       boxNode(130,262,1020,46,"⇒ 形状检查通不过的问题被藏住了","r");
+       boxNode(130,318,1020,46,"换成「3 个隐藏单元、2 个输入」就立刻暴露：手推 3×2，代码 2×3","g");
+       note("⭐ 形状题常考：N 个观测、2 个特征、3 个隐藏单元 ⇒ H 是 (N,3)、P 是 (N,1)、Y 是 (N,1)",640,386,"y");},"<b>⚠ 讲义特意指出了一个会掩盖问题的巧合，值得知道。</b><br><b>它的例子里 W₁ 恰好是一个 2×2 的方阵</b>。<b>⇒ 转置之后形状不变（还是 2×2），但元素确实被挪动了位置。</b><br><b>⚠ 麻烦就在这里：形状检查通不过的问题被藏住了。</b><b>你写错了转置，程序照样跑，只是算出来的数不对。</b><br><b>⭐ 换成「3 个隐藏单元、2 个输入特征」，问题立刻暴露</b>：<b>手推的 W 是 3×2，代码的 W 是 2×3</b>——<b>形状不同，一错就报错</b>。<br><b>⇒ 所以自己验算时，尽量别用方阵做例子。</b><br><b>⭐ 形状题是常考的送分题</b>：<b>N 个观测、2 个特征、3 个隐藏单元 ⇒ H 的形状是 (N, 3)、P 是 (N, 1)、Y 是 (N, 1)</b>。<b>⚠ 注意 N 永远在第一维，它是「有多少个观测」，和网络结构无关。</b>");
+  SUM(0,24,{h:"★★★ X (N,d) · W (d,h) · b (h,) ⇒ Z (N,h)",k:"<b>手推把输入写成列，代码把观测存成行</b> ⇒ <b>代码里的 W 是手推版本的转置</b>。课件：<b>存储约定变了，底层计算没变。</b>",m:"<b>b 的形状是 (h,)，靠广播加到 (N,h) 上</b>——NumPy 自动复制到每一行，对应「每个观测加同一个偏置」。",w:"⚠ <b>一个掩盖问题的巧合</b>：讲义例子的 W₁ 恰好是 <b>2×2 方阵</b>，<b>转置不改形状但挪动了元素</b>，<b>形状检查抓不到</b>。换成 <b>3 隐藏 × 2 输入</b>（手推 3×2、代码 2×3）就立刻暴露。",e:"⭐ <b>形状题是送分题</b>：N 个观测、2 个特征、3 个隐藏单元 ⇒ <b>H 是 (N,3)、P 是 (N,1)、Y 是 (N,1)</b>。<b>N 永远在第一维</b>，和网络结构无关。"});
+  QUIZ(0,24,{t:"N 个观测、2 个输入特征、3 个隐藏单元，隐藏层输出 H 的形状是什么？",o:["(3, N)","(2, 3)","(N, 2)","(N, 3)"],a:3,w:"<b>代码里行 = 观测</b>，所以 <b>N 永远在第一维</b>：<b>X (N,2) @ W (2,3) = (N,3)</b>。⚠ <b>(2,3) 是权重矩阵的形状，不是输出</b>。"});
+});
+KP("25 · ★★★ 自动微分：三个角色，和它不做的事",function(){
+  S(0,function(){clearScene();setEq(null);setCap("考纲明确点名：它做什么、不做什么");
+       boxNode(60,206,370,52,"① 记录","b");
+       boxNode(60,268,370,52,"GradientTape 记录涉及变量的前向运算","b");
+       boxNode(455,206,370,52,"② 求导","v");
+       boxNode(455,268,370,52,"tape.gradient 按链式法则返回梯度","v");
+       boxNode(850,206,370,52,"③ 更新","g");
+       boxNode(850,268,370,52,"★ 优化器才真正改参数","g");
+       note("⭐ 第②步不更新任何参数 —— 这正是 T1 那句「算斜率什么都不会动」",640,350,"y");
+       note("⚠ 「自动微分更新了权重」是经典错项",640,386,"r");},"<b>⭐⭐ 自动微分「做什么、不做什么」是考纲明确点名的，而三个角色必须分清。</b><br><b>① 记录</b>：<b>GradientTape 记录涉及 tf.Variable 的前向运算</b>——<b>它在前向的时候就把计算图记下来了</b>。<br><b>② 求导</b>：<b>tape.gradient 按链式法则返回梯度</b>。<b>⚠ 注意它只返回梯度，不更新任何参数。</b><br><b>③ 更新</b>：<b>优化器（assign_sub 或 optimiser.step）才真正改参数。</b><br><b>⭐ 第 ② 步和第 ③ 步的分工，正是 T1 里那句「反向传播算斜率，梯度下降迈步子；光算斜率什么都不会动」。</b><b>⇒ 自动微分只是把「算斜率」这件事自动化了，它没有改变分工。</b><br><b>⚠ 「自动微分更新了权重」是经典错项，一定要分清。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 它不做的三件事，也要会说");
+       boxNode(130,206,1020,46,"✗ 它不替你选一个有用的目标（损失配错了它照样求导）","r");
+       boxNode(130,262,1020,46,"✗ 它不修复数据泄漏（泄漏的数据它照样算得飞快）","r");
+       boxNode(130,318,1020,46,"✗ 它不保证学习率是好的（步长是优化器的事）","r");
+       note("⚠ PyTorch 专有的一条：loss.backward 是累加的 —— 只用当前批次要先 zero_grad",640,386,"r");},"<b>考纲要求连「它不做什么」也要会说，这是标准答法的后半段。</b><br><b>✗ 它不替你选一个有用的目标。</b><b>损失函数配错了（比如二分类配了 MSE），自动微分照样求导，一声不吭。</b><br><b>✗ 它不修复数据泄漏。</b><b>泄漏的数据它照样算得飞快，而且训练指标会很好看</b>——<b>这正是它危险的地方。</b><br><b>✗ 它不保证学习率是好的。</b><b>步长是优化器的事，自动微分只负责方向。</b><br><b>⇒ 一句话概括：它追踪一次前向计算里的各个运算并应用链式法则求导数，仅此而已。</b><br><b>⚠ 最后一条是 PyTorch 专有的，讲稿专门点了</b>：<b>loss.backward 是累加的</b>。<b>⇒ 如果你只想用当前批次的梯度，必须先清零（zero_grad）</b>，<b>而且优化器要单独调用</b>。<b>忘了清零，梯度就是好几个批次叠加的结果。</b>");
+  SUM(0,25,{h:"★★★ autodiff：记录 / 求导 / 更新是三件事",k:"<b>① 记录</b>：GradientTape 记录涉及变量的前向运算。<b>② 求导</b>：tape.gradient 按链式法则返回梯度，<b>不更新任何参数</b>。<b>③ 更新</b>：<b>优化器才真正改参数</b>。",m:"⭐ ②③ 的分工正是 T1 那句 <b>「反向传播算斜率，梯度下降迈步子」</b>。⚠ <b>「自动微分更新了权重」是经典错项。</b>",w:"<b>它不做的三件事</b>：<b>✗ 不替你选有用的目标</b>（损失配错照样求导）<b>✗ 不修复数据泄漏</b>（指标还很好看）<b>✗ 不保证学习率合适</b>。",e:"⚠ <b>PyTorch 专有</b>：<b>loss.backward 是累加的</b>——只用当前批次要先 <b>zero_grad</b>，<b>而且优化器要单独调用</b>。"});
+  QUIZ(0,25,{t:"关于自动微分，下面哪句是对的？",o:["它能自动选出合适的损失函数","它记录前向运算、求梯度并自动更新参数","它能检测并修复数据泄漏","它记录前向运算、按链式法则求梯度，但参数更新是优化器做的"],a:3,w:"⭐ <b>三个角色要分清：记录 / 求导 / 更新</b>，<b>更新是优化器的事</b>。⚠ 考纲要求连「不做什么」也会说：<b>不选目标、不修泄漏、不保证学习率</b>。"});
+});
+KP("完 · 这一讲要带走的六件事",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("M3 T2 · 完","训练神经网络",
+      "激活 → 损失 → 隐藏梯度 → 批量 → 实现");},
+    "收一下，六段路线图就是答题提纲。<br><b>① 激活</b>：<b>每个激活有两个身份——前向的值 g(z) 和反向的斜率 g′(z)，两件事互不相干</b>。⭐ 讲义说得很狠：<b>大的输出不代表大的梯度</b>。三个数值必须会默写：<b>σ(2)=0.881 导数 0.105</b>、<b>tanh(2)=0.964 导数 0.0707</b>、<b>ReLU(2)=2 导数 1</b>。⚠⚠ 本课约定 <b>ReLU′(0)=0、LeakyReLU′(0)=α</b>。<br><b>② 塌缩</b>：<b>W₂(W₁x+b₁)+b₂ 仍是一个仿射映射</b>，带数字就是 <b>3(2x+1)+4 = 6x+7</b>。<b>光加深度，不会多出一条弯的边界。</b><br><b>③ 损失</b>：<b>要同时匹配目标的类型和输出的含义</b>。⭐⭐ 最该记的是那组对比——<b>y=1、p=0.01 时，半平方误差的 ∂L/∂z = (p−y)p(1−p) = −0.009801，而 BCE 的 = p−y = −0.990000，正好差 101 倍</b>。<b>原因是 sigmoid 在 p=0.01 处的斜率 p(1−p) 本身就极小，而 BCE 的 −log 恰好把它约掉了。</b>⚠ 这是 <b>sigmoid + BCE 这一对</b>的优点，不是 BCE 单独的优点。<br><b>④ 隐藏梯度</b>：⭐⭐⭐ <b>∂L/∂wⱼᵢ = (p − y)·vⱼ·g′(zⱼ)·xᵢ</b>，四个因子对应路径上的四步。本例 <b>−0.338497 → ×0.7 → ×1 → ×2 = −0.473896</b>，<b>w₁₂ 从 0.4 变成 0.447390</b>，更新后 <b>p 从 0.661503 升到 0.700487</b>。⚠⚠ 两条纪律：<b>所有因子用同一次前向、同一组更新前的参数</b>；<b>全部梯度算完才更新</b>。⚠ <b>z₂ = −0.1 < 0，所以第二个隐藏单元两处全零</b>——它的输入权重梯度是 0，它的输出权重梯度 (p−y)·h₂ = (p−y)·0 也是 0。<br><b>⑤ 批量</b>：<b>batch 供一次更新，epoch 是把训练集过一遍</b>。<b>100 个样本、批大小 20 ⇒ 一个 epoch 5 次更新，3 个 epoch 15 次</b>。⚠⚠ <b>平均损失在降，不代表每个样本都变好</b>——两个样本的梯度 −0.2 和 +0.6，平均 +0.2，对第一个样本方向是反的。<br><b>⑥ 实现</b>：<b>代码把观测存成行（X 是 (N,d)、W 是 (d,h)），手推把输入写成列，所以代码里的 W 是手推版本的转置</b>——<b>转置只是行列互换，网络没变</b>。⭐⭐ <b>自动微分三个角色要分清：记录前向、按链式法则求导、而更新参数是优化器干的</b>。⚠ 它<b>不替你选目标、不修数据泄漏、也不保证学习率合适</b>。");
+});
+window.__startProjector(CFG);
+})();
+</script>

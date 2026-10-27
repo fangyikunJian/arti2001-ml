@@ -1,0 +1,960 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M3 T3 · 模型评估（精读动画版）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"M3 T3 · 模型评估（精读动画版）",
+  subtitle:"训练证据 · 停止 · 泛化 · 混淆矩阵 · ROC/AUC · 空格推进 · N 讲解",
+  video:""};
+
+/* ── 引课件/讲稿原话（课程片没有讲课视频，所以不是 says）── */
+function cite(en,y){ note("📄 课件原话  «"+en+"»",640,y||150,"g"); }
+
+/* ── 2×2 混淆矩阵：cells 按 [左上,右上,左下,右下] 给 ── */
+function cmat(x,y,cw,ch,rowlab,collab,cells,hl){
+  var i;
+  note(collab[0],x+cw*0.5,y-14,"d"); note(collab[1],x+cw*1.5,y-14,"d");
+  note(rowlab[0],x-78,y+ch*0.5+5,"d"); note(rowlab[1],x-78,y+ch*1.5+5,"d");
+  for(i=0;i<4;i++){
+    var r=Math.floor(i/2), c=i%2;
+    boxNode(x+c*cw, y+r*ch, cw-8, ch-8, cells[i], (hl&&hl.indexOf(i)>=0)?"g":"b");
+  }
+}
+
+/* ── ROC 画布：把 (FPR,TPR) 映到画布坐标 ── */
+function rocxy(f,t,x0,x1,yb,yt){ return [x0+(x1-x0)*f, yb-(yb-yt)*t]; }
+function rocpath(pts,x0,x1,yb,yt){
+  var out=[],i; for(i=0;i<pts.length;i++) out.push(rocxy(pts[i][0],pts[i][1],x0,x1,yb,yt));
+  return out;
+}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("M3 T3 · 模型评估","训练证据 · 停止 · 泛化",
+      "降下去了，凭什么相信它在新数据上也行");},
+    "前两讲都在问同一类问题：<b>怎么把参数调好</b>。<b>T3 问的是另一个问题：调好之后，凭什么相信它在新数据上也行。</b><br><b>⭐ 讲稿把分工说得很干净</b>：<b>Topic 2 explained how to calculate and implement updates. Topic 3 now interprets the resulting training evidence.</b>——<b>T1、T2 讲的是优化，T3 讲的是评估</b>。<br><b>副标题三个词就是三块</b>：<b>training evidence</b>（训练过程留下的证据怎么读）、<b>stopping</b>（什么时候停）、<b>generalisation</b>（在没见过的数据上的表现）。<br><b>⭐ 而讲稿第一页就把这一讲的全部依赖列全了，这句值得抄下来</b>：<b>可靠的结论依赖四件事——受保护的数据划分、正确构造的指标、合适的阈值，以及对泄漏 / 不平衡 / 抽样 / 漂移的警觉。</b><br><b>⚠ 这一讲有一个和别处不同的气质：它满篇都是限定词。</b><b>can、but also、does not by itself、not proof</b>——<b>这些词不是客套，它们就是考点</b>。<b>把限定词写进答案，才是满分结构。</b><br><b>⚠ 考试：110 分钟、100 分、开卷；20 道选择每题 3 分，4 道扩展题每题 10 分。T3 在考纲里占六条。</b>");
+});
+KP("1 · ★ T3 和前两讲的分工：优化 vs 评估",function(){
+  S(0,function(){clearScene();setEq(null);setCap("调好参数，和相信它管用，是两件事");
+       cite("Optimisation fits parameters; evaluation estimates future behaviour.",150);
+       boxNode(130,206,470,56,"T1 · T2：优化","b");
+       boxNode(130,270,470,56,"怎么把损失降下去","b");
+       boxNode(690,206,470,56,"★ T3：评估","g");
+       boxNode(690,270,470,56,"降下去之后，这说明了什么","g");
+       note("⭐ 讲稿：Topic 3 now interprets the resulting training evidence",640,350,"y");
+       note("⚠ 这一讲满篇都是限定词 —— can / but also / not proof —— 它们就是考点",640,386,"r");},"<b>先把 T3 摆在前两讲旁边。课件原话一句话就划清了：优化拟合参数，评估估计未来行为。</b><br><b>T1 和 T2 讲的是优化</b>——<b>怎么把损失降下去</b>。<b>T3 讲的是评估</b>——<b>降下去之后，这件事说明了什么</b>。<br><b>⭐ 讲稿的说法是：Topic 2 解释了怎么计算和实现更新；Topic 3 现在来解读由此产生的训练证据。</b><br><b>⚠⚠ 这一讲有一个和前两讲完全不同的气质，必须提前说清楚：它满篇都是限定词。</b><br><b>can（可能）、but also check（但还要查）、does not by itself prove（本身不证明）、not proof of（不是……的证明）</b>——<b>这些词在 T1、T2 里是点缀，在 T3 里是主干。</b><br><b>⇒ 因为评估的本质就是「这个证据能支持什么结论、不能支持什么结论」。</b><b>⭐ 所以答题时把限定词写进去，才是满分结构；只写一个干脆的判断，最多拿一半分。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("六段路线图，也是扩展题的分类框架");
+       matrix({rows:7,cols:2,cw:460,ch:26,x:180,y:150,
+         cell:function(i,j){var t=[["段","这一段的一句话"],
+           ["1 Training evidence","学习率与重复更新留下的证据"],
+           ["2 Splits and stopping","★ 受保护的测试集"],
+           ["3 Confusion Matrix","数四种结果"],
+           ["4 Precision and Recall","★ 对误差的不同视角"],
+           ["5 ROC and AUC","★ 跨阈值的排序"],
+           ["6 Tutorial & Revision","算指标，备 Week 13 的测验"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2||i===4||i===5?"hl":"";}});
+       note("⭐ 高亮那三句是三块最该记的定性结论",640,386,"y");},"<b>六段路线图，每一段的副标题都点出了那一段的「一句话」。</b><br><b>① Training evidence</b>：学习率与重复更新留下的证据。<b>② Splits and stopping</b>：<b>受保护的测试集</b>。<b>③ Confusion Matrix</b>：数四种结果。<b>④ Precision and Recall</b>：<b>对误差的不同视角</b>。<b>⑤ ROC and AUC</b>：<b>跨阈值的排序</b>。<b>⑥ Tutorial &amp; Revision</b>。<br><b>⭐ 高亮的那三句值得单独记，它们是三块各自最该带走的定性结论</b>：<b>测试集是「受保护的」</b>、<b>precision 和 recall 是「对误差的不同视角」而不是谁更好</b>、<b>AUC 说的是「跨阈值的排序」而不是某一个工作点</b>。<br><b>⚠ 还有一条安排上的事实值得知道</b>：<b>T3 没有排定的 practical</b>，<b>只有两个选做、不计分的 notebook</b>（T1 notebook 的 Q3 做学习率实验，以及 T3 的评估 notebook）。<b>而 Tutorial 的题目没有改动，三道题。</b>");
+  SUM(0,1,{h:"★ T1/T2 是优化，T3 是评估",k:"课件：<b>Optimisation fits parameters; evaluation estimates future behaviour.</b>讲稿：<b>Topic 3 now interprets the resulting training evidence.</b>",m:"⚠⚠ <b>这一讲满篇都是限定词</b>：<b>can、but also check、does not by itself prove、not proof of</b>——<b>它们不是客套，就是考点</b>。",w:"⭐ 因为<b>评估的本质就是「这个证据能支持什么结论、不能支持什么」</b>。<b>把限定词写进答案才是满分结构</b>，只写干脆的判断最多一半分。",e:"<b>六段路线图的三句关键定性结论</b>：<b>受保护的测试集</b>、<b>precision/recall 是对误差的不同视角</b>、<b>AUC 是跨阈值的排序</b>。⚠ <b>T3 没有排定的 practical</b>，只有选做 notebook。"});
+  QUIZ(0,1,{t:"T3 和 T1/T2 的分工是什么？",o:["T1/T2 讲二分类，T3 讲多分类","T1/T2 讲优化（怎么把损失降下去），T3 讲评估（降下去说明了什么）","T1/T2 讲前向，T3 讲反向","T1/T2 讲理论，T3 讲代码实现"],a:1,w:"课件原话：<b>Optimisation fits parameters; evaluation estimates future behaviour.</b>⚠ 代码实现是 <b>T2 的第 5 段</b>；<b>多分类在 T2 的损失配对里</b>。"});
+});
+KP("2 · ★ 考试的硬信息，和这一讲的练习安排",function(){
+  S(0,function(){clearScene();setEq(null);setCap("⚠ T3 和 T1 / T2 不一样：没有排定的 practical");
+       boxNode(130,206,470,56,"Tutorial","g");
+       boxNode(130,270,470,56,"三题，课上做 ⇒ 修订后要交 ⇒ ★ 计分","g");
+       boxNode(690,206,470,56,"Practical","r");
+       boxNode(690,270,470,56,"★ 没有排定的 —— 只有两个选做 notebook","r");
+       note("⭐ 两个 notebook 都是不计分的自学材料，但都带参考答案",640,350,"y");
+       note("⚠ T1 notebook 的 Q3 练学习率实验；T3 notebook 练泄漏、指标、阈值代价",640,386,"r");},"<b>先把这一讲的练习安排说清楚，因为它和前两讲不一样。</b><br><b>Tutorial 照常在课上进行，三道题。</b><b>⚠⚠ 但讲稿特意交代了做法和评分：先自己独立做，tutor 讲完之后修订你的答案，然后交 Q1–Q3——最终的 worksheet 是计分的。</b><br><b>⇒ 这和 T2 不同，别当成随便做做的练习。</b><br><b>⚠ 而 Practical：T3 没有排定的编程 practical。</b><b>只有两个选做的 notebook，都是不计分的自学材料，但都带参考答案。</b><br><b>⭐ 两个 notebook 各练什么，讲稿写明了</b>：<b>M3 T1 notebook 的 Q3 练学习率实验</b>（正好对应那张学习率表）；<b>M3 T3 notebook 练泄漏防范、指标、验证选择与阈值代价</b>。<br><b>⇒ 时间紧的话，T3 那个 notebook 的性价比更高，因为它正好覆盖本讲三个考点最密的地方。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("M3 测验的硬信息 —— 现在就确认，别到考前才查");
+       matrix({rows:6,cols:2,cw:460,ch:28,x:180,y:150,
+         cell:function(i,j){var t=[["项","内容"],
+           ["时间","Week 13，2026 年 11 月 9–15 日"],
+           ["时长与分值","110 分钟 · 100 分"],
+           ["题型","Q1–Q20 单选每题 3 分；Q21–Q24 扩展题每题 10 分"],
+           ["资料","开卷：任意印刷或手写笔记；考试期间不得互相传阅"],
+           ["计算器","普通非编程、非图形科学计算器"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⚠ Canvas 的 due-date 字段是空的，不代表考试没排 —— 自己去确认场次和允许的材料",640,386,"r");},"<b>把考试的硬信息摆在这里，因为课件最后一页专门有一条行动项。</b><br><b>时间：Week 13，2026 年 11 月 9–15 日，在排定的 assessment / practical 课时。</b><b>时长 110 分钟、满分 100 分。</b><br><b>题型：Q1–Q20 单选，每题 3 分；Q21–Q24 扩展题，每题 10 分。</b><b>⇒ 选择题占 60 分，扩展题占 40 分。</b><br><b>资料：开卷，任意印刷或手写笔记，但考试期间不得互相传阅。</b><b>计算器：普通的非编程、非图形科学计算器。</b><b>⚠ 注意 tanh 要用 hyperbolic 键，确认你的计算器有。</b><br><b>⚠⚠ 课件最后那句是行动项，别忽略：到 Canvas 上确认你自己那一场的时间，以及允许带什么材料。</b><br><b>⚠ 还有一个坑：Canvas 的 due-date 字段是空的，这不代表考试没排。</b><b>⇒ 自己去确认场次，别等它提醒你。</b>");
+  SUM(0,2,{h:"★ T3 没有 practical；Tutorial 要交且计分",k:"<b>Tutorial 三题</b>：<b>先自己做 → tutor 讲完后修订 → 交 Q1–Q3，最终 worksheet 计分</b>（和 T2 不同）。<b>Practical：T3 没有排定的</b>。",m:"<b>两个选做 notebook</b>（不计分但带参考答案）：<b>M3 T1 notebook 的 Q3 练学习率实验</b>；<b>M3 T3 notebook 练泄漏、指标、验证选择与阈值代价</b>。",w:"<b>M3 测验</b>：<b>Week 13（2026-11-09 至 11-15）· 110 分钟 · 100 分 · 20 选择（每题 3 分）+ 4 扩展题（每题 10 分）· 开卷</b>。",e:"⚠ <b>计算器要能按 hyperbolic 键</b>（算 tanh）。⚠⚠ <b>Canvas 的 due-date 字段是空的不代表没排</b>——<b>自己去确认场次和允许的材料</b>。"});
+  QUIZ(0,2,{t:"关于 M3 Topic 3 的练习安排，下面哪句是对的？",o:["没有排定的 practical；Tutorial 三题要交且计分，两个 notebook 选做不计分","只有 notebook 计分","有一个计分的编程 practical","Tutorial 和 notebook 都不计分"],a:0,w:"⚠ 讲稿：<b>先独立做，tutor 讲完后修订，然后交 Q1–Q3；最终 worksheet 是计分的</b>。⭐ 两个 notebook 是 <b>ungraded self-study，但带参考答案</b>。"});
+});
+KP("3 · ★★★ 三种「训练–验证」模式：判定 + 机制 + 限定 + 下一步",function(){
+  S(0,function(){clearScene();setEq(null);setCap("扩展题最爱考的一页 —— 照这个措辞写");
+       matrix({rows:4,cols:3,cw:360,ch:34,x:110,y:196,
+         cell:function(i,j){var t=[["看到什么","可以说","⚠ 必须补的限定"],
+           ["训练差、验证也差","可能欠拟合或优化困难","可能是容量/优化/预处理/数据；本身不证明欠拟合"],
+           ["训练强、验证明显更差","可能过拟合","归因于方差前先查分布差异、验证集过小、泄漏"],
+           ["两边都强且接近","学到的模式迁移到了未见样本","⚠ 接近也可能两边都差；要和基线比"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return j===2?"hl":"";}});
+       note("⭐ 满分结构 = 判定 + 机制 + 限定 + 下一步（下一步都在验证集上做）",640,350,"y");
+       note("⚠ 只写「这是过拟合」最多一半分",640,386,"r");},"<b>⭐⭐ 这一页是 T3 扩展题最爱考的，而它的价值全在第三列那些限定里。</b><br><b>训练差、验证也差</b>：可以说<b>可能欠拟合或优化困难</b>。<b>⚠ 但必须补上：也可能是容量不足、优化不够、预处理差或数据问题——训练表现差本身不证明欠拟合。</b><br><b>训练强、验证明显更差</b>：可以说<b>可能过拟合</b>。<b>⚠ 但在把差距归因于方差之前，要先查分布差异、验证集过小、以及泄漏。</b><br><b>两边都强且接近</b>：可以说<b>学到的模式迁移到了未见样本</b>。<b>⚠⚠ 但这一条最容易被忽略：接近也可能是「两边都很差」。</b><br><b>⇒ 很多人看到训练和验证接近就下「泛化良好」的结论，其实要先看这个数值本身够不够好——和一个合适的基线比。</b><br><b>⭐ 满分结构是四段：判定 + 机制 + 限定 + 下一步。</b><b>而「下一步」永远是在验证集上做的，不能去碰测试集。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("一句万能的收尾");
+       boxNode(130,216,1020,54,"「这些是诊断模式，不是证明。」","y");
+       boxNode(130,286,1020,54,"「要把差距归因于方差之前，还需要排除分布差异、验证样本过小和数据泄漏。」","g");
+       note("⭐ 任何诊断题的最后都可以加这两句 —— 它们正好对应课件的限定词",640,350,"y");
+       note("⚠ 怎么才算「好」：在可比的人群上比同一个指标，并且要看一个合适的基线",640,386,"r");},"<b>给一个万能的收尾，任何诊断题都能用。</b><br><b>第一句：「这些是诊断模式，不是证明。」</b><b>第二句：「要把差距归因于方差之前，还需要排除分布差异、验证样本过小和数据泄漏。」</b><br><b>⭐ 为什么这两句这么好用？因为它们正好把课件的限定词系统地复述了一遍</b>——<b>阅卷要找的就是「你知道这些证据的边界」。</b><br><b>⚠ 还有一条要会答：怎么才算「好」？</b><b>课件的说法是：在可比的人群上比同一个指标，并且检查一个合适的基线。</b><br><b>基线是什么？</b><b>对不平衡的二分类，最常用的基线就是「全判多数类」的准确率。</b><br><b>⇒ 比如正例只占 2%，那么「全判负」的准确率就有 98%</b>。<b>你的模型要是只做到 95%，那它比什么都不做还差</b>——<b>没有基线，这个结论根本看不出来。</b>");
+  SUM(0,3,{h:"★★★ 诊断三模式，每一条都带限定",k:"<b>训练差、验证也差</b> ⇒ 可能欠拟合或优化困难。⚠ <b>也可能是容量/优化/预处理/数据问题；本身不证明欠拟合</b>。",m:"<b>训练强、验证明显更差</b> ⇒ 可能过拟合。⚠ <b>归因于方差之前要先查分布差异、验证集过小、泄漏</b>。",w:"⚠⚠ <b>两边接近也可能是「两边都差」</b>——<b>要先看数值本身够不够好，和基线比</b>（不平衡二分类的常用基线是「全判多数类」）。",e:"⭐ <b>满分结构 = 判定 + 机制 + 限定 + 下一步</b>（下一步都在验证集上做）。<b>万能收尾</b>：「这些是诊断模式，不是证明；归因于方差前还需排除分布差异、验证样本过小和数据泄漏。」"});
+  QUIZ(0,3,{t:"训练分数和验证分数很接近，下面哪句最准确？",o:["说明验证集太小","说明模型泛化良好","说明模型过拟合了","不一定：接近也可能是两边都很差，要先和一个合适的基线比"],a:3,w:"⭐ 课件原话：<b>Similar scores can both be poor.</b>⚠ 这是最容易被忽略的一条——<b>很多人看到接近就下「泛化良好」的结论</b>。"});
+});
+KP("4 · ★★★ 三个划分，每个只有一个角色",function(){
+  S(0,function(){clearScene();setEq(null);setCap("拿测试做决定，它就变成验证了");
+       cite("Reusing test data for decisions turns it into validation data.",150);
+       boxNode(60,206,290,52,"训练 train","b");
+       boxNode(60,268,290,52,"fit —— 拟合参数","b");
+       boxNode(375,206,290,52,"验证 validation","v");
+       boxNode(375,268,290,52,"choose —— 做选择","v");
+       boxNode(690,206,290,52,"测试 test","g");
+       boxNode(690,268,290,52,"estimate —— 估计","g");
+       boxNode(1005,206,215,52,"future data","r");
+       boxNode(1005,268,215,52,"可能和三者都不一样","r");
+       note("⭐ 不是「不太好」，是性质变了 —— 这句是整讲最该背的",640,350,"y");
+       note("⚠ 阈值和停止点是「决定」，不是参数，所以归验证管",640,386,"r");},"<b>⭐⭐ 这一页的副标题是整讲最该背的一句：拿测试数据做决定，它就变成了验证数据。</b><br><b>注意措辞：不是「这样做不太好」，是「它的性质变了」。</b><b>一旦你根据测试结果做过任何选择，它就不再是一个独立的估计了。</b><br><b>三个角色</b>：<b>训练 fit（拟合参数）、验证 choose（做选择）、测试 estimate（估计）</b>。<br><b>⚠ 验证管哪些决定？课件列了四样：结构、学习率、判定阈值、停止的检查点。</b><b>⇒ 注意阈值和停止点是「决定」，不是参数，所以归验证管，不能拿测试集去挑。</b><br><b>⭐ 而课件还加了第四列：future data（未来的数据）</b>，<b>它可能和三个划分全都不一样</b>——<b>这就是后面要讲的 shift（分布漂移）</b>。<br><b>⇒ 所以即使你把三个划分都做对了，仍然挡不住部署后分布变化。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 测试集也不是真相");
+       boxNode(130,206,1020,48,"留出估计仍然带着抽样不确定性","r");
+       boxNode(130,262,1020,48,"而且取决于它的样本能不能代表目标人群","r");
+       boxNode(130,318,1020,48,"⇒ 所以报告时要给三样：指标、不确定性、局限","g");
+       note("⭐ 只报一个数字是不完整的答案 —— 这是明确的扣分点",640,386,"y");},"<b>⚠ 有一个常见的误解要纠正：测试集不是真相，它只是一个估计。</b><br><b>课件原话：留出估计仍然带有抽样不确定性，而且取决于它的样本能不能代表目标人群。</b><br><b>⇒ 两层意思</b>：<b>第一，样本有限，换一批测试数据数字会变</b>；<b>第二，就算样本很多，如果它和你真正要部署的人群不一样，这个数字也不说明问题</b>。<br><b>⭐ 所以课件在「评估四步」里明确要求：报告时要给三样——指标、不确定性、局限。</b><br><b>⚠ 只报一个数字是不完整的答案，这是明确的扣分点。</b><br><b>⇒ 答扩展题时，哪怕只加一句「该估计基于 N 个测试样本，仍有抽样不确定性，且假设测试样本能代表部署人群」，也比只甩一个准确率强得多。</b>");
+  SUM(0,4,{h:"★★★ train 拟合 / validation 选择 / test 估计",k:"⭐⭐ 最该背的一句：<b>Reusing test data for decisions turns it into validation data.</b>——<b>不是「不太好」，是性质变了</b>。",m:"<b>验证管四样决定</b>：<b>结构、学习率、判定阈值、停止的检查点</b>。⚠ <b>阈值和停止点是「决定」不是参数</b>，所以归验证管。",w:"⚠ <b>测试集也不是真相</b>：<b>留出估计仍带抽样不确定性，且取决于样本能否代表目标人群</b>。",e:"⭐ <b>报告要给三样：指标、不确定性、局限</b>——<b>只报一个数字是明确的扣分点</b>。⚠ 课件还加了第四列 <b>future data</b>：<b>可能和三个划分全都不一样</b>（就是 shift）。"});
+  QUIZ(0,4,{t:"判定阈值应该用哪个划分来选？",o:["训练集，因为它样本最多","三个划分合起来选","验证集，因为阈值是一个「决定」而不是参数","测试集，因为它最接近真实部署"],a:2,w:"⭐ <b>阈值和停止点都是「决定」，归验证管</b>。⚠ 用测试集选阈值 ⇒ <b>它就变成验证数据了</b>，最终估计不再独立——这正是考纲官方示例题的答案。"});
+});
+KP("5 · ⚠⚠ 测试集也不是真相，而 future data 谁都挡不住",function(){
+  S(0,function(){clearScene();setEq(null);setCap("留出估计仍然是一个估计");
+       cite("A held-out estimate still has sampling uncertainty.",150);
+       boxNode(130,206,470,56,"第一层不确定","r");
+       boxNode(130,270,470,56,"样本有限 —— 换一批测试数据，数字就会变","r");
+       boxNode(690,206,470,56,"第二层不确定","r");
+       boxNode(690,270,470,56,"它的样本能不能代表你要部署的那个人群","r");
+       note("⭐ 所以报告要给三样：指标、不确定性、局限",640,350,"y");
+       note("⚠ 只甩一个准确率是不完整的答案 —— 这是明确的扣分点",640,386,"r");},"<b>⚠ 有一个常见的误解要纠正：测试集不是真相，它只是一个估计，而且有两层不确定。</b><br><b>第一层：抽样不确定性。</b><b>样本是有限的——换一批测试数据，数字就会变。</b><b>⇒ 测试准确率 0.91 和 0.89 之间的差别，可能完全来自抽样。</b><br><b>第二层：代表性。</b><b>课件说得很明确：它取决于这些案例能不能代表你想要的那个人群。</b><b>⇒ 就算样本很多，如果它和你真正要部署的场景不一样，这个数字也不说明问题。</b><br><b>⭐ 所以课件在「评估四步」的最后一步要求报告三样：指标、不确定性、局限。</b><br><b>⚠ 只甩一个准确率是不完整的答案，这是明确的扣分点。</b><br><b>⇒ 答扩展题时，哪怕只补一句「该估计基于 N 个测试样本，仍有抽样不确定性，且假设测试样本能代表部署人群」，也比只给一个数字强得多。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("课件自己加的第四种数据：future data");
+       boxNode(60,206,270,52,"训练","b"); boxNode(60,268,270,52,"拟合","b");
+       boxNode(350,206,270,52,"验证","v"); boxNode(350,268,270,52,"选择","v");
+       boxNode(640,206,270,52,"测试","g"); boxNode(640,268,270,52,"估计","g");
+       boxNode(930,206,290,52,"⚠ future data","r");
+       boxNode(930,268,290,52,"可能和三者全都不一样","r");
+       note("⭐ 这就是 shift（分布漂移）—— 五个坑里唯一「任何划分都挡不住」的那一个",640,350,"y");
+       note("⚠ 所以它不能写成「怎么防」，只能写成「这是本研究的局限」",640,386,"r");},"<b>⭐ 课件在三个划分旁边，自己加了第四列：future data（未来的数据）。</b><br><b>它的说明只有一句：可能和所有划分都不一样。</b><br><b>⇒ 这就是后面五个坑里的最后一个——shift（分布漂移）。</b><br><b>⚠⚠ 而它和另外四个坑有一个本质区别：泄漏可以靠流程防、不平衡可以靠基线和指标防、阈值可以靠验证选、抽样可以靠分组划分防</b>——<b>只有漂移，任何划分都挡不住</b>。<br><b>⇒ 因为它说的是「评估之后、部署之时，世界变了」，而你手上所有的数据都来自变之前。</b><br><b>⭐ 所以答题时它的位置也不一样：另外四个写在「怎么防」里，漂移只能写在「局限」里。</b><br><b>⚠ 讲义的原话是：划分给出的是估计，不保证在分布漂移下的稳健性。</b><b>⇒ 这句话可以直接抄进扩展题的收尾。</b>");
+  SUM(0,5,{h:"⚠⚠ 测试集只是估计；future data 挡不住",k:"<b>两层不确定</b>：<b>① 抽样不确定性</b>（样本有限，换一批数字就变）<b>② 代表性</b>（它的案例能不能代表要部署的人群）。",m:"⭐ <b>所以报告要给三样：指标、不确定性、局限</b>——<b>只甩一个准确率是明确的扣分点</b>。",w:"<b>课件自己加的第四列 future data</b>：<b>可能和三个划分全都不一样</b> ⇒ 这就是 <b>shift（分布漂移）</b>。",e:"⚠⚠ <b>漂移和另外四个坑本质不同</b>：泄漏/不平衡/阈值/抽样都有办法防，<b>只有漂移任何划分都挡不住</b> ⇒ <b>它只能写进「局限」，不能写进「怎么防」</b>。"});
+  QUIZ(0,5,{t:"五个坑里，哪一个是「任何划分都挡不住」的？",o:["不平衡 Imbalance","漂移 Shift","泄漏 Leakage","抽样 Sampling"],a:1,w:"⭐ <b>泄漏靠流程防、不平衡靠基线和指标、抽样靠分组划分</b>——<b>只有漂移说的是「评估之后世界变了」</b>，<b>手上所有数据都来自变之前</b>。⇒ 它只能写成局限。"});
+});
+KP("6 · ★★ 防泄漏五步：顺序不能乱",function(){
+  S(0,function(){clearScene();setEq(null);setCap("讲义版的五步，顺序本身就是防线");
+       boxNode(90,176,1100,42,"① 先划分成 训练 / 验证 / 测试","b");
+       boxNode(90,224,1100,42,"② 只用训练集算填补与缩放参数","v");
+       boxNode(90,272,1100,42,"③ 把学到的参数「应用」到验证集和测试集 —— 不要重新拟合","v");
+       boxNode(90,320,1100,42,"④ 用验证结果选择模型与超参数（含阈值、停止点）","g");
+       note("⑤ 所有选择固定之后，在没碰过的测试集上评估「一次」",640,386,"g");},"<b>防泄漏有一个五步流程，顺序本身就是防线。</b><br><b>① 先划分成训练 / 验证 / 测试。</b><b>⚠ 注意是「先」——很多泄漏就是因为先做了预处理再划分。</b><br><b>② 只用训练集算填补与缩放参数。</b><b>③ 把学到的参数应用到验证集和测试集——不要重新拟合。</b><br><b>⭐ ②③ 两步是最常见的泄漏入口，而讲稿把原因说清了</b>：<b>训练拟合的不只是权重，还包括预处理的参数</b>（缩放用的均值方差、缺失值填补的值）。<b>⇒ 如果你拿全部数据算均值，测试集的信息就已经渗进训练流程了。</b><br><b>④ 用验证结果选择模型与超参数，含阈值和停止点。</b><b>⑤ 所有选择固定之后，在没碰过的测试集上评估一次。</b><br><b>⚠ 「一次」这个词是认真的：评估完又回去改，测试集就污染了。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 不用标签，照样会泄漏");
+       boxNode(130,206,1020,48,"训练值是 [0, 2]，均值 = 1 —— 缩放就按这个来","b");
+       boxNode(130,262,1020,48,"⚠ 把留出的那个 100 也混进来算：[0, 2, 100] 的均值 = 34","r");
+       boxNode(130,318,1020,48,"⇒ 连训练数据的表示方式都被留出数据改掉了","r");
+       note("⭐ 交叉验证也一样：每一折的预处理都要在那一折的训练部分里拟合",640,386,"y");},"<b>⚠⚠ 有一个常见误解：以为「只要没用到标签就不算泄漏」。讲义专门给了一个反例。</b><br><b>假设训练值是 [0, 2]，均值是 1</b>，<b>你的缩放就按这个来</b>。<br><b>⚠ 现在把留出集里的一个 100 也混进来算均值</b>：<b>[0, 2, 100] 的均值变成 34</b>。<br><b>⇒ 整个训练数据的表示方式都被留出数据改掉了</b>——<b>而这个过程一个标签都没用到。</b><br><b>⭐ 所以泄漏的定义不是「用了标签」，而是课件那句：信息越过了你打算划的那条边界。</b><br><b>⚠ 交叉验证也逃不掉这一条</b>：<b>每一折的预处理都必须在那一折的训练部分里拟合</b>。<b>⇒ 常见错误是先在全量数据上做一次标准化，再去做交叉验证——那每一折都带着其他折的信息。</b><br><b>⭐ 另外记住交叉验证的定位：它支持开发阶段的选择，但仍然要另外留一个最终测试集。</b>");
+  SUM(0,6,{h:"★★ 防泄漏五步",k:"<b>① 先划分 ② 只用训练集算填补与缩放参数 ③ 把学到的参数应用到验证/测试（不重新拟合）④ 用验证结果做选择 ⑤ 全部固定后在测试集上评估一次</b>。",m:"⭐ <b>②③ 是最常见的泄漏入口</b>：<b>训练拟合的不只是权重，还包括预处理参数</b>（缩放的均值方差、填补的值）。",w:"⚠⚠ <b>不用标签照样会泄漏</b>：训练值 [0,2] 均值 1，<b>把留出的 100 混进来算就变成 34</b>——<b>连训练数据的表示方式都被改了</b>。",e:"⭐ 泄漏的定义是 <b>信息越过了你打算划的那条边界</b>，不是「用了标签」。⚠ <b>交叉验证每一折的预处理都要在那一折的训练部分里拟合</b>，而且<b>仍要另留最终测试集</b>。"});
+  QUIZ(0,6,{t:"在划分之前先用全部数据算了标准化的均值和方差，这算泄漏吗？",o:["不算，只要之后重新划分就行","只有在测试集上才算","不算，因为没有用到标签","算：信息越过了划分边界，留出数据改变了训练数据的表示方式"],a:3,w:"⭐ 讲义反例：训练值 [0,2] 均值 1，<b>混进留出的 100 后变成 34</b>——<b>一个标签都没用到</b>。⚠ <b>泄漏的定义是信息越界，不是「用了标签」。</b>"});
+});
+KP("7 · ★★ 学习率表：三行是三次独立实验",function(){
+  S(0,function(){clearScene();setEq(null);setCap("每一行都回到同一个起点，只改 η");
+       cite("These are separate experiments, not successive updates.",150);
+       matrix({rows:6,cols:3,cw:360,ch:28,x:110,y:186,
+         cell:function(i,j){var t=[["学习率 η","走一步之后的平均 BCE","读法"],
+           ["0","0.580352","参数没变，就是起点"],
+           ["0.1","0.574996","降了一点"],
+           ["1","0.533347","降得多些"],
+           ["10","★ 0.371611","这一步最低"],
+           ["100","⚠ 9.965953","飞了"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===4||i===5?"hl":"";}});
+       note("⚠ 控制变量：同样的四个观测、同样的初始参数、同样的初始批梯度，只有 η 变",640,386,"r");},"<b>⚠⚠ 这张表最容易被误读，所以先把读法说死：三行不是「连着走了三步」，而是三次互相独立的实验。</b><br><b>每一次都回到同一组初始参数，只改学习率，然后只走一步。</b><b>课件在正文和讲稿里各强调了一次。</b><br><b>起始平均 BCE 是 0.580352。</b><b>η = 0 时参数不动，还是 0.580352</b>；<b>η = 0.1 得 0.574996</b>；<b>η = 1 得 0.533347</b>；<b>η = 10 得 0.371611，这一步最低</b>；<b>η = 100 得 9.965953，飞了</b>。<br><b>⭐ 控制变量讲稿列全了，答题时可以照着说</b>：<b>同样的四个观测、同样的初始参数、同样的初始批梯度，唯一变化的是 η。</b><br><b>⇒ 这是一个标准的受控实验，而「受控」正是它能说明问题的前提。</b><br><b>⚠ 那四个观测是 ([1,2],1)、([−1,−2],1)、([2,−1],0)、([−2,1],0)，网络就是 T2 那个两隐藏单元 ReLU + sigmoid 输出。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 这张表能说明什么、不能说明什么");
+       boxNode(130,206,470,56,"✓ 能说明","g");
+       boxNode(130,270,470,56,"优化对步长很敏感","g");
+       boxNode(690,206,470,56,"✗ 不能说明","r");
+       boxNode(690,270,470,56,"η=10 是最佳学习率；也不能说明泛化","r");
+       note("⚠ 这组数据没有验证/测试样本 ⇒ 这张表只说明优化行为，和泛化无关",640,350,"r");
+       note("⭐ η=100 为什么会飞：过冲，或者改变了「哪些 ReLU 单元是激活的」",640,386,"y");},"<b>这张表的考法几乎固定：它能说明什么、不能说明什么。</b><br><b>✓ 能说明的：优化对步长很敏感。</b>从 0.1 到 10，一步之后的损失差了快一倍；再到 100，直接飞到 9.97。<br><b>✗ 不能说明的有两条，都要写出来。</b><br><b>第一条：不能说明 η = 10 是最佳学习率。</b>课件原话：<b>最好的单步结果，并不能确立整个训练过程或新数据上的最佳步长。</b><b>⇒ 它只是「走一步」的结果。</b><br><b>第二条：不能说明泛化。</b><b>⚠ 这组数据没有验证/测试样本，所以这张表只说明优化行为。</b><br><b>⭐ 还有一个很精彩的机制要会说：η = 100 为什么会飞？</b><b>课件说：很大的步子可能过冲，或者改变哪些 ReLU 单元是激活的。</b><b>⇒ 后半句是关键——步子太大会把 z 推过 0，整个网络「哪条路通」都变了。</b>");
+  SUM(0,7,{h:"★★ 学习率表：三次独立实验，不是三步",k:"<b>每一行都回到同一组初始参数、只改 η、只走一步</b>。起点 <b>0.580352</b>；<b>η=0.1 → 0.574996；η=1 → 0.533347；η=10 → 0.371611（最低）；η=100 → 9.965953（飞了）</b>。",m:"⭐ <b>控制变量</b>：同样的四个观测、同样的初始参数、同样的初始批梯度，<b>唯一变化的是 η</b>。",w:"<b>✓ 能说明</b>：优化对步长很敏感。<b>✗ 不能说明</b>：<b>η=10 是最佳学习率</b>（只是单步结果）；<b>也不能说明泛化</b>（这组数据没有验证/测试样本）。",e:"⭐ <b>η=100 为什么飞</b>：<b>过冲，或者改变了「哪些 ReLU 单元是激活的」</b>——<b>步子太大会把 z 推过 0，整个网络哪条路通都变了</b>。"});
+  QUIZ(0,7,{t:"学习率表里 η = 10 这一行的损失最低，能说明它是最佳学习率吗？",o:["不能：这只是单步结果，而且这组数据没有验证/测试样本，说明不了泛化","能，因为是受控实验","能，它在表里最低","不能，因为 η = 100 更大"],a:0,w:"⭐ 课件原话：<b>最好的单步结果并不能确立整个训练过程或新数据上的最佳步长</b>。⚠ <b>受控实验只保证「这个对比是公平的」，不保证结论能外推。</b>"});
+});
+KP("8 · ★★★ 连续训练表：平均在降，有样本一直判错",function(){
+  S(0,function(){clearScene();setEq(null);setCap("这是一次不间断的训练，和上一张表完全不同");
+       matrix({rows:6,cols:4,cw:280,ch:28,x:80,y:150,
+         cell:function(i,j){var t=[["更新次数","平均 BCE","p([1,2])  y=1","p([−1,−2])  y=1"],
+           ["0","0.580352","0.6615","0.4750"],
+           ["1","0.574996","0.6664","0.4749"],
+           ["10","0.527730","0.7158","0.4750"],
+           ["50","0.406138","0.8987","0.4788"],
+           ["100","★ 0.369420","★ 0.9592","⚠ 0.4859　仍 < 0.5"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===5?"hl":"";}});
+       note("⚠ 这里一次全批量更新 = 一个 epoch，所以 100 次更新就是 100 个 epoch",640,386,"r");},"<b>⚠ 先把这张表和上一张分开：讲稿第一句就说，这一张跟随的是一次不间断的训练，不像学习率那张是互相独立的对比。</b><b>两张表长得很像，含义完全不同。</b><br><b>看平均 BCE 这一列</b>：<b>0.580352 → 0.574996 → 0.527730 → 0.406138 → 0.369420</b>。<b>一路在降，从总体看训练很成功。</b><br><b>再看第一个正例 p([1, 2])</b>：<b>0.6615 → 0.9592</b>，<b>学得非常好</b>。<br><b>⚠⚠ 但看第二个正例 p([−1, −2])</b>：<b>0.4750 → 0.4749 → 0.4750 → 0.4788 → 0.4859</b>。<b>100 次更新之后仍然在 0.5 以下，一直被判成类别 0——一直是错的。</b><br><b>⭐ 注意这里一次全批量更新就等于一个 epoch，所以 100 次更新就是 100 个 epoch</b>——<b>不是跑得不够久。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("机制，和三条必须写的限定");
+       boxNode(130,206,1020,48,"机制：100 次更新后它的两个隐藏 ReLU 激活都是 0","r");
+       boxNode(130,262,1020,48,"⇒ 它的分数只取决于输出偏置 —— 隐藏层那条路对它完全没用","r");
+       boxNode(130,318,1020,48,"⇒ 梯度传不到它身上，再跑 100 次也一样","r");
+       note("⚠ 三条限定：跑满预算既不证明收敛、不证明全局最优、也不证明泛化",640,386,"r");},"<b>为什么这个样本学不动？讲稿给了机制，而机制正是扩展题的得分点。</b><br><b>100 次更新之后，它的两个隐藏 ReLU 激活都是 0</b>。<b>⇒ 它的分数只取决于输出偏置，隐藏层那条路对它完全没用。</b><br><b>⇒ 而梯度也传不到它身上</b>——<b>这正是 T2 讲的「两处零梯度」在 100 轮里持续发生</b>。<b>再跑 100 次，结果还是一样。</b><br><b>⚠⚠ 然后是三条必须写进答案的限定</b>：<b>跑满 100 次就停，既不证明收敛、也不证明全局最优、更不证明泛化。</b><br><b>⭐ 还有一句同样重要：平均损失、逐样本概率、准确率是三种不同的证据，不能互相替代。</b><br><b>⇒ 这一页把 T3 的核心态度说透了：一个汇总数字在降，不等于你想知道的那件事在变好。</b><b>而这正是下一块「混淆矩阵」存在的理由。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("三种证据，各看见不同的东西");
+    matrix({rows:4,cols:3,cw:360,ch:40,x:110,y:206,
+      cell:function(i,j){var t=[["证据","它看见什么","它看不见什么"],
+        ["平均损失","整体在不在改善","★ 哪个样本一直没救"],
+        ["逐样本概率","每个样本各自走到哪了","整体趋势、类别层面的模式"],
+        ["准确率","判对判错的个数","★ 0.49 和 0.01 的差别"]];return t[i][j];},
+      dim:function(i,j){return i===0;},
+      hl:function(i,j){return j===2?"hl":"";}});
+    note("⭐ 课件原话：三种证据提供的是不同的信息 —— 不能互相替代",640,386,"y");},"<b>课件有一句很值钱的话：平均损失、逐样本概率、准确率提供的是不同的证据。把它们各自的盲区列出来就清楚了。</b><br><b>平均损失</b>：<b>看得见整体在不在改善</b>；<b>看不见哪个样本一直没救</b>——<b>这正是那个 p = 0.4859 的正例藏身的地方</b>。<br><b>逐样本概率</b>：<b>看得见每个样本各自走到哪了</b>；<b>但样本一多就没法读，看不出整体趋势和类别层面的模式</b>。<br><b>准确率</b>：<b>看得见判对判错的个数</b>；<b>但看不见 0.49 和 0.01 的差别</b>——<b>两者都判错，在它眼里一样</b>。<br><b>⭐ 这正好接上 T1 那句「准确率分不出 p = 0.75 和 p = 0.90」——同一个毛病，只是这次出现在错误的那一侧。</b><br><b>⇒ 所以这三种证据要配合着看。而「按类别拆开看」这件事，正是下一块混淆矩阵提供的能力。</b>");
+  SUM(0,8,{h:"★★★ 平均 BCE 0.580352 → 0.369420，仍有正例一直判错",k:"<b>一次不间断的训练</b>（不同于学习率那张独立对比表）。<b>平均 BCE 一路降到 0.369420</b>，<b>p([1,2]) 从 0.6615 升到 0.9592</b>。",m:"⚠⚠ <b>但 p([−1,−2]) 只从 0.4750 爬到 0.4859</b>，<b>始终在 0.5 以下，100 个 epoch 之后仍然一直判错</b>。",w:"⭐ <b>机制</b>：<b>它的两个隐藏 ReLU 激活都是 0，分数只取决于输出偏置</b>——<b>隐藏层那条路对它完全没用，梯度也传不到</b>。",e:"⚠⚠ <b>三条限定</b>：<b>跑满预算既不证明收敛、不证明全局最优、也不证明泛化</b>。⭐ <b>平均损失、逐样本概率、准确率是三种不同的证据，不能互相替代。</b>"});
+  QUIZ(0,8,{t:"100 次更新后那个正例的概率只有 0.4859，根本原因是什么？",o:["它的标签标错了","学习率太小","它的两个隐藏 ReLU 激活都是 0，分数只取决于输出偏置，梯度传不到它身上","训练轮数不够"],a:2,w:"⭐ 讲稿给的机制。⚠ <b>不是轮数不够</b>——<b>一次全批量更新就是一个 epoch，100 次已经是 100 个 epoch，再跑也一样</b>。"});
+});
+KP("9 · ★★ 早停四步：保留最好的，不是最后的",function(){
+  S(0,function(){clearScene();setEq(null);setCap("固定预算是一个停止的选择，不是收敛的证明");
+       cite("A fixed update budget is a stopping choice, not proof of convergence.",150);
+       boxNode(60,206,270,52,"① Monitor","b");
+       boxNode(60,268,270,52,"按约定间隔盯训练和验证","b");
+       boxNode(350,206,270,52,"② Choose a rule","v");
+       boxNode(350,268,270,52,"事先定好「改善」和 patience","v");
+       boxNode(640,206,270,52,"③ Keep a checkpoint","g");
+       boxNode(640,268,270,52,"★ 保留验证最好的那一组参数","g");
+       boxNode(930,206,290,52,"④ Evaluate","y");
+       boxNode(930,268,290,52,"冻结流程，再评测试集","y");
+       note("⚠ patience 的单位是「验证检查次数」，不是 epoch 数",640,350,"r");
+       note("⚠⚠ 一句硬规定：Never use the test set to choose the stopping time.",640,386,"r");},"<b>早停有四步，而且每一步都有一个容易做错的地方。</b><br><b>① Monitor</b>：<b>按约定的间隔，同时盯训练和验证</b>。<b>② Choose a rule</b>：<b>在最终测试之前，先定义好什么叫「改善」、patience 是多少</b>。<br><b>⚠ patience 的定义讲稿给得很精确：允许连续多少次验证检查没有足够改善才停。</b><b>⇒ 单位是「检查次数」，不是 epoch 数。</b><br><b>⭐ 「改善」也要自己定义：说清楚用哪个指标、往哪个方向算改善</b>（损失是越小越好，AUC 是越大越好）。<br><b>③ Keep a checkpoint</b>：<b>保留验证证据最好的那一组参数，而不是自动取最后一步的。</b><b>⚠⚠ 这是早停最容易做错的一步——训练结束时的参数，未必是验证表现最好的那一组。</b><br><b>④ Evaluate</b>：<b>冻结整个流程，然后才评测试集。</b><b>⚠ 硬规定：绝不能用测试集来选停止时间。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 训练损失几乎不动，说明不了什么");
+       boxNode(170,216,980,50,"可能是稳定了","b");
+       boxNode(170,276,980,50,"可能是学习率太小","y");
+       boxNode(170,336,980,50,"也可能是优化卡住了","r");
+       note("⭐ 三种可能并列 —— 所以它「不证明达到了全局最优」",640,386,"y");},"<b>⚠ 还有一个常见的误判：看到训练损失几乎不动，就以为「收敛了」。</b><br><b>课件把三种可能并列了：可能是稳定了（stabilisation）、可能是学习率太小、也可能是优化卡住了（stalled）。</b><br><b>⇒ 这三种情况在「损失曲线变平」这个现象上长得一模一样，光看曲线分不出来。</b><br><b>⭐ 所以课件的结论是：它们不证明达到了全局最优。</b><br><b>⚠ 怎么分辨？要配合别的证据</b>：<b>如果同时验证表现还在变，那更像是在稳定</b>；<b>如果梯度的幅度明显很小，那更像学习率问题</b>；<b>如果某些单元的激活长期为 0，那就是卡住了</b>——<b>这正好回到上一页那个正例的机制。</b><br><b>⇒ 这也是为什么「停止」必须用验证证据，而不是看训练损失的形状。</b>");
+  SUM(0,9,{h:"★★ 早停四步 + patience 的单位",k:"<b>① Monitor（按约定间隔盯训练和验证）② Choose a rule（事先定义改善与 patience）③ Keep a checkpoint（保留验证最好的）④ Evaluate（冻结后评测试集）</b>。",m:"⚠ <b>patience 的单位是「验证检查次数」</b>，不是 epoch 数。⭐ <b>「改善」要说清楚用哪个指标、往哪个方向</b>（损失越小越好，AUC 越大越好）。",w:"⚠⚠ <b>保留验证最好的检查点，不是自动取最后一步</b>——这是早停最容易做错的一步。⚠ <b>Never use the test set to choose the stopping time.</b>",e:"⚠ <b>训练损失几乎不动有三种可能</b>：<b>稳定了 / 学习率太小 / 优化卡住了</b>——<b>光看曲线分不出来，所以它不证明全局最优</b>。⭐ <b>固定预算是一个停止的选择，不是收敛的证明。</b>"});
+  QUIZ(0,9,{t:"早停时应该保留哪一组参数？",o:["训练结束时的最后一组","训练损失最低的那一组","验证证据最好的那一组检查点","测试表现最好的那一组"],a:2,w:"⭐ 课件：<b>Retain the best validation checkpoint rather than automatically the last step.</b>⚠ <b>用测试表现挑，测试集就变成验证集了</b>；<b>训练损失最低通常正是过拟合的那一点</b>。"});
+});
+KP("10 · ★★ 评估四步纪律：顺序本身就是防线",function(){
+  S(0,function(){clearScene();setEq(null);setCap("决策的顺序防止结论过于乐观");
+       cite("The order of decisions prevents optimistic conclusions.",150);
+       boxNode(60,206,270,52,"① Define target","b");
+       boxNode(60,268,270,52,"正类、两类错误的代价、部署人群","b");
+       boxNode(350,206,270,52,"② Split safely","v");
+       boxNode(350,268,270,52,"★ 按真正的抽样单位分层或分组","v");
+       boxNode(640,206,270,52,"③ Develop","g");
+       boxNode(640,268,270,52,"只用训练/验证来拟合和调参","g");
+       boxNode(930,206,290,52,"④ Evaluate once","y");
+       boxNode(930,268,290,52,"报指标、不确定性、局限","y");
+       note("⭐ 为什么顺序能防乐观：每一步都把「做选择」关在测试集之前",640,350,"y");
+       note("⚠ 「真正的抽样单位」可能不是一行数据 —— 同一个病人的 10 条记录，单位是病人",640,386,"r");},"<b>评估是一套纪律，不是一个指标。课件给了四步，而顺序本身就是机制。</b><br><b>① Define target</b>：<b>要定三样，不只是正类</b>——<b>正类是谁、两类错误各自的代价、部署时面对的人群</b>。<b>⇒ 后两样决定了你最后该选什么阈值、该报什么指标。</b><br><b>② Split safely</b>：<b>按真正的抽样单位分层或分组</b>。<b>⚠ 「真正的抽样单位」可能不是一行数据</b>：<b>同一个病人的 10 条记录，抽样单位是病人不是记录</b>，<b>所以要用分组划分，不能按行随机</b>。<br><b>③ Develop</b>：<b>只用训练和验证来拟合、调参。</b><b>④ Evaluate once</b>：<b>报告测试指标、不确定性和局限。</b><br><b>⭐ 为什么这个顺序能防止乐观？因为每一步都把「做选择」这件事关在测试集之前。</b><b>⇒ 顺序一乱——比如先看测试结果再定阈值——乐观偏差就进来了。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 按行随机划分为什么会出事");
+       boxNode(130,206,1020,48,"同一个病人的 10 条记录，按行随机划分","r");
+       boxNode(130,262,1020,48,"⇒ 有几条进训练、有几条进测试","r");
+       boxNode(130,318,1020,48,"⇒ 测试集其实不是「新」样本，模型见过这个人了","r");
+       note("⭐ 同样的问题也出现在时间和地点上 —— 都要按真正的单位分组",640,386,"y");},"<b>把「真正的抽样单位」这件事落到一个具体场景上，就非常清楚了。</b><br><b>假设数据里同一个病人有 10 条记录。</b><b>按行随机划分，就会有几条进训练、有几条进测试。</b><br><b>⇒ 结果是：测试集其实不是「新」样本——模型已经见过这个人了。</b><b>它可能只是记住了这个人的特点，而不是学会了一般规律。</b><br><b>⚠ 于是你的测试分数会偏高，而且是系统性偏高，看不出来。</b><br><b>⭐ 同样的问题也出现在时间和地点上</b>：<b>同一时段的记录、同一地点的记录，如果被随机拆开，也会造成同样的乐观偏差。</b><br><b>⇒ 所以课件说「按真正的抽样单位分组」——先问一句：我想让模型泛化到什么？是新病人、新时段，还是新地点？那就按那个单位分组。</b>");
+  SUM(0,10,{h:"★★ 评估四步：定目标 → 安全划分 → 开发 → 只评一次",k:"<b>① Define target：正类、两类错误的代价、部署人群</b>（后两样决定阈值和该报的指标）。<b>② Split safely：按真正的抽样单位分层或分组。</b>",m:"<b>③ Develop：只用训练/验证拟合和调参。④ Evaluate once：报指标、不确定性、局限。</b>",w:"⭐ <b>顺序为什么能防乐观</b>：<b>每一步都把「做选择」关在测试集之前</b>；顺序一乱（先看测试再定阈值），乐观偏差就进来了。",e:"⚠ <b>「真正的抽样单位」可能不是一行数据</b>：同一个病人的 10 条记录按行随机划分 ⇒ <b>测试集不是「新」样本，模型见过这个人了</b>。<b>时间、地点同理。</b>"});
+  QUIZ(0,10,{t:"数据里同一个病人有多条记录，应该怎么划分训练/测试？",o:["按行随机划分，这样最公平","按病人分组划分 —— 抽样单位是病人不是记录","把重复的记录删掉再随机划分","按记录的时间顺序划分"],a:1,w:"⭐ 课件：<b>stratify or group by the real sampling unit</b>。⚠ 按行随机 ⇒ <b>同一个人的记录会同时进训练和测试，测试集不是「新」样本</b>，分数系统性偏高。"});
+});
+KP("11 · ★ Checkpoint：五个词盖住右边自测",function(){
+  S(0,function(){clearScene();setEq(null);setCap("课件自己给的自测页 —— 盖住右边先自己说");
+       matrix({rows:6,cols:2,cw:460,ch:28,x:180,y:150,
+         cell:function(i,j){var t=[["词","它是干什么的"],
+           ["Training evidence","看更新过程中的进展（讲稿版：训练集拟合参数）"],
+           ["Validation decisions","★ 选设置、选阈值、选停止点"],
+           ["Test set","估计最终的泛化"],
+           ["Confusion matrix","把 TP / FP / FN / TN 映射出来"],
+           ["ROC point","★ FPR 在横轴，TPR 在纵轴"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2||i===5?"hl":"";}});
+       note("⭐ 第二条把验证管的三件事列全了：设置、阈值、停止点",640,386,"y");},"<b>课件给了一页 Checkpoint，五个词。正确用法是盖住右边，先自己把每个词说一遍。</b><br><b>Training evidence</b>：<b>看更新过程中的进展</b>。⭐ 讲稿版本写的是 <b>Training set — fit model parameters</b>，<b>两个版本合起来看更完整：训练集拟合参数，训练证据看进展</b>。<br><b>Validation decisions</b>：<b>选设置、选阈值、选停止点</b>。<b>⭐ 这一条把验证管的三件事列全了</b>——<b>考试里问「这个决定该用哪部分数据做」，答案基本都落在这三样里</b>。<br><b>Test set</b>：<b>估计最终的泛化</b>。<br><b>Confusion matrix</b>：<b>把 TP / FP / FN / TN 映射出来</b>。<b>⚠ 注意用词是「映射」不是「背位置」。</b><br><b>ROC point</b>：<b>FPR 在横轴，TPR 在纵轴</b>。");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 最后一条是送分，也是陷阱");
+       axes({x0:380,x1:760,y0:370,y1:210});
+       curve([[380,370],[760,210]],"d");
+       curve(rocpath([[0,0],[0,0.55],[0.45,0.8],[1,1]],380,760,370,210),"y");
+       note("TPR（= recall）在纵轴",380,196,"g");
+       note("FPR 在横轴",800,356,"b");
+       boxNode(850,230,330,48,"★ 记法：TPR 就是 recall","g");
+       boxNode(850,288,330,48,"recall 是「好事」⇒ 所以在上面","g");
+       note("⚠ 轴画反了，整道题就废了 —— 评分点清单里专门有这一条",640,386,"r");},"<b>⚠ Checkpoint 的最后一条是送分题，也是陷阱题：ROC 的轴。</b><br><b>FPR 在横轴，TPR 在纵轴。</b><b>⚠ 画反了，整道题就废了——评分点清单里专门有「Plot ROC axes in the correct order」这一条。</b><br><b>⭐ 给一个不会忘的记法：TPR 就是 recall。</b><b>recall 是「好事」——找到的正例越多越好——<b>好事往上走，所以它在纵轴。</b></b><br><b>⇒ 而 FPR 是「坏事」——误报率——<b>往右走是变坏，所以它在横轴。</b></b><br><b>⇒ 于是整张图的方向就定了：左上角是最好的（高 TPR、低 FPR），右下角是最差的。</b><br><b>⭐ 对角线那条虚线代表随机猜测</b>：<b>在它上面说明比随机好，在它下面说明比随机还差</b>（这时候把预测反过来反而更好）。");
+  SUM(0,11,{h:"★ 五个词自测：训练证据 / 验证决定 / 测试集 / 混淆矩阵 / ROC 点",k:"<b>Training evidence</b>（看进展；讲稿版：训练集拟合参数）<b>Validation decisions</b>（<b>选设置、选阈值、选停止点</b>）<b>Test set</b>（估计最终泛化）。",m:"<b>Confusion matrix</b>（<b>把 TP/FP/FN/TN 映射出来</b>——是「映射」不是背位置）<b>ROC point</b>（<b>FPR 横轴、TPR 纵轴</b>）。",w:"⭐ <b>第二条最有用</b>：考试问「这个决定该用哪部分数据做」，<b>答案基本都落在设置、阈值、停止点这三样里</b>。",e:"⭐ <b>轴的记法</b>：<b>TPR 就是 recall，是「好事」，好事往上 ⇒ 纵轴</b>；<b>FPR 是「坏事」，往右变坏 ⇒ 横轴</b>。<b>左上角最好，对角线是随机猜。</b>"});
+  QUIZ(0,11,{t:"ROC 图上，左上角那个方向代表什么？",o:["最好：高 TPR、低 FPR","最差：低 TPR、高 FPR","随机猜测","阈值最低的那个点"],a:0,w:"<b>TPR（= recall）在纵轴，越往上越好；FPR 在横轴，越往左越好</b> ⇒ <b>左上角最好</b>。⚠ <b>对角线才是随机猜</b>；<b>阈值最低的点是右上角 (1,1)</b>。"});
+});
+KP("12 · ⚠⚠ 五个坑：泄漏 / 不平衡 / 阈值 / 抽样 / 漂移",function(){
+  S(0,function(){clearScene();setEq(null);setCap("「这个评估流程有什么问题」型题目的素材库");
+       matrix({rows:6,cols:3,cw:360,ch:28,x:110,y:150,
+         cell:function(i,j){var t=[["坑","让什么失效","怎么防"],
+           ["Leakage 泄漏","整个留出估计都偏乐观","先划分，预处理只在训练折内拟合"],
+           ["Imbalance 不平衡","accuracy 失去信息量","和「全判多数类」基线比，看 precision/recall"],
+           ["Threshold 阈值","单个工作点不代表模型","在验证集上按代价选，选定后冻结"],
+           ["Sampling 抽样","测试集其实不是「新」样本","按真正的抽样单位分组划分"],
+           ["Shift 漂移","部署后表现与评估时不同","⚠ 划分防不住，只能说明局限"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===5?"hl":"";}});
+       note("⭐ 看到「随机划分」「同一个病人」「准确率 95%」「在测试集上调阈值」就对号入座",640,386,"y");},"<b>课件把五个坑并列成一张表，每一个都能单独出一道题。</b><br><b>① Leakage 泄漏</b>：<b>信息越过了你打算划的那条边界</b>，<b>整个留出估计都偏乐观</b>。<br><b>② Imbalance 不平衡</b>：<b>准确率会掩盖在稀有类上的失败</b>。<b>⭐ 极端例子：正例占 2%，全判负的准确率就有 98%，但 recall = 0。</b><br><b>③ Threshold 阈值</b>：<b>precision 和 recall 一起变</b>，<b>所以单个工作点的指标不代表整个模型</b>。<br><b>④ Sampling 抽样</b>：<b>按行随机划分，可能让同一个人、同一时段、同一地点的记录同时出现在训练和测试里</b>。<br><b>⑤ Shift 漂移</b>：<b>未来的数据可能和评估时的分布不一样</b>。<b>⚠⚠ 这一条任何划分都挡不住</b>——<b>所以讲义说「划分给出的是估计，不保证分布漂移下的稳健性」，答题时只能把它写成局限。</b><br><b>⭐ 看到题目里出现「随机划分」「同一个病人」「准确率 95%」「在测试集上调阈值」，就对号入座。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 第③条有一个方向上的细节");
+       boxNode(130,206,1020,48,"课件说：Precision and recall change together（它们一起变）","b");
+       boxNode(130,262,1020,48,"⚠ 但方向不同：降低阈值时 recall 不会下降","y");
+       boxNode(130,318,1020,48,"⚠ 而 precision 可升可降 —— 取决于新进来的那批是不是真正例","r");
+       note("⭐ 降阈值 ⇒ 判为正的变多 ⇒ TP 不减（recall 不降），FP 可能一起涨",640,386,"y");},"<b>⚠ 第三条「阈值」里有一个方向上的细节，课件的措辞容易被读成「两者同涨同跌」。</b><br><b>课件说的是 Precision and recall change together——它们会一起变</b>。<b>但「一起变」不等于「同方向变」。</b><br><b>⭐ 把机制想一遍就清楚了：降低阈值，判为正的样本变多。</b><br><b>⇒ TP 只会增加或不变，而真实正例总数 TP + FN 是固定的</b>，<b>所以 recall = TP/(TP+FN) 不会下降</b>。<br><b>⇒ 但 precision = TP/(TP+FP) 的分子分母都在涨</b>，<b>结果可升可降——取决于新进来的那一批里有多少是真正例。</b><br><b>⚠ 所以正确的说法是：降阈值时 recall 单调不减，precision 方向不定。</b><br><b>⭐ 这个细节在 ROC 那一块还会再用到：那里的 TPR 就是 recall，而 FPR 的分母也是固定的。</b>");
+  SUM(0,12,{h:"⚠⚠ 五个坑：Leakage / Imbalance / Threshold / Sampling / Shift",k:"<b>泄漏</b>（留出估计偏乐观）<b>不平衡</b>（accuracy 失去信息量；正例 2% ⇒ 全判负就有 98%，recall = 0）<b>阈值</b>（单个工作点不代表模型）。",m:"<b>抽样</b>（按行随机 ⇒ 测试集不是「新」样本）<b>漂移</b>（未来数据与评估分布不同）。⚠⚠ <b>漂移任何划分都挡不住，只能写成局限</b>。",w:"⚠ <b>阈值那条的方向细节</b>：课件说「一起变」，<b>但不是同方向</b>——<b>降阈值时 recall 单调不减</b>（TP 不减、TP+FN 固定），<b>precision 可升可降</b>（分子分母都在涨）。",e:"⭐ <b>对号入座</b>：题干出现<b>「随机划分」「同一个病人」「准确率 95%」「在测试集上调阈值」</b>，就分别对应抽样 / 抽样 / 不平衡 / 泄漏。"});
+  QUIZ(0,12,{t:"把判定阈值从 0.5 降到 0.3，recall 会怎样？",o:["一定下降","一定上升","无法判断，可升可降","不会下降（可能上升或不变）"],a:3,w:"<b>降阈值 ⇒ 判为正的变多 ⇒ TP 不减</b>，而<b>真实正例总数 TP+FN 固定</b> ⇒ <b>recall 单调不减</b>。⚠ <b>precision 才是「可升可降」的那个</b>。"});
+});
+KP("13 · ★★★ 混淆矩阵：先定正类，再逐格归",function(){
+  S(0,function(){clearScene();setEq(null);setCap("行是真实，列是预测 —— 先把正类固定下来");
+       cite("Rows are actual classes; columns are predicted classes. Fix the positive class first.",150);
+       cmat(430,206,210,76,["真实 −","真实 +"],["预测 −","预测 +"],
+            ["TN = 5","FP = 2","FN = 1","TP = 4"],[3]);
+       note("合计自查：5 + 2 + 1 + 4 = 12 个观测",640,386,"y");},"<b>⭐⭐ 混淆矩阵是 T3 必考的一块，而它也是最可能因为「背错摆法」整题全废的地方。</b><br><b>课件给的两句规则是安全的做法：行是真实类别，列是预测类别；先把正类固定下来。</b><br><b>然后逐格按构造规则认</b>：<b>TP = 真实正、预测正</b>；<b>FN = 真实正、预测负</b>；<b>FP = 真实负、预测正</b>；<b>TN = 真实负、预测负</b>。<br><b>本页的例子</b>：<b>TN = 5、FP = 2、FN = 1、TP = 4</b>。<br><b>⚠ 做完一定要做合计自查：5 + 2 + 1 + 4 = 12，等于观测总数。</b><br><b>⭐ 讲稿把流程说得很死：一次一个观测地比较真实标签和预测标签，把每个案例放进「恰好一个」格子。然后——只有在这个检查之后，才可以开始算指标。</b><br><b>⇒ 这个顺序是评分点：先归格、先自查，再算。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠⚠ 两份官方材料的摆法是反的");
+       matrix({rows:5,cols:3,cw:360,ch:28,x:110,y:150,
+         cell:function(i,j){var t=[["来源","摆法","左上角是"],
+           ["Canvas 讲义页","正类在前 ⇒ [[TP, FN], [FP, TN]]","TP"],
+           ["本复习课件","负类在前 ⇒ [[TN, FP], [FN, TP]]","TN"],
+           ["sklearn labels=[0,1]","同复习课件","TN"],
+           ["CS229 评估指标幻灯","列=真实（和前面都转置）","视定义而定"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1||i===2?"hl":"";}});
+       note("⭐ 四个计数（TP=4, FN=1, FP=2, TN=5）在任何摆法下都相同，变的只是位置",640,350,"y");
+       note("⚠⚠ 所以绝不能背位置 —— 每次都读轴标签逐格确认",640,386,"r");},"<b>⚠⚠⚠ 这一点必须知道，否则考场上可能整题全废：两份官方材料的摆法是反的。</b><br><b>Canvas 讲义那一页给的是正类在前</b>：<b>[[TP, FN], [FP, TN]]，左上角是 TP</b>。<br><b>而这份复习课件给的是负类在前</b>：<b>[[TN, FP], [FN, TP]]，左上角是 TN</b>——<b>和 sklearn 在 labels=[0,1] 时的输出顺序一致</b>。<br><b>⇒ 两份都是官方材料，顺序却相反。</b><b>再加上 CS229 的评估指标幻灯是把列当真实（整个转置），一共三种不同的摆法。</b><br><b>⭐ 关键的安慰是：四个计数本身完全相同——TP = 4、FN = 1、FP = 2、TN = 5，变的只是它们摆在哪个格子。</b><br><b>⇒ 所以唯一安全的做法就是课件自己给的那句：读轴标签，逐格确认。</b><b>⚠⚠ 绝不能背「左上角是 TP」这种位置记忆。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("同一批计数，换个摆法长什么样");
+    note("Canvas 讲义：正类在前",380,176,"y");
+    cmat(250,222,180,62,["真实 +","真实 −"],["预测 +","预测 −"],
+         ["TP = 4","FN = 1","FP = 2","TN = 5"],[0]);
+    note("复习课件 / sklearn：负类在前",940,176,"g");
+    cmat(810,222,180,62,["真实 −","真实 +"],["预测 −","预测 +"],
+         ["TN = 5","FP = 2","FN = 1","TP = 4"],[3]);
+    note("⭐ 左右两张的四个计数一模一样 —— 变的只是哪个格子在左上角",640,372,"y");},"<b>把两种摆法并排画出来，这个「冲突」就一点都不吓人了。</b><br><b>左边是 Canvas 讲义的摆法：正类在前，左上角是 TP。</b><b>右边是复习课件和 sklearn 的摆法：负类在前，左上角是 TN。</b><br><b>⭐ 现在看关键的一点：两张表里的四个数字一模一样——TP = 4、FN = 1、FP = 2、TN = 5。</b><b>变的只是它们摆在哪个格子。</b><br><b>⇒ 所以真正危险的不是「摆法不同」，而是「用位置去记名字」。</b><b>只要你每次都读轴标签——这一行是真实什么、这一列是预测什么——两张表都能正确读出来。</b><br><b>⚠ 而如果你背的是「左上角是 TP」，那么拿到右边这张表，你会把 TN = 5 当成 TP，四个指标全错，整题报废。</b><br><b>⭐ 这就是为什么课件把「Fix the positive class first」和「Rows are actual, columns are predicted」这两句放在一起讲。</b>");
+  SUM(0,13,{h:"★★★ 行=真实、列=预测；先固定正类",k:"<b>构造规则</b>：<b>TP = 真实正·预测正；FN = 真实正·预测负；FP = 真实负·预测正；TN = 真实负·预测负</b>。本例 <b>TN=5、FP=2、FN=1、TP=4</b>。",m:"⚠ <b>做完要合计自查</b>：<b>5+2+1+4 = 12 = 观测总数</b>。讲稿：<b>只有在这个检查之后，才可以开始算指标</b>。",w:"⚠⚠⚠ <b>两份官方材料摆法相反</b>：<b>Canvas 讲义正类在前 [[TP,FN],[FP,TN]]</b>；<b>复习课件与 sklearn 负类在前 [[TN,FP],[FN,TP]]</b>；<b>CS229 幻灯还把列当真实（转置）</b>。",e:"⭐ <b>四个计数在任何摆法下都相同，变的只是位置</b> ⇒ <b>绝不能背位置，每次读轴标签逐格确认</b>。"});
+  QUIZ(0,13,{t:"关于混淆矩阵的摆法，下面哪句是对的？",o:["本课固定是左上角 TP，背下来就行","摆法不同会导致四个计数不同","不同材料摆法不同（Canvas 讲义正类在前、复习课件和 sklearn 负类在前），要读轴标签逐格确认","sklearn 的输出左上角一定是 TP"],a:2,w:"⚠⚠ <b>两份官方材料是反的</b>，所以<b>位置记忆不可靠</b>。⭐ <b>四个计数本身完全相同</b>——变的只是它们摆在哪个格子。"});
+});
+KP("14 · ★★★ 四个指标：两个分母的「条件」",function(){
+  S(0,function(){clearScene();setEq("$$\\text{Acc}=\\frac{TP+TN}{N}\\quad P=\\frac{TP}{TP+FP}\\quad R=\\frac{TP}{TP+FN}\\quad F_1=\\frac{2TP}{2TP+FP+FN}$$","top");
+       setCap("TP=4  FP=2  FN=1  TN=5  共 12 个观测");
+       boxNode(130,206,470,52,"Accuracy = (4+5)/12 = 0.75","b");
+       boxNode(130,268,470,52,"Precision = 4/(4+2) = 4/6 ≈ 0.667","v");
+       boxNode(690,206,470,52,"Recall = 4/(4+1) = 4/5 = 0.80","g");
+       boxNode(690,268,470,52,"F1 = 8/(8+2+1) = 8/11 ≈ 0.727","y");
+       note("⭐ Precision 的条件是「我预测为正的那一组」—— 分母 TP+FP",640,350,"y");
+       note("⭐ Recall 的条件是「真实为正的那一组」—— 分母 TP+FN　两组有重叠但不是同一组",640,386,"y");},"<b>四个指标，而真正要记的是两个分母各自的「条件」。</b><br><b>Accuracy = (TP+TN)/N = (4+5)/12 = 0.75。</b><br><b>Precision = TP/(TP+FP) = 4/6 ≈ 0.667。</b><b>⭐ 课件的说法是：precision 的条件是「预测为正的那一组」</b>——<b>也就是「我说是正的时候，对了多少」。</b><br><b>Recall = TP/(TP+FN) = 4/5 = 0.80。</b><b>⭐ recall 的条件是「真实为正的那一组」</b>——<b>「真正的正例里，我找到了多少」。</b><br><b>⚠ 这两组有重叠（交集就是 TP），但不是同一组</b>——<b>这正是它们会给出不同数字的原因。</b><br><b>F1 = 2TP/(2TP+FP+FN) = 8/11 ≈ 0.727。</b><br><b>⭐ 评分点清单里有一条就是「分母要和问题对应」</b>：<b>问「我说是正的时候对了多少」用 TP+FP，问「真正的正例找到了多少」用 TP+FN。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ F1 用计数版更稳，而且它不含 TN");
+       boxNode(130,206,470,56,"计数版：F1 = 2TP/(2TP+FP+FN)","g");
+       boxNode(130,270,470,56,"= 8/11 ≈ 0.727　一步到位","g");
+       boxNode(690,206,470,56,"⚠ 比值版：F1 = 2PR/(P+R)","y");
+       boxNode(690,270,470,56,"先把 P、R 四舍五入再算，容易差一点","y");
+       note("⭐ 两者数学上等价 —— 本例都给 0.727，差别只在四舍五入",640,350,"y");
+       note("⚠⚠ 注意 F1 的式子里没有 TN —— 它对「正确判负」完全不敏感",640,386,"r");},"<b>F1 有两种写法，数学上等价，但考场上用计数版更稳。</b><br><b>计数版：F1 = 2TP/(2TP+FP+FN) = 8/(8+2+1) = 8/11 ≈ 0.727</b>，<b>一步到位</b>。<br><b>比值版：F1 = 2PR/(P+R)</b>。<b>⚠ 问题在于你得先算出 P 和 R，如果中途四舍五入（比如把 0.6667 写成 0.67），结果就会差一点。</b><br><b>⭐ 本例两种写法都给 0.727，差别只在四舍五入——所以讲义建议「和这些计数保持一致地算 F1」。</b><br><b>⚠⚠ 还有一个很重要的性质：F1 的式子里根本没有 TN。</b><br><b>⇒ 它对「正确判负」完全不敏感。</b><b>这正是它在不平衡数据上比 accuracy 有用的原因</b>——<b>accuracy 的分子里有一大堆 TN，稀有类的失败就被它们淹没了。</b>");
+  SUM(0,14,{h:"★★★ Acc .75 / Pre 4/6≈.667 / Rec 4/5=.80 / F1 8/11≈.727",k:"<b>Accuracy = (TP+TN)/N = 9/12 = 0.75</b>；<b>Precision = TP/(TP+FP) = 4/6 ≈ 0.667</b>；<b>Recall = TP/(TP+FN) = 4/5 = 0.80</b>；<b>F1 = 2TP/(2TP+FP+FN) = 8/11 ≈ 0.727</b>。",m:"⭐ <b>两个分母的「条件」</b>：<b>precision 条件在「我预测为正的那一组」</b>，<b>recall 条件在「真实为正的那一组」</b>。<b>两组有重叠（交集是 TP）但不是同一组。</b>",w:"⚠ <b>F1 用计数版 2TP/(2TP+FP+FN) 更稳</b>——比值版要先算 P、R，中途四舍五入会差一点。",e:"⚠⚠ <b>F1 的式子里没有 TN</b> ⇒ <b>它对「正确判负」完全不敏感</b>。这正是它在不平衡数据上比 accuracy 有用的原因（accuracy 的分子里有一大堆 TN）。"});
+  QUIZ(0,14,{t:"TP=18, FP=12, FN=6, TN=164。precision 和 recall 分别是多少？",o:["0.60 和 0.667","0.60 和 0.75","0.75 和 0.60","0.91 和 0.60"],a:1,w:"<b>P = 18/(18+12) = 0.60</b>（分母是预测为正的）；<b>R = 18/(18+6) = 0.75</b>（分母是真实为正的）。⚠ <b>0.91 是 accuracy</b>，<b>0.667 是 F1</b>——这是考纲官方示例题的数。"});
+});
+KP("15 · ★★ precision 盯 FP，recall 盯 FN：对误差的不同视角",function(){
+  S(0,function(){clearScene();setEq(null);setCap("路线图第 4 段的那句话：different views of error");
+       boxNode(130,206,470,56,"Precision = TP/(TP+FP)","v");
+       boxNode(130,270,470,56,"分母里的错误是 FP —— 它盯「误报」","v");
+       boxNode(690,206,470,56,"Recall = TP/(TP+FN)","g");
+       boxNode(690,270,470,56,"分母里的错误是 FN —— 它盯「漏报」","g");
+       note("⭐ 两个式子里都没有 TN —— 它们只关心和正类有关的三个格子",640,350,"y");
+       note("⚠ 所以它们不是「谁更好」，是「你更怕哪一种错」",640,386,"r");},"<b>⭐ 路线图第 4 段的副标题是 different views of error——对误差的不同视角。这句话值得拆开看。</b><br><b>Precision = TP/(TP+FP)</b>：<b>分母里的那个错误是 FP</b>。<b>⇒ 它盯的是「误报」——我说是正的，结果不是。</b><br><b>Recall = TP/(TP+FN)</b>：<b>分母里的那个错误是 FN</b>。<b>⇒ 它盯的是「漏报」——真的是正的，我没认出来。</b><br><b>⭐ 注意两个式子里都没有 TN</b>——<b>它们只关心和正类有关的那三个格子</b>。<br><b>⚠ 所以它们之间不是「谁更好」的关系，而是「你更怕哪一种错」。</b><br><b>举个具体的</b>：<b>癌症筛查更怕漏报（FN 会要命）⇒ 优先 recall</b>；<b>垃圾邮件过滤更怕误报（把重要邮件扔了）⇒ 优先 precision</b>。<b>⇒ 这正是「用错误代价解释阈值」那条评分点的来源。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 两个极端：各自怎么被玩坏");
+       boxNode(130,206,470,56,"只要 recall = 1 ？","r");
+       boxNode(130,270,470,56,"全判正就行 —— 但 precision 掉到正类比例","r");
+       boxNode(690,206,470,56,"只要 precision 高 ？","r");
+       boxNode(690,270,470,56,"只挑最有把握的一个判正 —— 但 recall 几乎为 0","r");
+       note("⭐ 所以单看任何一个都能被作弊 —— 这就是 F1 存在的理由",640,350,"y");
+       note("⚠ 而 F1 也只是「某一个阈值下」的汇总；跨阈值要看 ROC/AUC",640,386,"r");},"<b>为什么不能只看其中一个？因为单看任何一个都能被轻易玩坏。</b><br><b>想要 recall = 1？</b><b>全判正就行了——所有真实正例都被抓到，FN = 0，recall 满分。</b><b>⚠ 但 precision 会掉到「正类在样本里的比例」</b>，<b>正例占 2% 的话，precision 就是 2%。</b><br><b>想要 precision 很高？</b><b>只挑最有把握的那一个判正就行——很可能它确实是正的，precision = 1。</b><b>⚠ 但其余的正例全漏了，recall 几乎为 0。</b><br><b>⭐ 这两个极端说明：单看任何一个指标，都可以用一个毫无价值的策略刷满。</b><b>⇒ 这正是 F1 存在的理由——它把两者绑在一起，任何一个塌下去，F1 都会跟着塌。</b><br><b>⚠ 但 F1 也有边界：它仍然只是「某一个阈值下」的汇总数字。</b><b>⇒ 想看这个模型跨所有阈值的表现，就要用 ROC 和 AUC。</b>");
+  SUM(0,15,{h:"★★ precision 盯 FP（误报），recall 盯 FN（漏报）",k:"<b>Precision = TP/(TP+FP)</b>，分母里的错误是 <b>FP</b> ⇒ <b>盯误报</b>。<b>Recall = TP/(TP+FN)</b>，分母里的错误是 <b>FN</b> ⇒ <b>盯漏报</b>。<b>两者都不含 TN。</b>",m:"⚠ <b>不是「谁更好」，是「你更怕哪一种错」</b>：<b>癌症筛查怕漏报 ⇒ 优先 recall</b>；<b>垃圾邮件过滤怕误报 ⇒ 优先 precision</b>。",w:"⚠ <b>单看一个都能被玩坏</b>：<b>全判正 ⇒ recall = 1 但 precision 掉到正类比例</b>；<b>只挑最有把握的一个判正 ⇒ precision = 1 但 recall ≈ 0</b>。",e:"⭐ <b>这就是 F1 存在的理由</b>——<b>两者绑在一起，任何一个塌下去 F1 都跟着塌</b>。⚠ 但 <b>F1 仍只是某一个阈值下的汇总，跨阈值要看 ROC/AUC</b>。"});
+  QUIZ(0,15,{t:"把所有样本都判为正类，precision 和 recall 会怎样？",o:["precision = 1，recall = 0","两个都是 1","两个都是 0","recall = 1，precision 掉到正类在样本里的比例"],a:3,w:"<b>全判正 ⇒ FN = 0 ⇒ recall = 1</b>；<b>而 TP+FP = 全部样本 ⇒ precision = 正类比例</b>（正例占 2% 就是 0.02）。⭐ 这正说明<b>单看一个指标可以被毫无价值的策略刷满</b>。"});
+});
+KP("16 · ⚠ 换正类，格子的名字就全变了",function(){
+  S(0,function(){clearScene();setEq(null);setCap("同一批数据，正类换一下");
+       boxNode(130,206,470,56,"正类定为「+」","g");
+       boxNode(130,270,470,56,"TP=4  FP=2  FN=1  TN=5 ⇒ P≈.667  R=.80","g");
+       boxNode(690,206,470,56,"⚠ 正类改定为「−」","r");
+       boxNode(690,270,470,56,"TP=5  FP=1  FN=2  TN=4 ⇒ P≈.833  R≈.714","r");
+       note("⭐ 同一批观测、同一个模型，precision 和 recall 的数字全变了",640,350,"y");
+       note("⚠ 所以课件说：State the convention every time —— 每次都要声明约定",640,386,"r");},"<b>⚠ 这是一个很容易忽略但影响很大的点：换一个正类，所有格子的名字都变了。</b><br><b>还是那批数据。正类定为「+」时</b>：<b>TP=4、FP=2、FN=1、TN=5</b>，<b>precision ≈ 0.667、recall = 0.80</b>。<br><b>⚠ 如果把正类改定为「−」</b>，<b>原来的 TN 就变成了新的 TP</b>，<b>原来的 FP 变成新的 FN</b>，以此类推。<b>⇒ 变成 TP=5、FP=1、FN=2、TN=4</b>，<b>precision ≈ 0.833、recall ≈ 0.714</b>。<br><b>⭐ 同一批观测、同一个模型，precision 和 recall 的数字完全不同。</b><br><b>⚠ 注意 accuracy 不变</b>（还是 9/12 = 0.75）——<b>因为 TP+TN 这个和没变</b>。<b>这也说明 accuracy 不区分两类错误。</b><br><b>⇒ 所以课件的要求是：State the convention every time——每次都要把正类的约定声明出来。</b><b>这也是评分点清单的第一条：把正类显式写出来。</b>");
+  SUM(0,16,{h:"⚠ 换正类 ⇒ 格子的名字和指标全变",k:"同一批数据：<b>正类为「+」</b> ⇒ TP=4, FP=2, FN=1, TN=5 ⇒ <b>P≈.667, R=.80</b>；<b>正类改为「−」</b> ⇒ TP=5, FP=1, FN=2, TN=4 ⇒ <b>P≈.833, R≈.714</b>。",m:"⚠ <b>accuracy 不变</b>（还是 9/12 = 0.75），因为 <b>TP+TN 这个和没变</b>——这也说明 <b>accuracy 不区分两类错误</b>。",w:"⭐ 课件：<b>Changing the positive class changes the names of the cells and therefore precision and recall. State the convention every time.</b>",e:"⇒ 这正是评分点清单的第一条：<b>把正类显式写出来</b>——<b>不是心里知道，是要写在答卷上</b>。"});
+  QUIZ(0,16,{t:"把正类从「+」改成「−」，下面哪个指标不变？",o:["accuracy","F1","precision","recall"],a:0,w:"<b>accuracy = (TP+TN)/N</b>，换正类只是把 TP 和 TN 互换，<b>和不变</b>。⚠ <b>precision、recall、F1 全都会变</b>——本例 P 从 .667 变 .833，R 从 .80 变 .714。"});
+});
+KP("17 · ★★★ 不平衡：先和「全判多数类」的基线比",function(){
+  S(0,function(){clearScene();setEq(null);setCap("准确率会掩盖稀有类上的失败");
+       boxNode(130,206,1020,48,"正例只占 2%：全判负的准确率 = 98%，而 recall = 0","r");
+       boxNode(130,262,1020,48,"⇒ 一个什么都没学的模型，准确率比很多真模型还高","r");
+       boxNode(130,318,1020,48,"讲义算例：模型 accuracy = 0.8267，全判非次品的基线 = 0.8667","y");
+       note("⚠ 基线比模型还高 —— 没有基线，这个结论根本看不出来",640,386,"r");},"<b>⭐ 不平衡是 accuracy 最容易骗人的场景，课件给的极端例子非常清楚。</b><br><b>正例只占 2%。那么「全判负」这个什么都没学的模型，准确率就有 98%。</b><b>⚠ 但它的 recall = 0——一个正例都没找到。</b><br><b>⇒ 所以在不平衡数据上，一个很高的准确率本身不说明任何事情。</b><br><b>⭐ 讲义还给了一个更真实的算例</b>：<b>某个模型的 accuracy = 0.8267</b>，<b>看起来还行</b>；<b>但「全判非次品」的基线是 0.8667</b>——<b>基线比模型还高</b>。<br><b>⇒ 也就是说，这个模型还不如什么都不做。</b><b>⚠ 而如果不去算那个基线，这个结论根本看不出来。</b><br><b>⭐ 所以「和基线比」不是客套话，它是唯一能让准确率变得有意义的参照。</b><b>这也正好回到前面那条：两边分数接近也可能两边都差，要和基线比。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("那该看什么");
+       boxNode(130,206,470,56,"不平衡时 accuracy 失去信息量","r");
+       boxNode(130,270,470,56,"因为分子里的 TN 太多，淹没了稀有类","r");
+       boxNode(690,206,470,56,"★ 改看 precision / recall","g");
+       boxNode(690,270,470,56,"它们的式子里都没有 TN","g");
+       note("⭐ F1 = 2TP/(2TP+FP+FN) 也不含 TN —— 所以它在不平衡上比 accuracy 有用",640,350,"y");
+       note("⚠ 但 F1 也只是一个工作点的汇总；跨阈值的信息要看 ROC/AUC",640,386,"r");},"<b>那不平衡时该看什么？答案已经藏在公式里了。</b><br><b>accuracy = (TP+TN)/N</b>。<b>⚠ 当负类占 98% 时，分子里的 TN 有一大堆，稀有类上的失败完全被淹没。</b><br><b>⭐ 而 precision = TP/(TP+FP) 和 recall = TP/(TP+FN) 的式子里都没有 TN。</b><b>⇒ 它们只盯着和正类有关的三个格子，所以不会被多数类冲淡。</b><br><b>F1 = 2TP/(2TP+FP+FN) 同样不含 TN</b>——<b>这正是它在不平衡数据上比 accuracy 有用的原因。</b><br><b>⚠ 但要注意 F1 也有它的边界：它仍然是「某一个阈值下」的汇总数字。</b><b>⇒ 换一个阈值，四个计数全变，F1 也跟着变。</b><br><b>⇒ 想知道这个模型跨所有阈值的表现，就得看 ROC 和 AUC——这正是下一块的内容。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("把那个 2% 的例子算完整");
+    matrix({rows:4,cols:4,cw:270,ch:40,x:100,y:206,
+      cell:function(i,j){var t=[["模型","Accuracy","Recall（正类）","有用吗"],
+        ["全判负（什么都没学）","0.98","★ 0","✗ 一个正例都没找到"],
+        ["真模型 A","0.96","0.55","⚠ 准确率更低，但找到了一半以上"],
+        ["看哪个指标","★ 看不出差别","★ 差别巨大","⇒ 所以要看 recall"]];return t[i][j];},
+      dim:function(i,j){return i===0;},
+      hl:function(i,j){return i===3?"hl":"";}});
+    note("⭐ 按准确率排名，「什么都没学」排第一 —— 这就是 accuracy 在不平衡上失效的样子",640,386,"y");},"<b>把那个「正例占 2%」的例子算完整，对比就非常刺眼了。</b><br><b>「全判负」这个什么都没学的模型：accuracy = 0.98，recall = 0。</b><b>它一个正例都没找到。</b><br><b>再看一个真模型 A：accuracy = 0.96，recall = 0.55。</b><b>它找到了一半以上的正例，但准确率反而更低</b>——<b>因为为了抓正例，它不可避免地误判了一些负例。</b><br><b>⚠⚠ 如果按准确率排名，「什么都没学」排第一。</b><b>这就是 accuracy 在不平衡数据上失效的样子。</b><br><b>⭐ 而换成 recall 看，差别是 0 和 0.55——巨大。</b><br><b>⇒ 所以课件说「和全判多数类的基线比，看 precision/recall」。</b><b>这两句是连在一起的：先用基线揭穿 accuracy，再用 precision/recall 看真实差别。</b><br><b>⚠ 这也说明为什么「这个模型准确率 96%」这种句子，在不给类别比例的情况下，根本没有信息量。</b>");
+  SUM(0,17,{h:"★★★ 不平衡时必须和基线比",k:"<b>正例占 2% ⇒ 全判负的准确率 98%，而 recall = 0</b>。<b>一个什么都没学的模型，准确率比很多真模型还高。</b>",m:"⭐ <b>讲义算例</b>：<b>模型 accuracy = 0.8267，全判非次品的基线 = 0.8667</b>——<b>基线比模型还高，模型还不如什么都不做</b>。⚠ 不算基线根本看不出来。",w:"<b>为什么 accuracy 失效</b>：<b>分子里的 TN 太多，淹没了稀有类</b>。⇒ <b>改看 precision / recall / F1，它们的式子里都没有 TN</b>。",e:"⚠ <b>但 F1 也只是「某一个阈值下」的汇总</b>——换阈值四个计数全变。<b>跨阈值的信息要看 ROC / AUC。</b>"});
+  QUIZ(0,17,{t:"正例只占 2% 的数据上，某模型准确率 96%。这说明什么？",o:["说明不了什么：全判负的基线就有 98%，模型还不如什么都不做","说明 recall 也很高","模型很好，准确率很高","说明数据有泄漏"],a:0,w:"⭐ <b>不平衡时必须先算「全判多数类」的基线</b>。⚠ 讲义真实算例：<b>模型 0.8267 vs 基线 0.8667</b>——<b>不算基线这个结论根本看不出来</b>。"});
+});
+KP("18 · ⚠⚠ 稀有正例：recall 0.80，可 precision 只有 7.5%",function(){
+  S(0,function(){clearScene();setEq(null);setCap("Tutorial extension 的主题：rare positives");
+       matrix({rows:5,cols:3,cw:360,ch:34,x:110,y:196,
+         cell:function(i,j){var t=[["量","数值","怎么读"],
+           ["样本总数 / 真实正例","1000 / 10","正类只占 1%"],
+           ["TP / FN","8 / 2","★ recall = 8/10 = 0.80，找得不错"],
+           ["FP / TN","98 / 892","⚠ 为了抓到 8 个，误报了 98 个"],
+           ["precision","8/106 ≈ 0.075","★ 说是正的，只有 7.5% 真是"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2||i===4?"hl":"";}});
+       note("⭐ accuracy = 900/1000 = 0.900，看着不错 —— 可全判负的基线是 0.990",640,386,"y");},"<b>⚠⚠ 这是 Tutorial extension 的主题，也是 precision 和 recall 分歧最大的场景。</b><br><b>设定：1000 个样本，真实正例只有 10 个——正类占 1%。</b><br><b>模型抓到了 8 个（TP = 8），漏了 2 个（FN = 2）</b>。<b>⇒ recall = 8/10 = 0.80，找得相当不错。</b><br><b>⚠ 但为了抓到这 8 个，它误报了 98 个（FP = 98）。</b><b>⇒ precision = 8/(8+98) = 8/106 ≈ 0.075。</b><br><b>也就是说：它每说 100 次「这是正的」，只有 7.5 次是真的。</b><br><b>⭐ 而 accuracy = (8+892)/1000 = 0.900，看起来相当漂亮。</b><b>⚠⚠ 可是「全判负」的基线是 990/1000 = 0.990——比它高得多。</b><br><b>⇒ 三个数字讲了三个完全不同的故事，而这是同一个模型、同一批数据。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("同一个模型，三个指标三种结论");
+       boxNode(130,206,320,52,"accuracy = 0.900","b");
+       boxNode(130,268,320,52,"「还不错」","b");
+       boxNode(480,206,320,52,"recall = 0.80","g");
+       boxNode(480,268,320,52,"「正例找得不错」","g");
+       boxNode(830,206,330,52,"precision = 0.075","r");
+       boxNode(830,268,330,52,"「报警几乎全是假的」","r");
+       note("⭐ 哪个结论对？取决于你要拿它干什么 —— 这就是「结合代价解释」",640,350,"y");
+       note("⚠ 如果人工复核一次很贵，0.075 的 precision 意味着 92.5% 的复核是白做的",640,386,"r");},"<b>把三个数字并排放，这一页的教训就非常清楚了。</b><br><b>accuracy = 0.900 说「还不错」；recall = 0.80 说「正例找得不错」；precision = 0.075 说「报警几乎全是假的」。</b><br><b>⭐ 同一个模型、同一批数据、三个完全不同的结论。那哪个对？</b><b>答案是：取决于你要拿它干什么。</b><br><b>⇒ 如果这是一个初筛，后面还有一道便宜的复核，那 recall 0.80 就是好消息——重要的是别漏。</b><br><b>⚠ 但如果每一次人工复核都很贵，那 precision = 0.075 意味着 92.5% 的复核是白做的——这个模型可能根本不能用。</b><br><b>⭐ 这正是课件反复说的「结合错误代价解释」：指标本身不会告诉你好坏，是代价结构告诉你的。</b><br><b>⚠ 答题时的标准做法：三个指标都算出来，然后说明在给定的代价下哪一个才是关键。</b>");
+  SUM(0,18,{h:"⚠⚠ 稀有正例：accuracy .900、recall .80、precision .075",k:"<b>1000 个样本只有 10 个正例</b>。<b>TP=8、FN=2 ⇒ recall = 0.80</b>；<b>FP=98、TN=892 ⇒ precision = 8/106 ≈ 0.075</b>。",m:"⭐ <b>accuracy = 900/1000 = 0.900 看着不错</b>，<b>可「全判负」的基线是 0.990</b>——<b>比它高得多</b>。",w:"⇒ <b>同一个模型、同一批数据，三个指标给出三种结论</b>：「还不错」/「正例找得不错」/「报警几乎全是假的」。",e:"⭐ <b>哪个结论对取决于用途</b>：<b>后面有便宜复核 ⇒ recall 0.80 是好消息</b>；<b>人工复核很贵 ⇒ 92.5% 的复核白做，可能根本不能用</b>。⚠ 答题要<b>三个都算，再说明代价下哪个关键</b>。"});
+  QUIZ(0,18,{t:"1000 个样本里 10 个正例，模型 TP=8、FP=98。precision 是多少？",o:["0.990","0.900","0.80","约 0.075"],a:3,w:"<b>precision = TP/(TP+FP) = 8/106 ≈ 0.075</b>。⚠ <b>0.80 是 recall</b>（8/10）、<b>0.900 是 accuracy</b>、<b>0.990 是全判负的基线</b>——<b>基线比模型的准确率还高</b>。"});
+});
+KP("19 · ★★★ 阈值要按代价选，不是按「哪个好看」",function(){
+  S(0,function(){clearScene();setEq("$$\\text{总代价} \\;=\\; 5\\cdot FN \\;+\\; 1\\cdot FP$$","top");
+       setCap("漏一个次品代价 5，一次不必要检验代价 1");
+       matrix({rows:3,cols:4,cw:270,ch:40,x:100,y:206,
+         cell:function(i,j){var t=[["阈值","FN","FP","总代价"],
+           ["0.5","6","4","5(6) + 4 = 34"],
+           ["0.3","2","12","★ 5(2) + 12 = 22"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2?"hl":"";}});
+       note("⭐ 阈值 0.3 更优 —— 因为漏检比误检贵 5 倍，值得多抓一些",640,350,"y");
+       note("⚠ 算法很简单：每类错误的计数乘它的代价，然后相加 —— 但式子必须写出来",640,386,"r");},"<b>⭐ 阈值不是按「哪个指标好看」选的，是按代价选的。讲义给了一个干净的算例。</b><br><b>设定：漏掉一个次品的代价是 5，一次不必要的检验代价是 1。</b><b>⇒ 总代价 = 5·FN + 1·FP。</b><br><b>阈值 0.5 时</b>：<b>FN = 6、FP = 4</b>，<b>总代价 = 5×6 + 4 = 34</b>。<br><b>阈值 0.3 时</b>：<b>FN = 2、FP = 12</b>，<b>总代价 = 5×2 + 12 = 22</b>。<br><b>⇒ 阈值 0.3 更优。</b><b>直觉上也说得通：漏检比误检贵 5 倍，所以值得把阈值放低一些、多抓一些，哪怕多了一些误检。</b><br><b>⭐ 算法本身很简单——每类错误的计数乘它的代价，然后相加。</b><b>⚠ 但式子必须写出来，这是得分点，不能只给结论。</b><br><b>⚠ 还有一条纪律：阈值要用验证证据来选，不能去看测试结果再决定。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 代价一改，结论就翻转");
+       boxNode(130,206,470,56,"代价 5 : 1（漏检贵）","g");
+       boxNode(130,270,470,56,"34 vs 22 ⇒ 阈值 0.3 更优","g");
+       boxNode(690,206,470,56,"⚠ 代价改成相等 1 : 1","r");
+       boxNode(690,270,470,56,"(6+4)=10 vs (2+12)=14 ⇒ 阈值 0.5 更优","r");
+       note("⭐ 同一个模型、同一组预测，代价一变，最优阈值就换了",640,350,"y");
+       note("⚠ 所以这个代价比只属于这道题，不是「precision 比 recall 重要」的普遍结论",640,386,"r");},"<b>⚠⚠ 这一镜是整块最该理解的：把代价改成相等，结论会直接翻转。</b><br><b>还是同样的计数。如果漏检和误检一样贵（1 : 1）</b>：<b>阈值 0.5 的总代价是 6 + 4 = 10</b>；<b>阈值 0.3 的是 2 + 12 = 14</b>。<b>⇒ 这回是阈值 0.5 更优。</b><br><b>⭐ 同一个模型、同一组预测、同样的两个阈值——代价一变，最优选择就换了。</b><br><b>⇒ 这说明「哪个阈值好」根本不是模型的属性，它是「模型 + 代价结构」共同决定的。</b><br><b>⚠ 所以讲稿特意加了一条限定：这个代价比描述的是这道练习的优先级，不是「precision 比 recall 重要」的普遍偏好。</b><br><b>⚠ 答题时千万别写成「recall 更重要」这种绝对化的句子</b>——<b>要写「在本题 5 : 1 的代价下，降低阈值更优；若代价相等，结论相反」。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("阈值动一下，四个计数全变");
+    matrix({rows:4,cols:4,cw:270,ch:40,x:100,y:206,
+      cell:function(i,j){var t=[["阈值","判为正的变多还是变少","Recall","Precision"],
+        ["调高（更严）","变少","↓ 不会上升","↑ 可升可降"],
+        ["调低（更松）","变多","★ ↑ 不会下降","可升可降"],
+        ["⇒ 谁没变","—","真实正例总数","⚠ 预测为正的那一组变了"]];return t[i][j];},
+      dim:function(i,j){return i===0;},
+      hl:function(i,j){return i===3?"hl":"";}});
+    note("⭐ recall 的分母 TP+FN 是固定的，所以它单调；precision 的分母会跟着阈值变",640,386,"y");},"<b>再把阈值和两个指标的关系说透一次，因为这里的方向很容易记反。</b><br><b>调高阈值（更严格）</b>：<b>判为正的变少 ⇒ TP 不会增加 ⇒ recall 不会上升</b>。<br><b>调低阈值（更宽松）</b>：<b>判为正的变多 ⇒ TP 不会减少 ⇒ recall 不会下降</b>。<br><b>⭐ 为什么 recall 这么听话？因为它的分母 TP + FN 就是「真实正例总数」，这个数和阈值无关，永远固定。</b><b>⇒ 分母不动，分子单调，整个比值就单调。</b><br><b>⚠ 而 precision 的分母是 TP + FP ——「我预测为正的那一组」</b>，<b>这一组的大小会随阈值变</b>。<b>⇒ 分子分母一起变，方向就说不定了。</b><br><b>⇒ 所以课件那句「Precision and recall change together」要这样理解：它们都会随阈值变，但只有 recall 的方向是确定的。</b><br><b>⭐ 这个结论在 ROC 里直接复用：TPR 就是 recall，所以曲线从 (0,0) 到 (1,1) 的过程中，纵坐标永远不会往下走。</b>");
+  SUM(0,19,{h:"★★★ 总代价 = 5·FN + 1·FP：34 vs 22",k:"<b>阈值 0.5：FN=6, FP=4 ⇒ 5(6)+4 = 34</b>；<b>阈值 0.3：FN=2, FP=12 ⇒ 5(2)+12 = 22</b>。<b>⇒ 0.3 更优</b>（漏检贵 5 倍，值得多抓）。",m:"⚠⚠ <b>代价改成相等就翻转</b>：<b>(6+4)=10 vs (2+12)=14 ⇒ 阈值 0.5 更优</b>。<b>同一个模型、同一组预测，代价一变最优阈值就换了。</b>",w:"⇒ <b>「哪个阈值好」不是模型的属性</b>，它是<b>「模型 + 代价结构」共同决定的</b>。",e:"⚠ 讲稿限定：<b>这个代价比只属于这道练习，不是「precision 比 recall 重要」的普遍结论</b>。⚠ <b>阈值要用验证证据选，不能看测试结果再决定。</b>"});
+  QUIZ(0,19,{t:"漏检代价 5、误检代价 1 时阈值 0.3 更优。如果两类错误代价相等呢？",o:["仍然是 0.3 更优","无法比较","变成 0.5 更优：10 vs 14","两者相同"],a:2,w:"<b>代价相等时 0.5 得 6+4 = 10，0.3 得 2+12 = 14</b> ⇒ <b>0.5 更优，结论翻转</b>。⭐ 这说明<b>最优阈值由「模型 + 代价结构」共同决定</b>。"});
+});
+KP("20 · ★★★ ROC：怎么一个点一个点地建出来",function(){
+  S(0,function(){clearScene();setEq(null);setCap("FPR 横轴、TPR 纵轴 —— 轴别画反");
+       axes({x0:300,x1:760,y0:380,y1:200});
+       curve([[300,380],[760,200]],"d");
+       curve(rocpath([[0,0],[0,0.5],[0.5,0.5],[0.5,1],[1,1]],300,760,380,200),"y");
+       dots(rocpath([[0,0],[0,0.5],[0.5,0.5],[0.5,1],[1,1]],300,760,380,200),"r",7);
+       note("(0,0) 全判负",300,196,"d"); note("(1,1) 全判正",790,196,"d");
+       boxNode(850,206,330,44,"加一个正例 ⇒ 点往上走","g");
+       boxNode(850,258,330,44,"加一个负例 ⇒ 点往右走","r");
+       boxNode(850,310,330,44,"⚠ 分数相同的必须一起加入","y");
+       note("⇒ 于是同时往上又往右 —— 画出来是一段斜线，不是阶梯",640,386,"y");},"<b>ROC 的建法是一个点一个点来的，而且顺序是固定的。</b><br><b>先把两个轴定死：FPR 放横轴，TPR 放纵轴。⚠ 评分点清单里专门有一条「ROC 轴别画反」。</b><br><b>起点是 (0, 0)：阈值极高，全判负。终点是 (1, 1)：阈值极低，全判正。</b><br><b>然后从严到松地降低阈值，每次让一个（或一批）观测进入「判为正」</b>：<b>加进来的是一个正例 ⇒ TP 增加 ⇒ 点往上走</b>；<b>加进来的是一个负例 ⇒ FP 增加 ⇒ 点往右走</b>。<br><b>⚠⚠ 关键的一条：分数相同的观测必须一起加入。</b><b>⇒ 如果同分的里面既有正例又有负例，那么 TP 和 FP 同时增加——点同时往上又往右，画出来就是一段斜线，而不是台阶。</b><br><b>⭐ 两个分母自始至终不变：真实正例总数、真实负例总数。这是 ROC 能画成固定方框的原因。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("四样本算例：A .90(+)  B .80(−)  C .40(+)  D .10(−)");
+       matrix({rows:6,cols:4,cw:280,ch:28,x:80,y:150,
+         cell:function(i,j){var t=[["阈值","被判为正","FPR","TPR → ROC 点"],
+           ["高于 0.90","无","0","0 → (0, 0)"],
+           ["0.85","A","0","0.5 → (0, 0.5)"],
+           ["0.60","A, B","0.5","0.5 → (0.5, 0.5)"],
+           ["0.30","A, B, C","0.5","1 → (0.5, 1)"],
+           ["0.05","全部","1","1 → (1, 1)"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===2||i===4?"hl":"";}});
+       note("⭐ 加入 A（正例）点往上；加入 B（负例）点往右；加入 C（正例）又往上",640,386,"y");},"<b>用四个样本把这个过程走一遍，每一步都对得上。</b><br><b>四个样本</b>：<b>A 打分 0.90 是正例、B 打分 0.80 是负例、C 打分 0.40 是正例、D 打分 0.10 是负例</b>。<b>⇒ 真实正例 2 个，真实负例 2 个，两个分母都是 2。</b><br><b>阈值高于 0.90</b>：没人被判为正，<b>FPR = 0、TPR = 0 ⇒ 点 (0, 0)</b>。<br><b>阈值 0.85</b>：<b>A 进来，它是正例 ⇒ TPR = 1/2 = 0.5，FPR 还是 0 ⇒ 点 (0, 0.5)，往上走了</b>。<br><b>阈值 0.60</b>：<b>B 进来，它是负例 ⇒ FPR = 1/2 = 0.5，TPR 不变 ⇒ 点 (0.5, 0.5)，往右走了</b>。<br><b>阈值 0.30</b>：<b>C 进来，正例 ⇒ TPR = 2/2 = 1 ⇒ 点 (0.5, 1)，又往上</b>。<br><b>阈值 0.05</b>：<b>D 进来 ⇒ 点 (1, 1)</b>。<br><b>⭐ 这个例子里没有同分，所以全是「纯上」或「纯右」的台阶，没有斜线。</b>");
+  SUM(0,20,{h:"★★★ ROC：FPR 横轴、TPR 纵轴，从 (0,0) 走到 (1,1)",k:"<b>起点 (0,0) 全判负，终点 (1,1) 全判正</b>，<b>阈值从严到松</b>。<b>加一个正例 ⇒ 点往上；加一个负例 ⇒ 点往右。</b>",m:"⚠⚠ <b>分数相同的观测必须一起加入</b> ⇒ <b>TP 和 FP 同时增加 ⇒ 点同时往上又往右 ⇒ 画出一段斜线</b>，不是台阶。",w:"⭐ <b>两个分母自始至终不变</b>：真实正例总数、真实负例总数。⚠ <b>评分点：ROC 轴别画反（FPR 横、TPR 纵）。</b>",e:"<b>四样本算例</b>（A .90+、B .80−、C .40+、D .10−）：<b>(0,0) → (0,0.5) → (0.5,0.5) → (0.5,1) → (1,1)</b>。这个例子<b>没有同分，所以全是台阶没有斜线</b>。"});
+  QUIZ(0,20,{t:"ROC 上出现一段斜线，说明什么？",o:["模型是随机猜的","有分数相同的观测，而且它们里既有正例又有负例，必须一起加入","画错了，ROC 只能是阶梯","阈值取得太密"],a:1,w:"⚠ <b>同分的必须一起加入</b> ⇒ <b>TP 和 FP 同时增加 ⇒ 点同时往上又往右</b>。⭐ <b>对角线才代表随机猜</b>；阈值取多密都不会产生斜线。"});
+});
+KP("21 · ★★★ AUC：梯形法与配对法互相验算",function(){
+  S(0,function(){clearScene();setEq("$$\\text{梯形面积} = \\text{宽} \\times \\frac{\\text{两个高}}{2} \\qquad \\text{AUC}=P[\\,\\text{随机正例分数} > \\text{随机负例分数}\\,]$$","top");
+       setCap("两种算法，结果必须一致");
+       matrix({rows:5,cols:3,cw:360,ch:32,x:110,y:200,
+         cell:function(i,j){var t=[["线段","宽 × 平均高","面积"],
+           ["(0,0) → (0,0.5)","0 × 0.25","★ 0　竖直段宽度为 0"],
+           ["(0,0.5) → (0.5,0.5)","0.5 × 0.5","0.25"],
+           ["(0.5,0.5) → (0.5,1)","0 × 0.75","★ 0　又是竖直段"],
+           ["(0.5,1) → (1,1)","0.5 × 1","0.50"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===1||i===3?"hl":"";}});
+       note("⭐ 合计 AUC = 0 + 0.25 + 0 + 0.50 = 0.75",640,386,"y");},"<b>AUC 就是 ROC 曲线下的面积，用梯形法一段一段加起来。</b><br><b>梯形面积 = 宽 × 两个高的平均。</b><br><b>把四段逐个算</b>：<b>(0,0) → (0,0.5) 是竖直段，宽度为 0，面积 0</b>；<b>(0,0.5) → (0.5,0.5)：宽 0.5、平均高 0.5 ⇒ 面积 0.25</b>；<b>(0.5,0.5) → (0.5,1) 又是竖直段，面积 0</b>；<b>(0.5,1) → (1,1)：宽 0.5、平均高 1 ⇒ 面积 0.50</b>。<br><b>⇒ 合计 AUC = 0 + 0.25 + 0 + 0.50 = 0.75。</b><br><b>⚠ 注意那两个竖直段：它们的宽度是 0，所以面积是 0。</b><b>很多人会下意识地给它们算一块面积，那就错了。</b><br><b>⭐ 顺带一个考试安排：Tutorial Q3 会直接给你前两块面积，让你算剩下的，最后五块全加起来。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("配对法：用来核对，两种方法必须一致");
+       matrix({rows:5,cols:3,cw:360,ch:32,x:110,y:200,
+         cell:function(i,j){var t=[["配对（正例 vs 负例）","正例分数更高吗","计分"],
+           ["A 0.90  vs  B 0.80","是","1"],
+           ["A 0.90  vs  D 0.10","是","1"],
+           ["C 0.40  vs  B 0.80","否","0"],
+           ["C 0.40  vs  D 0.10","是","1"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ AUC = 3/4 = 0.75 —— 和梯形法完全一致，这就是考场上的自查手段",640,386,"y");},"<b>AUC 还有第二个定义，而它正好可以用来核对。</b><br><b>配对法：AUC = 随机抽一个正例、随机抽一个负例，正例分数更高的概率。⭐ 平局算半胜。</b><br><b>本例有 2 个正例、2 个负例，一共 4 个配对</b>：<b>A(0.90) vs B(0.80)：正例更高，计 1</b>；<b>A(0.90) vs D(0.10)：计 1</b>；<b>C(0.40) vs B(0.80)：负例更高，计 0</b>；<b>C(0.40) vs D(0.10)：计 1</b>。<br><b>⇒ AUC = 3/4 = 0.75——和梯形法完全一致。</b><br><b>⭐ 讲稿明确建议用这个方法核对：数「正例分数高于负例」的配对数，平局算半个。</b><b>⇒ 两种方法应当一致，考场上互相验算。</b><br><b>⚠ 这也解释了 AUC 的含义：它衡量的是「排序质量」——模型有没有把正例排在负例前面，而不是概率值本身准不准。</b>");
+  SUM(0,21,{h:"★★★ AUC = 0.75，两种算法一致",k:"<b>梯形法</b>：面积 = 宽 × 两个高的平均。四段分别是 <b>0（竖直段）、0.25、0（竖直段）、0.50</b> ⇒ <b>AUC = 0.75</b>。",m:"⚠ <b>竖直段宽度为 0，面积就是 0</b>——很多人会下意识给它们算一块面积。",w:"<b>配对法</b>：<b>AUC = P[随机正例分数 > 随机负例分数]，平局算半胜</b>。本例 4 个配对里 3 个正例更高 ⇒ <b>3/4 = 0.75</b>，和梯形法一致。",e:"⭐ <b>两种方法必须一致，这就是考场上的自查手段</b>。⇒ 配对法也解释了 AUC 的含义：<b>衡量排序质量</b>——有没有把正例排在负例前面。"});
+  QUIZ(0,21,{t:"ROC 上一段竖直线（比如 (0,0) 到 (0,0.5)）对 AUC 的贡献是多少？",o:["无法确定","0.5","0 —— 宽度为 0","0.25"],a:2,w:"<b>梯形面积 = 宽 × 平均高</b>，<b>竖直段的宽是 0</b>，所以面积是 0。⚠ 这是算 AUC 时最常见的失误——<b>给竖直段也算了一块面积</b>。"});
+});
+KP("22 · ⚠⚠ AUC 的边界：它只衡量排序",function(){
+  S(0,function(){clearScene();setEq(null);setCap("课件把话说得很死");
+       cite("AUC measures ranking, not calibration or error cost.",150);
+       boxNode(130,206,470,56,"✓ AUC 衡量的","g");
+       boxNode(130,270,470,56,"跨所有阈值的排序质量","g");
+       boxNode(690,206,470,56,"✗ AUC 不衡量","r");
+       boxNode(690,270,470,56,"校准（概率准不准）· 错误代价 · 业务价值","r");
+       note("⭐ 所以 AUC 很高也不代表这个模型「直接能用」",640,350,"y");
+       note("⚠ 真正要用的那个阈值，仍然要靠错误代价和应用场景来定",640,386,"r");},"<b>⚠⚠ AUC 的边界，课件把话说得很死，而且这是扩展题的得分点。</b><br><b>课件原话：AUC 衡量排序，不衡量校准，也不衡量错误代价。</b><b>讲稿版本还多一个词：也不衡量业务价值。</b><br><b>✓ 它衡量的是：跨所有阈值的排序质量</b>——<b>模型有没有把正例排在负例前面</b>。<br><b>✗ 它不衡量校准</b>：<b>一个模型可能把所有概率都压在 0.4 到 0.6 之间，排序完全正确、AUC = 1，但没有一个概率值是可信的。</b><br><b>✗ 它不衡量错误代价</b>：<b>AUC 把所有阈值一视同仁地平均掉了，而你实际只会用其中一个。</b><br><b>⇒ 所以课件的收尾是：AUC 描述的是跨阈值的排序；真正要用的那个工作阈值，仍然需要一个关于错误代价和应用场景的决定。</b><br><b>⭐ 答题时这句话可以直接当结论写。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("五条评分点清单 —— 直接对应扣分点");
+       boxNode(90,196,1100,40,"① 把正类显式写出来 —— 不是心里知道，是写在答卷上","g");
+       boxNode(90,244,1100,40,"② 先把每个混淆矩阵格子映射好，再算","g");
+       boxNode(90,292,1100,40,"③ 分母要和问题对应：问「我说是正时对了多少」用 TP+FP","g");
+       boxNode(90,340,1100,40,"④ ROC 的轴别画反（FPR 横、TPR 纵）","g");
+       note("⑤ 用错误代价解释阈值 —— 不能只说「0.3 比 0.5 好」",640,386,"g");},"<b>课件第 12 页右栏给了五条「上 Tutorial 之前先会」，它们直接对应扣分点。</b><br><b>① 把正类显式写出来。</b><b>⚠ 注意措辞——不是心里知道，是要写在答卷上。</b><br><b>② 先把每一个混淆矩阵格子映射好，再开始算。</b><b>这呼应了「只有在这个检查之后才算指标」。</b><br><b>③ 分母要和问题对应</b>：<b>问「我说是正的时候对了多少」就用 TP+FP</b>；<b>问「真正的正例找到了多少」就用 TP+FN</b>。<br><b>④ ROC 的轴别画反：FPR 横轴、TPR 纵轴。</b><br><b>⑤ 用错误代价解释阈值——不能只说「0.3 比 0.5 好」，要给出代价计算。</b><br><b>⭐ 这五条有一个共同点：它们考的都不是「会不会算」，而是「写没写出来」。</b><b>⇒ 所以哪怕时间紧，这五句话也要补上，性价比极高。</b>");
+  SUM(0,22,{h:"⚠⚠ AUC 只衡量排序 ＋ 五条评分点",k:"课件：<b>AUC measures ranking, not calibration or error cost</b>（讲稿还多一个 <b>business value</b>）。",m:"<b>✗ 不衡量校准</b>：概率全挤在 0.4–0.6 之间，排序完全正确 AUC = 1，<b>但没有一个概率值可信</b>。<b>✗ 不衡量代价</b>：它把所有阈值一视同仁平均掉了，<b>而你只会用其中一个</b>。",w:"⇒ <b>真正要用的那个工作阈值，仍然需要一个关于错误代价和应用场景的决定。</b>",e:"⭐ <b>五条评分点</b>：<b>① 把正类显式写出来 ② 先映射每个格子再算 ③ 分母和问题对应 ④ ROC 轴别画反 ⑤ 用错误代价解释阈值</b>。<b>它们考的不是「会不会算」，是「写没写出来」。</b>"});
+  QUIZ(0,22,{t:"某模型 AUC = 0.95，下面哪句最准确？",o:["它的概率预测很准确，可以直接当作风险值用","它的排序能力很好，但这不说明概率校准，也不说明该用哪个阈值","它一定优于 AUC = 0.90 的模型在所有阈值上的表现","它在任何阈值下的准确率都很高"],a:1,w:"⭐ 课件：<b>AUC measures ranking, not calibration or error cost.</b>⚠ 两条 ROC 曲线可以交叉——<b>AUC 更高不代表在每个阈值上都更好</b>。"});
+});
+KP("23 · ★★ Tutorial 三题就是三种扩展题形态",function(){
+  S(0,function(){clearScene();setEq(null);setCap("数据划分 → 指标 → ROC/AUC，一条链");
+       matrix({rows:4,cols:3,cw:360,ch:34,x:110,y:196,
+         cell:function(i,j){var t=[["题","考什么","对应本片哪几个知识点"],
+           ["Q1","数据角色、泄漏、拟合诊断、停止","划分 / 防泄漏 / 诊断三模式 / 早停"],
+           ["Q2","计数、指标、基线、验证代价","混淆矩阵 / 四个指标 / 不平衡 / 代价"],
+           ["Q3","从分数建 ROC（含一个平局）、估 AUC、讨论阈值","ROC 建点 / 梯形与配对 / AUC 边界"]];return t[i][j];},
+         dim:function(i,j){return i===0;},
+         hl:function(i,j){return i===3?"hl":"";}});
+       note("⭐ 这三题就是 T3 扩展题最可能的三种形态 —— 练透它们等于练透这一讲",640,386,"y");},"<b>Tutorial 的三道题构成一条清晰的链：数据划分 → 指标 → ROC/AUC。而这也正是 T3 扩展题最可能的三种形态。</b><br><b>Q1 考数据角色、泄漏、拟合诊断和停止。</b>讲稿把它拆成四步：<b>算各子集大小并说明用途 → 指出哪些操作从留出数据里「学」了东西 → 对照基线诊断拟合 → 比较单步学习率证据并用验证来停</b>。<br><b>⭐ 第二步的措辞是判据：找出哪些操作从留出数据里「学」了东西。关键词是 learn——缩放器、填补器、PCA 都在学参数，即使不用标签。</b><br><b>Q2 考计数、指标、基线和验证代价。</b><b>⚠ 讲稿用 Also 起头提了后两样，说明基线和代价是最容易漏掉的部分。</b><br><b>Q3 考从打分的案例建 ROC 点（里面有一个平局）、用配对计数核对 AUC、再对给定曲线估 AUC 并讨论阈值。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("⚠ 讲稿给的两条「不要推出」");
+       boxNode(130,206,1020,48,"✗ 不要从更低的平均损失推出「这是普适的最佳学习率」","r");
+       boxNode(130,262,1020,48,"✗ 也不要从更低的平均损失推出「每个观测都预测对了」","r");
+       boxNode(130,318,1020,48,"⇒ 这两条正好对应那两张表：学习率表、连续训练表","g");
+       note("⭐ Q3 的 AUC 题会直接给你前两块面积，让你算剩下的，最后五块全加起来",640,386,"y");},"<b>⚠⚠ 讲稿在 Q1 里给了两条「不要推出」，它们正好把前面两张表的教训固定成了答题纪律。</b><br><b>第一条：不要从更低的平均损失，推出一个普适的最佳学习率。</b><b>⇒ 对应那张学习率表——那是单步的、受控的、没有验证数据的对比。</b><br><b>第二条：不要从更低的平均损失，推出每个观测都预测对了。</b><b>⇒ 对应那张连续训练表——平均降到 0.369420，仍有正例停在 0.4859 一直判错。</b><br><b>⭐ 这两条的共同点是：它们都在限制「从一个汇总数字能推出什么」。</b><b>⇒ 而这正是整个 T3 的主题。</b><br><b>⚠ 另外一个实操信息：Q3 的 AUC 那一题会直接给你前两块梯形面积，让你算剩下的，最后把五块全加起来。</b><b>⇒ 所以要熟练的是「算一块梯形」和「别给竖直段算面积」这两件事。</b>");
+  SUM(0,23,{h:"★★ Q1 划分 / Q2 指标 / Q3 ROC —— 三种扩展题形态",k:"<b>Q1</b>：算各子集大小并说明用途 → <b>指出哪些操作从留出数据里「学」了东西</b> → 对照基线诊断拟合 → 比较单步学习率证据并用验证来停。",m:"<b>Q2</b>：计数 → 指标 → <b>基线</b> → <b>验证代价</b>（⚠ 讲稿用 <b>Also</b> 起头提后两样，说明最容易漏）。<b>Q3</b>：建 ROC 点（含一个平局）→ 配对核对 AUC → 估面积并讨论阈值。",w:"⚠⚠ 讲稿两条<b>「不要推出」</b>：<b>✗ 从更低的平均损失推出普适最佳学习率</b>（对应学习率表）<b>✗ 推出每个观测都预测对了</b>（对应连续训练表）。",e:"⭐ 两条的共同点：<b>都在限制「从一个汇总数字能推出什么」</b>——这就是整个 T3 的主题。⚠ <b>Q3 会给你前两块面积，算剩下的，五块全加</b>。"});
+  QUIZ(0,23,{t:"Q1 要你「指出哪些操作从留出数据里学了东西」，关键词是什么？",o:["learn —— 缩放器、填补器、PCA 都在学参数，即使不用标签","在测试集上运行的操作","耗时最长的操作","用到了标签的操作"],a:0,w:"⭐ 讲稿措辞：<b>identify which operations learn from held-out data</b>。⚠ <b>关键词是 learn 不是「用标签」</b>——讲义那个 [0,2] 均值变 34 的反例，一个标签都没用到。"});
+});
+KP("24 · ★ 答题模板：混淆矩阵题的六步",function(){
+  S(0,function(){clearScene();setEq(null);setCap("考纲官方示例大题就是这个套路");
+       boxNode(90,196,1100,38,"① 声明正类（写在答卷上）","b");
+       boxNode(90,242,1100,38,"② 读行列标签，确认哪一行是真实、哪一列是预测","b");
+       boxNode(90,288,1100,38,"③ 逐个观测归格，每个案例进且只进一个格子","v");
+       boxNode(90,334,1100,38,"④ 四格之和 = 样本数（把这个自查写出来）","v");
+       note("⑤ 套公式算四个指标　⑥ 结合错误代价解释该选哪个阈值",640,386,"g");},"<b>把混淆矩阵题的答法固定成六步，照着写就不会漏。</b><br><b>① 声明正类</b>——写在答卷上。<b>② 读行列标签</b>，确认哪一行是真实、哪一列是预测。<b>⚠ 这一步就是防「摆法反了」的那道闸。</b><br><b>③ 逐个观测归格</b>，每个案例进且只进一个格子。<b>④ 四格之和 = 样本数，把这个自查写出来。</b><br><b>⑤ 套公式算四个指标。⑥ 结合错误代价解释该选哪个阈值。</b><br><b>⭐ 考纲的官方示例大题走的就是这个套路</b>：<b>给 TP=18、FP=12、FN=6、TN=164</b>，<b>算出 accuracy = 182/200 = 0.91、precision = 18/30 = 0.60、recall = 18/24 = 0.75、F1 = 36/54 ≈ 0.667</b>。<br><b>⚠ 注意这一题里 accuracy 高达 0.91，而 precision 只有 0.60</b>——<b>正是因为 TN = 164 占了绝大多数</b>。<b>⇒ 这就是不平衡那一条在真题里的样子。</b>");
+  S(0,function(){clearScene();setEq(null);setCap("最后：T3 的六件事串成一条线");
+       boxNode(130,206,1020,44,"划分（训练拟合 / 验证选择 / 测试估计）→ 防泄漏五步","b");
+       boxNode(130,256,1020,44,"→ 读训练证据（平均会骗人）→ 用验证证据停止（保留最好的检查点）","v");
+       boxNode(130,306,1020,44,"→ 混淆矩阵（先定正类、逐格归）→ 四个指标（两个分母）","g");
+       note("→ 跨阈值看 ROC/AUC（只衡量排序）→ 最后用代价选定那一个工作阈值",640,386,"y");},"<b>最后把 T3 的六件事串成一条线，这就是整讲的逻辑顺序。</b><br><b>先把数据划分好</b>（训练拟合、验证选择、测试估计），<b>并用防泄漏五步保证边界不被跨越</b>。<br><b>然后读训练过程留下的证据</b>——<b>⚠ 记住平均会骗人：平均 BCE 降到 0.369420，仍有正例停在 0.4859 一直判错。</b><br><b>接着用验证证据决定什么时候停</b>，<b>保留验证最好的那一组检查点，而不是最后一步。</b><br><b>再建混淆矩阵</b>——<b>先定正类、逐格归、做合计自查</b>——<b>然后才算那四个指标，注意两个分母各自的条件。</b><br><b>想看跨阈值的表现就用 ROC 和 AUC</b>，<b>但它只衡量排序。</b><br><b>⭐ 最后，用错误代价选定实际要用的那一个工作阈值。</b><b>⇒ 整条线走完，才叫「评估」——它确实是一套纪律，不是一个指标。</b>");
+  SUM(0,24,{h:"★ 混淆矩阵题六步 ＋ 整讲一条线",k:"<b>① 声明正类 ② 读行列标签 ③ 逐个观测归格 ④ 四格之和 = 样本数（写出来）⑤ 套公式 ⑥ 结合代价解释阈值</b>。",m:"⭐ <b>考纲官方示例</b>：<b>TP=18, FP=12, FN=6, TN=164</b> ⇒ <b>accuracy = 182/200 = 0.91、precision = 18/30 = 0.60、recall = 18/24 = 0.75、F1 = 36/54 ≈ 0.667</b>。",w:"⚠ 那一题 <b>accuracy 高达 0.91 而 precision 只有 0.60</b>——<b>正因为 TN = 164 占了绝大多数</b>。这就是不平衡那条在真题里的样子。",e:"⭐ <b>整讲一条线</b>：<b>划分 + 防泄漏 → 读训练证据（平均会骗人）→ 用验证证据停止 → 混淆矩阵 → 四个指标 → ROC/AUC（只衡量排序）→ 用代价选定工作阈值</b>。"});
+  QUIZ(0,24,{t:"TP=18, FP=12, FN=6, TN=164，F1 是多少？",o:["0.91","0.75","0.60","约 0.667"],a:3,w:"<b>F1 = 2TP/(2TP+FP+FN) = 36/(36+12+6) = 36/54 ≈ 0.667</b>。⚠ <b>0.91 是 accuracy</b>、<b>0.60 是 precision</b>、<b>0.75 是 recall</b>——这四个数正是考纲示例题的全套答案。"});
+});
+KP("完 · 这一讲要带走的七件事",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("M3 T3 · 完","模型评估",
+      "划分 → 停止 → 混淆矩阵 → precision/recall → ROC");},
+    "收一下，七件事。<br><b>① 三个划分各一个角色</b>：<b>训练拟合、验证选择、测试估计</b>。⭐⭐ 最该背的一句是：<b>拿测试数据做决定，它就变成了验证数据</b>——<b>不是「不太好」，是性质变了</b>。⚠ <b>阈值和停止点是「决定」，不是参数，所以归验证管</b>。<br><b>② 防泄漏五步</b>：<b>先划分 → 只用训练集算填补与缩放参数 → 把学到的参数应用到验证/测试（不要重新拟合）→ 用验证结果做选择 → 全部固定后在测试集上评估一次</b>。⚠ <b>训练集拟合的不只是权重，还包括预处理参数</b>——这是泄漏最常见的入口。<br><b>③ 诊断要带限定词</b>。<b>训练差 ⇒ 可能容量不足/优化不够/预处理差/数据问题，本身不证明欠拟合</b>；<b>训练强而验证差 ⇒ 可能过拟合，但要先排除分布差异、验证集过小、泄漏</b>；⚠⚠ <b>两边接近也可能是「两边都差」</b>，<b>所以要和基线比</b>。<br><b>④ 平均会骗人</b>。⭐ 那张连续训练表是全讲最锋利的证据：<b>平均 BCE 从 0.580352 降到 0.369420，可有一个正例的概率只从 0.4750 爬到 0.4859，始终在 0.5 以下、一直判错</b>。<b>机制是它的两个隐藏 ReLU 都是 0，分数只剩输出偏置在撑。</b>⚠ <b>跑满 100 次就停，既不证明收敛、不证明全局最优、也不证明泛化。</b><br><b>⑤ 混淆矩阵先定正类</b>。⚠⚠⚠ <b>两份官方材料的摆法是反的</b>（Canvas 讲义正类在前 [[TP,FN],[FP,TN]]，复习课件和 sklearn 负类在前 [[TN,FP],[FN,TP]]），<b>所以绝不能背位置</b>。<b>课件自己给的安全办法是：行是真实、列是预测，先固定正类，再逐个观测归格，四格之和 = 样本数，这一步查完才算指标。</b><br><b>⑥ 四个指标与两个分母</b>：<b>Accuracy = (TP+TN)/N = 9/12 = 0.75</b>；<b>Precision = TP/(TP+FP) = 4/6 ≈ 0.667，条件是「我预测为正的那一组」</b>；<b>Recall = TP/(TP+FN) = 4/5 = 0.80，条件是「真实为正的那一组」</b>；<b>F1 = 2TP/(2TP+FP+FN) = 8/11 ≈ 0.727</b>。⚠ <b>F1 不含 TN</b>。<br><b>⑦ ROC 与 AUC</b>：<b>FPR 横轴、TPR 纵轴；从 (0,0) 全判负走到 (1,1) 全判正；加一个正例往上走，加一个负例往右走，分数相同的必须一起加入 ⇒ 画出一段斜线</b>。<b>梯形法与配对法要互相验算</b>——四样本那个例子两种方法都给 <b>AUC = 0.75</b>。⚠⚠ <b>AUC 只衡量排序，不衡量校准、也不衡量错误代价</b>；<b>真正要用的那个阈值，仍然要靠代价和场景来定</b>（本例 <b>5·FN + 1·FP：阈值 0.5 得 34，阈值 0.3 得 22</b>；<b>代价改成相等就翻转成 10 vs 14</b>）。");
+});
+window.__startProjector(CFG);
+})();
+</script>
