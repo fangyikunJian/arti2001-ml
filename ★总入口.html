@@ -373,6 +373,26 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
     <div class="m">复习放映厅/M2T3-GMM与EM-精读动画深度版.html</div>
     <div class="d">生成故事与 z/r 之分、为什么求和号困在 log 里就解不出闭式、E 步四步与 M 步三步的完整算例、一轮后似然从 −2.9703 升到 −2.4394、选 K 与 p=3K−1</div>
   </a>
+  <a class="card v" href="复习放映厅/影片/CME295讲座L1-Transformer.html">
+    <div class="t"><span class="tag d">CME295 · 33 知识点 / 117 帧</span>L1 Transformer</div>
+    <div class="m">复习放映厅/影片/CME295讲座L1-Transformer.html</div>
+    <div class="d">Stanford CME295《Transformers &amp; LLMs》2025 秋第一讲。<b>从「模型只懂数字」一路推到自注意力</b>：分词三种切法与 OOV → one-hot 全正交 → Word2vec 的代理任务 → RNN 的三个病 → 注意力 → Q/K/V 与 softmax(QKᵀ/√d_k)V → 三处注意力各司其职 → 端到端走一遍。42 条讲者原话带精确时间码</div>
+  </a>
+  <a class="card v" href="复习放映厅/影片/CME295讲座L2-Transformer变体与技巧.html">
+    <div class="t"><span class="tag d">CME295 · 25 知识点 / 91 帧</span>L2 Transformer 的变体与技巧</div>
+    <div class="m">复习放映厅/影片/CME295讲座L2-Transformer变体与技巧.html</div>
+    <div class="d">八年里换了哪三个零件，以及为什么只剩 decoder-only。<b>位置嵌入换了五次</b>（学出来的 → 正弦余弦 → T5 偏置 → ALiBi → <b>RoPE</b>），每次都在修前一次的具体毛病；归一化 post→pre、LayerNorm→RMSNorm；注意力的两个正交方向（滑窗省算力、MQA/GQA 省显存）。后半场把 BERT 讲到底：CLS/SEP · MLM 的 80/10/10 · NSP · 蒸馏 · RoBERTa</div>
+  </a>
+  <a class="card v" href="复习放映厅/影片/CME295讲座L3-大语言模型.html">
+    <div class="t"><span class="tag d">CME295 · 25 知识点 / 97 帧</span>L3 Transformers 与大语言模型</div>
+    <div class="m">复习放映厅/影片/CME295讲座L3-大语言模型.html</div>
+    <div class="d">三块：<b>MoE</b>（怎么把模型做大而不把推理做贵 —— 专家/路由/稀疏、路由坍塌、扩容量而不扩激活参数）· <b>解码策略</b>（贪心 / beam search / 采样 / top-k / top-p / 温度；⭐ 整块是「在序列空间上做搜索」，而且结局反直觉：更接近全局最优的 beam search 实践中不用）· <b>提示与推理效率</b>（context rot · CoT · self-consistency · KV 缓存 · PagedAttention · MLA · 投机解码）</div>
+  </a>
+  <a class="card v" href="复习放映厅/影片/CME295讲座L4-LLM的训练.html">
+    <div class="t"><span class="tag d">CME295 · 25 知识点 / 92 帧</span>L4 LLM 是怎么训出来的</div>
+    <div class="m">复习放映厅/影片/CME295讲座L4-LLM的训练.html</div>
+    <div class="d">上半场<b>预训练</b>：迁移学习范式 · FLOPs 与 FLOPS 的区别 · 规模定律与 <b>Chinchilla（token ≈ 20× 参数）</b> · 训练要存什么 · 数据并行 / ZeRO / 模型并行 · <b>FlashAttention</b>（瓶颈在搬运不在计算；重算激活竟然两头都赚）· 量化与混合精度。下半场<b>微调</b>：SFT（损失只从回答算起）· 指令微调与安全 · <b>评估为什么难</b>（在「测试任务」上训练 / Chatbot Arena 的四个毛病）· alignment 与 mid-training · <b>LoRA 与 QLoRA</b></div>
+  </a>
   <a class="card v" href="复习放映厅/影片/CS229讲座L15-PCA与ICA.html">
     <div class="t"><span class="tag d">CS229 · 25 知识点 / 82 帧</span>L15 PCA 与 ICA</div>
     <div class="m">复习放映厅/影片/CS229讲座L15-PCA与ICA.html</div>
@@ -1051,6 +1071,7 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
 
 
 
+
 <!-- deploy-public-mode : start ── 由 _deploy/apply.py 注入，别手改 ── -->
 <style>
 a.nolocal{pointer-events:none;opacity:.42;text-decoration:line-through;
@@ -1070,7 +1091,7 @@ a.nolocal::after{content:"仅本地";font-size:11px;letter-spacing:.02em;
      本地想看公开站长什么样，地址后面加 ?public=1 。*/
   if (!/\.github\.io$/.test(location.hostname)
       && !/[?&]public=1\b/.test(location.search)) return;
-  var MISSING = ["M1材料/课件/", "M2材料/课件/", "M3材料/课件/", "M1材料/Tutorial与Practical/", "M2材料/Tutorial与Practical/", "M3材料/Tutorial与Practical/", "M2材料/Canvas讲义/", "M3材料/Canvas讲义/", "CS229/notes/", "CS229/transcripts/", "精读/slides/", "精读/src/", "其它/", "M2T1_PCA.pdf", "GMM.pdf", "Assessment 2 Revision.pdf", "M1材料/笔记与阅读/Calculating linear regression coefficients.pdf", "M1材料/笔记与阅读/General form and gradient descent.pdf", "M1材料/笔记与阅读/How to train your perceptron.pdf", "M1材料/笔记与阅读/Linear Regression A Probability Interpretation.pdf", "M1材料/笔记与阅读/Logistic Regression A Step Beyond the Perceptron.pdf", "M1材料/笔记与阅读/Other classical machine-learning algorithms.pdf", "M1材料/笔记与阅读/SVM - kernel trick.pdf", "M1材料/笔记与阅读/SVM - margin maximisation via its dual form.pdf", "M1材料/笔记与阅读/SVM - margin.pdf", "复习放映厅/源码/ppt_M1T1_overview.txt", "复习放映厅/源码/ppt_M1T2_LinearRegression.txt", "复习放映厅/源码/ppt_M1T3_Classification.txt", "复习放映厅/源码/ppt_M1T4_SVM.txt"], ALT = {"M3材料/Canvas讲义/T0_考纲与考试形式.txt": "M3材料/笔记与阅读/M3_总目录.pdf"};
+  var MISSING = ["M1材料/课件/", "M2材料/课件/", "M3材料/课件/", "M1材料/Tutorial与Practical/", "M2材料/Tutorial与Practical/", "M3材料/Tutorial与Practical/", "M2材料/Canvas讲义/", "M3材料/Canvas讲义/", "CS229/notes/", "CS229/transcripts/", "CME295/transcripts/", "精读/slides/", "精读/src/", "其它/", "M2T1_PCA.pdf", "GMM.pdf", "Assessment 2 Revision.pdf", "M1材料/笔记与阅读/Calculating linear regression coefficients.pdf", "M1材料/笔记与阅读/General form and gradient descent.pdf", "M1材料/笔记与阅读/How to train your perceptron.pdf", "M1材料/笔记与阅读/Linear Regression A Probability Interpretation.pdf", "M1材料/笔记与阅读/Logistic Regression A Step Beyond the Perceptron.pdf", "M1材料/笔记与阅读/Other classical machine-learning algorithms.pdf", "M1材料/笔记与阅读/SVM - kernel trick.pdf", "M1材料/笔记与阅读/SVM - margin maximisation via its dual form.pdf", "M1材料/笔记与阅读/SVM - margin.pdf", "复习放映厅/源码/ppt_M1T1_overview.txt", "复习放映厅/源码/ppt_M1T2_LinearRegression.txt", "复习放映厅/源码/ppt_M1T3_Classification.txt", "复习放映厅/源码/ppt_M1T4_SVM.txt"], ALT = {"M3材料/Canvas讲义/T0_考纲与考试形式.txt": "M3材料/笔记与阅读/M3_总目录.pdf"};
   function hit(href){
     var p; try { p = decodeURIComponent(href); } catch(e) { p = href; }
     p = p.replace(/^\.\//, "").split(/[?#]/)[0];

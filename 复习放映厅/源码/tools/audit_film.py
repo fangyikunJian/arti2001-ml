@@ -36,12 +36,20 @@ BOXN  = re.compile(r'boxNode\([^)]*?,\s*"([a-z ]*)"\s*\)')
 SETEQ = re.compile(r'setEq\(\s*"((?:[^"\\]|\\.)*)"')
 AXES  = re.compile(r"axes\(\{([^}]*)\}\)")
 MATRX = re.compile(r"matrix\(\{rows:(\d+),\s*cols:(\d+).*?var t=(\[\[.*?\]\]);", re.S)
+# note("文字",…) 与 boxNode(x,y,w,h,"文字",…) 的那个文字实参
+NOTE_TXT = re.compile(r'(?:note|boxNode)\(\s*(?:[^,()]*,\s*){0,4}?"((?:[^"\\]|\\.)*)"')
+HTMLTAG  = re.compile(r"</?(?:b|u|i|em|strong|span|br|div|p)\b[^>]*>")
+# setEq 的内容里「< 紧跟字母/斜杠」会被 innerHTML 当成标签开头 ⇒ 公式整个不渲染。
+# 白名单是老片子故意写在公式里的 HTML（加粗之类），要放过。
+LT_TAG   = re.compile(r"<[A-Za-z/]")
+LT_OK    = re.compile(r"</?(?:b|u|i|em|strong|span|br)\b[^>]*>")
 ODD   = re.compile(r"[\u0400-\u04FF\uAC00-\uD7AF\u3040-\u30FF\u0600-\u06FF]")
 
 Y_LIMIT = 390     # 2026-10-27 实测：讲解条（#cap）顶边稳定在画布 y=403。
                   # ⚠ 之前记的「遮挡从 457 起」是在标题帧上量的，字幕当时是空的，不作数。
                   # ⚠ 字幕被下方的讲解文字顶上来，所以讲解越长字幕越高；403 是实测的下限。
-NOTE_Y    = 386   # note 的文字框是 [y-14, y+4]，y<=399 底边才 <=403
+NOTE_Y    = 386
+NOTE_GAP  = 19   # note 文字框高 18 ⇒ 同镜内相邻两条的 y 至少差这么多   # note 的文字框是 [y-14, y+4]，y<=399 底边才 <=403
 EQTOP_MIN = 196    # setEq(…,"top") 的方程底边实测 194，内容不得高于这一行
 AX_OK = {"x0", "x1", "y0", "y1", "l", "r", "t", "b"}
 # "d" 是全体基类统一的「无修饰」约定：落回基础样式。
@@ -101,6 +109,101 @@ def audit(path):
             if k not in AX_OK:
                 bad.append('⑥ axes 用了不认的键名 "%s"（只认 %s）'
                            % (k, "/".join(sorted(AX_OK))))
+
+    # ⑬ note()/boxNode() 的文字走 d3 的 .text()，**HTML 标签会原样显示在画面上**。
+    #    （引擎第 245 行：note 用 .text(t)；boxNode 的 label 也转交给 note。）
+    #    2026-10-28 加：build_m2t1.py 里就有一处 note("…<b>要用验证集比</b>")，
+    #    一直把 <b> 两个标签画在屏幕上，而前十二项检查全都放过它。
+    #    ⚠ 讲解词（narr）走 innerHTML，那里的 HTML 是**对的**，所以只查这两个函数的实参。
+    for m in NOTE_TXT.finditer(src):
+        t = m.group(1)
+        hit = HTMLTAG.findall(t)
+        if hit:
+            bad.append("⑬ note()/boxNode() 的文字里有 HTML 标签 %s —— "
+                       "会原样画在画面上（它走 .text() 不是 innerHTML）：%s"
+                       % ("/".join(sorted(set(hit))), t[:46]))
+
+    # ⑭ setEq 里的 `<` 紧跟字母 ⇒ innerHTML 把它当标签，公式整个不渲染（运行时才坏，
+    #    前 13 项全查不出来）。2026-10-28 在 CME295 L1 的 perplexity 公式上实测过。
+    for m in SETEQ.finditer(src):
+        q = m.group(1)
+        if not q.strip():
+            continue
+        rest = LT_OK.sub(" ", q)
+        if LT_TAG.search(rest):
+            bad.append("⑭ setEq 的 LaTeX 里有「< 紧跟字母」，innerHTML 会当成 HTML 标签 ⇒ "
+                       "公式整个不渲染。改写成 \\lt 或换记法：%s"
+                       % q[:60])
+
+    # ⑮ 同一镜里两条 note 竖直挨太近 ⇒ 文字框相触。
+    #    note 的文字框实测是 [y−14, y+4]（高 18）⇒ 相邻两条的 y 至少差 19。
+    #    2026-10-28：CME295 L3 里连犯三次（都是 368/386，正好差 18），前 14 项全放过。
+    #    只在「横向也可能重叠」时报 —— 左右两栏各一条、Δy 再近也不碰。
+    for shot in re.split(r"S\(\s*\d+\s*,\s*function", src)[1:]:
+        ns = []
+        for m in re.finditer(r'note\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)', shot):
+            t, x, y = m.group(1), float(m.group(2)), float(m.group(3))
+            if not t.strip():
+                continue
+            w = max(40.0, len(t) * 11.0)          # 中文约 11px/字，保守下限 40
+            ns.append((y, x - w / 2, x + w / 2, t))
+        for a in range(len(ns)):
+            for b in range(a + 1, len(ns)):
+                ya, la, ra, ta = ns[a]
+                yb, lb, rb, tb = ns[b]
+                if abs(ya - yb) >= NOTE_GAP:
+                    continue
+                if ra < lb or rb < la:            # 横向完全错开
+                    continue
+                bad.append("⑮ 同一镜里两条 note 的 y 只差 %g（文字框高 18，至少要差 %d）"
+                           "：「%s」与「%s」" % (abs(ya - yb), NOTE_GAP, ta[:26], tb[:26]))
+
+    # ⑯ stack() / seq() 的几何：这两个辅助函数**自己算**每一格的 y，
+    #    所以⑨⑩那种「只认字面 boxNode」的检查完全看不见它们。
+    #    2026-10-28：CME295 L3 里 stack 两次把底边算到 390 以上，并压住下方的 note。
+    #    签名（本项目通用）：stack(cx, ytop, items, bw, bh, gap) / seq(x0, y, toks, cls, bw, bh)
+    for shot in re.split(r"S\(\s*\d+\s*,\s*function", src)[1:]:
+        notes_y = []                  # [(y, 左, 右), ...]
+        for m in re.finditer(
+                r'note\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)', shot):
+            if not m.group(1).strip():
+                continue
+            w = max(40.0, len(m.group(1)) * 11.0)
+            nx = float(m.group(2))
+            notes_y.append((float(m.group(3)), nx - w / 2, nx + w / 2))
+        notes_y.sort()
+        for m in re.finditer(r"stack\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*\[(.*?)\]\s*,\s*"
+                             r"(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)", shot, re.S):
+            ytop, bh, gap = float(m.group(2)), float(m.group(5)), float(m.group(6))
+            n = m.group(3).count('["')
+            if n < 1:
+                continue
+            bottom = ytop + (n - 1) * (bh + gap) + bh
+            if bottom > Y_LIMIT:
+                bad.append("⑯ stack(ytop=%g, n=%d, bh=%g, gap=%g) 底边 y=%g 超过 %d"
+                           % (ytop, n, bh, gap, bottom, Y_LIMIT))
+            # ⚠ 不能只看「末格标签下方」的 note —— note 也可能落在标签**上方**几像素
+            #   （CME295 L4 第 88 帧就是这样漏掉的）。逐格标签都比一遍。
+            cx, bw = float(m.group(1)), float(m.group(4))
+            sl, sr = cx - bw / 2, cx + bw / 2          # stack 的横向范围
+            for k in range(n):
+                lab = ytop + k * (bh + gap) + bh / 2 + 5
+                near = [t for t in notes_y
+                        if abs(t[0] - lab) < NOTE_GAP and not (t[2] < sl or sr < t[1])]
+                if near:
+                    bad.append("⑯ stack 第 %d 格标签 y=%g 与 note y=%g 只差 %g（至少要差 %d）"
+                               % (k + 1, lab, near[0][0], abs(near[0][0] - lab), NOTE_GAP))
+                    break
+        for m in re.finditer(r"seq\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*\[[^\]]*\]\s*,\s*"
+                             r'(?:"[a-z ]*"|\[[^\]]*\])\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)', shot, re.S):
+            y, bh = float(m.group(2)), float(m.group(4))
+            if y + bh > Y_LIMIT:
+                bad.append("⑯ seq(y=%g, bh=%g) 底边 y=%g 超过 %d" % (y, bh, y + bh, Y_LIMIT))
+            last = y + bh / 2 + 5
+            near = [t for t in notes_y if abs(t[0] - last) < NOTE_GAP]
+            if near:
+                bad.append("⑯ seq 方块标签 y=%g 与 note y=%g 只差 %g（至少要差 %d）"
+                           % (last, near[0][0], abs(near[0][0] - last), NOTE_GAP))
 
     for m in ODD.finditer(src):
         a, b = max(0, m.start() - 22), m.end() + 22

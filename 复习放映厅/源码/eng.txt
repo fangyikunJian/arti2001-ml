@@ -120,6 +120,7 @@ svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
 #sum .row.w{border-left-color:var(--coral)}
 #sum .row.e{border-left-color:var(--yellow)}
 #sum .row.m{border-left-color:var(--blue)}
+#sum .row.r{border-left-color:var(--violet)}
 
 #quizL{align-items:center;pointer-events:none}
 #quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
@@ -306,7 +307,9 @@ function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
   narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
 function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
 function showSum(kp,s){
-  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"]];
+  /* ⚠ 2026-10-28 新增 ["r","接到你的课题"]：公开课片子（CME295 这类为科研看的课）
+     没有「与你的考试」这一格可填。放在最后、键名另起 ⇒ 既有片子一个字不用改。*/
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"],["r","接到你的课题"]];
   sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
     ord.filter(function(o){return s[o[0]];}).map(function(o){
       return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';

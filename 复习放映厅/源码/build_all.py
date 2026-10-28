@@ -32,6 +32,11 @@ def R(pat):
 RULES = [
     ("入口",        lambda p: p in (HUB, OUT)),
     ("备份",        R(r"复习放映厅/_备份-修复前/")),
+    # CME295（Stanford Transformers & LLMs，2025 秋）—— 与 CS229 同构的一套
+    ("字幕·VTT原始", R(r"CME295/transcripts/_vtt/")),
+    ("字幕·时间索引", R(r"CME295/transcripts/.*_timed\.txt$")),
+    ("字幕·正文",    R(r"CME295/transcripts/.*\.txt$")),
+    ("工具",        R(r"CME295/.*\.py$")),
     ("字幕·VTT原始", R(r"CS229/transcripts/_vtt/")),
     ("字幕·旧版",    R(r"CS229/transcripts/_旧版/")),
     ("字幕·时间索引", R(r"CS229/transcripts/.*_timed\.txt$")),

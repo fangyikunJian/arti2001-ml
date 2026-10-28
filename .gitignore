@@ -15,7 +15,7 @@ nul
 Thumbs.db
 
 # ── 第三方材料：学校课件 / Tutorial 与官方答案 / 讲师反馈 /
-#    Canvas 讲义原文 / CS229 讲义与字幕 / 幻灯 PDF ──
+#    Canvas 讲义原文 / CS229 与 CME295 的讲义与字幕 / 幻灯 PDF ──
 #    著作权属于学校与各课作者，本仓库不转载。本地照常用，
 #    公开站上这些链接会被标成「只在本地有」。
 M1材料/课件/
@@ -28,6 +28,7 @@ M2材料/Canvas讲义/
 M3材料/Canvas讲义/
 CS229/notes/
 CS229/transcripts/
+CME295/transcripts/
 精读/slides/
 精读/src/
 其它/

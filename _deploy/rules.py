@@ -20,6 +20,9 @@ THIRD_PARTY_DIRS = [
     "M3材料/Tutorial与Practical/",
     "M2材料/Canvas讲义/", "M3材料/Canvas讲义/",
     "CS229/notes/", "CS229/transcripts/",
+    # ⚠ CME295（Stanford Transformers & LLMs）的字幕与 CS229 的完全同类：
+    #   著作权属于 Stanford 与讲者，本仓库不转载。片子里只引单句原话并注明时间码。
+    "CME295/transcripts/",
     "精读/slides/",
     # ⚠ 别看名字像自己的源码 —— `精读/src/*.txt` 是官方课件的**逐页全文抽取**，
     #   而且连【备注讲稿】（老师的讲稿备注）都抽出来了。等于把整份课件换成文本发布。
@@ -84,7 +87,7 @@ def gitignore_text():
     L += BUILD_ONLY
     L += ["",
           "# ── 第三方材料：学校课件 / Tutorial 与官方答案 / 讲师反馈 /",
-          "#    Canvas 讲义原文 / CS229 讲义与字幕 / 幻灯 PDF ──",
+          "#    Canvas 讲义原文 / CS229 与 CME295 的讲义与字幕 / 幻灯 PDF ──",
           "#    著作权属于学校与各课作者，本仓库不转载。本地照常用，",
           "#    公开站上这些链接会被标成「只在本地有」。"]
     L += THIRD_PARTY_DIRS
