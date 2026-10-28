@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""放映厅影片静态体检 —— 八项检查。每一条都对应一次真实踩过的坑。
+"""放映厅影片静态体检 —— 十七项检查（⑰ 扫构建脚本 .py，其余扫产物 html）。每一条都对应一次真实踩过的坑。
 见 memory/projector-engine-traps.md 与 projector-quality-bar.md。
 
   ① setEq 必须 $$ 包裹        —— 不包裹 MathJax 不渲染，画面上是一行裸 LaTeX
@@ -15,7 +15,7 @@
 
 用法：python audit_film.py <影片.html> [更多...]
 """
-import io, os, re, subprocess, sys, tempfile
+import io, os, os, re, subprocess, sys, tempfile
 
 sys.stdout.reconfigure(encoding="utf-8")
 SRC = r"G:/Adelaide COMSC/2026S2/Machine Learning/复习放映厅/源码"
@@ -285,6 +285,62 @@ def audit(path):
     return len(bad)
 
 
+# ⑰ setEq 的 LaTeX 里不许有「单个反斜杠」—— 场景 JS 会被当成 JS 源码插进 <script>，
+#    setEq("$$\theta$$") 里的 \t 在 JS 字符串里是制表符，公式会**静默**变形。
+#    ⚠ 这一项扫**构建脚本 .py**，不是产物 html。
+EQ_CALL = re.compile(r'setEq\(\s*"((?:[^"' + "\\\\" + r']|' + "\\\\" + r'.)*)"')
+LONE_BS = re.compile(r'(?<!' + "\\\\" + r')' + "\\\\" + r'(?!' + "\\\\" + r')')
+
+
+def check_source(path):
+    """扫一个构建脚本/模块，只做第 ⑰ 项；返回问题列表。"""
+    src = io.open(path, encoding="utf-8").read()
+    out = []
+    for m in EQ_CALL.finditer(src):
+        inner = m.group(1)
+        if LONE_BS.search(inner):
+            out.append("⑰ 第 %d 行 setEq 里有单个反斜杠（要写成两个）：%s"
+                       % (src.count("\n", 0, m.start()) + 1, inner[:66]))
+    return out
+
+
+def audit_source(path):
+    bad = check_source(path)
+    name = os.path.basename(path)
+    print("%-34s %s" % (name, "✓ 通过（⑰）" if not bad else "✗ %d 个问题" % len(bad)))
+    for b in bad:
+        print("   " + b)
+    return len(bad)
+
+
+def selftest_17():
+    """⑰ 的自检：三条该报、三条不该报。改了正则就要重跑。"""
+    import tempfile
+    fire = ['setEq("$$' + chr(92) + 'theta$$");',
+            'setEq("$$' + chr(92) + 'frac{a}{b}$$");',
+            'setEq("$$x ' + chr(92) + 'mid y$$","top");']
+    quiet = ['setEq("$$' + chr(92) * 2 + 'theta$$");',
+             'setEq("$$' + chr(92) * 2 + 'frac{a}{b}$$","top");',
+             'setEq("$$a+b=c$$");']
+    bad = []
+    for i, line in enumerate(fire + quiet):
+        fd, p = tempfile.mkstemp(suffix=".py"); os.close(fd)
+        io.open(p, "w", encoding="utf-8").write(line + "\n")
+        hit = bool(check_source(p))
+        os.unlink(p)
+        want = i < len(fire)
+        if hit != want:
+            bad.append("⑰ 自检第 %d 条%s：%s"
+                       % (i + 1, "该报没报" if want else "误报", line))
+    return bad
+
+
 if __name__ == "__main__":
-    n = sum(audit(p) for p in sys.argv[1:])
+    if "--selftest17" in sys.argv:
+        probs = selftest_17()
+        print("\n".join(probs) if probs else "⑰ 自检：6/6 条都对")
+        sys.exit(1 if probs else 0)
+    n = 0
+    for p in sys.argv[1:]:
+        n += audit_source(p) if p.endswith(".py") else audit(p)
     print("\n合计 %d 个问题" % n)

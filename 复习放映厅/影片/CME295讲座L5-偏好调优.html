@@ -1,0 +1,995 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CME295 讲座 L5 · 偏好调优</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;600;800&display=swap">
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+   通用「放映厅」学习模板  ·  v1
+  ═══════════════════════════════════════════════════════════════════════════
+
+  这是一个可复用的框架。所有引擎代码（放映机、字幕层、总结卡、必答测验、
+  SVG 绘图工具箱、字幕防遮挡）都已内置。你只需要改动一个地方：
+
+     ↓↓↓ 最下方 <script> 里 “========= 在这里填内容 =========” 之间的部分 ↓↓↓
+
+  ── 怎么用 ───────────────────────────────────────────────────────────────
+  1. 改 CFG：标题、副标题、视频链接（可留空）。
+  2. 用 KP / S / SUM / QUIZ 四个函数搭出每个知识点，结构固定：
+        KP("知识点名", function(){
+          S(时间秒, 画面函数, "讲解段落（可选，按 N 显示）");   // 讲解镜头，可多个
+          SUM(时间秒, 知识点号, {h:标题, k:核心结论, m:底层机制, w:常见误解, e:与考试});
+          QUIZ(时间秒, 知识点号, {t:题干, o:[选项...], a:正确下标, w:解析});
+        });
+  3. 画面函数里可用的绘图工具（全部已内置）：
+        clearScene()                    清空画布
+        setTitle(小标,大标题,副标题)     标题卡
+        setBig(大字, 小字)               居中大字（数字/结论）
+        setCap(html)                     顶部一句话（支持 <b><i><em><s>）
+        setEq("$$...$$", "top")          MathJax 公式（"top" 顶部对齐）
+        flip("...<span data-id=x>..")    公式项级变形动画（FLIP）
+        T(id, 文本, "hl/res/ded")        flip 用的 token
+        note(文本,x,y,"g/y/b/r/v",锚)    画布上的标注
+        dots([[x,y]...], "a/b/c", 半径)  散点
+        curve(点数组, "fit/fit g/...")    折线/曲线（带描边动画）
+        boxNode(x,y,w,h,标签,"g/y/b/r/v") 方块节点
+        link(x1,y1,x2,y2)                连线
+        matrix({rows,cols,cw,ch,x,y,cell:fn,dim:fn,hl:fn,label,labelCls})  表格/矩阵
+        坐标系是 1280×720（16:9），原点左上。
+  4. 颜色语义（保持一致，学习者会形成条件反射）：
+        蓝 blue = 模型/输入   黄 yellow = 注意力/结论   绿 green = 正确/答案
+        珊瑚 coral = 误差/错误   紫 violet = 强调
+  5. 交互（已内置，无需改）：空格/→ 推进 · ← 回退 · 数字键跳知识点 · N 开关讲解。
+     测验必答才能继续；总结卡与测验不需要讲解。
+
+  ── 这个模板里放了 3 个知识点作为“怎么写”的活样例，可整段替换。 ────────────
+-->
+
+<style>
+:root{
+  --bg:#080B11; --ink:#F0F4FA; --dim:#93A1B5; --dimmer:#3D4658; --edge:#1B2230;
+  --blue:#54A9F7; --yellow:#FFD36E; --green:#5BDDA8; --coral:#FF7C87; --violet:#B48BF5;
+  --sans:"Sora",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+mjx-container{color:inherit!important}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;width:100%;height:100%;max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto}
+svg#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.layer{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+
+#eqBox{font-size:clamp(16px,2.5vw,36px);text-align:center;line-height:1.5;max-width:92%;
+  transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.3,1)}
+#eqBox.off{opacity:0;transform:translateY(13px) scale(.97)}
+#eqBox.top{align-self:flex-start;margin-top:4.5vh}
+
+#big{font-family:var(--mono);font-size:clamp(30px,5.6vw,82px);font-weight:500;letter-spacing:-.03em;
+  color:var(--yellow);text-shadow:0 0 44px rgba(255,211,110,.3);text-align:center;
+  transition:opacity .55s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+#big.off{opacity:0;transform:scale(.86)}
+#big small{display:block;font-family:var(--sans);font-size:.22em;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--dim);text-shadow:none;margin-top:.55em;font-weight:400}
+
+/* caption band — pinned into the lower third, clears the strip, scrolls if long */
+#capL{align-items:flex-end;pointer-events:none}
+#capL::before{content:'';position:absolute;left:0;right:0;bottom:0;height:46vh;
+  background:linear-gradient(to top,var(--bg) 30%,rgba(8,11,17,.72) 62%,transparent);pointer-events:none}
+#capWrap{max-width:min(84ch,94%);width:100%;max-height:62vh;overflow-y:auto;margin-bottom:50px;
+  display:flex;flex-direction:column;align-items:center;pointer-events:auto;position:relative;z-index:2}
+#cap{text-align:center;font-size:clamp(13.5px,1.56vw,22px);font-weight:400;line-height:1.55;
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#cap.off{opacity:0;transform:translateY(12px)}
+#cap b{font-weight:600;color:var(--yellow)}
+#cap i{font-style:normal;color:var(--blue);font-weight:600}
+#cap em{font-style:normal;color:var(--green);font-weight:600}
+#cap s{text-decoration:none;color:var(--coral);font-weight:600}
+#narr{margin:.7em 0 0;max-width:min(90ch,100%);text-align:left;
+  font-size:clamp(12.5px,1.12vw,16px);font-weight:400;line-height:1.72;color:#D9E1ED;
+  background:rgba(8,11,17,.86);border:1px solid rgba(46,58,82,.7);border-radius:12px;
+  padding:12px 17px;box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:1}
+#narr.off{opacity:0}
+#narr[hidden]{display:none}
+#narr b{color:#C6D2E2;font-weight:500}
+#narr i{font-style:normal;color:var(--blue)}
+#narr em{font-style:normal;color:var(--green)}
+#narr s{text-decoration:none;color:var(--coral)}
+
+#sum{max-width:min(1200px,94%);width:100%;max-height:90vh;overflow:auto;
+  background:rgba(17,23,33,.975);border:1px solid #303D52;border-radius:18px;padding:34px 46px 34px;
+  box-shadow:0 28px 74px rgba(0,0,0,.62);
+  transition:opacity .45s ease,transform .45s cubic-bezier(.2,.7,.3,1)}
+#sum.off{opacity:0;transform:translateY(16px) scale(.985)}
+#sum[hidden]{display:none}
+#sum .sh{font-family:var(--mono);font-size:12.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--green);margin:0 0 9px}
+#sum h3{font-size:clamp(24px,2.7vw,38px);font-weight:800;margin:0 0 26px;letter-spacing:-.02em;line-height:1.25;color:#F6F9FE}
+#sum .rows{display:flex;flex-direction:column;gap:15px}
+#sum .row{border-left:4px solid #3C4A61;padding:17px 24px;background:rgba(255,255,255,.03);border-radius:0 12px 12px 0}
+#sum .rk{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:#9EABBE;margin:0 0 8px}
+#sum .rv{font-size:clamp(16px,1.45vw,21px);font-weight:400;line-height:1.88;color:#E3EAF5;margin:0}
+#sum .rv b{color:#FFFFFF;font-weight:700}
+#sum .rv i{font-style:normal;color:#7CC0FF;font-weight:600}
+#sum .rv em{font-style:normal;color:#6FE3B4;font-weight:600}
+#sum .rv s{text-decoration:none;color:#FF97A0;font-weight:600}
+#sum .row.k{border-left-color:var(--green)}
+#sum .row.w{border-left-color:var(--coral)}
+#sum .row.e{border-left-color:var(--yellow)}
+#sum .row.m{border-left-color:var(--blue)}
+#sum .row.r{border-left-color:var(--violet)}
+
+#quizL{align-items:center;pointer-events:none}
+#quiz{max-width:min(72ch,91%);pointer-events:auto;background:rgba(13,18,26,.95);
+  border:1px solid #253044;border-radius:14px;padding:23px 27px;
+  transition:opacity .4s ease,transform .4s cubic-bezier(.2,.7,.3,1)}
+#quiz.off{opacity:0;transform:translateY(14px);pointer-events:none}
+#quiz[hidden]{display:none}
+#quiz .qh{font-family:var(--mono);font-size:11px;letter-spacing:.19em;text-transform:uppercase;color:var(--yellow);margin:0 0 10px}
+#quiz .qq{font-size:clamp(13.5px,1.5vw,20px);font-weight:600;margin:0 0 15px;line-height:1.45}
+#quiz .qo{display:flex;flex-direction:column;gap:7px}
+#quiz button{font-family:var(--sans);font-size:clamp(11.5px,1.2vw,16px);font-weight:300;
+  color:var(--ink);background:rgba(255,255,255,.045);border:1px solid #2A3546;
+  border-radius:8px;padding:10px 15px;cursor:pointer;text-align:left;line-height:1.5;transition:background .2s,border-color .2s}
+#quiz button:hover:not(.lk){border-color:var(--blue);background:rgba(84,169,247,.13)}
+#quiz button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+#quiz button.lk{cursor:default}
+#quiz button.ok{border-color:var(--green);background:rgba(91,221,168,.15);color:var(--green)}
+#quiz button.no{border-color:var(--coral);background:rgba(255,124,135,.13);color:var(--coral)}
+#quiz button.off2{opacity:.32}
+#quiz .why{margin:15px 0 0;font-size:clamp(11.5px,1.15vw,15px);font-weight:300;color:#93A1B5;line-height:1.7;border-top:1px solid #1E2634;padding-top:12px}
+#quiz .why[hidden]{display:none}
+#quiz .why b{color:#C6D2E2;font-weight:500}
+#quiz .why em{font-style:normal;color:var(--green)}
+#quiz .why s{text-decoration:none;color:var(--coral)}
+#quiz .why i{font-style:normal;color:var(--blue)}
+
+#titleL{flex-direction:column}
+#titleL h1{font-size:clamp(25px,4.7vw,68px);font-weight:800;letter-spacing:-.045em;margin:0;line-height:1.07;text-align:center;text-shadow:0 0 70px rgba(84,169,247,.25)}
+#titleL p{font-size:clamp(12px,1.32vw,18px);color:var(--dim);font-weight:300;margin:2vh 0 0;letter-spacing:.05em;text-align:center;max-width:62ch}
+#titleL .act{font-family:var(--mono);font-size:clamp(11px,1.18vw,15px);color:var(--blue);letter-spacing:.28em;margin:0 0 2.2vh;text-transform:uppercase}
+#titleL .rule{width:60px;height:2px;background:var(--blue);margin:3.2vh auto 0;box-shadow:0 0 18px rgba(84,169,247,.7)}
+.fade{transition:opacity .6s ease;display:flex;flex-direction:column;align-items:center}
+.fade.off{opacity:0}
+
+.tok{display:inline-block;white-space:nowrap;padding:0 .06em}
+.tok.hl{color:var(--yellow);text-shadow:0 0 24px rgba(255,211,110,.5)}
+.tok.res{color:var(--green);text-shadow:0 0 24px rgba(91,221,168,.45)}
+.tok.ded{color:var(--coral);opacity:.5}
+
+#strip{position:fixed;left:0;right:0;bottom:0;height:44px;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:6}
+#kps{display:flex;gap:3px;flex:1}
+.kpbar{display:flex;gap:2px;flex:1;position:relative;cursor:pointer}
+.pip{height:2px;flex:1;background:var(--edge);border-radius:2px;transition:background .4s}
+.pip.seen{background:#2E3B50}
+.pip.now{background:var(--blue);box-shadow:0 0 9px rgba(84,169,247,.85)}
+.pip.sum{background:#1D3A30} .pip.sum.seen{background:#2C5C4A}
+.pip.quiz{background:#3A3218} .pip.quiz.seen{background:#5C4E22}
+.kplbl{position:absolute;top:-15px;left:0;font-family:var(--mono);font-size:8px;color:var(--dimmer);letter-spacing:.06em;white-space:nowrap;transition:color .3s}
+.kpbar.active .kplbl{color:var(--blue)}
+#hint{font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#tc{position:fixed;top:18px;left:20px;font-family:var(--mono);font-size:10.5px;color:var(--dimmer);letter-spacing:.1em;text-decoration:none;pointer-events:auto}
+#tc:hover{color:var(--blue)}
+#tc[hidden]{display:none}
+#kbd{position:fixed;top:18px;right:20px;font-family:var(--mono);font-size:10px;color:var(--dimmer);letter-spacing:.1em}
+.navbtn{position:fixed;top:0;bottom:44px;width:14%;background:none;border:0;cursor:pointer;opacity:0;z-index:4}
+#prev{left:0} #next{right:0}
+.navbtn:focus-visible{opacity:1;outline:2px solid var(--blue);outline-offset:-6px}
+
+.axline{stroke:#5C6B86;stroke-width:1.4}
+.axlbl{fill:#8491A8;font-family:var(--mono);font-size:13px}
+.pt{fill:var(--ink)}
+.pt.b{fill:var(--blue)} .pt.r{fill:var(--coral)} .pt.g{fill:var(--green)}
+.pt.y{fill:var(--yellow)} .pt.v{fill:var(--violet)} .pt.d{fill:var(--dim)}
+.pt.a{fill:var(--blue)} .pt.c{fill:var(--green)}
+.fit{stroke:var(--blue);stroke-width:3;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 9px rgba(84,169,247,.5))}
+.fit.g{stroke:var(--green);filter:drop-shadow(0 0 9px rgba(91,221,168,.5))}
+.fit.r{stroke:var(--coral);filter:drop-shadow(0 0 9px rgba(255,124,135,.5))}
+.fit.y{stroke:var(--yellow);filter:drop-shadow(0 0 9px rgba(255,211,110,.5))}
+.fit.b{stroke:var(--blue)}
+.fit.v{stroke:var(--violet);filter:drop-shadow(0 0 9px rgba(180,139,245,.5))}
+.fit.d{stroke:#8491A8;stroke-width:2;filter:none}
+.guide{stroke:#55637C;stroke-width:1.4;stroke-dasharray:4 5}
+.slbl{font-family:var(--mono);font-size:14px;fill:var(--dim)}
+.slbl.g{fill:var(--green)} .slbl.y{fill:var(--yellow)} .slbl.b{fill:var(--blue)}
+.slbl.r{fill:var(--coral)} .slbl.v{fill:var(--violet)}
+.box{fill:#101724;stroke:#53617A;stroke-width:1.4}
+.box.g{stroke:var(--green)} .box.y{stroke:var(--yellow)} .box.b{stroke:var(--blue)}
+.box.r{stroke:var(--coral)} .box.v{stroke:var(--violet)}
+.link{stroke:#5C6B86;stroke-width:1.6;fill:none}
+.cellbg{fill:#101724;stroke:#53617A;stroke-width:1}
+.cellbg.hl{fill:#2A2410;stroke:var(--yellow);stroke-width:1.6}
+.cellbg.hl2{fill:#0E2A24;stroke:var(--green);stroke-width:1.6}
+.cellbg.hl3{fill:#3A1A1E;stroke:var(--coral);stroke-width:1.6}
+.celltx{font-family:var(--mono);font-size:15px;fill:var(--ink);text-anchor:middle;dominant-baseline:middle}
+.celltx.d{fill:var(--dim)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+/* fix: 面板 .off 立即不可见 */
+#big.off,#cap.off,#eqBox.off,#titleBox.off,#sum.off,#quiz.off{visibility:hidden}
+</style>
+
+<div id="stage"><div id="frame">
+  <svg id="scene" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="layer" id="titleL"><div class="fade" id="titleBox"></div></div>
+  <div class="layer"><div id="eqBox" class="off"></div></div>
+  <div class="layer"><div id="big" class="off"></div></div>
+  <div class="layer" id="capL"><div id="capWrap">
+    <div id="cap" class="off"></div><p id="narr" class="off"></p>
+  </div></div>
+  <div class="layer"><div id="sum" class="off" hidden></div></div>
+  <div class="layer" id="quizL"><div id="quiz" class="off" hidden></div></div>
+</div></div>
+
+<button class="navbtn" id="prev" aria-label="上一镜"></button>
+<button class="navbtn" id="next" aria-label="下一镜"></button>
+<a id="tc" href="#" target="_blank" rel="noopener">▶ 0:00</a>
+<div id="kbd">空格 推进 · ← 回退 · N 讲解</div>
+<div id="strip"><div id="kps"></div><span id="hint"></span></div>
+
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["$$","$$"]]},svg:{fontCache:"global"},startup:{typeset:false}};
+</script>
+<script src="../lib/tex-svg.js"></script>
+<script>window.MathJax&&MathJax.version||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"><\/script>');</script>
+<script src="../lib/d3.min.js"></script>
+<script>window.d3||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"><\/script>');</script>
+<script>
+/* ════════════════ 引擎（无需改动） ════════════════ */
+(function(){
+"use strict";
+var W=1280,H=720,DUR=700,FAST=false;
+var svg=d3.select("#scene"),gS=svg.append("g"),gN=svg.append("g");
+function clearScene(){gS.selectAll("*").remove();gN.selectAll("*").remove();noTitle();}
+function note(t,x,y,c,a){var e=gN.append("text").attr("class","slbl "+(c||""))
+  .attr("x",x).attr("y",y).attr("text-anchor",a||"middle").text(t);
+  if(FAST)e.attr("opacity",1);else e.attr("opacity",0).transition().duration(470).delay(210).attr("opacity",1);}
+function dots(p,cls,r){var s=gS.selectAll(null).data(p).enter().append("circle")
+  .attr("class","pt "+(cls||"")).attr("cx",function(d){return d[0];}).attr("cy",function(d){return d[1];});
+  if(FAST)s.attr("r",r||7);else s.attr("r",0).transition().duration(DUR).delay(function(d,i){return i*35;}).attr("r",r||7);}
+function curve(pts,cls){var p=gS.append("path").attr("class","fit "+(cls||""))
+  .attr("d","M"+pts.map(function(q){return q[0].toFixed(1)+","+q[1].toFixed(1);}).join("L"));
+  if(!FAST&&p.node().getTotalLength){var L=p.node().getTotalLength();
+    p.attr("stroke-dasharray",L+" "+L).attr("stroke-dashoffset",L)
+     .transition().duration(900).attr("stroke-dashoffset",0);}}
+function fn(f,a,b,N){var p=[];for(var i=0;i<=N;i++){var t=i/N,x=a+(b-a)*t;p.push([x,f(x)]);}return p;}
+function boxNode(x,y,w,h,label,cls){
+  gS.append("rect").attr("class","box "+(cls||"")).attr("x",x).attr("y",y).attr("width",w).attr("height",h).attr("rx",8);
+  note(label,x+w/2,y+h/2+5,cls||"");}
+function link(x1,y1,x2,y2){gS.append("path").attr("class","link").attr("d","M"+x1+","+y1+"L"+x2+","+y2);}
+function matrix(o){
+  var cw=o.cw||80,ch=o.ch||42,R=o.rows,C=o.cols;
+  var x0=o.x!=null?o.x:(W-C*cw)/2,y0=o.y!=null?o.y:(H-R*ch)/2-30;
+  for(var i=0;i<R;i++)for(var j=0;j<C;j++){
+    var hl=o.hl?o.hl(i,j):"";
+    var rc=gS.append("rect").attr("class","cellbg "+(hl||""))
+      .attr("x",x0+j*cw).attr("y",y0+i*ch).attr("width",cw-3).attr("height",ch-3).attr("rx",3);
+    var tx=gS.append("text").attr("class","celltx"+(o.dim&&o.dim(i,j)?" d":""))
+      .attr("x",x0+j*cw+(cw-3)/2).attr("y",y0+i*ch+(ch-3)/2).text(o.cell(i,j));
+    if(!FAST){var dl=(i*C+j)*18;rc.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);
+      tx.attr("opacity",0).transition().duration(360).delay(dl).attr("opacity",1);}}
+  if(o.label)note(o.label,x0+C*cw/2-1,y0-20,o.labelCls||"y");}
+function rng(s){return function(){s=(s*9301+49297)%233280;return s/233280;};}
+
+var big=document.getElementById("big"),cap=document.getElementById("cap"),
+    narrEl=document.getElementById("narr"),titleBox=document.getElementById("titleBox"),
+    sumEl=document.getElementById("sum"),quizEl=document.getElementById("quiz"),
+    eqBox=document.getElementById("eqBox");
+var narrOn=true,locked=false;
+function setCap(h){if(!h){cap.classList.add("off");cap.innerHTML="";return;}
+  cap.innerHTML=h;cap.classList.remove("off");}
+function setBig(v,s){if(v===null){big.classList.add("off");return;}
+  big.innerHTML=v+(s?"<small>"+s+"</small>":"");big.classList.remove("off");}
+function setEq(h,pos){if(!h){eqBox.classList.add("off");eqBox.innerHTML="";return;}
+  var go=function(){eqBox.innerHTML=h;eqBox.className=pos||"";eqBox.classList.remove("off");
+    if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise([eqBox]).catch(function(){});};
+  if(FAST){go();return;}eqBox.classList.add("off");setTimeout(go,150);}
+function flip(h){
+  if(FAST){eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");return;}
+  var b={};eqBox.querySelectorAll("[data-id]").forEach(function(e){b[e.dataset.id]=e.getBoundingClientRect();});
+  eqBox.innerHTML=h;eqBox.className="";eqBox.classList.remove("off");
+  if(!eqBox.animate)return;
+  eqBox.querySelectorAll("[data-id]").forEach(function(e){
+    var r=b[e.dataset.id];
+    if(r){var a=e.getBoundingClientRect(),dx=r.left-a.left,dy=r.top-a.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)
+        e.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
+          {duration:780,easing:"cubic-bezier(.35,0,.15,1)"});}
+    else e.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],
+      {duration:520,delay:250,easing:"cubic-bezier(.3,.7,.3,1)",fill:"backwards"});});}
+function T(id,t,c){return '<span class="tok '+(c||"")+'" data-id="'+id+'">'+t+'</span>';}
+function setTitle(a,h,p){titleBox.classList.remove("off");
+  titleBox.innerHTML='<p class="act">'+(a||"")+'</p><h1>'+h+'</h1>'+(p?'<p>'+p+'</p>':'')+'<div class="rule"></div>';}
+function noTitle(){titleBox.classList.add("off");}
+function setNarr(t){if(!t||!narrOn){narrEl.hidden=true;return;}
+  narrEl.hidden=false;narrEl.innerHTML=t;narrEl.classList.remove("off");}
+function clearSum(){sumEl.hidden=true;sumEl.classList.add("off");sumEl.innerHTML="";}
+function showSum(kp,s){
+  /* ⚠ 2026-10-28 新增 ["r","接到你的课题"]：公开课片子（CME295 这类为科研看的课）
+     没有「与你的考试」这一格可填。放在最后、键名另起 ⇒ 既有片子一个字不用改。*/
+  var ord=[["k","核心结论"],["m","底层机制"],["w","常见误解"],["e","与你的考试"],["r","接到你的课题"]];
+  sumEl.innerHTML='<p class="sh">知识点 '+kp+' · 总结</p><h3>'+s.h+'</h3><div class="rows">'+
+    ord.filter(function(o){return s[o[0]];}).map(function(o){
+      return '<div class="row '+o[0]+'"><p class="rk">'+o[1]+'</p><p class="rv">'+s[o[0]]+'</p></div>';}).join("")+'</div>';
+  sumEl.hidden=false;void sumEl.offsetWidth;sumEl.classList.remove("off");}
+function clearQuiz(){quizEl.hidden=true;quizEl.classList.add("off");quizEl.innerHTML="";locked=false;}
+function askQ(kp,q){
+  if(FAST){clearQuiz();return;}
+  locked=true;
+  quizEl.innerHTML='<p class="qh">知识点 '+kp+' · 检验</p><p class="qq">'+q.t+'</p><div class="qo">'+
+    q.o.map(function(o,i){return '<button data-i="'+i+'">'+o+'</button>';}).join("")+
+    '</div><p class="why" hidden>'+q.w+'</p>';
+  quizEl.hidden=false;void quizEl.offsetWidth;quizEl.classList.remove("off");
+  var bs=[].slice.call(quizEl.querySelectorAll("button"));
+  bs.forEach(function(b,i){b.addEventListener("click",function(){
+    if(b.classList.contains("lk"))return;
+    bs.forEach(function(x,k){x.classList.add("lk");x.classList.add(k===q.a?"ok":(k===i?"no":"off2"));});
+    quizEl.querySelector(".why").hidden=false;locked=false;
+    document.getElementById("hint").textContent=(cur+1)+" / "+SHOTS.length+"  ·  空格继续";});});}
+
+var SHOTS=[],KPS=[];
+function S(t,fn,narr){SHOTS.push({t:t,enter:fn,n:narr});}
+function KP(name,build){var from=SHOTS.length;build();KPS.push({name:name,from:from,len:SHOTS.length-from});}
+function SUM(t,kp,s){SHOTS.push({t:t,sum:{kp:kp,s:s},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+function QUIZ(t,kp,q){SHOTS.push({t:t,quiz:{kp:kp,q:q},enter:function(){clearScene();setBig(null);setCap(null);setEq(null);noTitle();}});}
+
+/* 把引擎暴露给内容区 */
+function axes(P){
+  /* ⚠ 2026-10-08：全部 54 处调用写的都是 x0/x1/y0/y1，而这里只认 l/r/t/b，
+     于是 d3 把坐标设成 undefined——**所有片子的坐标轴一直没画出来**。
+     两套键名都收，y0 是底、y1 是顶。*/
+  var l=P.l!=null?P.l:P.x0, r=P.r!=null?P.r:P.x1,
+      t=P.t!=null?P.t:P.y1, b=P.b!=null?P.b:P.y0;
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",r).attr("y1",b).attr("y2",b);
+  gS.append("line").attr("class","axline").attr("x1",l).attr("x2",l).attr("y1",t).attr("y2",b);}
+window.__engine={clearScene:clearScene,note:note,dots:dots,curve:curve,fn:fn,boxNode:boxNode,
+  link:link,matrix:matrix,rng:rng,axes:axes,setCap:setCap,setBig:setBig,setEq:setEq,flip:flip,T:T,
+  setTitle:setTitle,noTitle:noTitle,S:S,KP:KP,SUM:SUM,QUIZ:QUIZ,W:W,H:H};
+
+/* ════════════════ 放映机（无需改动） ════════════════ */
+function startProjector(CFG){
+  var cur=-1,kpsEl=document.getElementById("kps"),pipEls=[];
+  KPS.forEach(function(k){
+    var bar=document.createElement("div");bar.className="kpbar";
+    var lb=document.createElement("span");lb.className="kplbl";lb.textContent=k.name;bar.appendChild(lb);
+    for(var i=0;i<k.len;i++){var p=document.createElement("span"),sh=SHOTS[k.from+i];
+      p.className="pip"+(sh.sum?" sum":(sh.quiz?" quiz":""));bar.appendChild(p);pipEls[k.from+i]=p;}
+    bar.addEventListener("click",function(){go(k.from,true);});
+    kpsEl.appendChild(bar);});
+  function hhmmss(s){s=Math.round(s);var m=Math.floor(s/60);
+    return Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+":"+String(s%60).padStart(2,"0");}
+  var tcEl=document.getElementById("tc");
+  if(!CFG.video)tcEl.hidden=true;
+  function go(n,force){
+    n=Math.max(0,Math.min(SHOTS.length-1,n));
+    if(n===cur)return;
+    if(locked&&n>cur&&!force)return;
+    FAST=true;clearScene();
+    for(var i=0;i<n;i++){if(SHOTS[i].enter)SHOTS[i].enter();}
+    FAST=false;
+    cur=n;clearQuiz();clearSum();
+    var sh=SHOTS[n];
+    noTitle();clearScene();setBig(null);setEq(null);setCap(null);
+    if(sh.enter)sh.enter();
+    setNarr(sh.n);
+    if(sh.sum){setNarr(null);showSum(sh.sum.kp,sh.sum.s);}
+    if(sh.quiz){setNarr(null);askQ(sh.quiz.kp,sh.quiz.q);}
+    pipEls.forEach(function(p,i){if(!p)return;
+      var base="pip"+(SHOTS[i].sum?" sum":(SHOTS[i].quiz?" quiz":""));
+      p.className=base+(i===n?" now":(i<n?" seen":""));});
+    var ki=0;KPS.forEach(function(k,j){if(n>=k.from)ki=j;});
+    [].slice.call(kpsEl.children).forEach(function(b,j){b.classList.toggle("active",j===ki);});
+    document.getElementById("hint").textContent=(n+1)+" / "+SHOTS.length+(sh.quiz?"  ·  先回答":"");
+    if(CFG.video){tcEl.textContent="▶ "+hhmmss(sh.t||0);tcEl.href=CFG.video+Math.round(sh.t||0)+"s";}}
+  window.__go=go;window.__n=SHOTS.length;window.__kps=KPS;
+  document.getElementById("next").addEventListener("click",function(){go(cur+1);});
+  document.getElementById("prev").addEventListener("click",function(){go(cur-1,true);});
+  window.addEventListener("keydown",function(e){
+    if(e.key===" "||e.key==="ArrowRight"||e.key==="ArrowDown"||e.key==="Enter"){e.preventDefault();go(cur+1);}
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp"||e.key==="Backspace"){e.preventDefault();go(cur-1,true);}
+    else if(e.key==="Home"){e.preventDefault();go(0,true);}
+    else if(e.key>="1"&&e.key<="9"){var k=KPS[+e.key-1];if(k){e.preventDefault();go(k.from,true);}}
+    else if(e.key==="n"||e.key==="N"){e.preventDefault();narrOn=!narrOn;
+      var sh=SHOTS[cur];setNarr(sh&&!sh.sum&&!sh.quiz?sh.n:null);
+      document.getElementById("kbd").textContent="空格 推进 · ← 回退 · N "+(narrOn?"讲解":"显示讲解");}});
+  go(0);
+}
+window.__startProjector=startProjector;
+})();
+</script>
+
+<script>
+(function(){
+var E=window.__engine;
+var S=E.S,KP=E.KP,SUM=E.SUM,QUIZ=E.QUIZ,W=E.W,H=E.H,rng=E.rng;
+var clearScene=E.clearScene,setTitle=E.setTitle,setBig=E.setBig,setCap=E.setCap,
+    setEq=E.setEq,flip=E.flip,T=E.T,note=E.note,dots=E.dots,curve=E.curve,fn=E.fn,
+    boxNode=E.boxNode,link=E.link,matrix=E.matrix,axes=E.axes,noTitle=E.noTitle;
+var CFG={title:"CME295 讲座 L5 · 偏好调优",
+  subtitle:"偏好对与奖励模型 · RLHF / PPO · Best-of-N · DPO · 空格推进 · N 讲解",
+  video:"https://www.youtube.com/watch?v=PmW_TMQ3l0I&t="};
+
+function says(ts,en,y){
+  note("🎙 Amidi "+ts+"  «"+en+"»",640,y||150,"g");}
+
+function seq(x0,y,toks,cls,bw,bh){
+  bw=bw||104; bh=bh||44; var cx=[],i;
+  for(i=0;i<toks.length;i++){
+    var x=x0+i*(bw+10);
+    boxNode(x,y,bw,bh,toks[i],(cls instanceof Array)?cls[i]:(cls||"b"));
+    cx.push(x+bw/2);}
+  return cx;}
+
+function stack(cx,ytop,items,bw,bh,gap){
+  bw=bw||250; bh=bh||32; gap=gap==null?6:gap; var i,ys=[];
+  for(i=0;i<items.length;i++){
+    var y=ytop+i*(bh+gap);
+    boxNode(cx-bw/2,y,bw,bh,items[i][0],items[i][1]||"");
+    ys.push(y);
+    if(i) link(cx,y,cx,y-gap);}
+  return ys;}
+
+KP("开场",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);
+    setTitle("CME295 讲座 L5","偏好调优：怎么把模型「对齐」到人的偏好上",
+      "九讲的第 5 讲 · 约 107 分钟");},
+    "第五讲，而它的位置很特别 —— <b>讲者开场就说：期末考考 L5 到 L9，也就是「从今天这一讲开始」。</b><br><b>先把这一讲挂到流水线上。</b><b>L4 讲了两步：<u>预训练</u>（学语言是怎么回事）和 <u>SFT 微调</u>（学该生成什么）。</b><b>而这一讲讲第三步：<u>偏好调优</u>（preference tuning）—— SFT 与它合起来叫 alignment，所以这一讲是 alignment 的后半段。</b><br><b>★★★ 这一讲有一把总钥匙，讲者直到最后一分钟才明说，但我建议你从开场就带着它听</b>：<b>「<u>我们不想学新的事实。我们要做的是聚焦在已有的 completion 分布上，并把模型该返回的东西，向人类所偏好的那一边对齐</u>。」</b><br><b>⇒ 这句话能解释这一讲几乎每一个设计</b>：<b>为什么要约束「别离原模型太远」（因为你不是要换一个模型）、为什么数据是<u>成对</u>的而不是标准答案（因为你在表达偏好，不是在教内容）、为什么 Best-of-N 这种<u>一个权重都不改</u>的办法也算一种偏好调优（因为你只需要在已有候选里挑）。</b><br><br><b>⭐ 这一讲的结构值得先知道，因为它是一条很干净的「问题驱动」的线</b>：<b>先给出标准答案 <u>RLHF / PPO</u>，然后把它的代价一笔一笔算清（<u>要四个模型、五个挑战</u>），再给两个「不想付这个代价」的方案 —— <u>Best-of-N</u>（完全不训，把成本挪到推理）和 <u>DPO</u>（把两段变一段，四个模型变两个）。</b><br><b>★ 所以你听的时候可以一直问一个问题：<u>这一步在省什么、又为此付了什么</u>。本讲没有免费的午餐，但每一笔交易都说得很清楚。</b><br><b>⚠ 最后提个醒：这一讲有<u>三个符号陷阱</u>，讲者自己都主动点了出来（他说当初也把他搞糊涂了）。到那一条我会专门标出来。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+    note("这一讲的四段路线，以及每一段在「省什么、付什么」",640,186,"v");
+    stack(250,214,[["① 偏好数据","g"],["成对比较最好标","d"],["⇒ 放弃信息量换可靠","d"],["★ 同一判断用了三次","y"]],340,34,8);
+    stack(640,214,[["② RLHF / PPO","b"],["两段式：RM + RL","d"],["⚠ 要四个模型","r"],["⚠ 五个挑战","r"]],340,34,8);
+    stack(1030,214,[["③ Best-of-N","y"],["一个权重都不训","d"],["⚠ 成本挪到推理端","r"],["④ DPO ⇒ 两个模型","g"]],340,34,8);
+    note("⇒ 听的时候一直问：这一步省了什么、又为此付了什么",640,386,"y");},
+    "<b>把路线先摆出来，因为这一讲的方法是「一个比一个更省」地排开的，而顺序本身就是论证。</b><br><b>① 偏好数据怎么来。</b><b>这一段表面上在讲数据收集，<u>其实只有一条判断，而它被用了三次</u>：产出答案 → 改成比较答案；pointwise → 改成 pairwise；细粒度刻度 → 改成二元。<u>三次都是主动放弃信息量，去换标注的可靠性</u>。</b><br><b>② RLHF / PPO。</b><b>标准答案。先训一个<u>奖励模型</u>（它有一条漂亮的性质：训练时成对、使用时逐点），再用 RL 把策略对齐。</b><b>⚠ 代价是：<u>显存里要同时养四个模型</u>，而且有五个实打实的工程挑战。</b><br><b>③ Best-of-N。</b><b>最省事的路：<u>一个权重都不训</u>，生成 N 条用奖励模型挑最好的。</b><b>⚠ 代价是把成本<u>全推到推理端</u> —— 而且讲者给了一个很漂亮的论证：<u>就算钱无限，延迟也救不回来</u>。</b><br><b>④ DPO。</b><b>把两段变一段、四个模型变两个，<u>而且式子里再没有奖励</u>。</b><b>⚠ 代价是分布漂移，<u>而这是内在的，不是实现问题</u>。</b><br><b>★★ 我特别建议你留意第 ④ 段的推导（四步，没有任何额外假设）。</b><b>它的关键一步用到了前面一条看起来只是注解的性质 —— <u>Bradley-Terry 只看分数的差</u>。<u>一个顺带提到的性质，后来成了一个方法能不能成立的承重点</u>，这种事在研究里非常常见，值得体会。</b>");
+});
+KP("1 · 第三阶段：偏好调优不教新事实，只改「该偏好哪个」",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("00:58","we are going to talk about LLM tuning");
+  note("LLM 的三段流水线：这一讲只讲第三段",640,186,"v");
+  stack(250,214,[["① 预训练","d"],["学「语言是怎么回事」","d"],["⇒ 只会续写下一个 token","d"],["L4 讲过","d"]],340,34,8);
+  stack(640,214,[["② 微调 SFT","d"],["学「该生成什么」","d"],["⇒ 变成一个助手","d"],["L4 讲过","d"]],340,34,8);
+  stack(1030,214,[["③ 偏好调优","g"],["学「该偏好哪个」","y"],["⇒ 语气 / 安全 / 对齐","y"],["★ 这一讲","g"]],340,34,8);
+  note("⚠ ② + ③ 合称 alignment；而「③ 不教新事实」是这一讲的总钥匙",640,386,"y");},"<b>先把这一讲钉在流水线上，因为第三段最容易被误解成「再多学点东西」。</b><br><b>① 预训练</b>：<b>在整个互联网上学「语言和代码是怎么回事」，目标是预测下一个 token。</b><b>⇒ 出来的东西是个<u>很会续写的自动补全器</u>，还不是助手。</b><br><b>② 微调（SFT）</b>：<b>用小得多但质量高得多的数据，教它<u>该生成什么</u>。</b><b>⇒ 出来的是个助手。</b><br><b>③ 偏好调优</b>：<b>这一讲。讲者给的场景很具体：<u>你的助手行为已经对了，但语气不对 —— 不够友好、或者不够安全</u>。那你就在第三步调这些方面。</b><br><b>★★★ 这里有一句贯穿全讲的总钥匙，讲者在最后才明说，但我建议你从现在就带着它听：<u>我们不想学新事实。我们要做的是在已有的输出分布上，把模型该返回的那一个，向人类偏好的那一边挪</u>。</b><br><b>⇒ 这句话解释了后面所有设计</b>：<b>为什么要约束「别离原模型太远」（因为你不是要换一个模型）、为什么数据是「成对的」而不是「标准答案」（因为你在表达偏好而不是在教内容）、为什么 Best-of-N 这种<u>完全不训练</u>的办法也能算一种偏好调优（因为你只需要在已有的候选里挑）。</b><br><b>⚠ 术语先交代清楚：② + ③ 合起来叫 <u>alignment</u>（对齐）。这一讲讲的是 alignment 的后半段。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("04:57","this step is called preference tuning");
+  boxNode(340,196,600,40,"prompt：建议一个我能和泰迪熊一起做的新活动","v");
+  boxNode(70,264,540,44,"SFT 模型实际给的回答","r");
+  note("「我建议你根本别在泰迪熊上花太多时间」",340,334,"d");
+  boxNode(670,264,540,44,"我们希望看到的回答","g");
+  note("「泰迪熊不仅是绝佳的睡眠伴侣，也能是好玩的玩伴…」",940,334,"d");
+  note("⇒ 这一对（prompt + 想要的 + 不想要的）就叫一个「偏好对」preference pair",640,374,"y");},"<b>讲者用一个例子把「偏好对」这个核心数据单位立起来，而这个例子会贯穿整讲。</b><br><b>设定</b>：<b>有一个 <u>SFT 模型</u>（意思是已经走完预训练 + 微调两步的模型）。</b><b>问它：<u>建议一个我能和我的泰迪熊一起做的新活动</u>。</b><br><b>它的回答</b>：<b>「<u>我建议你根本别在泰迪熊上花太多时间</u>。」</b><b>⭐ 注意讲者怎么评价这句：<u>这确实是一个助手的回答，但不一定是我们想要的</u>。</b><b>⇒ 关键在于它<u>没有事实错误、也不是没在回答问题</u> —— 它只是不是你想要的那种回答。这正是第三阶段要处理的那类问题。</b><br><b>我们想要的回答</b>：<b>「泰迪熊不仅是绝佳的睡眠伴侣，也能是好玩活动的好玩伴…」然后给出一些活动建议。</b><br><b>★ 于是得到一个数据单位：<u>同一个 prompt，配两个回答 —— 一个是我们想看到的，一个是我们不想看到的</u>。这叫一个<u>偏好对</u>（preference pair）。</b><br><b>⇒ 讲者的做法是：把这些「坏输出」拿出来，<u>找一个、或者改写出一个我们希望它给的输出</u>，两者配成一对。</b><br><b>⚠ 记住这个结构，因为后面每一个方法（奖励模型、PPO、DPO）吃的都是同一种数据 —— 变的只是怎么用它。</b>");
+  SUM(0,1,{h:"偏好调优（第三阶段）在改什么",k:"① 预训练学「语言是怎么回事」；② SFT 学「该生成什么」；<b>③ 偏好调优学「该偏好哪个」</b>。② + ③ 合称 <b>alignment</b>。",m:"数据单位是<b>偏好对</b>：同一个 prompt + 一个想要的回答 + 一个不想要的回答。讲者的泰迪熊例子里，坏回答<b>没有事实错误</b>，只是语气不对。",w:"⚠ 别把它理解成「再多学点东西」。讲者的总钥匙：<b>我们不想学新事实，而是在已有的输出分布上把该返回的那一个向人类偏好挪</b>。这解释了后面所有设计。",r:"对应到你的搜索：这里区分的是<b>扩大可达集合</b>（学新东西）和<b>在已有候选里重排序</b>（挪偏好）。你的「最便宜的可行配置」多数时候是后者 —— 候选早就在可达集合里，缺的是一个把它排到前面的准则。"});
+  QUIZ(0,1,{t:"讲者的泰迪熊例子里，那个「不想要的回答」问题出在哪？",o:["它没有回答问题","它没有事实错误、也在回答问题，只是不是我们想要的那种回答（语气 / 态度）","它太长了","它有事实错误"],a:1,w:"讲者的原话评价是：这确实是一个助手的回答，但不一定是我们想要的。第三阶段处理的正是这类「没错但不对味」的问题。"});
+});
+KP("2 · 为什么还要第三步 · 理由一：比较比写容易得多",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("07:41","more a I prefer this option kind of thing");
+  note("同一件事的两种问法，标注代价差一个量级",640,188,"v");
+  boxNode(70,218,520,44,"SFT 的问法：请写一首好诗","r");
+  note("标注者要「从零产出」一个高质量答案",330,288,"d");
+  note("⚠ 而且数据集整体质量必须很高，否则白做",330,318,"r");
+  boxNode(690,218,520,44,"偏好调优的问法：这两首哪个好","g");
+  note("标注者只要「挑一个」",950,288,"g");
+  note("⇒ 同样的人力，能标多得多的数据",950,318,"g");
+  note("★ 讲者：从零写一首好诗，通常比给你两首、让你说哪首更好要难得多",640,368,"y");},"<b>既然已经有 SFT 了，为什么还要第三步？讲者给了三个理由，第一个是关于<u>标注代价</u>的，而且最直观。</b><br><b>他先说清 SFT 那一步在做什么</b>：<b>你要构造一个<u>非常高质量</u>的数据集，覆盖你希望模型在哪些 prompt 上以某种方式表现。</b><b>⇒ 而他说，要组出这样一个数据集，<u>是非常耗时、而且实际上非常困难的，因为数据集必须是极高质量的</u>。</b><br><b>★★ 对比来了，这是整段的核心</b>：<b>第三步做的事<u>不是真的在教模型它该生成什么，而是在告诉模型它该偏好哪种输出</u>。</b><b>讲者的措辞很传神：<u>不太是「请生成那个」，而更像是「我更喜欢这个选项」</u>。</b><br><b>⭐ 然后他给了那个让人一下就懂的类比</b>：<b>如果让你<u>从零写一首好诗</u>，通常会比<u>给你两首诗、一首差一首好，然后请你说哪个更好</u>要难得多。</b><br><b>⇒ 结论：<u>光从「拿到数据集」这一点看，偏好数据就已经容易得多了</u>。</b><br><b>★ 这一条值得单独记住，因为它是一个可以照抄到别处的方法论：<u>当「产出标准答案」太贵时，看看你的问题能不能改写成「在两个候选里挑一个」</u>。</b><b>这个改写不是偷懒 —— 它换来的是同样人力下多得多的数据量。</b>");
+  SUM(0,2,{h:"理由一：比较比产出容易得多",k:"SFT 要标注者<b>从零产出</b>一个高质量答案；偏好调优只要标注者<b>在两个候选里挑一个</b>。讲者的类比：从零写一首好诗，比给你两首让你说哪个更好要难得多。",m:"根子在于两步的性质不同：SFT 是「请生成那个」，偏好调优是「<b>我更喜欢这个选项</b>」。⇒ 光从拿到数据集这点看，偏好数据就已经容易得多。",w:"⚠ 容易不等于免费。偏好标注仍要人（或 LLM 评委）逐对判断，而且主观任务上会很吵 —— 后面专门有一条讲标注指南。",r:"直接可用：你的代价/可行性如果难给绝对数值（「这个配置值 0.9」几乎没法标），就改成<b>成对比较</b>。这不只是省事 —— 成对比较有自己的一整套理论（Bradley-Terry、dueling bandits），样本复杂度的分析方式完全不同。"});
+  QUIZ(0,2,{t:"讲者用「写诗」类比想说明什么？",o:["从零产出一个高质量答案，比在两个候选里挑一个要难得多 ⇒ 偏好数据更容易拿到","SFT 不适合创作类任务","诗歌是 LLM 的强项","模型写诗需要更高的温度"],a:0,w:"这是偏好调优存在的第一个理由：它把标注任务从「产出」改成了「比较」，而同样的人力能标多得多的数据。"});
+});
+KP("3 · 理由二三：SFT 的 prompt 分布很娇贵，而且 ⚠ 偏好调优不是万能药",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("09:51","preference tuning is not the answer to everything");
+  note("理由二：SFT 数据里有一个很娇贵的东西 —— prompt 的分布",640,188,"y");
+  boxNode(70,218,520,44,"想修一个 misbehave？往 SFT 里加一条","b");
+  note("⚠ 可你得很小心加的是哪种 prompt",330,288,"r");
+  note("⚠ 某类 prompt 一多，模型就偏向那样回答",330,318,"r");
+  boxNode(690,218,520,44,"理由三：SFT 数据本来就极贵","b");
+  note("把模型所有失误都塞进 SFT ⇒ 会很痛苦、很慢",950,288,"d");
+  note("⇒ 于是人们改用偏好数据来表达这些修正",950,318,"g");
+  note("★★ 但讲者紧接着提醒：模型总在 misbehave，也可能是 SFT 数据本身有问题",640,368,"r");},"<b>第二和第三个理由，加上一句很重要的提醒 —— 这句提醒我觉得比前面三个理由都值钱。</b><br><b>理由二：SFT 数据里有一个要很小心的东西 —— <u>prompt 的分布</u>。</b><b>讲者的说法是：如果某一类 prompt 在数据里<u>占得太多，模型就会更偏向于按那种方式回答</u>。</b><b>所以做 SFT 数据的人会很注意 prompt 的分布。</b><br><b>⇒ 于是出现一个具体的两难</b>：<b>模型某处表现不好，你想「往 SFT 数据里加一条例子」来修它 —— 可你必须非常小心<u>你加的是哪种 prompt、会不会把模型整体带偏</u>。</b><b>⭐ 换句话说：<u>SFT 数据集是个牵一发动全身的东西，不适合用来打补丁</u>。</b><br><b>理由三</b>：<b>SFT 数据通常是极高质量的。如果你把模型所有的失误都盯着、都想塞进 SFT 数据里，<u>你会很痛苦，很费时间</u>。</b><br><b>★★★ 但接下来这句话是整段最该带走的</b>：<b>讲者说 —— <u>如果你的模型在很多地方表现不好，那也可能是因为你的 SFT 数据集本身有问题。所以偏好调优不是万能解药。有时候更好的做法是回去查你的 SFT 数据集有没有毛病</u>。</b><br><b>⇒ 这是一个非常好的工程判断：<u>当下游一直要打补丁时，先怀疑上游</u>。</b><b>⚠ 别把第三阶段当成「反正后面能修」的兜底 —— 它修的是语气和偏好，修不了数据本身的系统性缺陷。</b>");
+  SUM(0,3,{h:"理由二三，以及「不是万能药」",k:"<b>理由二</b>：SFT 的 <b>prompt 分布</b>很娇贵 —— 某类 prompt 一多，模型就偏向那样回答，所以不适合用加例子来打补丁。<b>理由三</b>：SFT 数据极贵，把所有失误都塞进去会很痛苦。",m:"⇒ 于是改用偏好数据来表达这些修正。但讲者的提醒更重要：<b>模型到处 misbehave，也可能是 SFT 数据本身有问题；偏好调优不是万能解药，有时该回去查 SFT 数据</b>。",w:"⚠ 别把第三阶段当成「反正后面能修」的兜底。它修语气和偏好，<b>修不了上游数据的系统性缺陷</b>。",r:"同一条判断在你的实验里成立：代理模型（可行性/代价预测器）如果到处需要人工修正，先怀疑<b>训练它的那批配置采样有偏</b>，而不是继续在搜索端加规则。下游补丁掩盖上游偏差，是实验结论站不住的常见原因。"});
+  QUIZ(0,3,{t:"讲者说「偏好调优不是万能解药」，他建议先做什么？",o:["提高 KL 系数 β","加大偏好数据量","换一个更大的模型","回去检查 SFT 数据集本身有没有问题"],a:3,w:"原话大意：如果你的 SFT 模型到处 misbehave，也可能是 SFT 数据集本身有问题，有时更好的做法是先去查它。当下游一直要打补丁时，先怀疑上游。"});
+});
+KP("4 · ★ 理由四：SFT 没法告诉模型「不该生成什么」",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("11:09","preference tuning allows us to inject some negative signal");
+  note("两种监督能表达的东西，不一样",640,188,"v");
+  boxNode(70,218,520,44,"SFT：只能说「该预测什么」","b");
+  note("给输入 x，照这个答案 y 预测",330,288,"d");
+  note("⚠ 它没有任何位置能写「别生成这个」",330,318,"r");
+  boxNode(690,218,520,44,"偏好对：能注入「负信号」","g");
+  note("想要的那条 ⇒ 往上推",950,288,"g");
+  note("不想要的那条 ⇒ 往下压",950,318,"y");
+  note("★ 除非你把坏输出改写成完美句子，SFT 框架里没有办法表达「不要这样」",640,368,"y");},"<b>第四个理由是我认为最本质的一个，而讲者把它放在了最后强调。</b><br><b>他的说法</b>：<b>偏好调优和 SFT 的另一个区别是，它<u>允许我们注入一些负信号</u>。</b><b>因为 <u>SFT 全是在教模型「它该预测什么」，但它没有教模型「它不该预测什么」</u>。</b><br><b>⭐ 后面有学生直接问到这一点：「为什么不干脆在偏好数据上做 SFT？」讲者的回答把这件事说透了</b>：<b>SFT 是你告诉模型「给这个输入、你该生成这个」；但你<u>没有在告诉它哪些东西不该生成</u>。</b><b>假设有个你不希望发生的输出 —— <u>除非你把它改写成一个完美的句子，在传统 SFT 框架里你根本没有办法告诉模型「不要生成那个」</u>。</b><br><b>★★ 为什么这是本质的？因为它是<u>损失函数形状决定的</u>，不是数据量能解决的。</b><b>SFT 的损失是「在正确 token 上的交叉熵」—— 它只有一个方向：把概率往目标答案上推。<u>没有任何一项能把概率从某个答案上拉走</u>。</b><b>⇒ 而偏好对的损失里有两项（想要的那条和不想要的那条），所以它能同时往上推和往下压。</b><br><b>⚠ 一个常见误解要避开：<u>「SFT 时不给坏答案」并不等于「压低了坏答案」</u>。不出现只是没被奖励，不是被惩罚。模型完全可以仍然给它高概率。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  note("把两种损失能做的事画出来：方向数不一样",640,188,"v");
+  axes({x0:120,x1:1160,y0:360,y1:210});
+  note("输出空间（示意）",640,384,"d");
+  note("SFT：只有「往上推」一个方向",330,216,"b");
+  boxNode(200,240,260,36,"目标答案：概率推高","g");
+  note("偏好调优：两个方向",950,216,"y");
+  boxNode(760,240,260,36,"想要的：推高","g");
+  boxNode(760,288,260,36,"不想要的：压低","r");
+  note("⇒ 所以偏好调优能表达 SFT 在结构上表达不了的东西",640,344,"y");},"<b>把这件事画出来，就能看清这不是「哪个更好」的问题，而是<u>能不能表达</u>的问题。</b><br><b>SFT 的损失</b>：<b>给定输入，对目标答案的每一个 token 算交叉熵。</b><b>⇒ 这个损失<u>只有一个方向</u>：把目标答案的概率往上推。</b><b>⚠ 整个表达式里没有任何一项提到「别的答案」，所以它对别的答案没有任何意见。</b><br><b>偏好对的损失</b>：<b>同时出现了想要的那条和不想要的那条。</b><b>⇒ 于是有<u>两个方向</u>：推高一边、压低另一边。</b><br><b>★★ 这里有个思维方式值得抄走：<u>判断一个方法能不能做某件事，先看它的损失函数里有没有对应的项</u>。</b><b>没有那一项，再多数据、再大模型也变不出来 —— 这比凭直觉猜「应该也能学到吧」可靠得多。</b><br><b>⇒ 而这也预告了后面 Bradley-Terry 为什么长那个样子：它的核心就是一个<u>差</u>（想要的分数减不想要的分数），而「差」天然就带两个方向。</b><br><b>★ 顺带说一句，讲者当时的回应很有意思：他说「这是个很好的提问，因为大约十分钟后我们就会看到一个<u>用监督方式做 RL 那件事</u>的方法」—— 指的就是本讲最后的 DPO。</b><b>⇒ 所以你可以把 DPO 理解为：<u>保留「两个方向」这个能力，但把 RL 那套机器拆掉</u>。</b>");
+  SUM(0,4,{h:"★ 理由四：SFT 注入不了负信号",k:"SFT 全是在教模型「<b>该</b>预测什么」，没有教它「<b>不该</b>预测什么」。⇒ 偏好调优的价值是能<b>注入负信号</b>。",m:"这是损失函数形状决定的：SFT 的交叉熵<b>只有「往目标推高」一个方向</b>，表达式里没有任何一项提到别的答案。偏好对的损失里有两项（想要的 / 不想要的），所以能同时推高和压低。",w:"⚠ 「SFT 时不给坏答案」≠「压低了坏答案」。不出现只是<b>没被奖励，不是被惩罚</b> —— 模型完全可以仍然给它高概率。",r:"★ 这正是 <b>nogood</b> 在你课题里的角色：把「这个组合不可行」显式记下来，是一种只能靠负信号表达的知识。正信号（见过的可行配置）无论多少条，都推不出「那一类组合不要试」。⇒ 判断一个方法能否表达某件事，先看它的目标函数里有没有对应的项。"});
+  QUIZ(0,4,{t:"为什么说 SFT 在结构上无法表达「不要生成这个」？",o:["因为 SFT 的数据量太小","因为 SFT 只训练最后一层","因为它的交叉熵损失只有「把目标答案概率推高」一个方向，表达式里没有一项提到别的答案","因为 SFT 不用梯度下降"],a:2,w:"讲者：除非你把坏输出改写成一个完美句子，传统 SFT 框架里没有办法告诉模型不要生成那个。而偏好对的损失里有两项，所以能同时推高和压低。"});
+});
+KP("5 · 偏好数据的三种形态：pointwise / pairwise / listwise",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("12:53","this one is called pairwise preference data");
+  note("同一批候选，三种问法",640,188,"v");
+  stack(250,214,[["① pointwise 逐点","r"],["给每个答案打一个分","d"],["这首 0.9、那首 0.2","d"],["⚠ 很难：尺度说不清","r"]],340,34,8);
+  stack(640,214,[["② pairwise 成对","g"],["一次给两个，说哪个更好","d"],["⭐ 容易得多","y"],["★ 实践中用这个","g"]],340,34,8);
+  stack(1030,214,[["③ listwise 列表","b"],["给 n 个，排个序","d"],["比逐点容易（不用说差多少）","d"],["⚠ 但仍比成对麻烦","y"]],340,34,8);
+  note("⇒ 所以人们收集的是成对偏好数据：每个 prompt 两个答案，标哪个更好",640,386,"y");},"<b>偏好数据有三种收集形态，而讲者一条条说了为什么最后只剩中间那一种。</b><br><b>① pointwise（逐点）</b>：<b>给每个候选答案一个<u>逐点分数</u> —— 这里「逐点」的意思是这个分数只相对于<u>一条</u>观测而言。</b><b>⇒ 讲者说你当然可以这么做，<u>但这挺难的</u>：作为人去说「这个是 0.9、这个是 0.2」，<u>并不清楚这个尺度到底该怎么定</u>。</b><br><b>② pairwise（成对）</b>：<b>一次拿两条观测，让你说<u>哪个更好</u>。</b><b>⇒ 讲者的评价就一句：<u>这容易得多</u>。</b><br><b>③ listwise（列表）</b>：<b>给你 n 个候选，你把它们排个序 —— 哪个最好、哪个最差。</b><b>⇒ 他说这比逐点容易，<u>因为你不必指明好多少</u>，但仍然还是要复杂一点。</b><br><b>★ 结论：<u>这就是人们通常用成对的原因</u>。所以实践中做的是收集成对偏好数据 —— 每个 prompt 两个可能的答案，然后只标哪个更好。本讲后面全部沿着这一种走。</b><br><b>⭐ 这三种形态的排序值得想一层：<u>信息量是 pointwise &gt; listwise &gt; pairwise，而可靠性恰好反过来</u>。</b><b>⇒ 选 pairwise 是主动放弃信息量，去换标注的低噪声。这个取舍在任何要人来标的任务里都会重演。</b>");
+  SUM(0,5,{h:"三种偏好数据形态，为什么是 pairwise",k:"<b>pointwise</b> 给每条打绝对分（⚠ 难：尺度说不清）；<b>pairwise</b> 一次两条说哪个好（⭐ 容易得多）；<b>listwise</b> 给 n 条排序（不用说差多少，但仍更麻烦）。⇒ 实践中用 pairwise。",m:"讲者的理由就是标注难度：说「这个 0.9、那个 0.2」时<b>尺度本身不清楚</b>；说「这个比那个好」不需要任何尺度。",w:"⚠ 注意信息量和可靠性是反的：pointwise 信息最多但最吵，pairwise 信息最少但最稳。选 pairwise 是<b>主动放弃信息量换低噪声</b>，不是因为它更强。",r:"对应到你的问题：要人（或仿真）判定「哪个配置更划算」远比要它给出绝对代价值靠谱。而如果你要的是 <b>top-m</b> 而不是 top-1，listwise 形态反而更贴 —— 形态的选择应该由你的目标（top-1 / top-m / 全序）倒推。"});
+  QUIZ(0,5,{t:"为什么实践中偏好数据基本都是 pairwise？",o:["pairwise 计算最快","pointwise 的绝对分数「尺度说不清」、listwise 排序更麻烦，而说「哪个更好」不需要任何尺度","pairwise 的信息量最大","只有 pairwise 能训练神经网络"],a:1,w:"三者的信息量是 pointwise > listwise > pairwise，可靠性恰好相反。选 pairwise 是主动放弃信息量去换标注的低噪声。"});
+});
+KP("6 · 偏好对怎么造出来：同一个 prompt、正温度跑两遍",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("14:23","they put this prompt, let us say, twice into the model with a positive temperature");
+  boxNode(420,196,440,40,"prompt x（来自线上日志）","v");
+  var cx=seq(220,268,["同一个模型，温度 > 0","同一个模型，温度 > 0"],["b","b"],400,44);
+  note("回答 1",420,338,"d");
+  note("回答 2",830,338,"d");
+  note("⇒ 再把 (x, 回答1) 与 (x, 回答2) 拿去比，标出哪个更好",640,376,"y");},"<b>偏好对的「来源」这一步很容易被跳过，但它里面有两个设计点。</b><br><b>第一个设计点：两个回答从哪来。</b><b>讲者回拨到第 3 讲讲过的东西 —— <u>只要温度是正的，同一个输入就能生成不同的答案</u>。</b><b>⇒ 所以通常的做法就是：<u>把同一个 prompt 用正温度喂进模型两次，于是拿到两个不同的答案</u>。</b><b>⭐ 注意这意味着两个候选是<u>同一个模型自己产生的</u> —— 不是从别处找来的。这一点在后面讲 on-policy / off-policy 和 DPO 的分布漂移时会变成关键。</b><br><b>第二个设计点：prompt 从哪来。</b><b>讲者说 prompt <u>通常是我们希望它跟随用户真实提问的分布</u>的东西。</b><b>⇒ 所以 x 可以来自<u>线上日志</u>，或者来自一批你想要的 prompt 集合。</b><br><b>★ 这一条和前面「SFT 的 prompt 分布很娇贵」是一个道理的两面</b>：<b>SFT 那边你要<u>小心控制</u>分布；这边你要<u>主动匹配</u>真实分布。</b><b>⇒ 两边都说明同一件事：<u>prompt 的分布本身就是数据集设计的一部分，不是「随便找些问题」</u>。</b><br><b>⚠ 还有一条路线讲者单独提了：到日志里<u>找一条你不喜欢的回答，把它拿来改写成好的</u>（这正是泰迪熊例子的做法）。他说这也是人们会做的，但<u>更费劲一些，因为你需要去生成</u>。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("17:07","take that response and to rewrite it");
+  note("造偏好对的两条路线，代价和性质都不同",640,188,"v");
+  boxNode(70,218,520,44,"路线 A：采样两次，再比","g");
+  note("便宜：只要跑两遍推理 + 标一次比较",330,288,"d");
+  note("⭐ 两条都来自模型自己的分布",330,318,"g");
+  boxNode(690,218,520,44,"路线 B：挑出坏的，人工改写","b");
+  note("⚠ 更贵：需要有人「生成」出好答案",950,288,"r");
+  note("⇒ 好处是能精准修掉你真正在意的那个毛病",950,318,"y");
+  note("★ 泰迪熊那个例子走的是路线 B",640,368,"y");},"<b>两条造数据的路线值得并排看，因为它们的性质差别比代价差别更重要。</b><br><b>路线 A：采样两次再比。</b><b>便宜 —— 跑两遍推理，加一次「哪个更好」的标注。</b><b>⭐ 而它有个容易被忽略的好处：<u>两个候选都来自模型当前的分布</u>。</b><b>⇒ 这意味着你训练时看到的东西和模型真实会产出的东西是一致的。本讲最后讲 DPO 的缺点时，问题恰恰出在这里 —— 如果偏好数据不是你的模型产生的，就会有<u>分布漂移</u>。</b><br><b>路线 B：从日志里挑出一条不好的回答，人工改写成好的。</b><b>⚠ 讲者明说这<u>更费劲一些，因为你需要去生成</u> —— 而他之前刚讲过「生成是昂贵且困难的」。</b><b>⇒ 但它换来一个别的东西：<u>你能精准地修掉你真正在意的那个毛病</u>。路线 A 只能在模型碰巧产出两个有差别的回答时才给你信号。</b><br><b>★ 泰迪熊那个例子走的就是路线 B：拿到那句「别在泰迪熊上花太多时间」，然后改写出一个好的。</b><br><b>⇒ 实践上的判断：<u>路线 A 用来铺量，路线 B 用来定点修</u>。而注意路线 B 的产物天然带着分布漂移的风险 —— 人写的「好答案」不在模型的分布里。</b>");
+  SUM(0,6,{h:"偏好对的两条来源",k:"<b>路线 A</b>：同一个 prompt 用<b>正温度喂两遍</b>，拿到两个不同回答，再标哪个更好。<b>路线 B</b>：从日志里挑一条不喜欢的回答，<b>人工改写</b>成好的（泰迪熊例子走的这条）。",m:"prompt 本身通常取自<b>线上日志</b>，为的是跟随用户真实提问的分布。⇒ prompt 分布是数据集设计的一部分。",w:"⚠ 路线 B 更贵（讲者：你需要去生成），而且产物<b>不在模型自己的分布里</b> —— 这正是后面 DPO 分布漂移问题的来源。",r:"同一个取舍：你的候选配置是从<b>当前搜索策略</b>里采的（分布一致、便宜、但只能看到策略碰巧覆盖的区域），还是<b>人工构造的反例</b>（能定点打击、但不在策略分布里）。两者混用时，要意识到第二类样本会让「在训练分布上成立」的结论失真。"});
+  QUIZ(0,6,{t:"路线 A（采样两次）相对路线 B（人工改写）最重要的性质差别是什么？",o:["路线 A 不需要标注","路线 A 只能用于短回答","路线 A 更快","路线 A 的两个候选都来自模型自己当前的分布，不会带来分布漂移"],a:3,w:"讲者讲 DPO 缺点时正是这个问题：如果偏好数据不是你的模型产生的，训练时拟合的就不是模型见过的那个分布。"});
+});
+KP("7 · 怎么判「哪个更好」：评判者与刻度",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("15:25","we have LLM as a judge");
+  note("谁来判，以及用多细的刻度判",640,188,"v");
+  stack(330,204,[["评判者：人工标注","g"],["评判者：LLM as a judge","b"],["⇒ L8 会专门讲","d"],["规则指标 BLEU / ROUGE","y"],["⚠ 讲者：如今已不太常用","r"]],460,32,6);
+  stack(950,204,[["刻度：二元","g"],["回答 1 比回答 2 好 / 差","d"],["刻度：细粒度","b"],["好得多 / 好 / 略好 / 略差 / 差 / 差得多","d"],["⚠ 很多任务偏主观 ⇒ 实践多用二元","y"]],460,32,6);},"<b>偏好对要「标出哪个更好」，这里有两个独立的选择：<u>谁来判</u>，和<u>用多细的刻度判</u>。</b><br><b>谁来判，讲者列了三类</b>：<br><b>① <u>人工评分</u> —— 最直接的那一类，也是 RLHF 里 H 的来源。</b><br><b>② <u>LLM as a judge</u>（拿 LLM 当评委）—— 讲者说你可能听过这个说法，本讲还没讲，<u>几讲之后会讲</u>（在 L8 评估那一讲），它也常用来比较两条观测哪个更好、好多少。</b><br><b>③ <u>规则类指标</u>，比如 BLEU、ROUGE 这些。<u>⚠ 但讲者补了一句：如今已经不太常用了</u>。</b><br><b>刻度有多细，这一点更有意思</b>：<b>最简单的是<u>二元</u> —— 回答 1 比回答 2 好还是差。</b><b>但你也可以用更细的刻度 —— <u>好得多、好、略好、略差、差、差得多</u>。</b><br><b>★★ 然后是关键的那句</b>：<b>讲者说这种做法<u>有挑战</u>，因为比如考虑人工评分时，<u>很多任务是有点主观的</u>。</b><b>⇒ 所以<u>实际上很多情况下，人们用的是二元刻度的成对偏好数据集 —— 只问更好还是更差</u>。</b><br><b>⭐ 这和上一条是同一个道理在更细一层上重演：<u>刻度越细、信息越多，但主观任务上噪声增长得更快</u>。于是又一次选了更粗、更稳的那一端。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  note("把这一段的三次「同一个取舍」放在一起看",640,186,"v");
+  stack(640,206,[["① 产出答案 vs 比较答案 ⇒ 选比较","g"],["② pointwise vs pairwise vs listwise ⇒ 选 pairwise","g"],["③ 细粒度刻度 vs 二元刻度 ⇒ 选二元","g"],["★ 三次都是：放弃信息量，换标注可靠性","y"]],700,36,8);
+  note("⇒ 这不是三个孤立的工程选择，而是同一条判断用了三次",640,382,"y");},"<b>这一段（数据怎么来）其实只有一条判断，但它被用了三次。我建议把它单独记住，因为它是可以直接搬到别的问题上的。</b><br><b>第一次：<u>产出 vs 比较</u></b>。<b>要人从零写好答案 → 改成让人在两个里挑。放弃了「标准答案」这个信息，换来同样人力下多得多的数据。</b><br><b>第二次：<u>pointwise vs pairwise vs listwise</u></b>。<b>放弃绝对分数（信息最多），放弃全序（信息次多），只要成对比较。换来的是：<u>不需要任何尺度</u>。</b><br><b>第三次：<u>刻度多细</u></b>。<b>放弃「好多少」这个维度，只留「好还是差」。换来的是主观任务上更低的噪声。</b><br><b>★★★ 三次的形状完全一样：<u>主动放弃信息量，去换标注的可靠性</u>。</b><br><b>⇒ 为什么这个方向是对的？因为<u>噪声会直接污染你学到的东西，而信息量的损失只是降低效率</u>。</b><b>标注噪声大的数据，加多少都不收敛到你想要的东西；而粗一点但干净的数据，多标一些就能补回来。</b><br><b>⚠ 但也要知道这个判断在什么时候反过来：<u>当标注者是可靠的（比如是一个精确的仿真器、或者一条能算出来的约束）时，就该去拿信息量最大的那种形态</u>。放弃信息量是为了避噪声，没有噪声就没必要放弃。</b>");
+  SUM(0,7,{h:"评判者与刻度，以及贯穿这一段的那条判断",k:"<b>评判者</b>：人工 / LLM as a judge（L8 讲）/ 规则指标 BLEU·ROUGE（⚠ 如今不太常用）。<b>刻度</b>：二元 或 细粒度（好得多…差得多）。⇒ 很多任务偏主观，实践多用<b>二元</b>。",m:"★ 整段其实是同一条判断用了三次：产出→比较、pointwise→pairwise、细刻度→二元。<b>三次都是放弃信息量，换标注可靠性</b>。",w:"⚠ 这个方向不是无条件的。放弃信息量是为了避噪声 —— 当评判者本身可靠（精确仿真器、可计算的约束）时，就该去拿信息量最大的形态。",r:"直接对你的实验设计有用：标注噪声会<b>污染你学到的东西</b>（加数据也不收敛到对的地方），信息量损失只<b>降低效率</b>（多采样能补）。⇒ 你的可行性判定若来自精确求解器，就该用它最强的输出；若来自带噪的代理或人工判断，就退回成对比较。"});
+  QUIZ(0,7,{t:"「产出→比较、pointwise→pairwise、细刻度→二元」这三次选择共同的形状是什么？",o:["都是主动放弃信息量，去换标注的可靠性 —— 因为噪声会污染结论，信息量损失只降低效率","都是为了让数据集更大","都是为了省算力","都是因为人类不擅长数字"],a:0,w:"而这个判断在评判者可靠（精确仿真器、可计算约束）时就反过来 —— 放弃信息量是为了避噪声，没有噪声就不必放弃。"});
+});
+KP("8 · RL 的五个词：agent / environment / state / action / policy",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("18:45","they have an agent-- and here, I mean the agent in RL term-- which interacts with an environment");
+  boxNode(170,206,380,44,"agent 智能体","b");
+  boxNode(730,206,380,44,"environment 环境","v");
+  link(550,228,730,228);
+  note("状态 s_t：它此刻所处的状态",360,286,"d");
+  note("动作 a_t：它可以采取的动作",360,312,"d");
+  note("奖励 r：有时是好奖励，有时是坏奖励",920,286,"d");
+  note("⇒ 策略 π_θ(a | s)：给定状态时、采取某个动作的概率",640,360,"y");},"<b>RLHF 要用到 RL，而讲者在课上先问了一句「这里有 RL 专家吗」，然后说<u>不需要是 RL 专家，我们会讲得很慢</u>。所以这一条把词先铺干净 —— 后面所有公式都用这五个词。</b><br><b>① <u>agent</u>（智能体）</b>：<b>RL 里做决策的那个东西。</b><b>⚠ 讲者特意说明「我这里说的 agent 是 RL 意义上的 agent」—— 和你平时听到的「AI agent」不是一回事。</b><br><b>② <u>environment</u>（环境）</b>：<b>agent 与之交互的那个东西。</b><br><b>③ <u>state</u>（状态，记 s_t）</b>：<b>它在某个时刻 t 所处的状态。</b><br><b>④ <u>action</u>（动作，记 a_t）</b>：<b>在那个时刻它可以采取的动作。</b><br><b>⑤ <u>policy</u>（策略，记 π_θ）</b>：<b>它采取动作是<u>按照某个策略</u>来的。</b><b>★ 策略的含义讲者讲得很干脆：<u>π_θ(a | s) 就是「给定状态 s 时你采取动作 a 的概率」</u>。他说完还加了一句「很简单，对吧？」</b><br><b>⑥ 还有 <u>reward</u>（奖励）</b>：<b>agent 采取动作后会收到奖励 —— <u>有时是好的奖励，有时是坏的奖励</u>。</b><br><b>⇒ 整个循环就是：处在某个状态 → 按策略选一个动作 → 收到奖励 → 用奖励去调策略。</b><br><b>★★ 把这个循环记牢，因为下一条要做的事只有一件：<u>把这五个词逐个换成 LLM 里的东西</u>。整个 RLHF 的「玄学感」在那一步就消掉了。</b>");
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$\\pi_\\theta(a \\mid s)\\;=\\;\\Pr\\big[\\,\\text{动作}=a \\;\\big|\\; \\text{状态}=s\\,\\big]$$");
+  says("19:09","it takes that action according to some policy");
+  note("⭐ 策略不是一条规则，而是一个「概率分布」",640,200,"y");
+  note("θ 是策略的参数 —— 在 LLM 里它就是模型权重",640,234,"d");
+  note("⇒ 所以「训练策略」= 调模型权重，让这个分布挪向我们要的方向",640,262,"g");},"<b>策略这个词值得单独停一下，因为它是后面所有公式的主角。</b><br><b>公式的读法</b>：<b>π_θ(a | s) 读作「<u>在状态 s 下采取动作 a 的概率</u>」，下标 θ 是这个策略的<u>参数</u>。</b><br><b>★★ 第一个要点：<u>策略是一个概率分布，不是一条确定的规则</u>。</b><b>⇒ 这很重要，因为它意味着「改变行为」= 「改变这个分布」，而分布是可以用梯度连续地挪的。如果策略是一条硬规则，就没有梯度可用，RL 那套机器也就无从下手。</b><br><b>★★ 第二个要点：<u>在 LLM 里，θ 就是模型的权重</u>。</b><b>⇒ 所以「学习策略」和「训练模型」在这里是<u>同一件事的两种说法</u>。讲者后面会反复说「我们要学 θ，而 θ 是我们 LLM 的参数，使得 π_θ 与偏好对齐」—— 现在这句话就完全是字面意思了。</b><br><b>⇒ 于是整个第三阶段的目标可以写成一句话：<u>找一组权重 θ，让模型输出的那个概率分布，和人类偏好对齐</u>。</b><br><b>⚠ 一个容易混的地方先打预防针：后面会出现一个也叫 r 的符号（PPO 里的「比值」r_θ），它<u>不是</u>奖励。讲者自己说这一点当初把他也搞混了。到那一条我会再提醒一次。</b>");
+  SUM(0,8,{h:"RL 的词汇表（后面全靠它）",k:"<b>agent</b> 与 <b>environment</b> 交互：处在 <b>state</b> s_t → 按 <b>policy</b> π_θ 选一个 <b>action</b> a_t → 收到 <b>reward</b> → 用奖励调策略。",m:"<b>π_θ(a | s) 就是「给定状态 s 时采取动作 a 的概率」</b> —— 它是一个概率分布，不是一条规则。θ 是它的参数；在 LLM 里 θ 就是模型权重，所以「学策略」= 「训模型」。",w:"⚠ 两处易混：① 这里的 agent 是 RL 意义上的，不是「AI agent」（讲者专门声明）。② 后面 PPO 里的 r_θ 是<b>比值</b>，不是奖励。",r:"这套词汇直接套得上你的搜索：<b>state</b> = 已经定下的那部分配置，<b>action</b> = 给下一个分量取值，<b>policy</b> = 在当前部分配置下该先定哪个分量、取什么值的分布。策略是分布而非规则，这一点是你能用梯度或 UCT 去调它的前提。"});
+  QUIZ(0,8,{t:"π_θ(a | s) 是什么？",o:["新旧策略的概率比值","奖励模型给出的分数","给定状态 s 时采取动作 a 的概率 —— 一个概率分布，θ 是它的参数（LLM 里即模型权重）","状态 s 的价值估计"],a:2,w:"策略是分布而不是规则，这是「改变行为」可以用梯度连续地做的前提。⚠ 别和 PPO 里的比值 r_θ 混。"});
+});
+KP("9 · 把五个词换成 LLM 的东西：玄学感就没了",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("20:12","The agent is the LLM");
+  stack(380,214,[["agent 智能体","b"],["state 状态","b"],["action 动作","b"],["environment 环境","b"],["policy 策略","b"]],300,30,6);
+  stack(900,214,[["= LLM 本身","g"],["= 目前已有的输入","g"],["= 预测下一个 token","g"],["= 词表里的所有 token","g"],["= 模型输出的那个概率分布","g"]],420,30,6);},"<b>这一条是整讲最关键的「翻译表」。讲者是一句一句对着问的，我们照他的顺序走。</b><br><b>「什么是 agent？」—— <u>agent 就是 LLM</u>。</b><br><b>「它处在什么状态？」—— <u>就是它目前已有的输入</u>。</b><b>⇒ 注意这个定义很实在：状态不是什么抽象的内部变量，<u>就是已经在上下文里的那串 token</u>。</b><br><b>「它想做的动作是什么？」—— <u>预测下一个 token</u>。</b><b>讲者的说法很形象：它基本上总在想「给定这个输入，下一个 token 是什么」。</b><br><b>「环境是什么？」—— 这个动作（下一个 token）是从所有 token 里挑的，<u>所以如果你愿意，环境就是你词表里的那组 token</u>。</b><br><b>「策略是什么？」—— <u>LLM 做前向、在输出端得到的那个概率分布，就是我们的策略</u>。</b><b>⇒ 所以策略不是额外加的一个东西 —— <u>它就是 LLM 本来就在输出的那个 softmax 分布</u>。</b><br><b>★★★ 我建议你在这张表上停久一点，因为它解释了 RLHF 为什么能成立：<u>LLM 本来就是一个策略，不需要为了用 RL 去改造它</u>。</b><b>你只要换一套词汇去描述它，RL 的全套工具就直接可用了。</b><br><b>⇒ 顺便，这也说明了为什么 RL 在这里是「自然」的而不是硬套：生成是<u>逐步决策</u>的，每一步都在一个离散集合里选一个，而这正是 RL 的标准设定。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("20:45","the environment can be the set of tokens of your vocabulary");
+  seq(120,210,["输入 s_t","LLM 做前向","概率分布 π_θ","采样出 token a_t"],["v","b","b","g"],260,44);
+  note("⇒ 这个输出分布就是策略：它决定下一个 token 取谁",640,282,"y");
+  boxNode(390,318,500,44,"奖励：回灌进来，用于调 agent（= 调 LLM 的权重）","r");
+  note("★ 而偏好数据，就是用来造出这个奖励的",640,386,"d");},"<b>把整个回路串起来，讲者自己也复述了一遍，因为这是后面所有算法共用的骨架。</b><br><b>他的复述</b>：<b>LLM 拿到某个输入，它想预测下一个 token、想采取这个动作；为了做这件事，它用<u>自己输出的那个概率分布</u>；然后它预测出的那个 token、或者说生成的那个输出，<u>会收到某个奖励，而这个奖励会回灌进去、用于调这个 agent</u> —— 而这个 agent 就是 LLM。</b><br><b>★ 然后他加上了最后一块拼图：<u>我们在组偏好数据集，我们想知道哪个输出比哪个更好 —— 我们要用这个来做奖励</u>。</b><br><b>⇒ 于是三件事接上了</b>：<b>偏好数据 → 造出奖励 → 奖励去调 LLM。</b><b>而「偏好数据怎么变成奖励」正是下面「奖励模型」那一段要解决的问题。</b><br><b>⚠ 这里要分清两个被调的东西，后面很容易混</b>：<b><u>被训练的是 LLM（策略）；奖励模型是另一个模型，而且它是冻住的</u>。</b><b>讲者后面会专门强调这一点，我们到那一条再展开。</b><br><b>⭐ 另外注意一个很实际的点：这个回路里<u>每转一圈都要生成一整条回答</u>。这就是为什么 RL 那一步比 SFT 贵得多 —— SFT 的数据是现成的，这里的数据要你自己当场生成。</b>");
+  SUM(0,9,{h:"★ RL 的词汇 ↔ LLM 的对应物",k:"<b>agent</b> = LLM；<b>state</b> = 目前已有的输入；<b>action</b> = 预测下一个 token；<b>environment</b> = 词表里的所有 token；<b>policy</b> = LLM 输出的那个概率分布。",m:"⇒ 关键在于：<b>LLM 本来就是一个策略</b>，不需要为了用 RL 去改造它。回路是：输入 → 前向 → 分布 → 采样 token → 拿到奖励 → 回灌调权重。而偏好数据就是用来造那个奖励的。",w:"⚠ 别把两个模型混了：<b>被训练的是 LLM（策略）；奖励模型是另一个、而且冻住</b>。另外这个回路每转一圈要生成一整条回答，所以比 SFT 贵得多。",r:"这张表对你的课题几乎是逐行对应的：state = 已定的部分配置，action = 给下一个分量取值，environment = 各分量的取值域，policy = 你的搜索策略。⇒ 而「奖励要等整条生成完才有」正是组合臂的根本难点，下一条就是讲这个。"});
+  QUIZ(0,9,{t:"在 LLM 里，RL 的「策略」具体是什么？",o:["奖励模型的输出分数","解码时用的 top-p 阈值","LLM 做前向后在输出端得到的那个概率分布 —— 它本来就在输出，不需要额外加东西","value head 的回归输出"],a:2,w:"这正是 RLHF 能成立的原因：LLM 本身就是一个策略，换一套词汇去描述它，RL 的全套工具就直接可用。"});
+});
+KP("10 · ⚠ 信号有多稀疏：一整条回答只换来一个数",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("24:28","you are only getting roughly one signal per completion");
+  note("同一段生成，两种监督能拿到几个信号",640,188,"v");
+  seq(140,218,["token 1","token 2","token 3","token 4","token 5","token 6"],"g",160,40);
+  note("SFT：每一个 token 都给一个监督信号 ⇒ 这里是 6 个",640,286,"g");
+  boxNode(390,318,500,40,"RL：整条 completion 只拿到 1 个奖励","r");
+  note("⚠ 所以 RLHF 被看作一种「信号很稀疏」的方法",640,386,"y");},"<b>这一条是课堂提问逼出来的，而答案很值钱 —— 它解释了 RLHF 为什么难训。</b><br><b>学生问的是：<u>这里拿到的奖励，真的足够有力量去改变 LLM 吗？</u></b><br><b>讲者的回答</b>：<b>你在网上会看到一些说法，把这种训练方式形容为<u>信号远不如 SFT 那么多</u>。</b><b>因为做 SFT 时，<u>你是字面意义上每次都拿一段部分输入、让 LLM 学会生成下一个 token</u>。</b><b>⇒ 而这里，<u>你每条 completion 大概只拿到一个信号</u>。</b><br><b>★ 他的结论：<u>所以它确实更稀疏，而这就是为什么 RLHF 被看作一种信号稀疏的方法</u>。</b><br><b>⭐ 把这个差距具体化一下你就知道有多悬殊</b>：<b>一条 500 token 的回答，<u>SFT 给你 500 个监督信号，RL 给你 1 个</u>。</b><b>⇒ 这个比例差不是细节 —— 它直接决定了 RL 那一步<u>需要多得多的样本、而且方差大得多</u>，也直接解释了后面为什么要费那么大劲去降方差（advantage、baseline、GAE 全是为这个）。</b><br><b>⚠ 另外有个学生先问了「对每个 token 给奖励还是对整条给？」讲者答得很明确：<u>是对整条</u>。</b><b>⇒ 记住这一点，因为后面的 value function 恰恰是为了把这「一个数」摊回到每个 token 上去。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("24:35","RLHF is seen as more an approach that has sparse signals");
+  stack(640,200,[["稀疏信号带来的三个后果","v"],["① 要的样本多得多 ⇒ 这一步至少 100K 量级的观测","d"],["② 方差大 ⇒ 后面 advantage / baseline / GAE 全是为了降它","y"],["③ 监控困难 ⇒ 只能看「平均奖励」，不像 SFT 有交叉熵可看","r"]],760,34,8);
+  note("⇒ 这三条后面都会单独出现；它们的共同根子就是「一条回答一个数」",640,386,"y");},"<b>把稀疏信号的后果提前摊开，因为后面三段内容其实都是在对付它。</b><br><b>① 样本量</b>：<b>讲者在讲 RL 那一步的配置时说，<u>这里的观测通常比奖励模型那一步还多，一般至少 100K</u>。</b><b>⇒ 对比一下：奖励模型那一步「几万条」就够。<u>信号更稀疏的那一步要更多数据</u>，这个关系是合理的。</b><br><b>② 方差</b>：<b>一条回答只有一个数，这个数还来自一个不完美的奖励模型 ⇒ <u>梯度估计会非常吵</u>。</b><b>⇒ 后面你会看到一长串专门对付方差的东西：用 <u>advantage 而不是裸 reward</u>、减一个 <u>baseline</u>、用 <u>GAE</u> 去估计。讲者说这些做法「降低了这些估计的方差，而且通常让训练跑得更快」 —— 现在你知道方差是从哪来的了。</b><br><b>③ 监控</b>：<b>讲者专门提了这个难处 —— <u>至少在预训练和 SFT 时你有交叉熵损失可以盯着，它真的在告诉你模型复现你要的行为的能力如何</u>；而这里你只能盯<u>平均奖励</u>，<u>这是一种监控方式，但不一定是最好的方式</u>。</b><br><b>★★ 这三条我建议连在一起记，因为它们是同一个根子长出来的：<u>一条回答只换来一个数</u>。</b><b>⇒ 看到后面任何一个「为什么要这么麻烦」的设计，先回头问一句「它是不是在对付稀疏」，多半是。</b>");
+  SUM(0,10,{h:"⚠ 稀疏信号：一条 completion 一个奖励",k:"SFT 是<b>每个 token</b> 一个监督信号；RL 这一步<b>整条 completion 只有一个奖励</b>（学生问过，讲者明确答「是对整条」）。⇒ 所以 RLHF 被称为信号稀疏的方法。",m:"一条 500 token 的回答，SFT 给 500 个信号、RL 给 1 个。三个后果：① 样本要多（这一步至少 100K 观测）；② 方差大（advantage / baseline / GAE 都是为了降它）；③ 监控难（只能看平均奖励，不像 SFT 有交叉熵）。",w:"⚠ 别以为稀疏只是「慢一点」。它是后面一整串复杂设计的<b>共同根源</b> —— 看到任何「为什么要这么麻烦」，先问是不是在对付稀疏。",r:"★ 这正是你课题的结构：<b>代价与可行性只有在完整配置上才测得到</b>，部分配置拿不到真值。所以你也要面对同一组后果 —— 样本贵、估计吵、过程指标弱。⇒ 而后面的 value function（把整条的一个数摊回每一步）就是对这个困难的标准答案，和 MCTS 的价值估计是同一件事。"});
+  QUIZ(0,10,{t:"RL 这一步的奖励是按 token 给还是按整条回答给？",o:["按 token 给，和 SFT 一样","按整条 completion 给一个 —— 所以信号比 SFT 稀疏得多","由用户选择","按句子给"],a:1,w:"学生问过这个，讲者答得很明确：是对整条。这一个事实解释了后面样本量、方差、监控三个难处，以及 value function 为什么存在。"});
+});
+KP("11 · RLHF 的两段式，以及 ⚠「HF」到底指什么",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("26:28","RLHF stands for Reinforcement Learning from Human Feedback");
+  boxNode(70,214,520,44,"第一段：训一个奖励模型 RM","g");
+  note("输入：prompt 与回答「拼起来」",330,284,"d");
+  note("输出：一个分数",330,310,"d");
+  note("⇒ 用收集到的全部偏好对，学「什么是好、什么是坏」",330,348,"y");
+  boxNode(690,214,520,44,"第二段：RL 那一步","b");
+  note("输入：prompt",950,284,"d");
+  note("输出：更贴合奖励的回答",950,310,"d");
+  note("⇒ 用奖励把模型对齐到偏好上",950,348,"y");},"<b>RLHF 的结构非常清楚：两段，而且两段的输入输出完全不同。记住这两段的边界，后面讨论「为什么 PPO 麻烦」才有抓手。</b><br><b>第一段：学会区分好输出和坏输出。</b><b>讲者的说法是 —— <u>你收集的所有偏好对，实际上就是用来让你学会「什么是好、什么是坏」的</u>。</b><b>输入是 <u>prompt 和回答拼接起来</u>；输出是<u>一个分数</u>。</b><b>⇒ 问题形式是：给定一个 prompt 和一个回答，<u>它有多好</u>。</b><br><b>第二段：RL 那一步。</b><b><u>用奖励把你的模型对齐到偏好上</u>。</b><b>输入是 <u>prompt</u>；你想做的是生成一个<u>更贴合奖励的 ŷ</u>。</b><br><b>★★ 注意两段的输入不一样，这个差别很实质</b>：<b>第一段吃「prompt + 回答」（回答是现成的，来自偏好数据）；第二段只吃「prompt」，<u>回答要模型自己当场生成</u>。</b><b>⇒ 所以第一段是普通的监督学习（数据现成、每条一个标签），第二段才是真正的 RL（要自己产数据）。<u>两段的工程难度差一个档次</u>，这也是后面 DPO 想绕开第二段的动机。</b><br><b>⇒ 顺序也要记牢：<u>必须先有第一段，第二段才能开始</u> —— 后面讲 RL 的挑战时，第一条就是这个依赖关系带来的麻烦。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("28:13","that one is relying on non-human preferences");
+  note("⚠ 名字里的「HF」指的到底是哪一环？",640,186,"y");
+  stack(640,210,[["HF = Human Feedback","v"],["它指的是「奖励模型训练标签的来源」","d"],["偏好对来自人工评分 ⇒ RLHF","g"],["偏好对来自非人类的偏好 ⇒ RLAIF","b"]],760,34,8);
+  note("⇒ RL 那一步的算法两者完全一样，差的只是标签谁给的",640,386,"d");},"<b>讲者专门停下来点了一件事，而这件事在读论文时很容易误解。</b><br><b>他的原话结构是这样的</b>：<b>RLHF 是 Reinforcement Learning from Human Feedback。<u>其中「Human Feedback」这一部分，指的是「奖励模型是在哪种标签上训练的」</u>。</b><b>⇒ 所以：<u>如果你的偏好对是基于人工评分的，那你就是在依赖人类偏好，你就处在 RLHF 里</u>。</b><br><b>然后他给出对照</b>：<b>你在外面还会看到 <u>RLAIF</u> —— Reinforcement Learning from AI Feedback，<u>而那一种依赖的是非人类的偏好</u>。</b><br><b>★★ 为什么这个区分值得单独记？因为它说明<u>「HF」限定的是数据来源，不是算法</u>。</b><b>⇒ RLHF 和 RLAIF 的 RL 那一步<u>可以是一模一样的算法（比如都用 PPO）</u>，差别只在第一段的标签是谁给的。</b><br><b>⚠ 所以读论文时要分清两件独立的事：<u>①「标签谁给的」（H 还是 AI）② 「用哪个 RL 算法」（PPO / GRPO / …）</u>。</b><b>这两件事可以任意组合，而名字只告诉你第一件。</b><br><b>⭐ 顺带一个实际含义：既然算法不变、只换标签来源，那「人工标注贵」这个瓶颈就有了一条明确的绕法 —— 用 LLM 当评委去产偏好标签。这正是前面提到的 LLM as a judge 在这条流水线上的位置。</b>");
+  SUM(0,11,{h:"RLHF = 两段式，而「HF」指标签来源",k:"<b>第一段</b>：训奖励模型 RM —— 输入「prompt + 回答」，输出一个分数，用全部偏好对学什么是好坏。<b>第二段</b>：RL —— 输入只有 prompt，回答要模型<b>当场生成</b>，用奖励把模型对齐。",m:"⚠ 名字里的 <b>Human Feedback 指的是「奖励模型是在哪种标签上训练的」</b>：人工评分 ⇒ RLHF；非人类偏好 ⇒ <b>RLAIF</b>。⇒ RL 那一步的算法两者可以完全一样。",w:"⚠ 两段的难度不同级：第一段是普通监督学习（数据现成），第二段要自己产数据才是真 RL。而且<b>必须先有第一段</b> —— 这个依赖是后面 RL 诸多麻烦的第一条。",r:"读论文时把两件事拆开：<b>标签谁给的</b> 与 <b>用哪个搜索/优化算法</b>，二者可任意组合。你的课题同理：可行性标签来自精确求解器还是代理模型，与你用 MCTS 还是别的搜索，是两个独立的设计维度，报告里应分别交代。"});
+  QUIZ(0,11,{t:"RLHF 里的「Human Feedback」具体限定了什么？",o:["奖励模型是在哪种标签上训练的 —— 人工评分是 RLHF，非人类偏好则是 RLAIF；RL 那一步的算法可以一样","RL 算法必须是 PPO","必须由人实时参与训练循环","偏好对必须是二元刻度"],a:0,w:"所以「标签谁给的」和「用哪个 RL 算法」是两件独立的事，可以任意组合，而名字只告诉你第一件。"});
+});
+KP("12 · Bradley-Terry：把「哪个更好」写成一个 sigmoid",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$P(y_i \\succ y_j)\\;=\\;\\frac{e^{r_i}}{e^{r_i}+e^{r_j}}\\;=\\;\\sigma(r_i-r_j)$$");
+  says("29:50","we are using a formulation that is called the Bradley-Terry formulation");
+  note("读法：输出 i 比输出 j 更好的「概率」",640,198,"y");
+  note("⭐ 右边那个等号是全部的玄机：概率只依赖两个分数的「差」",640,228,"g");
+  note("⚠ 讲者说这是一条重要公式，他在这里专门多停了一会儿",640,258,"d");},"<b>这是整讲第一条要背下来的公式，讲者自己说「<u>那是一条重要的公式，我们在这里多停一会儿</u>」。</b><br><b>它说的是什么</b>：<b><u>输出 y_i 比输出 y_j 更好的概率，等于 e 的 r_i 次方，除以「e 的 r_i 次方 加 e 的 r_j 次方」</u>。</b><b>这里 r_i、r_j 是某种「分数」。</b><br><b>★★★ 而右边那个等号是全部的玄机：<u>它等于 σ(r_i − r_j)</u>，也就是两个分数之<u>差</u>的 sigmoid。</b><br><b>⇒ 为什么这一步这么关键？因为它意味着<u>只有差有意义，绝对值没有意义</u>。</b><b>把 r_i 和 r_j 同时加 100，概率一点不变。<u>这就解释了后面那个说法「奖励的尺度本身是自由的」</u> —— 不是人们懒得定尺度，而是公式里根本没有尺度这个自由度。</b><br><b>⇒ 还有一个推论：<u>偏好数据里只有「谁更好」，所以你本来就只能学到差，学不到绝对值</u>。公式和数据在这一点上是严丝合缝的。</b><br><b>⚠ 名字要记住：<u>Bradley-Terry</u>。它不是这门课发明的，是统计学里处理成对比较的经典模型（排名、体育比分都在用）。⇒ 它和前一段「实践中用 pairwise」正好接上：有了成对数据，就有了与之匹配的成对模型。</b>");
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$\\sigma(x)\\;=\\;\\frac{1}{1+e^{-x}}$$","top");
+  says("30:57","So it is a sigmoid",206);
+  axes({x0:240,x1:1040,y0:366,y1:240});
+  curve(fn(function(x){return 366-116/(1+Math.exp(-(x-640)/55));},240,1040,300),"g");
+  note("x → −∞ 时趋于 0",350,250,"d");
+  note("x → +∞ 时趋于 1",930,250,"d");
+  note("⇒ i 比 j 好 ⇒ 要让 r_i − r_j 尽量大，概率才贴近 1",640,386,"y");},"<b>sigmoid 这个函数讲者也没跳过，他当场问了「谁知道 σ 是什么」，有人答对了，然后他把定义写了出来。</b><br><b>定义</b>：<b>σ(x) = 1 / (1 + e^(−x))。</b><br><b>形状</b>：<b>讲者的描述就是图上这条线 —— <u>当 x 趋于负无穷，它趋于 0；趋于正无穷，它趋于 1</u>。</b><br><b>★★ 然后是最有用的那句推论，它把公式变成了「该怎么训」</b>：<b><u>换句话说，如果 i 比 j 好，我们就想让 σ 的输入尽可能大，因为我们希望那个概率尽可能接近 1</u>。</b><b>⇒ 于是：<u>好的输出 i 要让 r_i 高，坏的输出 j 要让 r_j 低</u>。</b><br><b>⭐ 这就是奖励模型训练的全部直觉了。注意这个推理的方向很漂亮：<u>先写下「我希望这个概率接近 1」，再反推出「分数该怎么动」</u>。</b><b>这比直接说「好的打高分、坏的打低分」强，因为它顺手给出了损失函数该长什么样 —— 下一条就是把这句话变成公式。</b><br><b>⚠ 一个数值上的细节值得知道：sigmoid 在两端很平，<u>当 r_i − r_j 已经很大时梯度几乎为 0</u>。⇒ 这意味着奖励模型会自动「不再管已经分得很开的那些对」，而把梯度花在难分的对上。这是个好性质，但也意味着一旦数据里有标错的对，模型会很执着地去拟合它。</b>");
+  SUM(0,12,{h:"Bradley-Terry 公式",k:"P(y_i ≻ y_j) = e^{r_i} / (e^{r_i} + e^{r_j}) = <b>σ(r_i − r_j)</b>。σ(x) = 1/(1+e^{−x})，左端趋 0、右端趋 1。",m:"⇒ 推论（讲者亲口给的）：<b>i 比 j 好 ⇒ 要让 σ 的输入尽量大 ⇒ 好的 r 高、坏的 r 低</b>。这就是奖励模型的全部训练直觉。",w:"★ 概率只依赖两个分数的<b>差</b>，同时加一个常数不改变任何东西 ⇒ <b>奖励的绝对尺度在公式里根本不存在</b>。这解释了后面「尺度是自由的、要靠归一化」。",r:"Bradley-Terry 正是 <b>dueling bandits</b> 的标准模型 —— 你若把「哪个配置更划算」做成成对比较，这就是现成的似然。⚠ 同时记住它只能标定「差」：若你最终需要绝对代价（比如要和一个预算阈值比），成对比较本身不够，必须另外锚定尺度。"});
+  QUIZ(0,12,{t:"Bradley-Terry 公式右边那个 σ(r_i − r_j) 揭示了什么重要性质？",o:["必须用 softmax 而不是 sigmoid","奖励必须是正数","r_i 必须大于 1","概率只依赖两个分数的「差」—— 同时给两个分数加常数毫无影响，所以奖励的绝对尺度在公式里不存在"],a:3,w:"这解释了后面「奖励尺度是自由的、要靠归一化」那一段。而且偏好数据里本来只有「谁更好」，所以本来也只能学到差。"});
+});
+KP("13 · ★ 从第一性原理推出奖励模型的损失（四步）",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("36:45","what I am doing here is to just reconstruct the loss from first principles");
+  stack(640,200,[["① 要什么：找参数 θ，让「观测到这批偏好对」的概率最大","v"],["② 独立假设 ⇒ 写成 n 个 Bradley-Terry 概率的「乘积」","d"],["③ 看到概率乘积 ⇒ 取 log（否则数值会小到不稳定）","y"],["④ 机器学习的人喜欢最小化 ⇒ 前面加个负号","g"]],880,34,8);
+  note("⇒ 四步走完，损失函数就是推出来的，不是猜出来的",640,386,"y");},"<b>这一段我强烈建议你跟着自己推一遍，因为讲者明说「<u>我这里做的事，就是从第一性原理把损失重新构造出来</u>」，而这个套路你以后会反复用到。</b><br><b>① 先说清要什么。</b><b>给定你的数据、给定 Bradley-Terry 这个公式，<u>去找参数 θ，使得「这批数据发生」的概率最大</u>。</b><b>⇒ 这就是最大似然，只是说法朴素。</b><br><b>② 写出来。</b><b>设偏好数据集是一堆「赢的例子 配 输的例子」的对，<u>假设这些对彼此独立发生</u>。</b><b>⇒ 那「看到这些例子」的概率就是 n 个概率的<u>乘积</u>，而每个概率按 Bradley-Terry 都等于 σ(赢的奖励 − 输的奖励)。</b><br><b>③ 取 log。</b><b>讲者在这里向学生提问，并自己给出答案：<u>每当你看到一串概率的乘积，第一个该想到的就是 —— 对，log</u>。</b><b>理由他也说了：<u>因为乘积会变得非常小，会造成数值不稳定</u>。</b><b>⇒ 而且最大化乘积和最大化它的 log 是同一件事（log 单调）。</b><br><b>④ 变成最小化。</b><b>讲者的原话很可爱：<u>但搞机器学习的人喜欢最小化东西，所以我们在前面放个负号</u>。</b><b>⇒ 最大化「log 的和」= 最小化「负的 log 的和」。</b><br><b>★★ 四步下来，损失函数是<u>推出来的</u>，不是从论文里抄来的。这个区别很重要：推出来的你知道每一项为什么在那儿，抄来的你只能记住它长什么样。</b>");
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$\\mathcal{L}\\;=\\;-\\,\\mathbb{E}\\Big[\\;\\log \\sigma\\big(\\,r(x,\\hat y_w)-r(x,\\hat y_l)\\,\\big)\\Big]$$");
+  says("37:46","but people in ML, they like to minimize things");
+  note("ŷ_w = 赢的那条回答（winning）；ŷ_l = 输的那条（losing）",640,198,"d");
+  note("⭐ 括号里就是 Bradley-Terry 的那个「差」",640,228,"g");
+  note("⇒ 要让它小 ⇒ 要让「赢的分数 − 输的分数」大 ⇒ 正合我们的意思",640,258,"y");},"<b>最终的损失函数长这样，而它每一个部件你现在都能解释了。</b><br><b>符号先交代</b>：<b><u>ŷ_w 是「赢的」那条输出（winning），ŷ_l 是「输的」那条（losing）</u>。</b><b>r(x, ŷ) 是奖励模型给「这个 prompt 配这个回答」的分数。</b><br><b>怎么读这条式子</b>：<b>括号里是<u>赢的分数减输的分数</u> —— 正是 Bradley-Terry 里那个差；套上 σ 得到「赢的确实比输的好」的概率；取 log、取负、再对数据求期望。</b><br><b>★ 怎么验证它方向对不对？自己推一遍：<u>要让 L 小，就要让 log σ(·) 大，就要让 σ(·) 大，就要让那个差大 —— 也就是赢的分数高、输的分数低</u>。</b><b>⇒ 和我们想要的完全一致。这个「反着读一遍检查方向」的习惯很值得养，因为损失函数的符号错是极常见的 bug，而它不会报错、只会让训练往反方向跑。</b><br><b>⚠ 讲者在板书时写的是对 n 个样本求和，最后写成期望 —— 这两种写法在实践中就是「批内求和 / 求平均」的区别，不影响理解。</b><br><b>⭐ 还有一处很有意思：课上有学生先猜这个损失是<u>二元交叉熵</u>，讲者说「很好的答案」，并且补了一句 —— <u>交叉熵可以看成是这个式子的一个特例</u>。⇒ 这两种说法指的是同一个东西，只是一个从「分类」的角度看、一个从「最大似然」的角度看。</b>");
+  SUM(0,13,{h:"★ 奖励模型的损失，四步推出来",k:"L = −E[ log σ( r(x, ŷ_w) − r(x, ŷ_l) ) ]。<b>ŷ_w</b> 赢的回答，<b>ŷ_l</b> 输的回答。括号里就是 Bradley-Terry 的那个差。",m:"四步：① 最大化「观测到这批偏好对」的概率（最大似然）；② 独立假设 ⇒ 概率<b>乘积</b>；③ 看到概率乘积就<b>取 log</b>（乘积会小到数值不稳定，且 log 单调）；④ ML 的人喜欢最小化 ⇒ <b>加负号</b>。",w:"★ 养成反着读一遍验方向的习惯：要 L 小 ⇒ σ 大 ⇒ 差大 ⇒ 赢的高、输的低。✓ <b>损失的符号错不会报错，只会让训练往反方向跑</b>。",r:"这四步是你写方法章节时该照抄的模板：<b>先说清要最大化什么概率，再独立假设、取 log、变最小化</b>。⇒ 你的「最便宜可行配置」若用成对比较数据来学代价代理，损失形式与此完全同构，可以直接沿用并引 Bradley-Terry。"});
+  QUIZ(0,13,{t:"推导里「看到概率的乘积就取 log」的理由是什么？",o:["log 能让梯度更大","为了和交叉熵保持一致","乘积会变得非常小、造成数值不稳定；而且 log 单调，最大化乘积与最大化其 log 是同一件事","log 让损失变成凸函数"],a:2,w:"讲者的原话理由就是数值不稳定。顺带：课上有学生猜这是二元交叉熵，讲者说交叉熵可以看成这个式子的一个特例 —— 两种说法指同一个东西。"});
+});
+KP("14 · ⭐「训练时成对，使用时逐点」—— 这是奖励模型最妙的一点",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("38:59","you are just training it pairwise, but it is actually pointwise");
+  note("讲者自己当堂问了一句：损失是成对的，那模型呢？",640,188,"y");
+  boxNode(70,218,520,44,"训练时：必须成对","b");
+  note("损失里同时要「赢的」和「输的」两条",330,288,"d");
+  note("⇒ 没有一对就算不出这个损失",330,318,"d");
+  boxNode(690,218,520,44,"使用时：只要一条","g");
+  note("输入一个 prompt + 一条回答 ⇒ 输出一个数",950,288,"g");
+  note("⇒ 不需要配对就能打分",950,318,"g");
+  note("★ 讲者：这就是妙处所在 —— 你不需要一对",640,368,"y");},"<b>这一条是我在整讲里最喜欢的一个点，讲者是用当堂提问带出来的，而学生第一反应答错了。</b><br><b>他的问题</b>：<b>「<u>这里的损失函数是成对的。但奖励模型本身，它是成对的还是逐点的？你是需要一对才能做预测，还是只需要一条？</u>」</b><br><b>学生答「需要一对」。</b><b>⇒ 讲者的回答：<u>这就是妙处所在 —— 你不需要一对。你只是在用成对的方式训练它，但它其实是逐点的</u>。</b><br><b>★★★ 为什么会这样？把损失再看一眼就清楚了：<u>r(x, ŷ) 这个函数本身只吃一个「prompt + 回答」</u>。</b><b>成对出现在<u>损失里</u>，不在<u>模型里</u> —— 损失把两次调用的结果相减，但每次调用都是独立的、只看一条。</b><br><b>⇒ 所以训练完你得到的东西是：<u>一个吃一个 prompt 和它的输出、吐出一个数的模型</u>。而它学到的行为是：给赢的例子高分、给输的例子低分。</b><br><b>★★ 这个「训练形态」和「使用形态」可以不一样的思路，是本讲最可迁移的一条。</b><b>⇒ 它的价值在于：<u>你可以用最容易标注的形态去训练（成对比较），却得到最好用的形态去使用（单点打分）</u>。两头的需求不同，而中间可以靠损失函数的设计来转换。</b><br><b>⇒ 而这一点正是下一段 Best-of-N 能成立的前提：要在 N 个候选里挑最好的，你必须能<u>给单条打分</u>，不能只会两两比。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  note("把「两头形态不同」这件事画清楚",640,186,"v");
+  boxNode(230,212,360,36,"偏好对（最好标的形态）","v");
+  boxNode(690,212,360,36,"单条打分（最好用的形态）","g");
+  link(590,230,690,230);
+  boxNode(400,286,480,40,"中间靠「损失函数的设计」转换","y");
+  note("⭐ 能这样转换，是因为「成对」只出现在损失里，没出现在模型里",640,356,"d");
+  note("⇒ 所以 Best-of-N 这类「给 N 条打分再挑」的办法才成为可能",640,384,"g");},"<b>把这件事抽象一层，它就成了一条能带走的方法论。</b><br><b>两头的需求是矛盾的</b>：<b><u>标注端</u>希望形态越简单越好 —— 成对比较最容易、噪声最低（这正是前一段三次取舍的结论）。</b><b><u>使用端</u>希望形态越通用越好 —— 能给单条打分，才能排序、才能筛、才能当奖励用。</b><br><b>★★ 而这两头之所以能接上，靠的是一个很具体的结构：<u>「成对」只出现在损失函数里，没有出现在模型的输入里</u>。</b><b>⇒ 模型永远只吃一条，损失负责把两次调用的输出相减。所以模型天生就是逐点的，只是它的<u>训练信号</u>是成对的。</b><br><b>⭐ 这条思路的用法是反过来的：<u>当你的标注形态和使用形态不一致时，不要去改数据，去设计损失</u>。</b><b>把你能拿到的那种比较关系写成损失里的一个约束，而让模型保持你想要的那种输入输出形态。</b><br><b>⇒ 而它的直接后果你马上会在本讲用到两次</b>：<b>① RL 那一步要给<u>单条 rollout</u> 打分（没有配对可言）；② Best-of-N 要给 <u>N 条候选</u>各打一个分再取最大。<u>这两件事都要求模型是逐点的</u>。</b><b>⚠ 如果奖励模型真的只会「两两比」，这两个方法都做不了 —— 所以这不是一个花哨的观察，而是整条流水线的承重点。</b>");
+  SUM(0,14,{h:"⭐ 训练成对、使用逐点",k:"损失函数是<b>成对</b>的（要同时有赢的和输的），但奖励模型本身是<b>逐点</b>的：输入一个 prompt + 一条回答，输出一个数。讲者：这就是妙处所在 —— 你不需要一对。",m:"原因很具体：<b>「成对」只出现在损失里，没出现在模型的输入里</b>。r(x, ŷ) 每次只吃一条，损失负责把两次调用的结果相减。",w:"★ 可迁移的方法论：当标注形态（成对最好标）和使用形态（单点最好用）不一致时，<b>别改数据，去设计损失</b>。而这正是 RL 那步给单条 rollout 打分、以及 Best-of-N 能成立的前提。",r:"直接可用：你可以只收集「A 比 B 划算」这类成对判断，却训出一个<b>能给单个配置打分</b>的代价代理 —— 而后者才是 MCTS 的节点评分和 dominance 剪枝真正需要的东西。⇒ 两头形态不一致时，靠损失转换。"});
+  QUIZ(0,14,{t:"奖励模型是成对的还是逐点的？",o:["取决于用 PPO 还是 DPO","逐点的 —— 输入一个 prompt 加一条回答就输出一个数；「成对」只存在于损失函数里","成对的 —— 必须同时给两条才能打分","既不是成对也不是逐点，它输出一个排序"],a:1,w:"讲者当堂提问，学生答「需要一对」，他说这就是妙处 —— 你不需要一对。而这正是 RL 那步给单条 rollout 打分、以及 Best-of-N 挑最优的前提。"});
+});
+KP("15 · 奖励模型拿什么搭、量什么维度、分数是什么尺度",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("40:55","you just put a classification head");
+  note("奖励模型用什么搭？两条路都见过",640,188,"v");
+  boxNode(70,218,520,44,"路线 1：decoder-only LLM + 分类头","g");
+  note("在你关心的那个句末位置取表示，再过分类头",330,288,"d");
+  note("⇒ 讲者：如今什么都是 LLM，所以人们多走这条",330,318,"g");
+  boxNode(690,218,520,44,"路线 2：encoder-only，比如 BERT","b");
+  note("把 CLS token 的嵌入投影出来",950,288,"d");
+  note("⇒ 他说这完全可以是一个选项",950,318,"d");
+  note("★ 数据量：通常几万条量级、甚至更多；标签就是偏好评分；榜单叫 RewardBench",640,368,"y");},"<b>奖励模型不是什么新结构 —— 它就是你已经学过的两种模型外面加一个头。</b><br><b>路线 1：decoder-only + 分类头。</b><b>讲者的说法是：<u>既然预测下一个 token 的 decoder-only 模型如今非常流行，你完全可以拿这样一个 LLM，在你考虑的那个句子末尾接上几个分类头，用它来预测奖励</u>。</b><b>⇒ 他说<u>人们如今通常走 LLM 这条路，因为这年头什么都是 LLM</u>。</b><br><b>路线 2：encoder-only，比如 BERT。</b><b>（这是 L2 讲过的那一类。）做法是<u>把 CLS token 的嵌入投影出来</u>。</b><b>⇒ 讲者说这完全可以是一个选项。</b><br><b>★ 两条路的共同点值得点一下：<u>都是「拿一个已经会表示文本的模型，外面加一个输出一个数的头」</u>。</b><b>⇒ 所以奖励模型的能力上限，其实取决于底座模型对文本的理解能力 —— 这也是为什么它通常也要用一个不小的模型。</b><br><b>数据量</b>：<b>讲者说你这里需要的数据<u>通常在几万条、或者更多</u>，而<u>标签就是那个偏好评分</u>。</b><b>⚠ 而如果你谈的是 RLHF，这个偏好就<u>应该来自人类</u>。</b><br><b>⇒ 另外有个现成的评测榜单可以用来看自己的奖励模型做得好不好，讲者给了引用：<u>RewardBench</u>，他说这是个挺流行的。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("42:14","so they can be different reward models");
+  note("⚠「好」不是一个数：奖励总是相对某个「维度」而言",640,186,"y");
+  stack(640,210,[["维度：输出有用吗 useful","d"],["维度：输出友好吗 friendly","d"],["维度：输出安全吗 safe","d"],["⇒ 可以每个维度各一个 RM，也可以要一个综合分","g"]],760,34,8);
+  note("★ 而人工评分对「你给标注者的指南」极其敏感 ⇒ 指南越客观，标签越不吵",640,386,"y");},"<b>这一条来自一个很好的课堂提问：<u>有些任务里人类偏好是这样，另一些任务里可能是另一样 —— 那奖励到底在量什么？</u></b><br><b>讲者的回答很干脆</b>：<b><u>那些奖励，都是相对某个给定「维度」而言的</u>。</b><b>他举的维度有：<u>输出有用吗、输出友好吗、输出安全吗</u>。</b><b>⇒ <u>所有这些都是不同的维度，所以它们可以是不同的奖励模型</u>。</b><b>他补了一句：你也可以有一个综合性的分数。</b><br><b>★★ 但他的结论句才是关键：<u>你需要定义一个维度，沿着它来量化你的回答有多好</u>。</b><b>⇒ 换句话说，<u>「好」这件事不先被你拆成维度，奖励模型就无从训练</u>。这和 L4 结尾那个「不要只报一个数、要报一组维度」是同一个判断。</b><br><b>★★★ 然后讲者又主动加了一段，我觉得这段的含金量很高</b>：<b><u>人工评分对你向标注者展示的「指南」非常敏感</u>。</b><b>他说偏好数据有一个重要方面，就是<u>要确保你告诉标注者的指南尽可能客观</u> —— 有时候你没法让它们特别客观，但你的任务就是<u>让它们足够清楚，这样你的人类偏好才不会太吵</u>。</b><br><b>⇒ 这是一条很实在的提醒：<u>标注噪声的来源往往不是标注者不认真，而是指南本身没说清</u>。而前面讲过，噪声会直接污染你学到的东西。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("45:11","there is some rescaling that happens");
+  note("奖励模型输出的分数，是什么尺度？",640,188,"v");
+  boxNode(230,214,780,40,"好的输出 ≈ 1；差的输出 ≈ −2、−3 ⇒ 连续取值，不限区间","g");
+  note("⚠ 它不是「回归到某个给定刻度上」—— 讲者：这里是自由形式的",640,296,"y");
+  note("⇒ 推理时会有归一化流程，在批内把分数归一化",640,324,"d");
+  note("★ 而尺度只在它「进入损失函数」时才重要 —— 那正是 RL 的情形",640,362,"y");},"<b>学生连着问了三个关于分数的问题，而这三问凑出了一个完整答案，很值得整理在一起。</b><br><b>问一：这是回归还是分类？</b><b>讲者说这个不好答 —— <u>奖励可以被理解成一个分数，但我们用的是一个概率式的表述</u>。</b><b>他倾向于把它<u>框成分类</u>，因为你有偏好数据（更好还是更差，1 或 0）；但最后你用的是奖励，所以也不是纯粹的分类任务。<u>他最终说：我大概会把这个表述更多地描述成一个概率式的表述</u>。</b><br><b>问二：分数会归一化吗？</b><b>答：<u>通常会。有很多不同的方法</u>。</b><b>他给的理由很清楚：<u>如果你是在回归设定里，你是在某个给定刻度上预测一个分数 —— 而这里你并不是，这里是自由形式的</u>。<u>所以会有某种重新缩放发生</u>。</b><br><b>问三：奖励模型的输出到底长什么样？</b><b>答：<u>你可以把好输出想成 1，坏输出想成 −2、−3 —— 基本上是一个连续的尺度</u>。</b><br><b>★★ 把这三问和前面的 Bradley-Terry 连起来，就完全说通了：<u>公式里只有「差」有意义，所以绝对尺度在数学上根本不存在，于是实践中必须自己加归一化</u>。</b><br><b>⇒ 而讲者还点了一个很实用的判断：<u>尺度什么时候重要？当它进入一个损失函数的时候</u> —— 那正是 RL 的情形。⇒ 后面你会看到 Best-of-N 里尺度完全不重要（因为只取最大值，单调变换不改变谁最大）。</b>");
+  SUM(0,15,{h:"奖励模型：架构、维度、尺度",k:"<b>架构</b>两条路：decoder-only LLM + 分类头（如今的主流），或 encoder-only（BERT）投影 CLS。<b>数据</b>几万条量级，标签是偏好评分；榜单 <b>RewardBench</b>。",m:"<b>维度</b>：奖励总是相对某个维度（有用 / 友好 / 安全）—— 可以各训一个 RM，也可要综合分。<b>尺度</b>：自由形式、连续（好 ≈ 1，坏 ≈ −2），不是回归到给定刻度，所以实践中会在批内<b>归一化</b>。",w:"★ 讲者额外强调：<b>人工评分对「给标注者的指南」极其敏感</b> —— 指南要尽可能客观、至少足够清楚，否则标签会很吵。标注噪声往往来自指南没说清，不是标注者不认真。",r:"两条直接可用：① 把「好」拆成维度再建代理 —— 你的<b>代价</b>与<b>可行性</b>是两个维度，压成一个数会丢掉约束的硬性；② <b>尺度只在进入损失函数时才重要</b>。若你只做 argmin 选择，单调变换无害；一旦要和预算阈值比较或进入加权目标，就必须锚定尺度。"});
+  QUIZ(0,15,{t:"奖励模型输出分数的「尺度」是怎么回事？",o:["由 RewardBench 规定","固定在 0 到 1 之间","必须是整数等级 1 到 5","自由形式的连续值（好 ≈ 1、差 ≈ −2），不是回归到给定刻度，所以实践中会做归一化；而尺度只在它进入损失函数时才重要"],a:3,w:"这和 Bradley-Terry 完全自洽：公式里只有「差」有意义，绝对尺度在数学上不存在。⇒ Best-of-N 里尺度不重要（只取最大值），RL 里重要（进了损失）。"});
+});
+KP("16 · RL 那一步的回路，以及 ⚠ 谁在动、谁不动",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("47:13","people use also the term roll-outs");
+  seq(100,210,["prompt x 输入","LLM 生成一整条回答","(x, 回答) 喂进奖励模型","得到一个分数，例如 −2"],["v","b","g","y"],270,44);
+  note("completion = 一整条回答；讲者说人们也用 rollout 这个词",640,282,"d");
+  boxNode(390,318,500,44,"⇒ 拿这个分数去调 LLM","r");
+  note("★ 奖励模型不会给「大拇指」，它给的是一个数",640,386,"y");},"<b>RL 那一步的总流程讲者给了一个「总体配方」，四步，很好记。</b><br><b>① 先把 prompt 作为输入。</b><br><b>② <u>你的 LLM 生成一个 completion</u> —— 这里 completion 的意思是<u>模型给出的一整条完整回答</u>。</b><b>⚠ 术语要收一下：讲者说<u>人们也用 rollout（展开）这个词</u>来指同一件事。⇒ 读论文时 completion 和 rollout 是一回事。</b><br><b>③ <u>这整条回答连同 prompt 一起，进入奖励模型</u>。</b><b>奖励模型现在知道它是好还是坏了 —— 假设这次是坏的。</b><b>⭐ 讲者在这里特意纠了一句：<u>实际上它不会生成一个「大拇指向下」，它生成的是某种分数</u>，比如 −2。</b><br><b>④ <u>把这个奖励考虑进来，然后用这个信息去调 LLM</u>。</b><br><b>★ 他自己也说了「实际比这更复杂，我们会看怎么做」—— 但这个骨架是对的，后面 PPO 的所有复杂性都只是在第 ④ 步里展开。</b><br><b>⇒ 所以我建议你把这四步当成一个坐标系：后面每看到一个新东西（advantage、value function、clip、KL 项），就问它<u>是在第 ④ 步里的什么位置</u>。都是在同一个地方加东西。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("48:13","it is a model that is frozen");
+  note("⚠ 这一步里哪个模型在动，哪个不动",640,188,"y");
+  boxNode(70,218,520,44,"奖励模型 RM：冻住，不训","d");
+  note("它在第一段已经训完了",330,288,"d");
+  note("⇒ 这一步完全不动它",330,318,"d");
+  boxNode(690,218,520,44,"LLM（策略）：这才是被训的","g");
+  note("从 SFT 之后的那个模型开始",950,288,"g");
+  note("⇒ 它的权重就是我们要学的 θ",950,318,"g");
+  note("★ 讲者说这是很重要的一点 —— 极容易以为两个都在训",640,368,"y");},"<b>这一点讲者反复强调了两遍，说明它真的容易搞错。</b><br><b>他的原话结构</b>：<b><u>提醒一下，奖励模型是我们在第一步训出来的那个模型，而它是一个被冻住的模型。我们不训练奖励模型。奖励模型已经训好了。我们在训练的是 LLM</u>。</b><b>⇒ 他接着说：<u>我觉得这是很重要的一点</u>。</b><br><b>★ 为什么容易错？因为两个模型都在这个回路里、都在计算图上出现。</b><b>但它们的角色完全不同：<u>奖励模型是「环境的一部分」—— 它负责给反馈；LLM 是「agent」—— 它负责被改进</u>。</b><br><b>⇒ 用前面那张翻译表对一下就很清楚：agent 是 LLM，所以要被调的只能是 LLM。奖励模型在那张表里根本没有位置，它扮演的是「采取动作后收到奖励」里那个<u>给奖励的东西</u>。</b><br><b>⚠ 一个推论：既然 RM 冻住，那<u>它的缺陷在整个 RL 过程里是固定存在、而且会被持续利用的</u>。</b><b>⇒ 这正是下一条 reward hacking 的机制 —— 不是 RM 变坏了，是 LLM 越来越擅长钻它那个固定的空子。</b><br><b>⇒ 另外这也说明了为什么 RL 那一步<u>内存压力大</u>：你得同时在显存里放着被训的 LLM、冻住的 RM，后面还会再加两个。那是本段末尾的话题。</b>");
+  SUM(0,16,{h:"RL 那一步：四步回路，以及谁在动",k:"四步：① prompt 输入 → ② LLM 生成一整条 <b>completion</b>（也叫 <b>rollout</b>）→ ③ (prompt + 回答) 喂进奖励模型拿一个分数 → ④ 用这个分数去调 LLM。",m:"⚠ 讲者强调两遍：<b>奖励模型是冻住的，不训；被训的是 LLM（策略），从 SFT 之后的模型开始</b>。用翻译表对一下就清楚：agent 是 LLM，RM 扮演的是「给奖励的那个东西」。",w:"⚠ 推论很重要：RM 冻住 ⇒ <b>它的缺陷在整个过程里固定存在、而且会被持续利用</b>。reward hacking 不是 RM 变坏了，是 LLM 越来越擅长钻那个固定的空子。",r:"完全对应：你的<b>代理代价/可行性模型</b>相当于冻住的 RM，<b>搜索策略</b>相当于被训的 LLM。⇒ 所以搜索越强，越会把代理的系统性误差挖出来 —— 这不是搜索的 bug，是「优化一个固定的不完美代理」的必然结果。"});
+  QUIZ(0,16,{t:"RL 那一步里，奖励模型和 LLM 分别是什么状态？",o:["奖励模型冻住不训（第一段已训完），被训的是 LLM（策略），从 SFT 模型初始化","两个都冻住，只调解码参数","两个都在训练","LLM 冻住，训奖励模型"],a:0,w:"讲者强调了两遍。推论：RM 的缺陷在整个过程里固定存在且会被持续利用 —— 这正是 reward hacking 的机制。"});
+});
+KP("17 · ★ 为什么要「别跑太远」：遗忘、reward hacking、不稳定",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("48:31","our goal is to optimize for higher rewards but then without going too far from the initial model");
+  stack(640,200,[["目标有两半，而第二半最容易被忽略","v"],["① 把奖励优化得更高 —— 这个大家都同意","g"],["② 但不要离初始模型太远","y"],["⇒ 三个理由：灾难性遗忘 / reward hacking / 训练不稳","r"]],880,34,8);
+  note("⇒ 而 ② 正是「proximal」（邻近的）这个词的来历",640,386,"d");},"<b>这一条是 PPO 整个设计的出发点，而讲者是用一个反问带出来的。</b><br><b>他先说目标</b>：<b><u>我们的目标是去优化更高的奖励，但同时不要离初始模型太远</u>。</b><b>然后他说：「优化更高奖励这件事我想大家都同意我；但我刚说了第二句话 —— <u>我们不想离基座模型太远。为什么会这样？</u>」</b><br><b>⇒ 他把这个问题抛给了学生，而学生答出了两个理由，他自己补了第三个。我们一个一个看。</b><br><b>★★ 先记住这个结构本身：<u>目标是两半，不是一半</u>。</b><b>很多人记 RLHF 只记住「最大化奖励」，于是看到 KL 项时觉得是个无关紧要的正则。<u>但它不是修饰 —— 它是目标的另一半，而且是 PPO 名字的来历</u>：proximal（邻近的）这个词就是因为我们不希望模型偏离基座模型太远。</b><br><b>⇒ 讲者在讲 PPO 时专门说了这一点：<u>它之所以叫 proximal，是因为我们不想让模型离基座模型太远</u>。</b><br><b>⚠ 所以如果你把 β 调成 0，你得到的不是「更纯粹的 RLHF」，而是<u>一个没有第二半目标的、会跑飞的东西</u>。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("49:16","it will catastrophically forget what it has learned");
+  note("三个理由，逐个看",640,186,"v");
+  stack(640,210,[["① 灾难性遗忘：基座模型已经很好、知道很多","g"],["② 奖励模型本身不完美 ⇒ reward hacking","r"],["③ 训练本身会不稳定","y"],["⇒ 配置：这一步的观测通常至少 100K；标签由奖励模型给","d"]],880,34,8);
+  note("★ 讲者：理由很多，总之我们不想偏离太远",640,386,"y");},"<b>三个理由，讲者是和学生一起凑出来的，而顺序本身有信息量。</b><br><b>① 灾难性遗忘。</b><b>学生给的答案是「<u>它会灾难性地遗忘它已经学到的东西</u>」。</b><b>讲者追问「那为什么这是个问题？」—— 答案是：<u>你的初始模型里有那么多知识（它经过了预训练、又做了指令微调），你不想离它太远</u>。</b><b>⇒ 他评价这是「<u>很好的说法、确实如此</u>」。</b><br><b>② 奖励模型不完美。</b><b>另一个学生说的是「<u>会在不太干净的数据上过拟合</u>」，讲者说这和前一位同学「<u>是同一条线上的：奖励模型可能是有噪声的</u>」。</b><b>⇒ 而这就引出了 reward hacking，下一镜专讲。</b><br><b>③ 训练不稳定。</b><b>这一个是讲者自己补的：<u>第三个理由也是因为你会遇到一些训练不稳定</u>。</b><br><b>★ 他的收尾：<u>总之，我们有一堆理由说明为什么不想偏离太远</u>。</b><br><b>⇒ 顺带把这一步的配置也记下：<u>这个设定里的观测通常比奖励模型那一步更多，一般至少 100K；而这里的标签是由奖励模型给的</u>；起点是<u>你 SFT 之后得到的那个模型</u>。</b><br><b>⭐ 注意「标签由奖励模型给」这句话的含义：<u>这一步不再需要人</u>。人的参与在第一段就结束了 —— 这也是为什么第一段的质量如此关键。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("51:33","if my reward is how loud the claps are at the end of the lecture");
+  note("讲者的自嘲例子：目标 vs 代理指标",640,188,"y");
+  boxNode(70,218,520,44,"真正的目标：让这堂课尽量有信息量","g");
+  note("⚠ 可它不好量化",330,288,"r");
+  boxNode(690,218,520,44,"代理指标：下课时掌声有多响","b");
+  note("好量化 ⇒ 于是拿它当奖励",950,288,"d");
+  note("⇒ 要是发现你们爱听笑话，我就一直讲笑话",640,330,"y");
+  note("★ 奖励被最大化了，目标却没达成 —— 这就是 reward hacking",640,368,"r");},"<b>这是整讲最好记的一个例子，讲者拿自己开的玩笑。</b><br><b>设定</b>：<b>「<u>假设我在上一堂课，我的目标是让这堂课尽可能有信息量</u>。」</b><b>⇒ 但「有信息量」不好量化，所以他选一个能量化的东西来代理它。</b><br><b>代理指标</b>：<b>「<u>假设我的奖励是下课时掌声有多响、大家鼓掌鼓得多不多</u>。」</b><br><b>问题来了</b>：<b>「<u>如果我对结尾掌声的音量优化得太狠，可能会变成这样：我发现你们都爱听笑话，于是我开始一直讲笑话，然后你们在最后鼓掌 —— 我的奖励被最大化了。但我的目标没有被达成，也就是「把这堂课讲得有信息量」</u>。」</b><br><b>★★★ 这就是 <u>reward hacking</u>（奖励钻空子）的定义：<u>它让你的模型在一个不完美的指标或分数上优化得过头。所以它完全可以把奖励最大化，却没有实现你真正想要的</u>。</b><br><b>⇒ 讲者点明了机制：<u>如果你对奖励优化得太狠，你实际上是在假设「奖励恰好量化了你想要的东西」—— 但情况可能并非如此，因为奖励模型本身是不完美的</u>。</b><br><b>★★ 这一条我建议你当成一个通用警报记住，因为它在任何「用代理指标做优化」的地方都会出现：<u>优化强度越大，代理和真实目标的缝隙就越被撬开</u>。</b><b>⚠ 而它的解法不是「换个更好的代理」（代理永远不完美），而是<u>限制优化的强度</u> —— 这正是 KL 项和 clip 在做的事。</b>");
+  SUM(0,17,{h:"★ 为什么不能「跑太远」：三个理由",k:"目标是<b>两半</b>：① 把奖励优化得更高；② <b>别离初始模型太远</b>。②（proximal 的来历）有三个理由：<b>灾难性遗忘</b>、<b>reward hacking</b>、<b>训练不稳定</b>。",m:"<b>reward hacking</b>（讲者的鼓掌例子）：目标是「课讲得有信息量」，代理是「掌声多响」⇒ 一直讲笑话就能把奖励最大化，而目标没达成。机制是：优化太狠就等于假设代理恰好等于真目标，而奖励模型并不完美。",w:"⚠ 别把 KL 项当成可有可无的正则 —— 它是<b>目标的另一半</b>。β 调成 0 不是「更纯粹的 RLHF」，而是一个会跑飞的东西。而 reward hacking 的解法不是换更好的代理（代理永远不完美），是<b>限制优化强度</b>。",r:"★★ 这是本讲对你课题最直接的一条告警：你用<b>代理可行性/代价模型</b>去引导搜索，搜索越强，越会找到「骗过代理」的配置 —— 报出来的「最便宜可行配置」可能只在代理眼里可行。⇒ 对策同构：限制搜索相对参考策略的偏离，并保留一条用精确求解器复核 top-k 的通道。"});
+  QUIZ(0,17,{t:"讲者的「鼓掌」例子说明的是什么现象？",o:["reward hacking：对一个不完美的代理指标优化过头 ⇒ 奖励最大化了，真正的目标却没达成","灾难性遗忘","过拟合","梯度爆炸"],a:0,w:"机制是：优化太狠等于假设「代理恰好量化了你要的东西」，而奖励模型并不完美。解法不是换更好的代理，而是限制优化强度 —— 这正是 KL 项和 clip 做的事。"});
+});
+KP("18 · KL 散度：不是距离，但恒 ≥ 0",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$D_{\\mathrm{KL}}(P \\,\\|\\, Q)\\;=\\;\\sum_i p_i \\log \\frac{p_i}{q_i}\\;\\ge\\;0$$");
+  says("55:33","It is not a distance, but it is some measure of how far two probability distributions are");
+  note("读法：两个概率分布 P 与 Q「有多远」的一个度量",640,198,"d");
+  note("⭐ 讲者刻意不说「距离」—— 他说距离这个词带太多含义了",640,228,"y");
+  note("⇒ 它不对称：把 P 和 Q 换个位置，值一般就变了",640,258,"g");},"<b>讲者在这里做了一件很负责的事 —— 他说「我在谈 KL 散度，但我不想假设你们都知道那是什么」，于是从定义讲起。</b><br><b>定义</b>：<b>拿一个概率分布 P、另一个概率分布 Q，算这个式子 —— <u>p_i 乘以 log(p_i / q_i) 的和</u>。</b><b>它<u>就给你一个数，说明这两个概率分布有多远、多不一样</u>。</b><br><b>★★ 而最值得学的是他的用词谨慎：<u>「我不想说『距离』，因为距离这个词带着很多含义。它不是一个距离，但它是某种关于两个概率分布相距多远的度量。」</u></b><br><b>⇒ 为什么他要这么小心？因为数学上「距离」是有定义的 —— 要对称、要满足三角不等式。<u>而 KL 散度不对称</u>：把 P 和 Q 调换位置，算出来的值一般不一样。</b><b>⚠ 所以你在论文里看到 KL(π_θ ‖ π_ref) 时，<u>两个参数的顺序是有实质含义的，不能随手交换</u>。</b><br><b>⇒ 用在损失里的逻辑讲者也点了：<u>你想最小化损失，那也就是想最小化它们有多远</u>。</b><br><b>⭐ 顺带一个直觉：式子里的权重是 p_i（第一个分布的概率）。<u>所以 KL 更在意「P 认为可能、而 Q 认为不可能」的那些地方</u>。把谁放第一位，决定了你在惩罚哪种偏离 —— 这就是顺序的实质含义。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("57:17","the way you prove that it is always positive or equal to 0 is with the Jensen's inequality");
+  note("KL 的三条性质，讲者当堂带着学生过了一遍",640,188,"v");
+  stack(640,212,[["① 它不是「距离」—— 不对称","y"],["② 它恒 ≥ 0 ⇒ 用 Jensen 不等式证","g"],["③ 它 = 0 当且仅当 P 与 Q 相等","g"]],880,36,8);
+  note("⇒ 所以把它放进损失里「越小越好」是合理的：有下界，且下界恰在 P = Q 处取到",640,370,"y");},"<b>讲者在这里做了一次很好的教学示范，我把过程也记下来，因为他的追问方式值得学。</b><br><b>他问：「KL 散度是正的还是负的？你能告诉我关于它的什么？」</b><b>有学生答「是正的」。</b><br><b>★ 然后他<u>没有就此放过</u>，他追问：「<u>为什么是正的？</u>」</b><b>他说「<u>我觉得结论在这儿了，但我想知道为什么</u>」。</b><br><b>⇒ 答案是：<u>用 Jensen 不等式</u>。</b><b>讲者解释了为什么需要证明：<u>因为你看这个式子，log 可以取正值也可以取负值，所以它恒为正这件事并不显然</u>。</b><b>⇒ <u>而证明它总是大于或等于 0 的办法，就是 Jensen 不等式</u>。</b><br><b>第三条性质</b>：<b><u>这个量等于 0 当且仅当 P 和 Q 相等</u>。</b><br><b>★★ 这三条合起来才让 KL 能当损失项用，值得想清楚</b>：<b>② 给了它<u>下界</u>（否则最小化会无底地跑下去）；③ 保证<u>下界恰好在「两个分布一样」时取到</u>（否则最小化它不等于让两个分布接近）。</b><b>⇒ 所以「把 KL 放进损失、越小越好」不是约定，是这两条性质支持的。</b><br><b>⭐ 而 ① 提醒你它不对称，所以写的时候<u>哪个分布在前面是要想一下的</u>。</b>");
+  SUM(0,18,{h:"KL 散度：定义与三条性质",k:"D_KL(P ‖ Q) = Σ p_i log(p_i / q_i)。讲者刻意<b>不说「距离」</b>（距离这个词带太多含义）—— 它是「两个概率分布相距多远」的一个度量。",m:"三条性质：① <b>不对称</b>（顺序有实质含义）；② <b>恒 ≥ 0</b>，而且要用 <b>Jensen 不等式</b>才能证（因为 log 可正可负，不显然）；③ <b>= 0 当且仅当 P = Q</b>。",w:"★ ② 和 ③ 合起来才让它能当损失项：② 给了下界，③ 保证下界恰在两分布相等处取到。⇒ 「KL 越小越好」不是约定，是这两条性质支撑的。⚠ 而 ① 意味着 KL(π_θ‖π_ref) 的参数顺序不能随手交换。",r:"式子里的权重是 p_i，所以 KL 更在意「P 认为可能而 Q 认为不可能」的地方 —— 把谁放第一位，决定你惩罚哪种偏离。⇒ 你若用一个「别离参考策略太远」的约束来稳住搜索，这个顺序决定的是：你禁止策略去<b>开辟参考没覆盖的区域</b>，还是禁止它<b>放弃参考覆盖的区域</b>。"});
+  QUIZ(0,18,{t:"为什么证明 KL 散度恒 ≥ 0 需要 Jensen 不等式？",o:["因为要用到链式法则","因为 KL 不对称","因为概率必须归一化","因为式子里的 log 可以取正值也可以取负值，所以恒为正这件事并不显然"],a:3,w:"讲者当堂追问了「为什么是正的」，并给出这个理由。再配上「= 0 当且仅当 P = Q」，KL 才能作为损失项使用。"});
+});
+KP("19 · advantage 与 value function：把「一条一个数」摊回每一步",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("58:15","you can think of the advantage as being how much better is your output compared to what you would expect");
+  note("⚠ 讲者的原话是：关于「最大化奖励」我刚才稍微骗了你们",640,186,"y");
+  stack(640,210,[["我们真正要最大化的不是 reward，而是 advantage","v"],["advantage：你这个输出，比「你本来预期的」好多少","g"],["⇒ 它要拿 reward 减掉一个「基线」","d"],["★ 为什么？让训练更稳、方差更小、通常也更快","y"]],880,34,8);
+  note("⇒ 而那个「预期」要靠一个叫 value function（价值函数）的东西来估",640,386,"d");},"<b>这一条讲者开场就说了句很实在的话：「<u>关于损失函数，有一件我也稍微骗了你们的事 —— 我们并不是要最大化奖励，我们其实想最大化一个叫 advantage 的量</u>。」</b><br><b>advantage 是什么</b>：<b><u>你可以把 advantage 理解成「你的输出比你本来会预期的好多少」</u>。</b><br><b>为什么要换成它</b>：<b>讲者说<u>人们通常用 advantage 来让整个过程更稳定、训练更稳定</u>。</b><b>后面他讲得更细：<u>你想把拿到的奖励，和「一个平均回答会拿到的奖励」做比较 —— 如果你拿到了一个很好的奖励，那在平均情况下奖励会是多少？你想最大化的是这个差</u>。</b><br><b>★★ 他给的理由很关键：<u>人们之所以用「奖励减基线」这种形式，是因为它降低了这些估计的方差，而且通常让训练跑得更快</u>。</b><br><b>⇒ 回到前面那条稀疏信号：一条回答只有一个数，这个数的绝对大小里混着大量与「这条回答好不好」无关的东西（这个 prompt 本身难不难、这类问题的奖励基准高不高）。<u>减掉基线就是把这些共同成分消掉，只留下「相对于预期的偏离」</u>。</b><br><b>⭐ 这个技巧的适用面远超 RL：<u>当你的测量噪声里有一个随条件变化的共同成分时，减掉同条件下的期望值能大幅降方差</u>。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("59:49","The value function is a token level estimation of the reward");
+  note("两个量，粒度完全不同 —— 这是最容易混的一对",640,186,"y");
+  boxNode(70,214,520,44,"reward：completion 级","g");
+  note("输入：prompt + 一整条完整回答",330,284,"d");
+  note("⇒ 问的是：这整条有多好",330,314,"d");
+  boxNode(690,214,520,44,"value function：token 级","b");
+  note("输入：prompt + 部分生成",950,284,"d");
+  note("⇒ 问的是：若按策略继续写下去，最终奖励会是多少",950,314,"y");
+  note("★ 讲者把这句重复了一遍，因为它「信息量很大」",640,364,"y");},"<b>这一对是整讲最容易混的，而讲者自己也说「我再重复一遍，因为这句话<u>含的意思很多</u>」。我们逐字拆。</b><br><b>reward（奖励）</b>：<b>前面讲过怎么算 —— <u>给定一个 prompt、给定一个 completion，这个 prompt 加 completion 有多好</u>。</b><b>⇒ 粒度是<u>一整条</u>。</b><br><b>value function（价值函数）</b>：<b>讲者说它<u>是另一种估计，但这个估计不是在 completion 这一层，它其实是在 token 这一层</u>。</b><b>做法是：<u>把 prompt 连同「部分生成」一起作为输入，去估计「如果我们按这个策略继续把输出生成完，奖励会是多少」</u>。</b><br><b>★★ 他重复的那一句原话：<u>价值函数是对奖励的一个 token 级估计，它吃一段部分输入，预测奖励 —— 预测的是「如果你按策略去生成」的那个奖励</u>。</b><br><b>⇒ 为什么需要它？因为前面那条稀疏信号：<u>真实奖励只在整条写完时才有一个数，而梯度要分摊到每一步上去</u>。价值函数就是那个「把终局的一个数，摊回到中途每一步」的装置。</b><br><b>⚠ 实现上的要点讲者也说了：<u>这一次不是分类问题，是回归问题</u> —— 所以是在 LLM 上再加一个 <u>value head</u>（价值头），而<u>它通常要和策略联合训练</u>。</b><b>⇒ 于是你的显存里又多了一个要训的东西。这一笔账在本段末尾会被算进去。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("63:08","it reduces the variance of these estimates");
+  note("这一组设计的账：多了什么，换来了什么",640,186,"v");
+  boxNode(70,214,520,44,"多付出的：一个要训的 value head","r");
+  note("回归任务，与策略联合训练",330,284,"d");
+  note("⚠ 还要多一堆超参（GAE 自带至少两个）",330,314,"r");
+  boxNode(690,214,520,44,"换来的：方差小、训练稳、通常更快","g");
+  note("估计方差降低",950,284,"g");
+  note("⇒ 具体公式叫 GAE，讲者说超出本课范围",950,314,"d");
+  note("★ 想深究就读那篇 generalized advantage estimation 的论文",640,364,"y");},"<b>这一组设计到底值不值，讲者把账说得很清楚，而且很诚实地划了边界。</b><br><b>他划的边界</b>：<b>「<u>我故意不去细讲那个 advantage 具体是怎么表述的，它超出了这门课的范围</u>。」</b><b>但他给了去处：<u>如果你有兴趣，我强烈推荐读这篇在数学上比较硬的论文 —— 关于 generalized advantage estimation（广义优势估计）方法的那篇，叫《High-dimensional continuous control using generalized advantage estimation》</u>。</b><b>他说<u>这通常就是人们用来估计这些 advantage 的方法</u>。</b><br><b>⇒ 他也给了一句够用的概括：<u>你可以把 GAE 想成一个带若干超参数的大公式</u>。</b><br><b>多付出的</b>：<b>一个 value head 要训（回归任务、与策略联合训练），加上 GAE 自己带的超参 —— 讲者后面讲挑战时说「<u>GAE 的公式我们没看，但我能想到的至少有两个超参数</u>」。</b><br><b>换来的</b>：<b><u>降低这些估计的方差，而且通常让训练跑得更快</u>。</b><br><b>★★ 我建议你学讲者这个处理方式：<u>把一个复杂组件的「作用」和「内部公式」分开</u>。</b><b>作用必须讲清（降方差、让训练稳），公式可以外包给论文。⇒ 这样你既不会因为不会推 GAE 而卡住，又不会在用它的时候不知道它在干什么。</b>");
+  SUM(0,19,{h:"advantage 与 value function",k:"真正要最大化的不是 reward 而是 <b>advantage</b>：<b>你的输出比「你本来预期的」好多少</b>（reward 减一个基线）。理由：<b>降低估计的方差</b>，训练更稳、通常更快。",m:"⚠ 最易混的一对粒度：<b>reward 是 completion 级</b>（prompt + 一整条，问这条多好）；<b>value function 是 token 级</b>（prompt + 部分生成，问「按策略继续写完，奖励会是多少」）。实现是加一个 <b>value head</b>，回归任务，<b>与策略联合训练</b>。",w:"具体怎么算 advantage 叫 <b>GAE</b>（generalized advantage estimation），讲者明说超出本课范围、给了论文。⇒ 学他这个处理：<b>组件的「作用」必须讲清，内部公式可以外包</b>。",r:"★★ value function 就是你的 MCTS 需要的那个东西：<b>给一个部分配置，估计补全后的最终代价</b>。⇒ dominance 剪枝要的正是这种对部分解的估计（且要可信的界）。而「减基线降方差」也直接可用：同一类实例的代价基准不同，减掉同条件期望能把与实例难度无关的共同成分消掉。"});
+  QUIZ(0,19,{t:"value function 和 reward 的区别是什么？",o:["value function 更准","reward 是回归，value function 是分类","粒度不同：reward 是 completion 级（整条回答一个数）；value function 是 token 级，吃部分生成、估计「按策略写完后的奖励」","value function 只在推理时用"],a:2,w:"讲者把这句重复了一遍，说它含的意思很多。value function 的作用正是把「终局的一个数」摊回到中途每一步 —— 它是回归任务，用 value head，与策略联合训练。"});
+});
+KP("20 · PPO-Clip：三个一定会踩的坑，和那个形状",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$L^{\\mathrm{CLIP}}=\\mathbb{E}\\Big[\\min\\big(r_\\theta A,\\;\\mathrm{clip}(r_\\theta,\\,1-\\epsilon,\\,1+\\epsilon)\\,A\\big)\\Big]$$");
+  says("64:51","but it is actually not something we want to minimize");
+  note("⚠ 坑 1：写成 L =，但这是要「最大化」的，不是最小化",640,198,"r");
+  note("⚠ 坑 2：这个 r_θ 不是奖励 —— 它是新旧策略的「概率比值」",640,228,"r");
+  note("⚠ 坑 3：old 不是 SFT 模型，是 RL 阶段「上一轮」的模型",640,258,"r");},"<b>这条公式本身不难，但它有三个坑，而讲者<u>主动把三个坑都点了出来</u> —— 他说「有几件事我想先说清楚，因为它们看起来会让人困惑，而且当初也把我搞糊涂了」。这种坦白非常值得信任。</b><br><b>⚠ 坑 1：<u>这个式子写成 L = …，但它其实不是我们想最小化的东西，而是我们想最大化的东西</u>。</b><b>讲者说：人们通常用 L 表示 loss（损失），<u>所以你只要知道，这里我们是要最大化它，不是最小化</u>。</b><br><b>⚠ 坑 2：<u>我们引入了一个叫 r_θ 的项 —— 这不是奖励模型</u>。</b><b>讲者说人们通常用 r 表示 reward，<u>但这里它不是奖励，它其实是「我们的策略」和「上一步的策略」之间的概率比值</u>（记作 π_θ 与 π_θ_old）。</b><b>⇒ 它量化的是：<u>你当前阶段的策略，和你的旧策略有多不一样</u>。</b><br><b>⚠ 坑 3：<u>这里说的 old 不是 SFT 模型</u>。</b><b>讲者连说了两遍「它不是 SFT 模型」—— <u>它是 RL 阶段中「上一次迭代」时的那个模型</u>。</b><b>⇒ 因为这里我们要的是：<u>策略的更新幅度不要太宽</u>。</b><br><b>★★ 把坑 3 想清楚很重要：这意味着 PPO 里有<u>两种「别跑太远」</u> —— 一种是别离<u>基座模型</u>太远（KL 项干的），另一种是别离<u>上一轮</u>太远（clip 干的）。它们是两件不同的事，后面会看到两者常被混用在一起。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("63:58","the idea here is to prevent the updates to our model from being too large from one iteration to the next");
+  note("A > 0 时的形状：先线性上升，过了 1 + ε 就压平",640,188,"y");
+  axes({x0:240,x1:1040,y0:366,y1:230});
+  curve(fn(function(x){return 366-90*Math.min((x-240)/400,1.2)/1.2;},240,1040,300),"g");
+  note("横轴：比值 r_θ",640,386,"d");
+  note("A > 0 ⇒ 想强化这次生成 ⇒ 想把 r 推大",400,250,"g");
+  note("⚠ 但过了 1 + ε 就不再给奖励 ⇒ 不许一步跨太大",880,276,"r");},"<b>这个形状是 PPO 的灵魂，而讲者的讲法是「先想清楚 r 是什么意思，形状就自然了」。我们照他的推。</b><br><b>先定调</b>：<b>PPO-Clip 的想法是 <u>防止我们模型从一次迭代到下一次的更新幅度太大</u>。</b><br><b>A &gt; 0 的情况</b>：<b>advantage 为正<u>意味着我们某种程度上想强化刚才生成的东西</u>。</b><b>⇒ 那目标函数的形状是：<u>因为是 r 乘 A，所以它是 r 的一个线性函数；而过了 1 + ε 之后，它就平了</u>。</b><br><b>★★ 为什么要这个形状？讲者的推理很干净</b>：<b>「<u>如果 A 是正的，也就是我们想强化它，那我们通常希望「刚才发生的那件事」的概率被提高 —— 所以我们想让 r 更大。但我们不想让它太大。这就是为什么有这个截断机制</u>。」</b><br><b>⇒ 再说一遍这个逻辑链：<u>我们要最大化 L → 所以会朝着增大 r 的方向走 → 但 r 过了 1 + ε 之后 L 不再增加 → 于是「把 r 推得更大」没有任何收益 → 更新自然就停在那儿了</u>。</b><br><b>⭐ 这个设计手法很值得学：<u>它不是加一个惩罚去「罚」你跑太远，而是让跑太远「没有收益」</u>。</b><b>⇒ 两者的效果不同：惩罚项仍然可以被足够大的奖励压过去，而「削平」是彻底断掉了那个方向的梯度。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("65:23","it is actually the ratio in the probabilities between our policy and the policy from the previous step");
+  note("A < 0 时的形状：左边先平，过了 1 − ε 才开始下降",640,188,"y");
+  axes({x0:240,x1:1040,y0:366,y1:230});
+  curve(fn(function(x){return 254+100*(Math.max((x-240)/400,0.8)-0.8)/1.2;},240,1040,300),"y");
+  note("横轴：比值 r_θ",640,386,"d");
+  note("A < 0 ⇒ 想压低这次生成 ⇒ 想把 r 推小",400,250,"y");
+  note("⚠ 但小于 1 − ε 之后也不再给奖励 ⇒ 同样不许一步跨太大",880,276,"r");},"<b>A &lt; 0 的情况是镜像的，讲者也照着推了一遍，而两边合起来才是完整的「信任域」。</b><br><b>讲者的推理</b>：<b>「<u>而当 A 是负的，意味着我们做的那件事是我们不太想做的。所以为了最大化 L，我们实际上想降低「生成我们刚生成的那个东西」的概率。所以我们想让 r 更小，因为那也会增大 L —— 但我们不想让它小太多，我们不想要太大的更新，这就是为什么这里也有这个截断机制</u>。」</b><br><b>⇒ 形状上：<u>r 小于 1 − ε 的那一段是平的</u>，所以继续把 r 压小也不会让 L 更大。</b><br><b>★★ 他自己给了一个总结，我觉得可以直接背下来</b>：<b>「<u>这个看起来超级复杂的公式，可以用我刚说的话直观地解释：如果 advantage 是正的，你想强化生成这个输出（因为这是模型 —— 我说的是奖励模型 —— 喜欢的），但你不想更新太多，所以有了截断；advantage 小于 0 时同理，你想把这个输出发生的概率压低，所以想要更小的 r，但也不想太小，同样是为了不做太大的更新</u>。」</b><br><b>⇒ 他还很实在地说：<u>我建议你把这条公式再读几遍、记着我刚说的东西，希望会更有感觉</u>。</b><br><b>⭐ 把两边放在一起看，clip 的本质就清楚了：<u>它在比值 1 附近开了一个宽度为 2ε 的窗口，窗口里梯度照常、窗口外梯度归零</u>。这就是「信任域」这个说法的具体含义。</b>");
+  SUM(0,20,{h:"PPO-Clip：三个坑与那个形状",k:"L_CLIP = E[ min( r_θ·A , clip(r_θ, 1−ε, 1+ε)·A ) ]。<b>A &gt; 0</b>：线性上升、过 1+ε 压平；<b>A &lt; 0</b>：左边平、过 1−ε 才下降。",m:"⇒ 逻辑链：要最大化 L ⇒ A&gt;0 时朝增大 r 走、A&lt;0 时朝减小 r 走 ⇒ 但越过边界后 L 不再变化 ⇒ 那个方向<b>没有收益</b>，更新自然停住。本质是在比值 1 附近开一个宽 2ε 的<b>信任域窗口</b>。",w:"⚠ 讲者主动点的三个坑：① 写成 L= 但要<b>最大化</b>；② <b>r_θ 不是奖励</b>，是新旧策略的概率比值；③ <b>old 不是 SFT 模型</b>，是 RL 阶段上一轮的模型（他连说两遍）。",r:"⭐ 手法可直接借：<b>不是加惩罚去「罚」越界，而是让越界「没有收益」</b>。惩罚项能被足够大的收益压过去，削平则彻底断掉那个方向的梯度。⇒ 你限制搜索策略单轮漂移时，削平比加软惩罚更可靠。另外注意 PPO 有<b>两种「别跑太远」</b>：离基座（KL）与离上一轮（clip）。"});
+  QUIZ(0,20,{t:"PPO-Clip 里的 r_θ 是什么？",o:["学习率","当前策略与「上一轮迭代」策略的概率比值 —— 不是奖励，而 old 也不是 SFT 模型","奖励模型给出的奖励","advantage 的归一化系数"],a:1,w:"讲者主动点出这三个坑，还说当初也把他搞糊涂了：L 是要最大化的、r_θ 是比值不是奖励、old 指 RL 阶段的上一轮而非 SFT。"});
+});
+KP("21 · KL penalty 变体，以及 ⚠ PPO 要同时养四个模型",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$L=\\mathbb{E}\\big[\\,r_\\theta A\\,\\big]\\;-\\;\\beta\\,D_{\\mathrm{KL}}\\big(\\pi_{\\mathrm{old}}\\,\\|\\,\\pi_\\theta\\big)$$");
+  says("74:00","They will basically mix the two");
+  note("第二个变体：不用截断，改用 KL 惩罚",640,198,"d");
+  note("⚠ 2017 年那篇论文里写的是「上一轮」；如今人们放的是「参考模型」",640,228,"y");
+  note("★ 而实践中常把两者混着用：KL 项 + 对上一轮的截断",640,258,"g");},"<b>PPO 论文给了两个变体，第二个就是直接用 KL。而这一条里有一个「论文和现实不一样」的细节，很实用。</b><br><b>第二个变体</b>：<b>叫 <u>KL penalty</u>（KL 惩罚）。形式是<u>比值乘 advantage，减去「旧策略与当前迭代」之间的 KL 散度</u>。</b><br><b>★★ 然后讲者回应了之前学生的那个好问题（「为什么用上一轮而不是基座模型？」），并交代了一个版本差异</b>：<b><u>事实上 old 指的是上一个 RL 迭代。但如今人们用的是 reference（参考模型）</u>。</b><b>他解释了原因：<u>因为这篇论文是 2017 年发表的，而到了 2025 年，LLM 才变成在 2020 年代流行起来的东西 —— 所以在「那个位置放什么」上就出现了这个差别</u>。</b><b>⇒ 他的结论：<u>如今在 KL 散度里，你通常放的确实是 reference</u>。</b><br><b>★★ 还有一句很重要的实践说明</b>：<b><u>如今如果有人要用 PPO 训一个策略，他们通常会用 KL 散度，而且可能还会把它和「对上一轮做截断」那一套混起来 —— 基本上是两者混用</u>。</b><b>他很诚实地补了一句：<u>损失可以有很多不同的写法，我说的不总是对的，但这是人们有时会做的</u>。</b><br><b>⇒ 所以读实现代码时别惊讶于看到「clip + KL 两个都有」：<u>它们管的是两件不同的事（离上一轮 / 离参考），混用是合理的</u>。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("75:07","So it is a lot of models");
+  note("⚠ 跑一次 PPO，显存里要同时有四个模型",640,186,"r");
+  stack(640,210,[["① 策略 policy —— 你在训的那个 LLM","g"],["② 价值函数 value —— 为了估 advantage，也在训","y"],["③ 奖励模型 RM —— 冻住","d"],["④ 基座模型（SFT 模型）—— 冻住，用来比对当前策略","d"]],880,34,8);
+  note("⇒ 于是自然的问题：真的非得要这么多模型才能做好吗？",640,386,"y");},"<b>这一条是整个 PPO 段落的收尾，也是后面两个方法（Best-of-N、DPO）的全部动机。</b><br><b>讲者的清算</b>：<b>「PPO 让你能最大化奖励、最大化 advantage，同时不让模型离基座模型太远、也不离上一轮太远。<u>但问题是，用 PPO 你需要很多模型</u>。」</b><br><b>他一个个数</b>：<b>① <u>你需要你的策略</u> —— 就是你在训的那个 LLM；② <u>你还需要价值函数</u>，也就是前面说的、用于估计 advantage 的那个；③ <u>当然你还需要奖励模型</u>；④ <u>然后你还需要基座模型</u> —— 基座模型是冻住的，就是那个 SFT 模型，用来和当前策略做比较。</b><b>⇒ 他的总结就一句：<u>这是很多模型</u>。</b><br><b>★★★ 然后他提出那个关键问题，而这个问题撑起了本讲剩下的全部内容</b>：<b>「<u>你真的需要有所有这些模型才能表现好吗？答案是：也许不需要。可能需要，但也可能不需要</u>。」</b><br><b>⇒ 他指了两个方向：<u>如今有一堆别的方法越来越流行 —— 比如你可能在推理模型的语境下听过 GRPO，我们下周第 6 讲会更详细地看 GRPO</u>。</b><b>他也给了论文：<u>DeepSeek 团队那篇《DeepSeekMath》，提出了 GRPO 算法</u>。</b><br><b>⚠ 他还强调了一句分寸：<u>PPO 只是一个曾经非常流行的算法，而且连 PPO 内部都有很多变体；如今还有很多别的 RL 算法在用</u>。</b><b>⇒ 别把 PPO 当成「RLHF 的唯一实现」。</b>");
+  SUM(0,21,{h:"KL penalty 变体，与「四个模型」这笔账",k:"第二个变体 <b>KL penalty</b>：比值×advantage 减去 β·KL。⚠ 2017 年论文里那一项是对「上一轮」，<b>如今人们放的是参考模型</b>；而实践中常把 KL 项与对上一轮的截断<b>混着用</b>（两者管的是两件不同的事）。",m:"⚠ 跑一次 PPO 要同时养<b>四个模型</b>：① 策略（训）② 价值函数（训）③ 奖励模型（冻）④ 基座 SFT 模型（冻）。讲者：这是很多模型。",w:"⇒ 于是那个关键问题：真的非得这么多吗？讲者：<b>也许不需要</b>。这个问题撑起了本讲剩下的内容（Best-of-N、DPO），也指向 GRPO（L6 讲，DeepSeekMath 论文）。⚠ 别把 PPO 当成 RLHF 的唯一实现。",r:"把「要维护几个组件」当成方法的一项成本写进论文 —— 这正是讲者在这里做的事。你的方法若需要代理模型 + 价值估计 + 参考策略 + 精确求解器复核，就该像他这样把清单列出来，并给出一个<b>更省组件的退化版本</b>作对照（Best-of-N 之于 PPO 就是这种对照）。"});
+  QUIZ(0,21,{t:"跑一次 PPO 需要同时维护哪几个模型？",o:["两个：策略和参考模型","三个：策略、价值函数、奖励模型","四个：策略（训）、价值函数（训）、奖励模型（冻）、基座 SFT 模型（冻）","只要策略和奖励模型"],a:2,w:"讲者数完说「这是很多模型」，并由此提出那个撑起本讲后半部分的问题：真的非得要这么多模型才能表现好吗？"});
+});
+KP("22 · RL 路线的五个挑战：每一个都在后面有回响",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("76:55","then you need to redo everything");
+  note("挑战一与挑战二",640,186,"v");
+  boxNode(70,214,520,44,"① 两段式带来的依赖","r");
+  note("先训 RM、再用 RM 训策略",330,284,"d");
+  note("⚠ 第二段跑完才发现第一段有问题 ⇒ 全部重来",330,314,"r");
+  boxNode(690,214,520,44,"② 超参数太多","r");
+  note("KL 的 β、PPO-Clip 的 ε",950,284,"d");
+  note("⚠ 加上 GAE 自带的至少两个",950,314,"r");
+  note("★ 而两者叠加最要命：要重调超参，就得把两段全部再跑一遍",640,364,"y");},"<b>讲者专门留了一段讲 RL 路线的挑战，而这五条我建议你认真记 —— 它们解释了为什么后面两个方法会被发明出来。</b><br><b>① 两段式的依赖。</b><b>讲者的描述很生活化：<u>你必须先训你的奖励模型，然后才能用奖励模型去训你的策略。但问题是，你做完第一步、做完第二步，然后你发现 —— 哦等等，第一步有问题。那你就得把所有东西重做一遍</u>。</b><b>⇒ 他的总结：<u>有一堆依赖关系，能真正让你的日子难过得多；而这个训练流程本身也不是最简单的那种</u>。</b><br><b>② 超参数太多。</b><b>他数了一遍：<u>KL 散度表述里的 β，这是一个；PPO-Clip 版本里的 ε，这是另一个；广义优势估计的公式我们没看，但我能想到的至少有两个超参数 —— 总之你有一堆</u>。</b><br><b>★★ 然后他把 ① 和 ② 叠在一起，这才是真正的痛点</b>：<b>「<u>当然，有些超参数的表现比别的好。而如果你需要重新训练，那你就得把一切都再做一遍</u>。」</b><br><b>⇒ 想清楚这个组合有多糟：<u>调参本来就是试错，而这里每一次试错的代价是「把一个两段式的大流程整个重跑」</u>。这不是算力问题，是迭代速度问题 —— 而迭代速度慢，意味着你能试的配置就少，于是更难调好。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("79:36","you need to force your model to do some exploration");
+  note("挑战三、四、五",640,186,"v");
+  stack(640,210,[["③ 不稳定：限制单轮更新幅度有帮助，但有时不够","r"],["④ 监控难：只能盯「平均奖励」","y"],["⇒ 而 SFT 阶段你有交叉熵可盯，它真的在告诉你进展","d"],["⑤ 要强迫模型去「探索」，不然看不到什么是好的","g"]],880,34,8);
+  note("★ 外加一条很实在的：讲者说很多人（包括他自己）本来并不熟 RL",640,386,"d");},"<b>后三条挑战，而第四条和第五条我觉得最值得你带走。</b><br><b>③ 不稳定。</b><b>讲者说：<u>你可以限制你的迭代不要跨太宽来控制它，但有时候这还不够</u>。</b><b>⇒ 注意这句话的分量：clip 和 KL 是对付不稳的手段，但<u>他明确说了这些手段并不总是够</u>。</b><br><b>④ 监控难。</b><b>他问「你会用什么指标来监控训练？」然后自己答：<u>既然我们某种意义上是在最大化奖励，那你通常会用平均奖励</u>。</b><b>⚠ 但他紧接着说：<u>这不是一个很好的办法 —— 我是说，这是一种监控方式，但不一定是最好的</u>。</b><b>⇒ 他给了对照：<u>至少在预训练和 SFT 的时候，你有交叉熵损失可以盯着，它真的在告诉你模型复现你想要的行为的能力如何</u>。</b><br><b>⑤ 要强迫探索。</b><b>这一条的道理很硬：<u>在 RL 的世界里，为了知道哪些 completion 你不该做、哪些该多做，你在生成时必须有一定的多样性</u>。</b><b>⇒ 讲者的反例：<u>如果在 RL 训练循环里，每次给一个 prompt 你就生成一个东西，再试一次又生成一个太接近的东西，那就不好了 —— 因为你没有在探索可能的 completion 空间</u>。</b><br><b>⇒ 外加一条他自己说的实话：<u>你们很多人本来不熟 RL，我也不熟；而且为什么这一步「必须」用 RL，其实并不那么显然</u>。⇒ 这句话直接铺垫了 DPO。</b>");
+  SUM(0,22,{h:"RL 路线的五个挑战",k:"① <b>两段式依赖</b>：第二段跑完才发现第一段有问题 ⇒ 全部重来；② <b>超参太多</b>：β、ε、GAE 至少两个；③ <b>不稳定</b>：限制单轮更新有帮助但有时不够；④ <b>监控难</b>：只能盯平均奖励；⑤ <b>必须强迫探索</b>。",m:"★ ①+② 叠加最致命：调参本来就是试错，而这里每次试错要把两段式大流程整个重跑 —— 这不是算力问题，是<b>迭代速度</b>问题。④ 的对照很具体：SFT 有交叉熵可盯，它真的在告诉你进展。",w:"⑤ 的道理很硬：若每次生成的东西都太接近，你就<b>没在探索 completion 空间</b>，也就无从知道什么该多做、什么不该做。另外讲者坦白：很多人（包括他）本来不熟 RL，而「为什么必须用 RL」本身并不显然 —— 这句直接铺垫 DPO。",r:"①②④ 几乎是你实验设计的清单：代理模型 → 搜索 的两段依赖同样会让你返工；你的超参（剪枝阈值、置信水平、预算分配）也是乘法增长；而「只能盯平均奖励」对应你只能盯「当前最好解的代价」—— 它不告诉你剪枝是否剪错。⇒ 值得单独设计一个过程指标（例如被剪掉的分支里事后发现含最优解的比例）。"});
+  QUIZ(0,22,{t:"RL 路线里，「两段式依赖」和「超参太多」叠加起来为什么特别致命？",o:["因为会爆显存","调参本来就是试错，而这里每次试错的代价是把两段式大流程整个重跑 —— 伤的是迭代速度，于是能试的配置更少、更难调好","因为奖励模型会过拟合","因为超参之间互相冲突"],a:1,w:"讲者的原话：有些超参表现比别的好，而如果你需要重新训练，你就得把一切都再做一遍。"});
+});
+KP("23 · on-policy 与 off-policy：数据是不是「自己生的」",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("81:06","on policy training refers to training that involves the model generating from its current policy");
+  note("一个你会反复读到的术语对",640,188,"v");
+  boxNode(70,218,520,44,"on-policy 在策略上","g");
+  note("每轮都让「当前的模型」自己生成输出",330,288,"d");
+  note("⇒ 再用这个输出有多好去更新模型",330,318,"g");
+  boxNode(690,218,520,44,"off-policy 离策略","b");
+  note("用的是「不是由被训模型生成」的数据",950,288,"d");
+  note("⇒ SFT 就属于这一类：数据是现成的",950,318,"y");
+  note("★ 讲者明说：PPO 是一个 on-policy 算法",640,368,"y");},"<b>这个术语对你以后读任何 RL 论文都会撞上，而讲者是顺着「RL 和 SFT 到底差在哪」讲进去的。</b><br><b>他的切入</b>：<b>「这种基于 RL 的训练，你会大量听到 <u>on policy training</u> 这个说法，我就告诉你它是什么意思。」</b><br><b>核心差别</b>：<b><u>做 SFT 的时候，我们有一些 prompt、以及一些我们希望模型去生成、去模仿的回答。但这里我们做的是：每一次迭代，我们要求模型生成一个输出，然后用「这个输出有多好」去更新我们的模型</u>。</b><b>⇒ 讲者说<u>这两者有一个核心差别</u>：这里是我们要求模型去生成，而 SFT 只是在用一些<u>不一定由我们的模型生成</u>的数据。</b><br><b>★ 定义收口</b>：<b><u>on-policy 训练指的是「涉及模型从它当前的策略去生成、并在那上面做优化」的训练；而与之相对的 off-policy 训练，依赖的是「不是由你正在训练的那个模型生成」的输出</u>。</b><b>⇒ 他补了一句：<u>这是个你会大量看到的术语，所以我才告诉你。而且 PPO 是一个 on-policy 算法</u>。</b><br><b>⭐ 为什么这个区分重要？因为它决定了<u>旧数据能不能复用</u>。</b><b>on-policy 意味着模型一更新，之前采的样本就「过期」了（它们来自旧策略）。<u>这是 on-policy 方法样本效率低的根本原因，也是 PPO 要用「比值」去修正的那个东西</u>。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  note("为什么这个区分决定了「成本」",640,186,"v");
+  stack(640,210,[["on-policy：模型一更新，旧样本就过期了","y"],["⇒ 每轮都要重新生成 ⇒ 生成成本进入训练循环","r"],["off-policy：数据可以反复用、可以是别人生成的","g"],["⇒ 但你拟合的分布与模型自己的分布可能不一致","y"]],880,34,8);
+  note("★ 记住这个取舍：它是后面 DPO 优劣的全部来源",640,386,"y");},"<b>把这个术语对的「代价含义」想清楚，本讲最后 DPO 的优点和缺点你就能自己推出来了。</b><br><b>on-policy 的代价</b>：<b>模型每更新一次，之前采的样本就来自一个<u>已经不存在的策略</u>了。</b><b>⇒ 所以每轮都得重新生成，<u>而生成本身就进了训练循环</u>。</b><b>这解释了前面那条「这个回路每转一圈都要生成一整条回答」—— RL 那一步贵，很大一部分贵在这里。</b><br><b>off-policy 的便宜</b>：<b>数据可以反复用、可以来自别的模型、可以是人写的。<u>SFT 就是典型的 off-policy</u>：一份数据集训多少个 epoch 都行。</b><br><b>★★ 但便宜是有代价的，而且这个代价正是本讲结尾的那个缺点</b>：<b><u>如果数据不是你的模型生成的，那你拟合的就不是模型自己那个分布</u>。</b><br><b>⇒ 于是你可以提前把 DPO 的得失推出来了</b>：<b>DPO 把 RL 换成了监督学习 ⇒ 它变成 off-policy ⇒ <u>优点是便宜、稳、不用生成；缺点必然是分布漂移</u>。</b><br><b>★ 讲者在最后讲 DPO 缺点时说的正是这个：<u>直接监督这件好事，代价是有时候拟合的不是模型在训练时见过的那个确切分布</u>。</b><b>⇒ 你现在就能看出这不是 DPO 的实现缺陷，而是<u>「放弃 on-policy」这个选择的必然后果</u>。</b>");
+  SUM(0,23,{h:"on-policy vs off-policy",k:"<b>on-policy</b>：训练涉及「模型从它<b>当前</b>的策略去生成、并在那上面优化」。<b>off-policy</b>：依赖「不是由被训模型生成」的数据 —— <b>SFT 就是这一类</b>。讲者明说：<b>PPO 是 on-policy</b>。",m:"⇒ 代价含义：on-policy 一更新旧样本就过期 ⇒ <b>每轮都要重新生成，生成成本进入训练循环</b>（这是 RL 那步贵的主因）。off-policy 数据可反复用，但<b>拟合的不是模型自己的分布</b>。",w:"★ 这个取舍是后面 DPO 优劣的全部来源：DPO 把 RL 换成监督学习 ⇒ 变成 off-policy ⇒ 便宜又稳是必然的，<b>分布漂移也是必然的</b>。不是实现缺陷，是选择的后果。",r:"直接对应你的样本预算：rollout 一旦来自旧的搜索策略，就不能无条件当作当前策略的样本用。⇒ 若你想复用历史评估（这在「配置评估很贵」的场景里几乎是必须的），就要么接受 off-policy 的偏差、要么像 PPO 那样用<b>重要性比值</b>去修正。"});
+  QUIZ(0,23,{t:"on-policy 训练的定义是什么？",o:["训练涉及模型从它「当前的策略」去生成输出，并在那些输出上做优化；off-policy 则依赖不是由被训模型生成的数据（SFT 属于这类）","奖励模型和策略同时训练","每个 token 都给奖励","训练时不更新策略"],a:0,w:"讲者明说 PPO 是 on-policy 算法。代价是：模型一更新旧样本就过期，每轮都要重新生成 —— 这是 RL 那步贵的主因。"});
+});
+KP("24 · Best-of-N：有奖励模型，但「不想做 RL」的那条路",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("83:16","So you have these methods called best of N or BoN");
+  boxNode(420,196,440,40,"prompt：建议一个和泰迪熊一起做的新活动","v");
+  stack(500,264,[["回答 1 ⇒ 奖励 0.8  ⭐ 最高，就返回它","g"],["回答 2（别花时间在泰迪熊上）⇒ 奖励 −2","r"],["回答 3（带它去野餐）⇒ 奖励 0.3 左右","y"]],620,32,6);
+  note("⚠ 注意：SFT 模型完全不训，就按原样用；只是生成 N 次再挑",640,386,"y");},"<b>这是给「有奖励模型、但不想做 RL」的人准备的一条路，而讲者说<u>它实际上用得比不用更多</u>。</b><br><b>动机他问得很直白</b>：<b>「那你为什么不想做 RL？<u>因为它很贵。你需要一大堆模型</u>。」而且<u>有时候那个训练就是太难调了</u>。</b><br><b>做法</b>：<b>叫 <u>best of N</u>，或者 <u>BoN</u>。思路是：<u>利用你已经得到的那个奖励模型，去挑选你要返回给用户的那个输出</u>。</b><b>⇒ 具体是：<u>有一个 prompt，你让模型生成好几次 —— 比如 4 次、5 次；然后给每个「prompt + completion」打一个分，只把最好的那一个、评分最高的那一个返回</u>。这就是「N 个里挑最好」这个名字的来历。</b><br><b>★★ 这里有一个要点非常关键，讲者专门说了：<u>你把 prompt 喂进你的 SFT 模型 —— 你并不训练你的 SFT 模型，它就按原样用</u>。</b><b>⇒ 所以 Best-of-N <u>根本不是一种训练方法</u>，它是一种推理时的挑选策略。权重一个都没动。</b><br><b>他的例子</b>：<b>还是泰迪熊那个 prompt，生成三个 completion —— 第一个是好答案，<u>奖励 0.8</u>；第二个是「别在泰迪熊上花时间」，<u>一点都不好，比如 −2</u>；第三个「带你的泰迪熊去野餐」也不错，<u>大概 0.3、在中间</u>。</b><b>⇒ 于是 Best-of-N 选评分最高的第一个返回。</b><br><b>⭐ 顺带：讲者是在这里才回答了之前学生问的「奖励模型的输出到底长什么样」—— 就是这三个数。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  note("Best-of-N 为什么能成立？两个前提，都在前面讲过",640,186,"v");
+  boxNode(70,214,520,44,"前提 1：奖励模型是「逐点」的","g");
+  note("能给单条打分，不需要配对",330,284,"d");
+  note("⇒ 这正是 KP14 那条「训练成对、使用逐点」",330,314,"g");
+  boxNode(690,214,520,44,"前提 2：只取最大值 ⇒ 尺度不重要","g");
+  note("讲者：按正态分数缩放，最高的仍是最高的",950,284,"d");
+  note("⇒ 所以这里你完全不必在意尺度",950,314,"g");
+  note("★ 对照：RL 那边尺度重要，因为它进了损失函数",640,364,"y");},"<b>Best-of-N 看起来太简单了，但它成立靠两个前提，而这两个前提前面都铺过 —— 我把它们接上，你会看到这一讲的设计其实很连贯。</b><br><b>前提 1：奖励模型必须是<u>逐点</u>的。</b><b>因为你要给 N 条候选<u>各</u>打一个分再取最大 —— 如果它只会「两两比」，这件事就做不了。</b><b>⇒ 这正是前面那条「训练时成对、使用时逐点」的直接用处。讲者当时被问到 sigmoid 的事，他的回答也正是这个意思：<u>在 Best-of-N 里你做的只是用你的奖励模型打 N 次分，然后挑最高的那个</u>。</b><br><b>前提 2：<u>尺度不重要</u>。</b><b>有学生问「分数的尺度有什么约束吗？」讲者的回答很漂亮：<u>看你的缩放是怎么做的，但只要你是取最好的那一个、最高的那一个，你其实并不在意尺度。你想一下 —— 假设你用正态分数去缩放它，最高的那个仍然会是最高的</u>。</b><b>⇒ 所以<u>在这种情况下你确实不关心尺度</u>。</b><br><b>★★ 然后他给出了那个对照，这句话我觉得是本讲关于「尺度」最有用的一句</b>：<b><u>但尺度真正重要的时候，是它进入一个损失函数的时候 —— 而那正是 RL 的情形。所以那才是人们要用某种缩放机制的地方，那才是重要的部分</u>。</b><br><b>⇒ 可带走的判断：<u>单调变换下不变的操作（argmax、排序、取 top-k）对尺度免疫；进入加权求和或概率表达式的量，尺度就必须被锚定</u>。</b>");
+  SUM(0,24,{h:"Best-of-N（BoN）：推理时挑，不训练",k:"有奖励模型但不想做 RL 时的做法：<b>SFT 模型按原样用、完全不训</b>；同一个 prompt 生成 N 条 completion，用 RM 各打一个分，<b>只返回评分最高的那一条</b>。讲者说它实际用得比不用更多。",m:"两个前提前面都铺过：① RM 必须是<b>逐点</b>的（才能给 N 条各打分，而不是只会两两比）；② <b>只取最大值 ⇒ 尺度不重要</b>（按正态分数缩放后最高的仍最高）。",w:"★ 对照记住讲者那句：<b>尺度真正重要的时候，是它进入一个损失函数的时候</b> —— 那正是 RL 的情形。⇒ argmax / 排序 / top-k 对单调变换免疫；进入加权求和或概率表达式的量，尺度必须锚定。",r:"★★ Best-of-N 就是你课题里那个 naive baseline：<b>把预算均匀分给 N 个候选，再取 argmax</b>。这正是 best-arm identification 要打败的东西 —— successive halving / sequential elimination 在<b>同样预算</b>下显著更好，因为它们把预算挪给还没分清的候选。⇒ 你的论文里应该同时报 BoN 式均匀分配作对照。"});
+  QUIZ(0,24,{t:"Best-of-N 做法的关键特征是什么？",o:["它用奖励模型重新训练 SFT 模型","它需要 PPO 的四个模型","它把奖励直接加进解码的 logits","它完全不训练模型：SFT 模型按原样用，生成 N 条再用 RM 挑评分最高的返回"],a:3,w:"它不是训练方法，是推理时的挑选策略，权重一个都没动。成立靠两个前提：RM 是逐点的、取最大值时尺度不重要。"});
+});
+KP("25 · ★ Best-of-N 的代价：钱无限也救不了延迟",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("86:26","you are basically pushing all the work to your inference");
+  note("Best-of-N 的两个问题，讲者让学生先猜",640,186,"v");
+  boxNode(70,214,520,44,"问题 1：底模得「至少有点好」","y");
+  note("学生答：模型不好，结果就不好",330,284,"d");
+  note("⇒ 讲者承认这是实在的顾虑：全部候选都差怎么办",330,314,"y");
+  boxNode(690,214,520,44,"问题 2：成本全被推到推理端","r");
+  note("每个 prompt 要补全好几遍",950,284,"d");
+  note("⚠ 省掉了 RL 训练，却让每一次服务都变贵",950,314,"r");
+  note("★ 所以要先算清：你的推理流量 vs 你的训练成本",640,364,"y");},"<b>这一段讲者用的是提问法，而两个答案都来自学生，很值得记。</b><br><b>问题 1：底模得够好。</b><b>学生答「<u>如果模型不好，那结果就会不好</u>」。</b><b>讲者先接了一句缓和：<u>这个说得对。但我想，如果你用足够高的温度做足够多次补全，你会有一些多样性</u>。</b><b>⇒ 可后来又有学生直接追问「<u>那要是所有回答都很差呢？</u>」—— 讲者这次没有绕：<u>这确实是一个实在的顾虑，而且确实是个问题。所以你的模型至少得有一点好</u>。</b><br><b>问题 2：成本。</b><b>另一个学生答「<u>你要查询模型很多次</u>」。</b><b>⇒ 讲者说这确实就是问题所在：<u>你在推理阶段，而你想要的是不要花一大堆钱和算力；但你在这里做的事是把你的 prompt 补全好多遍</u>。</b><b>★ 他的定性很准：<u>你确实跳过了 RL 训练，但你基本上是把全部工作都推到了推理端 —— 这会让一切变得超级昂贵</u>。</b><br><b>⇒ 他还给了一个判断的方法，很实用：<u>如果你要给大量流量提供服务，从成本角度看它可能就不划算。所以在走这条路之前，最好先评估一下你的推理流量会是多少、你的训练成本会是多少，再从那里来决定</u>。</b><br><b>★★ 这个「把成本从训练挪到推理」的视角值得单独记：<u>训练成本是一次性的，推理成本是乘以流量的</u>。⇒ 所以这条路对「流量小、或者还在探索阶段」的场合很好，对「要大规模服务」的场合很糟。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("92:04","you still have to wait more than you would have on a single pass");
+  note("⭐ Shervine 的思想实验：就算钱无限，也还有延迟",640,188,"y");
+  axes({x0:200,x1:1080,y0:356,y1:210});
+  curve(fn(function(x){return 356-120*Math.exp(-Math.pow((x-440)/110,2));},200,1080,300),"g");
+  curve(fn(function(x){return 356-120*Math.exp(-Math.pow((x-800)/110,2));},200,1080,300),"r");
+  note("单次生成的延迟分布",380,222,"g");
+  note("N 次取「最大值」的延迟分布 ⇒ 整体右移",900,222,"r");
+  note("⇒ 并行也没用：你得等最慢那一条生成完才能回答",640,386,"y");},"<b>这是 Shervine 接手后讲的第一个论证，而我觉得它是整讲最漂亮的一个小推理 —— 它说明 Best-of-N 的代价不只是钱。</b><br><b>他的设定</b>：<b>「就当做个思想实验 —— <u>假设我们有无限的钱，那是不是就没问题了？</u>」</b><br><b>推理</b>：<b><u>假设你把这些全部并行生成。那你仍然需要等「某个答案生成时间的最大值」，才能给出结果</u>。</b><b>⇒ <u>而如果你看延迟的分布，它通常是某种不集中在单一点上的形状；而当你看「N 个答案的最大值」的概率分布时，它会倾向于向右移</u>。</b><br><b>★★ 他的结论：<u>所以假设你有无限的钱、无限的算力，你仍然得比单次前向等更久</u>。</b><br><b>⇒ 为什么这个论证漂亮？因为它把「钱」和「时间」这两种成本彻底分开了。<u>并行化能把钱换成时间，但它换不掉「最大值的期望大于单个的期望」这个统计事实</u>。</b><br><b>⭐ 这个事实值得单独记住，它在很多地方都成立：<u>N 个独立样本的最大值，其分布比单个样本的分布右移；N 越大，右移越多</u>。</b><b>⇒ 所以任何「发 N 个请求、等全部回来」的设计，延迟都由<u>最慢的那个</u>决定，而不是平均的那个。这就是所谓的尾延迟放大。</b><br><b>⚠ 一个实践推论：如果你真要用 Best-of-N 又在意延迟，就得接受「不等齐」—— 比如设一个超时、只在已返回的候选里挑。但那又会让你挑的不是真正的 best-of-N。</b>");
+  SUM(0,25,{h:"★ Best-of-N 的两种代价",k:"问题 1：<b>底模至少得有点好</b>（学生追问「要是所有回答都差呢」，讲者承认这是实在的顾虑）。问题 2：<b>成本全被推到推理端</b> —— 跳过了 RL 训练，却让每次服务都变贵。",m:"⭐ Shervine 的思想实验：<b>就算钱无限也救不了</b>。并行生成 N 条，你仍要等「生成时间的最大值」；而 <b>N 个样本最大值的分布比单个样本右移</b>。⇒ 所以仍然比单次前向慢。",w:"★ 判断方法（讲者给的）：先评估你的<b>推理流量</b> vs <b>训练成本</b>。训练成本是一次性的，<b>推理成本要乘以流量</b> ⇒ 流量小/探索期适合这条路，大规模服务不适合。",r:"两条都能直接用：① 「最大值分布右移」= 尾延迟放大，正是你并行评估多个配置时的 makespan 问题 —— 吞吐和延迟要分开报；② 「成本挪到推理端」提醒你把<b>一次性的离线代价</b>与<b>每次查询的在线代价</b>分开计量，否则两种方法的比较会不公平。"});
+  QUIZ(0,25,{t:"Shervine 的「无限的钱」思想实验说明了什么？",o:["Best-of-N 的瓶颈是显存","并行化可以完全消除 Best-of-N 的开销","N 越大准确率越高","即使无限并行，你仍要等 N 条里最慢的那条 —— 而 N 个样本最大值的分布比单个样本右移，所以仍比单次前向慢"],a:3,w:"它把「钱」和「时间」两种成本彻底分开了：并行化能用钱换时间，但换不掉「最大值的期望大于单个的期望」这个统计事实。"});
+});
+KP("26 · DPO：一个损失函数，里面再没有 r",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$\\mathcal{L}_{\\mathrm{DPO}}=-\\,\\mathbb{E}\\Big[\\log\\sigma\\Big(\\beta\\log\\frac{\\pi_\\theta(y_w\\mid x)}{\\pi_{\\mathrm{ref}}(y_w\\mid x)}-\\beta\\log\\frac{\\pi_\\theta(y_l\\mid x)}{\\pi_{\\mathrm{ref}}(y_l\\mid x)}\\Big)\\Big]$$");
+  says("92:50","there is no reward involved anymore");
+  note("DPO = direct preference optimization（直接偏好优化）",640,198,"d");
+  note("⭐ 通篇没有 r：不再需要先训一个奖励模型",640,228,"g");
+  note("⇒ 里面只有：赢的那条、输的那条、当前策略、参考策略、还有 β",640,258,"y");},"<b>这是本讲的收官方法，而它的卖点一句话就能说完：<u>把两段式变成一段</u>。</b><br><b>名字</b>：<b><u>DPO 是 direct preference optimization（直接偏好优化）</u>。</b><br><b>它做了什么</b>：<b>讲者的说法是 —— <u>不再去做那个昂贵的两步流程（先找一个奖励模型、再在模型权重上迭代），它优化一个单一的损失函数，直接对模型的权重做优化</u>。</b><b>★ 而最醒目的一点：<u>如你所见，再也没有奖励参与进来了 —— 没有 r</u>。</b><br><b>怎么读这条式子</b>：<b>讲者的导读很好用：<u>在那个损失函数里，你有的就是一堆变量和 sigmoid 函数；而在括号里面，你有的是「某条 completion 发生的概率」，还有一个做减法的操作，它把「赢的那条 completion 发生的概率」和「输的那条」做比较</u>。</b><br><b>⇒ 具体来说，括号里的两项都是<u>同一个形式</u>：β 乘以「当前策略给这条回答的概率 除以 参考策略给它的概率」的 log。</b><b>前一项用赢的那条 y_w，后一项用输的那条 y_l，然后相减。</b><br><b>★★ 注意这个形状你已经见过了 —— <u>期望、log、sigmoid、括号里一个差</u>。这正是奖励模型损失的形状。<u>区别只在于：差里面装的东西，从「奖励模型的两个分数」换成了「策略与参考策略的概率比的 log」</u>。</b><br><b>⇒ 讲者自己也说了：<u>我知道一次看这么多东西挺多的，公式也不算好看</u>。但下一条会把它是怎么来的推一遍，推完它就不神秘了。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("94:31","the paper is titled your language model is secretly a reward model");
+  note("⭐ 论文标题本身就是结论：你的语言模型其实暗地里就是一个奖励模型",640,188,"y");
+  boxNode(70,218,520,44,"原来的样子：r 由一个独立的奖励模型给","b");
+  note("要先训它，再用它",330,288,"d");
+  note("⇒ 两段式、四个模型",330,318,"d");
+  boxNode(690,218,520,44,"DPO 看穿的事：r 可以写成策略自己的函数","g");
+  note("那个「奖励的位置」被策略的表达式顶替了",950,288,"g");
+  note("⇒ 于是奖励模型就不必单独存在了",950,318,"g");
+  note("★ 讲者：这是个相当有意思的洞察",640,368,"y");},"<b>这一条讲的是 DPO 那个「名字即结论」的洞察，而它是本讲最值得回味的一点。</b><br><b>论文标题</b>：<b>讲者特意提了一句 —— <u>那篇论文的标题是「Your Language Model is Secretly a Reward Model」（你的语言模型暗地里就是一个奖励模型）</u>。</b><br><b>为什么叫这个名字</b>：<b>他的解释是：<u>因为你能从这个损失函数里识别出来的那个「奖励占位」，是被表达成你的策略的函数的。所以里面没有任何 r；但当你去写出那个与奖励等价的东西时，你直接找到的是你模型自己的表达式</u>。</b><b>⇒ 他的评价：<u>这是个相当有意思的洞察</u>。</b><br><b>★★ 我建议你体会一下这个思路的味道。原来的做法是：<u>训一个外部的东西来打分，再用它去调模型</u>。而 DPO 发现的是：<u>那个外部的东西，其实可以用模型自己（相对参考模型）的概率写出来 —— 它一直在那儿，只是没人把它读出来</u>。</b><br><b>⇒ 这类洞察的共同形状是：<u>你以为需要新引入一个量，但其实它是已有量的一个函数</u>。一旦看穿，整个流程就能塌缩掉一层。</b><br><b>⚠ 但要分清「等价」的边界：<u>DPO 的奖励与 PPO 的奖励在最优解处等价，不意味着两个算法的训练动力学一样</u>。讲者后面会讲到 PPO 总体表现更好 —— 那正是因为过程不同，而不是目标不同。</b>");
+  SUM(0,26,{h:"DPO：直接偏好优化",k:"<b>DPO = direct preference optimization</b>：不做两段式（先 RM 再 RL），而是优化<b>单一损失函数</b>，直接对模型权重优化。★ 式子里<b>再没有 r</b>。",m:"形状你已经见过：期望 + log + sigmoid + 括号里一个<b>差</b> —— 正是奖励模型损失的形状。区别只在差里装的东西：从「RM 的两个分数」换成「策略与参考策略概率比的 log」（各乘 β）。",w:"★ 论文标题即结论：<b>Your Language Model is Secretly a Reward Model</b> —— 那个「奖励占位」可以写成策略自己的函数，所以奖励模型不必单独存在。⚠ 但「在最优解处等价」不等于「训练动力学一样」。",r:"这类洞察的形状值得记：<b>你以为要新引入一个量，其实它是已有量的函数</b> —— 一旦看穿，流程就塌缩一层。⇒ 对你的课题可以问同一个问题：你的「代价代理」是否可以直接从搜索策略（或已有的剪枝判据）里读出来，而不必单独训练一个预测器？"});
+  QUIZ(0,26,{t:"DPO 论文标题「你的语言模型暗地里就是一个奖励模型」指的是什么？",o:["损失函数里那个「奖励占位」可以写成策略自己（相对参考模型）的函数 ⇒ 奖励模型不必单独存在","语言模型训练时会隐式学到 RLHF","语言模型可以直接输出奖励分数","奖励模型其实也是一个语言模型"],a:0,w:"这类洞察的共同形状：你以为需要新引入一个量，其实它是已有量的函数。⚠ 但在最优解处等价 ≠ 训练动力学一样。"});
+});
+KP("27 · ★ DPO 是怎么推出来的：四步，而且没有额外假设",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  note("从 PPO 的目标出发，四步到 DPO 的损失",640,186,"v");
+  stack(640,210,[["① 写下 PPO 的目标：最大化奖励 − β·KL（离参考模型的距离）","v"],["② 解出这个目标的「最优策略」π* ⇒ 它是 r 的函数","g"],["③ 把式子反过来 ⇒ 把 r 写成 π* 的函数","g"],["④ 把这个 r 代回 Bradley-Terry ⇒ r 消失，只剩策略和 β","y"]],880,34,8);
+  note("★ 讲者强调：这些步骤「没有任何额外假设」，只是一串推导",640,386,"y");},"<b>这四步是本讲最硬的一段，但讲者讲得很清楚，而且他强调了一件重要的事：<u>整个过程没有额外假设</u>。</b><br><b>① 回到 PPO 的目标。</b><b><u>我们想最大化奖励，同时最小化「得到的策略」与「参考策略」之间的距离</u> —— 也就是那个「最大化奖励 vs KL 散度项」的取舍。</b><b>⇒ 而<u>那里出现的 β 系数，控制的是你想多大程度地惩罚「离基座模型更远」</u>。</b><br><b>② 解最优策略。</b><b>讲者说这篇论文做的事是：<u>把这个式子写下来，然后求解「最优解会是什么」。于是它表达出了最优策略 π*；而当你推出这个表达式时，你得到的是一个关于 r 的函数</u>。</b><b>⇒ 式子里会出现一个 <u>Z 项，它代表配分函数（partition function），作用就是做归一化</u>；而讲者强调<u>它不是什么新东西，它是那些本来就在里面的项的函数</u>。</b><br><b>③ 反解。</b><b><u>当你把这些项重新排列一下，你就可以等价地把 r 表达成 π* 的函数</u>。</b><b>讲者说得很轻松：<u>这只是在两个表达式之间重排项，没什么花哨的</u>。</b><br><b>④ 代回 Bradley-Terry。</b><b>这是关键一步：<u>论文做的事就是把这一项认成某种奖励，然后把它表达成 Bradley-Terry 表述的一部分</u>。</b><b>⇒ 于是：<u>你把东西代进去，就再也没有奖励了，只剩别的参数的函数 —— 只有 β 和策略</u>。</b><br><b>★ 最后一步和前面一样：<u>一旦你有了这个想最大化的概率，你就能把它变成一个损失函数</u>。</b>");
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$\\pi^{*}(y\\mid x)=\\frac{1}{Z(x)}\\;\\pi_{\\mathrm{ref}}(y\\mid x)\\;\\exp\\!\\Big(\\frac{r(x,y)}{\\beta}\\Big)$$");
+  says("96:26","this Z term that stands for a partition function");
+  note("② 的结果：最优策略 = 参考策略 乘上「奖励的指数」，再归一化",640,198,"d");
+  note("⭐ 这个形状本身就有意思：最优策略是「把参考策略按奖励重新加权」",640,228,"g");
+  note("⇒ β 越小 ⇒ 指数越陡 ⇒ 越敢偏离参考策略",640,258,"y");},"<b>把第 ② 步的结果单独看一眼，因为这个式子本身就很有启发性。</b><br><b>怎么读</b>：<b>最优策略 π*(y | x)，等于<u>参考策略 π_ref(y | x)，乘上「奖励除以 β」的指数，再除以归一化项 Z(x)</u>。</b><br><b>★★ 这个形状的含义很漂亮：<u>最优策略不是另起一个分布，而是「把参考策略按奖励重新加权」</u>。</b><b>奖励高的回答，权重被乘大；奖励低的，被乘小；最后归一化回一个合法分布。</b><br><b>⇒ 这正好印证了本讲开头那把总钥匙：<u>偏好调优不教新事实，它是在已有的输出分布上重新分配权重</u>。而这里是数学形式上的证据 —— <u>π_ref 给某条回答 0 概率，乘任何有限的指数都还是 0</u>。偏好调优<u>变不出参考模型本来就不会说的东西</u>。</b><br><b>★ β 的作用也能从这里直接读出来</b>：<b>β 在分母、在指数里。<u>β 越小 ⇒ 指数越陡 ⇒ 奖励的差异被放得越大 ⇒ 越敢偏离参考策略；β 越大 ⇒ 指数越平 ⇒ 越贴着参考策略</u>。</b><b>⇒ 这和它在 PPO 里「惩罚偏离基座模型的力度」完全一致，是同一个 β。</b><br><b>⚠ 关于 Z(x)：它依赖 x（prompt），不依赖 y。<u>这就是它在第 ④ 步能被消掉的原因 —— 做差时两项的 Z(x) 相同，减掉了</u>。这也是为什么讲者强调它「不是什么新东西」。</b>");
+  S(0,function(){clearScene();setBig(null);setCap(null);noTitle();
+  setEq("$$r(x,y)=\\beta\\log\\frac{\\pi^{*}(y\\mid x)}{\\pi_{\\mathrm{ref}}(y\\mid x)}+\\beta\\log Z(x)$$");
+  says("98:46","typically taken around 0.1 if you want some order of magnitude");
+  note("③ 的结果：把奖励反解成「策略相对参考策略」的 log 比",640,198,"d");
+  note("⭐ 和 DPO 损失括号里那两项对一下 —— 正是这个东西",640,228,"g");
+  note("⇒ 代回 Bradley-Terry 做差时 β·log Z(x) 两边相同，被消掉",640,258,"y");},"<b>第 ③ 步的结果就是那把钥匙，把它和 DPO 的损失并排看，整条链就闭合了。</b><br><b>式子</b>：<b><u>r(x, y) = β 乘以「π* 除以 π_ref」的 log，再加上 β 乘以 log Z(x)</u>。</b><br><b>★★ 现在回头看 DPO 损失的括号里</b>：<b>那两项正是 <u>β·log(π_θ / π_ref)</u>，一项用赢的回答、一项用输的回答。<u>也就是说，DPO 损失里的那两项就是「被反解出来的奖励」</u>。</b><br><b>⇒ 而 β·log Z(x) 为什么不见了？因为第 ④ 步是把它代进 Bradley-Terry 的<u>差</u>里：<u>两项的 Z(x) 完全相同（它只依赖 prompt，不依赖回答），一减就没了</u>。</b><b>★ 这就是整个推导最关键的一步，也是它能成立的全部原因 —— <u>Bradley-Terry 只看差，而恰好那个难算的归一化项在差里消失</u>。</b><br><b>⇒ 回头看就会发现这不是巧合：前面我们就讲过「Bradley-Terry 只依赖分数的差，绝对值无意义」。<u>那条性质在当时看只是个注解，到这里却成了一个方法能不能成立的关键</u>。</b><br><b>β 的量级</b>：<b>讲者给了数：<u>这里的 β 和我们在 PPO 表述里看到的是同一个 β，如果你想要个量级，通常取 0.1 左右</u>。</b><b>⇒ 他补充：<u>β 是超参数，你唯一要优化的是策略；而偏好对是作为输入给进来的</u>。</b><br><b>★ 他自己的免责声明也记一下：<u>我把这篇论文相当沉重的步骤简化成了这几步</u>。要细节就去读原文。</b>");
+  SUM(0,27,{h:"★ DPO 的四步推导",k:"① 写下 PPO 的目标（最大化奖励 − β·KL）；② 解出最优策略 <b>π* = (1/Z)·π_ref·exp(r/β)</b>；③ 反解 <b>r = β·log(π*/π_ref) + β·log Z</b>；④ 代回 Bradley-Terry ⇒ <b>r 消失</b>，只剩策略和 β。讲者强调：<b>没有任何额外假设</b>。",m:"★ 成立的关键：<b>Bradley-Terry 只看差，而难算的 β·log Z(x) 只依赖 prompt、不依赖回答 ⇒ 做差时被消掉</b>。前面「只有差有意义」那条性质，在这里从注解变成了方法的承重点。",w:"⭐ π* 的形状很有启发：最优策略是<b>把参考策略按奖励重新加权</b> —— π_ref 给 0 概率的回答，乘任何指数还是 0。这正是「偏好调优不教新事实」的数学证据。β 在指数分母：<b>β 小 ⇒ 更敢偏离</b>；通常取 <b>0.1 左右</b>，且与 PPO 里是同一个 β。",r:"推导手法可直接借：<b>先写下带约束的目标、解出闭式最优解、再把难算的量反解成可观测量的函数</b>。⇒ 而「归一化项在做差时消掉」这一招，在你用成对比较学代价代理时同样成立 —— 这也正好解释了为什么成对比较学不到绝对尺度：那个尺度项正是被消掉的那一部分。"});
+  QUIZ(0,27,{t:"DPO 推导里那个难算的配分函数 β·log Z(x) 为什么能被消掉？",o:["因为论文做了一个近似假设","因为它只依赖 prompt、不依赖回答，而 Bradley-Terry 只看两项之差 ⇒ 做差时两边相同、减掉了","因为它等于 1","因为 β 取 0.1 时它可以忽略"],a:1,w:"讲者强调整个推导没有额外假设。而「Bradley-Terry 只依赖差」这条早先只是注解的性质，到这里成了方法能成立的承重点。"});
+});
+KP("28 · PPO vs DPO 怎么选，以及泰迪熊的最后一问",function(){
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("100:06","instead of four models, you just need two");
+  note("两条路的账，并排看",640,186,"v");
+  boxNode(70,214,520,44,"RLHF / PPO：两段式","b");
+  note("四个模型：策略 / 价值 / 奖励 / 基座",330,284,"d");
+  note("⚠ 没有直接监督、稳定性要操心、复杂度高",330,314,"r");
+  boxNode(690,214,520,44,"DPO：一段、监督式","g");
+  note("两个模型：π_θ 和 π_ref（冻住的 SFT）",950,284,"g");
+  note("⇒ 直接在偏好对上拟合一个损失函数",950,314,"g");
+  note("★ 讲者：不需要任何别的模型副本了",640,364,"y");},"<b>把两条路的账并排算清，这是做选择的基础。</b><br><b>RLHF / PPO 这一侧</b>：<b>讲者的概括是：<u>这是一个两阶段的训练过程 —— 你先拟合一个奖励函数，然后用它去做策略更新步骤</u>。</b><b>他说得很直白：<u>这挺沉重的。你需要很多模型在内存里，而训练稳定性是个顾虑。你没有直接的监督 —— 你依赖当前模型的策略去生成下一轮更新。所以这里面有很多复杂性</u>。</b><br><b>DPO 这一侧</b>：<b><u>与之相对，DPO 这个表述给出了一个「监督式」的思路去做偏好调优：你就拿这些偏好对，直接在它们上面拟合一个损失函数</u>。</b><b>★ 而模型数量的账：<u>不是四个模型，你只需要两个 —— 因为你有 π_θ 和 π_ref，而 π_ref 就是你的基座 SFT 模型；你不需要任何别的模型副本了</u>。</b><br><b>⇒ 对照着看就很清楚：<u>DPO 省掉的正是 PPO 的「中间两个」</u> —— 奖励模型（因为 r 被反解掉了）和价值函数（因为不再需要估 advantage）。剩下的两个是跑不掉的：你要训的那个，和你要比对的那个。</b><br><b>⭐ 另外注意「没有直接监督」这个说法的位置：它是 PPO 的缺点，但下一镜你会看到，<u>DPO 的「有直接监督」恰恰也是它缺点的来源</u>。这两件事是同一枚硬币。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("101:25","this shift in distribution is a challenge intrinsic to DPO");
+  note("⚠ 那为什么大家不都直接用 DPO？",640,186,"y");
+  stack(640,210,[["① 总体上，PPO 的表现比 DPO 好","r"],["② DPO 的「直接监督」代价是：拟合的分布可能不是模型见过的","y"],["⇒ 这个分布漂移是 DPO「内在」的挑战，不是实现问题","r"],["★ 想缓解？在偏好数据上做 SFT、或自己生成再评分 —— 又是额外成本","d"]],880,34,8);
+  note("⇒ 讲者给了一篇做基准对比的论文，想细看就去读它",640,386,"d");},"<b>讲者自己提了那个所有人都会问的问题：<u>如果 DPO 容易那么多，为什么不是所有人都直接用 DPO？</u></b><br><b>他的回答</b>：<b><u>没那么容易。实践中两种方法各有优劣</u>；他给了一篇论文，说那篇对基准差异和到达那里的步骤做了很有意思的研究。</b><br><b>① 主线结论</b>：<b><u>总体上，PPO 的表现比 DPO 好</u>。</b><br><b>② 代价在哪</b>：<b>他说得很准：<u>DPO 的一大好处就是那个直接监督，而它的代价是有时候拟合的东西不是模型在训练时见过的那个确切分布</u>。</b><b>⇒ 他接着解释机制：<u>DPO 让你完全不必操心奖励建模、只要弄到一个偏好数据集就行 —— 但这么做的问题恰恰就是那个分布漂移</u>。</b><b>★ 他的定性很重要：<u>这个分布漂移是 DPO 内在的挑战</u>。</b><br><b>⇒ 缓解办法他也说了，但每个都要花钱：<u>你可以在偏好相关的数据上先做 SFT（那篇论文说这样能得到更好的性能），或者自己生成数据再评分 —— 但那是你还得再付的一笔成本</u>。</b><br><b>★★ 把这条和前面 on-policy 那一条接起来，你就能自己推出这个结论了：<u>DPO 是 off-policy 的监督学习 ⇒ 便宜、稳、好调；而偏好数据不来自当前模型 ⇒ 分布漂移。这两件事是同一个选择的两面</u>。</b><b>⇒ 所以它不是「DPO 还不够成熟」，而是取舍。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  says("105:46","We do not want to learn new facts");
+  boxNode(340,196,600,40,"prompt：我能把泰迪熊放进洗衣机吗","v");
+  boxNode(70,264,540,44,"指令微调之后的回答","b");
+  note("「不行，可能会损坏。试试手洗吧。」",340,334,"d");
+  note("⚠ 事实正确，但太硬、不够友好",340,364,"r");
+  boxNode(670,264,540,44,"偏好调优之后的回答","g");
+  note("「最好别。你的泰迪熊可能会受伤。」",940,334,"d");
+  note("⭐ 同样的内容，换了一个让人听着舒服的语气",940,364,"g");},"<b>最后用这个例子收尾，而它把整讲的总钥匙落到了实处。讲者说这是他「今天最喜欢的部分」。</b><br><b>回到那个老 prompt</b>：<b>「<u>我能把泰迪熊放进洗衣机吗？</u>」</b><b>指令微调之后的回答是：<u>「不行，它可能会损坏。试试手洗它吧。」</u></b><br><b>他问：对这个回答有什么不满？</b><b>并且先排除了一种可能：<u>泰迪熊确实该手洗，所以它事实上是正确的</u>。</b><b>⇒ <u>那除了事实之外，你还有什么不喜欢的？</u></b><br><b>学生答：它在要求人「改成那样试试」。</b><b>讲者把这个感觉说清楚了：<u>更广一点说，它有点太硬了，听起来不够友好。而问这个问题的人可能很爱泰迪熊，所以你可能想用一种温和的方式告诉他</u>。</b><br><b>★★★ 然后是整讲的总结句，这句我建议你直接背下来</b>：<b>「<u>而这正是偏好调优这一阶段的全部意义。我们不想学新的事实。我们要做的是聚焦在已有的 completion 分布上，并把模型该返回的东西，向人类所偏好的那一边对齐</u>。」</b><br><b>偏好调优之后的回答</b>：<b><u>「最好别这么做。你的泰迪熊可能会受伤。温和地手洗会更安全。」</u></b><b>⇒ 讲者的评价：<u>它传达的是同样的要点，但用了一种在提问者听来舒服得多的语气</u>。</b><br><b>⚠ 注意这个对照有多干净：<u>两个回答的事实内容完全一样（别放洗衣机、手洗）—— 变的只有语气</u>。这就是第三阶段该做的事，也是它<u>不该</u>被用来做的事的边界。</b>");
+  S(0,function(){clearScene();setEq(null);setBig(null);setCap(null);noTitle();
+  note("最后一问：实践中到底选哪个？讲者的回答很实在",640,186,"v");
+  stack(640,210,[["看你的算力预算，以及你愿意为性能花多少精力看孩子","v"],["PPO（RL 那条）：很难调对，但会给出最高的结果","r"],["DPO：花少得多的力气，就能几乎到那个水平","g"],["⇒ 想快速拿到「被证明有效、但也许不是最好」的结果 ⇒ DPO","g"]],880,34,8);
+  note("★ 如果你是 RL 专家、知道自己在干什么、想要最后一点性能 ⇒ PPO",640,386,"y");},"<b>最后一个学生问了那个最实际的问题：<u>取舍是什么，实践中用哪个？</u>讲者的回答一点不含糊，我觉得值得完整记下来。</b><br><b>他说：<u>我觉得这完全取决于你的算力预算，取决于你有多在意性能、相对于你愿意花多少精力去「看着」你的训练过程</u>。</b><br><b>然后是对 PPO 的评价</b>：<b><u>PPO，也就是 RL 那部分，非常难调对。它会给出最高的结果，但你可能用少得多的努力就几乎达到那个水平</u>。</b><br><b>★ 他给的决策规则</b>：<b><u>如果你想要一个快速的偏好调优，它被证明能有不错的结果、但也许不是最好的结果，那 DPO 是你的朋友。而如果你是强化学习的专家、你知道自己在做什么、而且你想要最后那一点点性能，那 PPO 可能是更好的路</u>。</b><br><b>★★ 我想请你注意这个回答的形式，它比内容更值得学：<u>他没有说「X 比 Y 好」，而是给了一个以「你的处境」为输入的规则</u> —— 预算多少、在不在意最后几个点、你自己会不会调 RL。</b><br><b>⇒ 这正是工程选择该有的样子。而且注意他把「<u>你愿意花多少精力看着训练过程</u>」当成一项真实成本列了出来 —— 这项成本在论文里几乎从不出现，但在实际项目里往往是决定性的。</b><br><b>⇒ 下一讲 L6 是 LLM Reasoning，会讲 GRPO（DeepSeekMath 那篇），正是本讲末尾那个「真的需要这么多模型吗」的另一个答案。</b>");
+  SUM(0,28,{h:"PPO vs DPO 怎么选",k:"<b>模型数</b>：PPO 四个（策略/价值/奖励/基座），DPO <b>两个</b>（π_θ 与冻住的 π_ref = SFT 模型）。<b>性能</b>：总体上 <b>PPO 更好</b>。",m:"⚠ DPO 的代价是<b>内在的</b>：它的好处是直接监督，而代价是拟合的分布可能不是模型见过的那个 ⇒ <b>分布漂移</b>。缓解（先在偏好数据上 SFT、或自己生成再评分）都要另外花钱。接上 on-policy 那条就能自己推出来：off-policy 的便宜与漂移是同一个选择的两面。",w:"★ 讲者的决策规则（形式比内容更值得学）：要<b>快速、被证明有效但也许不是最好</b>的结果 ⇒ DPO；是 RL 专家、知道自己在干什么、要<b>最后一点性能</b> ⇒ PPO。他还把「愿意花多少精力看着训练」列为一项真实成本。",r:"两点可直接搬进你的论文：① 用「以读者处境为输入的规则」代替「X 比 Y 好」的断言；② 把<b>维护成本与调参心力</b>当成一项列出来的成本 —— 这项在论文里几乎从不出现，却常常决定方法会不会被真的采用。"});
+  QUIZ(0,28,{t:"讲者给的 PPO / DPO 选择规则是什么？",o:["永远选 PPO，因为它性能最高","永远选 DPO，因为它只要两个模型","要快速、被证明有效但也许不是最好的结果 ⇒ DPO；是 RL 专家、想要最后一点性能 ⇒ PPO。取决于算力预算与你愿意花多少精力看着训练","按偏好数据量决定：数据多用 DPO，少用 PPO"],a:2,w:"注意这个回答的形式：不是「X 比 Y 好」，而是一个以你的处境为输入的规则。他还把「愿意花多少精力看着训练过程」当成一项真实成本列出来了。"});
+});
+KP("完 · 每一步都在交易",function(){
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CME295 L5 · 完","偏好调优",
+      "一把总钥匙 · 四笔交易 · 三个符号陷阱");},
+    "收一下这一讲。<br><b>★★★ 先把总钥匙再说一遍，因为它是这一讲唯一需要你背下来的东西</b>：<b>「<u>我们不想学新的事实。我们要做的是聚焦在已有的 completion 分布上，并把模型该返回的东西，向人类所偏好的那一边对齐</u>。」</b><br><span class='k'>⭐ 而这句话在本讲里拿到了一个<b>数学形式的证明</b>：DPO 推导出的最优策略是 <b>π* ∝ π_ref · exp(r/β)</b> —— <u>最优策略只是「把参考策略按奖励重新加权」</u>。π_ref 给 0 概率的回答，乘任何指数还是 0。<b>偏好调优变不出参考模型本来就不会说的东西。</b></span><br><br><b>★★ 然后是四笔交易，每一笔都写清了价码。</b><br><span class='w'><b>交易一（数据）</b>：放弃信息量，换标注可靠性。产出→比较、pointwise→pairwise、细刻度→二元，<u>同一条判断用了三次</u>。⚠ 但这个方向不是无条件的 —— <b>放弃信息量是为了避噪声，评判者本身可靠时就不必放弃</b>。</span><br><span class='w'><b>交易二（RLHF/PPO）</b>：拿<u>四个模型 + 五个挑战</u>，换<u>最高的性能上限</u>。而「别跑太远」不是正则，是目标的另一半 —— 它有三个理由：灾难性遗忘、<b>reward hacking</b>、训练不稳。</span><br><span class='w'><b>交易三（Best-of-N）</b>：拿<u>每次服务都变贵</u>，换<u>一个权重都不用训</u>。⭐ 而讲者那个论证最漂亮：<b>就算钱无限，N 条里最慢那条的延迟也救不回来</b> —— 最大值的分布比单个样本右移。</span><br><span class='k'><b>交易四（DPO）</b>：拿<u>分布漂移</u>，换<u>两段变一段、四个模型变两个</u>。而这个漂移是 off-policy 这个选择的必然后果，<b>不是实现缺陷</b>。</span><br><br><b>★ 三个符号陷阱（讲者自己主动点的，他说当初也把他搞糊涂了）</b>：<b>① PPO-Clip 写成 L = …，但它是要<u>最大化</u>的；② 那个 r_θ <u>不是奖励</u>，是新旧策略的概率比值；③ 公式里的 old <u>不是 SFT 模型</u>，是 RL 阶段的上一轮。</b><br><br><b>★★★ 对你的课题，这一讲我认为有三条是能直接用的。</b><br><span class='k'><b>① reward hacking 是你最该防的那个失败模式。</b>你用代理的可行性/代价模型去引导搜索，<u>搜索越强，越会找到「骗过代理」的配置</u> —— 报出来的「最便宜可行配置」可能只在代理眼里可行。⇒ 而本讲给的对策是成套的：<b>限制偏离参考策略（KL / clip），并保留一条用精确求解器复核 top-k 的通道</b>。注意讲者说得很清楚：<u>解法不是换一个更好的代理（代理永远不完美），而是限制优化的强度</u>。</span><br><span class='k'><b>② Best-of-N 就是你要打败的那个 baseline。</b>它的结构是「<u>把预算均匀分给 N 个候选，再取 argmax</u>」—— 这正是 best-arm identification 的 naive 基线。<u>successive halving 之类的方法在同样预算下显著更好</u>，因为它们把预算挪给还没分清的候选。⇒ 所以你的实验里应该<b>同时报一个 BoN 式均匀分配的对照</b>，这个对比本身就是你方法价值的说明。</span><br><span class='k'><b>③ value function 就是你要的那个东西。</b>「<u>给一段部分生成，估计按策略写完后的最终奖励</u>」—— 把「部分生成」换成「部分配置」，这就是 MCTS 的节点价值，<b>也正是 dominance 剪枝需要的那个对部分解的估计</b>。⇒ 而「减基线降方差」也照搬得上：不同实例的代价基准不同，减掉同条件下的期望能把与实例难度无关的共同成分消掉。</span><br><br><b>⇒ 另外两条写论文时的习惯，我觉得比技术内容还值钱</b>：<b>① 讲者推损失函数是<u>从第一性原理推的</u>（要最大化什么概率 → 独立假设 → 取 log → 变最小化），而不是抄公式；② 他回答「用哪个」时给的是<u>以读者处境为输入的规则</u>，而不是「X 比 Y 好」，而且他把「<u>愿意花多少精力看着训练</u>」当成一项真实成本列了出来。</b><br><br><b>⇒ 下一讲 L6 是 LLM Reasoning，会讲 GRPO（DeepSeekMath 那篇）—— 正是本讲末尾那个「真的需要这么多模型吗」的另一个答案。</b>");
+});
+window.__startProjector(CFG);
+})();
+</script>
