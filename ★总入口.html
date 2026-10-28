@@ -403,6 +403,11 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
     <div class="m">复习放映厅/影片/CME295讲座L6-LLM推理.html</div>
     <div class="d">两个目标：推理模型<b>是什么</b>、<b>怎么训出来</b>。是什么：推理的操作性定义 · 把 CoT 放大 · ⭐ <b>想得久字面上就是算得多</b>（每个 token 一次前向）· 计费与 thought summary。怎么量：代码/数学 benchmark · <b>pass@k 的完整推导</b>（补事件 → 不放回抽样 → 组合数，代 k=1 自检得 c/n）· 温度与多样性。怎么训：三个理由否掉 SFT（⭐ <b>推理任务天然有可验证奖励，不用训奖励模型</b>）· 两个布尔奖励 · 思考预算 · <b>GRPO 用组内均值当基线，省掉价值函数</b>。最精彩的一段：<b>输出长度膨胀的根因是目标函数里一个 1/|o| 的「取平均」</b> —— 它让短的坏答案被压得更狠，于是模型宁可输出长的坏答案；DAPO 与 Dr. GRPO 怎么修、怎么验。最后是 DeepSeek R1-Zero 与 R1 的四阶段流水线，以及「小模型上蒸馏比从头 RL 更有效」。48 条讲者原话带精确时间码</div>
   </a>
+  <a class="card v" href="复习放映厅/影片/CME295讲座L7-接到外部世界.html">
+    <div class="t"><span class="tag d">CME295 · 28 知识点 / 102 帧</span>L7 把 LLM 接到外部世界（RAG · 工具 · agent）</div>
+    <div class="m">复习放映厅/影片/CME295讲座L7-接到外部世界.html</div>
+    <div class="d">一次修掉弱点清单上的两条。⭐ 贯穿全讲的一条线：<b>凡是「候选多 + 逐个评估贵」的地方，都会长出同一个两阶段结构</b>（这一讲里独立出现了两次：文档检索、工具选择）—— 第一级只能用便宜判据、所以指标必须是 <b>recall</b>（漏了永远救不回来），第二级才负担得起昂贵判据。上半场 <b>RAG</b>：为什么不能继续训、为什么不能全塞进 prompt（装不下 / <b>大海捞针</b> / 要花钱）· R-A-G 三步 · 知识库与三个超参 · bi-encoder 与 S-BERT · <b>BM25 与混合检索</b>（两种检索的失败模式正好互补）· HyDE · <b>prompt caching</b>（相同前缀必然相同激活）· cross-encoder 重排 · NDCG 与另外三个指标。下半场<b>工具与 agent</b>：定义里那句「<b>并可能作用于</b>」（RAG 只能读，工具可以写）· LLM 只看得到 API 与文档 · 三阶段 · ⭐ <b>让推理模型替你迭代那段说明</b> · 工具太多的五个问题与 tool selection · MCP · <b>ReAct 的 observe/plan/act 循环</b> · A2A · 安全与「start small, start smart」。38 条讲者原话带精确时间码</div>
+  </a>
   <a class="card v" href="复习放映厅/影片/CS229讲座L15-PCA与ICA.html">
     <div class="t"><span class="tag d">CS229 · 25 知识点 / 82 帧</span>L15 PCA 与 ICA</div>
     <div class="m">复习放映厅/影片/CS229讲座L15-PCA与ICA.html</div>
