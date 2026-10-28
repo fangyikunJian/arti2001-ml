@@ -398,6 +398,11 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
     <div class="m">复习放映厅/影片/CME295讲座L5-偏好调优.html</div>
     <div class="d">总钥匙：<b>偏好调优不教新事实</b>，只是在已有输出分布上把该返回的那一个向人类偏好挪（DPO 推出的 π* ∝ π_ref·exp(r/β) 正是它的数学形式）。上半场：为什么 SFT 不够（<b>它结构上无法表达「不要生成这个」</b>）· 偏好数据的三种形态 · RL 词汇到 LLM 的翻译表 · <b>Bradley-Terry 与从第一性原理推损失</b> · ⭐ 奖励模型「训练成对、使用逐点」· <b>reward hacking</b>（鼓掌的例子）· KL 散度 · advantage 与 value function · <b>PPO-Clip 的三个符号陷阱</b> · 要养四个模型 · 五个挑战。下半场：<b>Best-of-N</b>（钱无限也救不了延迟）· <b>DPO 的四步推导</b>（配分函数在做差时消掉）· PPO vs DPO 的取舍。53 条讲者原话带精确时间码</div>
   </a>
+  <a class="card v" href="复习放映厅/影片/CME295讲座L6-LLM推理.html">
+    <div class="t"><span class="tag d">CME295 · 28 知识点 / 111 帧</span>L6 LLM 推理（推理模型怎么训出来）</div>
+    <div class="m">复习放映厅/影片/CME295讲座L6-LLM推理.html</div>
+    <div class="d">两个目标：推理模型<b>是什么</b>、<b>怎么训出来</b>。是什么：推理的操作性定义 · 把 CoT 放大 · ⭐ <b>想得久字面上就是算得多</b>（每个 token 一次前向）· 计费与 thought summary。怎么量：代码/数学 benchmark · <b>pass@k 的完整推导</b>（补事件 → 不放回抽样 → 组合数，代 k=1 自检得 c/n）· 温度与多样性。怎么训：三个理由否掉 SFT（⭐ <b>推理任务天然有可验证奖励，不用训奖励模型</b>）· 两个布尔奖励 · 思考预算 · <b>GRPO 用组内均值当基线，省掉价值函数</b>。最精彩的一段：<b>输出长度膨胀的根因是目标函数里一个 1/|o| 的「取平均」</b> —— 它让短的坏答案被压得更狠，于是模型宁可输出长的坏答案；DAPO 与 Dr. GRPO 怎么修、怎么验。最后是 DeepSeek R1-Zero 与 R1 的四阶段流水线，以及「小模型上蒸馏比从头 RL 更有效」。48 条讲者原话带精确时间码</div>
+  </a>
   <a class="card v" href="复习放映厅/影片/CS229讲座L15-PCA与ICA.html">
     <div class="t"><span class="tag d">CS229 · 25 知识点 / 82 帧</span>L15 PCA 与 ICA</div>
     <div class="m">复习放映厅/影片/CS229讲座L15-PCA与ICA.html</div>
