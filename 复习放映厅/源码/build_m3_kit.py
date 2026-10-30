@@ -518,6 +518,70 @@ A('''<h2 id="en">英文句库 <em>直接抄进答卷</em></h2>
 </div>''')
 
 # ═════════════════════ 陷阱清单 ═════════════════════
+A('''<h2 id="off">官方练习要点 <em>全部出自 Tutorial 与 Practical 原件</em></h2>
+<p class="lead">下面四条来自本地那两份官方材料（<code>M3 T1 Tutorial.pdf</code> 与
+<code>M3 T1 Prac solution.html</code>），完整版见
+<b>《M3 官方练习全解》</b>（<code>M3材料/笔记与阅读/M3_官方练习全解.pdf</code>，13 页）。</p>
+
+<h3>⚠⚠ 一、M3 有<b>两张</b>学习率表，别记混</h3>
+<p>两个实验都是「四个观测、从同一起点只走一步、只改 η」，但<b>网络不同、数字不同、最优 η 也不同</b>。
+考场上看到学习率表，<b>先确认是哪一个</b>。</p>
+<table>
+<tr><th style="width:92px">η</th><th>Canvas 课程页 / T3 复习课件</th><th>T1 Practical</th></tr>
+<tr><td><b>起点</b></td><td class="k">0.580352</td><td class="k">0.745984</td></tr>
+<tr><td>0</td><td>0.580352（参数没变）</td><td>0.745984（参数没变）</td></tr>
+<tr><td>0.1</td><td>0.574996</td><td>0.733989</td></tr>
+<tr><td>1</td><td>0.533347</td><td class="k"><b>0.664890</b> ← 这张最低</td></tr>
+<tr><td>10</td><td class="k"><b>0.371611</b> ← 这张最低</td><td>（没做这一档）</td></tr>
+<tr><td>100</td><td class="w">9.965953</td><td class="w">4.621223</td></tr>
+</table>
+<div class="box g">
+  <p style="margin:0">⭐ <b>两张表最优的 η 不同，这本身就是答案</b>：
+  扩展题问「这张表能说明什么」时，除了「大步会过冲」之外，
+  还可以写<b>「单步最优不等于全程最优，也不存在普适最佳学习率」</b>。
+  ⚠ 另外 <b>η = 0 必须复现原损失</b>——官方把这当成实现是否正确的自检。</p>
+</div>
+
+<h3>⭐ 二、「ReLU 不激活」有<b>三个</b>层级（官方措辞）</h3>
+<table>
+<tr><th style="width:140px">层级</th><th>能得出什么结论</th></tr>
+<tr><td>① 对<b>一个观测</b>不激活</td><td><b>只有那一个观测</b>的这条路径被掐断</td></tr>
+<tr><td>② 对<b>这一批</b>都不激活</td><td>在<b>当前参数状态</b>下，这批数据给不了它任何输入权重的梯度</td></tr>
+<tr><td class="w">③ <b>永久</b>死亡</td><td class="w">⚠ <b>上面那个实验证明不了</b>——别的输入仍可能激活它</td></tr>
+</table>
+<p class="lead">官方的机制句要会写：<b>ReLU 的导数掩码把这条路径上的梯度挡住了；
+输出端的误差不为零也过不去。</b></p>
+
+<h3>⭐ 三、一次更新里<b>两个彼此独立</b>的错误（Practical Q5）</h3>
+<table>
+<tr><th style="width:92px">#</th><th>错在哪</th><th>为什么错</th></tr>
+<tr><td><b>①</b></td><td>算隐藏层梯度<b>之前</b>就更新了 W₂</td>
+    <td class="w">两个参数状态混在一起，算出来的<b>不再是原损失的导数</b></td></tr>
+<tr><td><b>②</b></td><td>把梯度<b>加</b>上去（<code>W1 + rate*dW1</code>）</td>
+    <td class="w">学习率为正时，最小化损失必须<b>减</b>——加是<b>上升</b>步</td></tr>
+</table>
+<div class="eq">官方给的正确写法：
+old = [a.copy() for a in parameters]
+grads = gradients(X, y, old)              # <b>全部梯度在同一个状态上算</b>
+parameters = [a - rate*d for a, d in zip(old, grads)]</div>
+
+<h3>四、T1 Tutorial 的答题骨架（扩展题直接套）</h3>
+<div class="eq">① 前向 z → h → s → p → L，<b>每步留 6 位，中间不四舍五入</b>
+② 写出 <b>δ = p − y</b>，并说明它是 sigmoid + BCE 链式化简的结果
+③ 用 <b>∂L/∂W₂ = δhᵀ、∂L/∂c = δ</b> 一次算完全部输出层梯度
+④ 同步更新，<b>明说「所有梯度都用更新前的参数算」</b>
+⑤ <b>重新跑一次前向</b>给出新的 s、p、L，和更新前列表对比
+⑥ 收一句局限：<b>只证明这一个样本上有改进，不是泛化的证据</b></div>
+<div class="box y">
+  <p style="margin:0"><b>那份 Tutorial 里最值钱的两问</b>：
+  <b>Q1 第 5 问</b>——去掉 ReLU 后整串塌缩成 s = w̃ᵀx + c̃，
+  算出 <b>w̃ = [2, 3]、c̃ = −10</b>，在 x = [0,3] 处 s 从 <b>+1 变成 −1</b>，
+  <b>预测直接从类 1 翻成类 0</b>；
+  <b>extension</b>——同一个预测、把 y 从 1 改成 0，
+  <b>δ 由 −0.268941 变成 +0.731059，梯度全部反号</b>。
+  ⭐ 它们合起来说明：<b>预测 p 只决定大小，目标 y 决定方向。</b></p>
+</div>''')
+
 A('''<h2 id="trap">陷阱清单 <em>考前 10 分钟看这栏</em></h2>
 <table>
 <tr><th style="width:92px">归属</th><th>陷阱</th><th>正确做法</th></tr>
@@ -543,6 +607,8 @@ A('''<h2 id="trap">陷阱清单 <em>考前 10 分钟看这栏</em></h2>
 <tr><td><b>T3</b></td><td>把 F1 里的 P 当成概率</td><td class="k">P 是 <b>precision</b></td></tr>
 <tr><td><b>T3</b></td><td>以为降阈值 precision 一定变好</td><td class="k"><b>recall 不降，precision 可升可降</b></td></tr>
 <tr><td><b>T3</b></td><td>用 AUC 回答「该用哪个阈值」</td><td class="k">AUC <b>不决定阈值、不衡量校准、不编码代价</b></td></tr>
+<tr><td><b>T1/T3</b></td><td>把两张学习率表记混</td><td class="k">Canvas 那张起点 <b>0.580352</b>、最低在 η=10；Prac 那张起点 <b>0.745984</b>、最低在 η=1</td></tr>
+<tr><td><b>T2</b></td><td>只写一个零梯度解释</td><td class="k">要写<b>两个</b>：g′(z)=0 截断路径；h=0 让输出权重梯度为零</td></tr>
 <tr><td><b>全局</b></td><td>只写最终数字</td><td class="k">官方：<b>只给正确数字可能不足以体现理解</b></td></tr>
 </table>''')
 
@@ -947,7 +1013,8 @@ A("""<div class="box y" style="margin-top:26px">
 NAV = ('<nav><div class="in">'
        '<a href="#plan">计划</a><a href="#pace">配速</a>'
        '<a href="#t1">T1 基础</a><a href="#t2">T2 训练</a><a href="#t3">T3 评估</a>'
-       '<a href="#py">Python</a><a href="#en">英文句库</a><a href="#trap">陷阱</a>'
+       '<a href="#py">Python</a><a href="#en">英文句库</a>'
+       '<a href="#off">官方练习</a><a href="#trap">陷阱</a>'
        '<a href="#tpl">答题模板</a><a href="#mcq">模拟·选择</a><a href="#erq">模拟·大题</a>'
        '<button id="themeBtn" title="切换主题">☾</button>'
        '<button onclick="window.print()">打印</button>'

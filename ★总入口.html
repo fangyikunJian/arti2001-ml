@@ -284,7 +284,7 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
   <a class="ti" href="M3材料/Canvas讲义/T0_考纲与考试形式.txt">
     <b>1</b><span>先读考纲那一页</span><i>三个 Topic 的 scope 原文 + 两道示例大题带答案</i></a>
   <a class="ti" href="M3材料/笔记与阅读/M3_总目录.pdf">
-    <b>2</b><span>再读打印资料，按 T1 &rarr; T2 &rarr; T3</span><i>7 册 126 页，含 205 道题与三个完整手算例</i></a>
+    <b>2</b><span>再读打印资料，按 T1 &rarr; T2 &rarr; T3</span><i>8 册 140 页，含 205 道题、三个完整手算例与官方 Tutorial 全解</i></a>
   <a class="ti" href="复习放映厅/M3备考包-速查表与模拟卷.html">
     <b>3</b><span>最后做整卷模拟</span><i>速查表 + 答题模板 + 20 选 4 大题，带进考场那一叠</i></a>
 </div>
@@ -660,9 +660,9 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
 <p class="lead">计算图 · 激活与损失 · 模型评估。<b>考试：Week 13（2026-11-09 ~ 11-15）</b>，在排定的 assessment / practical 课时，<b>110 分钟、100 分、开卷纸笔、20 单选×3 ＋ 4 大题×10</b>——和 M2 完全一样。⚠ <b>Canvas 的截止日期字段是空的</b>，但 Module 3 Assessment 说明里特意写了「字段空着不代表考试没排」。</p>
 <div class="grid">
   <a class="card y" href="M3材料/笔记与阅读/M3_总目录.pdf">
-    <div class="t"><span class="tag y">可打印</span><span class="tag d">7 册 · 125 页</span>M3 打印资料</div>
+    <div class="t"><span class="tag y">可打印</span><span class="tag d">8 册 · 140 页</span>M3 打印资料</div>
     <div class="m">M3材料/笔记与阅读/</div>
-    <div class="d"><b>2026-10-17 新做。</b>三册<b>知识点整理</b>（70 页）＋ 三册<b>题库与解析</b>（<b>205 道选择题</b>）＋ 总目录。<b>先开总目录</b>，里面有考试形式、读的顺序、和「考前最后一小时只看这几处」。⭐ 讲义里每一个算例的数字都用 numpy 复算过——<b>165 个数字全部对上</b>，连学习率一步实验和 100 次更新那两张表也是整网重算的。</div>
+    <div class="d"><b>2026-10-17 新做。</b>三册<b>知识点整理</b>（71 页）＋ 三册<b>题库与解析</b>（<b>205 道选择题</b>）＋ <b>《官方练习全解》</b>（13 页）＋ 总目录。<b>先开总目录</b>，里面有考试形式、读的顺序、和「考前最后一小时只看这几处」。⭐ <b>新增《官方练习全解》</b>：T1 Tutorial（堂内要交的 worksheet，<b>官方不发答案</b>）Q1–Q3 与选做 extension <b>逐问解出</b>，T1 Practical 的<b>官方 worked discussion</b> 要点全摘，⚠ 并点出一处极易记混的对照——<b>M3 有两张学习率表，网络不同、最优 η 也不同</b>。⭐ 讲义与解答里每一个数字都用 numpy 复算过——<b>165 + 54 个数字全部对上</b>，连学习率一步实验和 100 次更新那两张表也是整网重算的。</div>
   </a>
   <a class="card y" href="复习放映厅/M3备考包-速查表与模拟卷.html">
     <div class="t"><span class="tag y">考前</span><span class="tag d">速查 + 模拟卷</span>M3 备考包</div>
@@ -745,7 +745,7 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
   ① 用 Canvas API 把 Key concepts 页面抓成本地文本 <b>✓ 已完成（2026-10-14，18 页）</b> →
   ② 课件 pptx 转 PDF、裁掉致辞与课务页 →
   ③ 生成逐页精读（<code>精读/build_reader.py</code>）→
-  ④ 对照 CS229 相应讲次做深度片 → ⑤ 出备考包与模拟卷 <b>✓ 打印资料与题库已完成（2026-10-17，126 页 / 205 题）</b>，模拟卷待 Tutorial 解锁后再做。
+  ④ 对照 CS229 相应讲次做深度片 → ⑤ 出备考包与模拟卷 <b>✓ 打印资料与题库已完成（2026-10-17，140 页 / 205 题）</b>，模拟卷待 Tutorial 解锁后再做。
 </div>
 </section>
 
@@ -1079,6 +1079,7 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
   });
 })();
 </script>
+
 
 
 
