@@ -379,9 +379,9 @@ i.k.txt{background:var(--tdim);color:var(--dim)}
     <div class="d">Stanford CME295《Transformers &amp; LLMs》2025 秋第一讲，<b>2026-11-03 按「逐段走查」标准重做</b>：顺着字幕<b>第 1 句走到第 924 句</b>，每个讲解镜平均只扛 <b>4.8 句</b>（旧版 16.8 句），<b>167 条讲者原话</b>带精确时间码、相邻间隔不超过 90 秒。内容：课程本身与两个免责声明 → NLP 三个桶与四个指标 → 机器翻译与 BLEU/ROUGE/perplexity → 分词四种切法与 <b>OOV</b> → one-hot <b>全正交</b>的致命伤 → <b>Word2vec 与代理任务</b>（含三个课堂问答）→ RNN 的三宗罪与<b>梯度消失</b> → <b>注意力、Q/K/V、三处注意力各司其职</b>、位置编码与多头 → label smoothing → <b>Shervine 的端到端走查</b>（逐步拆解 QKᵀ、为什么除 √d_k、多头拼接与 W_o、解码循环到 EOS）</div>
   </a>
   <a class="card v" href="复习放映厅/影片/CME295讲座L2-Transformer变体与技巧.html">
-    <div class="t"><span class="tag d">CME295 · 25 知识点 / 91 帧</span>L2 Transformer 的变体与技巧</div>
+    <div class="t"><span class="tag d">CME295 · 60 知识点 / 365 帧 · 走查式</span>L2 Transformer 的变体与技巧</div>
     <div class="m">复习放映厅/影片/CME295讲座L2-Transformer变体与技巧.html</div>
-    <div class="d">八年里换了哪三个零件，以及为什么只剩 decoder-only。<b>位置嵌入换了五次</b>（学出来的 → 正弦余弦 → T5 偏置 → ALiBi → <b>RoPE</b>），每次都在修前一次的具体毛病；归一化 post→pre、LayerNorm→RMSNorm；注意力的两个正交方向（滑窗省算力、MQA/GQA 省显存）。后半场把 BERT 讲到底：CLS/SEP · MLM 的 80/10/10 · NSP · 蒸馏 · RoBERTa</div>
+    <div class="d">Stanford CME295《Transformers &amp; LLMs》2025 秋第二讲，<b>2026-11-04 按「逐段走查」标准重做</b>：顺着字幕<b>第 1 句走到第 933 句</b>，每个讲解镜平均只扛 <b>3.7 句</b>（旧版 20.7 句），<b>244 条讲者原话</b>带精确时间码、相邻间隔不超过 90 秒。上半场（Afshine）讲「八年里换了哪三个零件」：<b>位置嵌入占了整整 32 分钟、换了五代</b>（学出来的两个局限 → 正弦余弦<b>用 cos(a−b) 证明点积只依赖相对距离</b> → T5 把 m−n 分桶学偏置 → ALiBi 确定性公式 → <b>RoPE 旋转 Q 和 K</b>，含讲者临场被学生要出来的<b>旋转矩阵现场证明</b>与长程衰减上界）；归一化 <b>post-norm→pre-norm</b>（残差直路被不被 Norm 挡住）、<b>LayerNorm→RMSNorm</b>（砍掉减均值和 β）；注意力的两个<b>正交</b>方向 —— <b>滑动窗口</b>省计算（含 tiling 与感受野）、<b>MQA/GQA/MHA</b> 省 KV 缓存显存。下半场（Shervine）讲三类架构：T5 家族与 <b>span corruption</b> → encoder-only → <b>decoder-only 为什么赢</b>（不是更聪明，是 next-word prediction 最好扩展）；再把 <b>BERT</b> 从名字拆到底：双向 vs 因果掩码 · ELMo 的时机 · CLS/SEP/PAD · <b>segment encoding</b> · <b>MLM 的 80/10/10 及其理由</b> · NSP 为何是分类任务 · teddy bear 端到端走查 · <b>蒸馏</b>（Hinton 的 soft targets、KL 散度、<b>交叉熵是硬标签的特例</b>）· DistilBERT · RoBERTa 的 <b>vastly undertrained</b></div>
   </a>
   <a class="card v" href="复习放映厅/影片/CME295讲座L3-大语言模型.html">
     <div class="t"><span class="tag d">CME295 · 25 知识点 / 97 帧</span>L3 Transformers 与大语言模型</div>

@@ -108,17 +108,34 @@ def KP(name, shots, summ, quiz, t=0):
     b.append('});'); C.append("\n".join(b))
 
 
-import cme295_L2_a, cme295_L2_b, cme295_L2_c, cme295_L2_d
-cme295_L2_a.add(KP)   # 回顾与注意力图 → 位置嵌入：学出来的 / 正弦余弦 / 为什么说得通 / 频率
-cme295_L2_b.add(KP)   # 位置信息挪进注意力层：T5 偏置 → ALiBi → RoPE；归一化的两处变化
-cme295_L2_c.add(KP)   # O(n²) 与滑动窗口；共享 K/V 投影（MQA/GQA）；三类架构与 T5
-cme295_L2_d.add(KP)   # BERT 讲到底 + 蒸馏（DistilBERT）+ RoBERTa
+# ⚠ 2026-11-04 重做为「走查式」：顺着字幕第 1 句走到第 933 句，每镜 ≤6 句。
+import cme295_L2_a, cme295_L2_b, cme295_L2_c, cme295_L2_d, cme295_L2_e, cme295_L2_f
+import cme295_L2_g, cme295_L2_h, cme295_L2_i, cme295_L2_j, cme295_L2_k
+cme295_L2_a.add(KP)   # 句 1–82    后勤两条、L1 回顾（Q/K/V 与硬件）、attention map、读论文建议
+cme295_L2_b.add(KP)   # 句 83–134  八年没换的骨架、为何必须注入位置、第一代专属嵌入与两个局限
+cme295_L2_c.add(KP)   # 句 135–213 正弦余弦、ω_i、cos(a−b) 证点积只依赖相对距离、热力图
+cme295_L2_d.add(KP)   # 句 214–258 2025 年还用吗、把位置搬进 softmax、T5 相对偏置、ALiBi
+cme295_L2_e.add(KP)   # 句 259–373 RoPE 全程：旋转矩阵与现场证明、两个好处、四个课堂提问
+cme295_L2_f.add(KP)   # 句 374–428 层归一化：add&norm、γ/β、post→pre norm、RMSNorm、vs BatchNorm
+cme295_L2_g.add(KP)   # 句 429–532 O(n²)、tiling、滑动窗口与感受野、MQA/GQA/MHA
+cme295_L2_h.add(KP)   # 句 533–610 Shervine 接手：T5 家族、span corruption、三类架构、decoder-only 为何赢
+cme295_L2_i.add(KP)   # 句 611–708 BERT 名字拆解、ELMo 八卦、CLS/SEP、预训练+微调、优劣
+cme295_L2_j.add(KP)   # 句 709–857 WordPiece、segment encoding、MLM 的 80/10/10、NSP、微调、走查
+cme295_L2_k.add(KP)   # 句 858–933 丢掉其它输出、CLS 的 Q/K/V、三个局限、蒸馏、DistilBERT、RoBERTa
 
 C.append(r'''KP("完 · 八年里换了什么",function(){
   S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
-    setTitle("CME295 L2 · 完","Transformer 的变体与技巧",
-      "零件换了，骨架没换");},
-    "收一下这一讲。<br><b>★★★ 一句话总结：骨架八年没换，但三个零件各换了一遍，而每一次更换都能说出具体理由。</b><br><b>把三条线各自的「毛病 → 对策」列一遍，这是最该带走的东西</b>：<br><b>① 位置嵌入，换了五次</b>：<br><span class='w'>学出来的嵌入 —— 毛病是<b>依赖训练集</b>，而且<b>只能学到训练时见过的最大位置</b>；</span><br><span class='w'>正弦余弦 —— 治好了外推，<b>而且点积只依赖相对距离</b>；但它是加在<b>输入</b>上的，而我们真正想影响的是<b>注意力层</b>；</span><br><span class='w'>T5 的相对位置偏置 —— 直接加进 softmax 里，但<b>要学</b>，于是又带回了过拟合；</span><br><span class='w'>ALiBi —— 不学了，用确定性公式，<b>但太简单、太受限</b>；</span><br><span class='k'>RoPE —— 回到正弦余弦的世界，但改成<b>旋转 query 和 key</b>，于是 QKᵀ 天然只依赖相对距离。今天多数模型用它。</span><br><b>② 归一化，换了两处</b>：<b>位置从 post-norm 挪到 pre-norm（更稳）；形式从 LayerNorm 换成 RMSNorm（少学一半参数、速度更快，而收敛性相当）。</b><br><b>③ 注意力，两个正交的方向</b>：<b>滑动窗口治 O(n²) 的<u>计算</u>；共享 K/V 投影（MQA / GQA）治 KV 缓存的<u>显存</u>。</b><span class='w'>⚠ 这两件事常被混为一谈，但它们治的是不同的资源。</span><br><br><b>★★ 下半场那条线同样值得单独记：三类架构里，<u>赢的那一类不是因为更聪明，而是因为更好扩展</u>。</b><b>讲者的原话是：人们意识到<u>算力预算最好全部投在 decoder 上</u>；而 next-word prediction「是你能做的最简单的事情」，却被证明效果惊人。</b><br><b>⭐ 把它和 T5 的 span corruption 对比就更清楚了：span corruption 更<u>精巧</u>（要挖空、要 sentinel token、要按序重建），而 next-word prediction 更<u>笨</u>。</b><b>⚠ 结果是笨的那个赢了 —— 因为它更容易扩展，而且和「当一个有用的聊天助手」这件事天然对齐。</b><br><b>★ 这条教训对你的课题是直接可用的：一个更精巧的目标/判据，如果它的代价是「难以扩展」或「需要额外的构造步骤」，那它在大规模下很可能输给一个更朴素但更容易扩展的方案。</b><b>⇒ 所以比较方法时，<u>把扩展性当成一个和精度并列的轴</u>来报，而不是只报固定预算下的精度。</b><br><br><b>⇒ 下一讲 L3 是 Transformers & Large Language Models：正式进入 LLM，而上半场提到的 KV 缓存就在那一讲。</b>");
+    setTitle("CME295 L2 · 完 ①","位置嵌入：同一个目标，五代手段",
+      "注入的位置一路从输入端搬进注意力内部");},
+    "收一下这一讲。<br><b>★★★ 一句话总结：骨架八年没换，但三个零件各换了一遍 —— 而每一次更换都能说出具体理由。</b><br><b>先把占了全讲三分之一时间（10:44–42:43）的那条线列完整，这是最该带走的东西</b>：<br><span class='w'><b>① 学出来的嵌入</b> —— 毛病有两个：<b>依赖训练集</b>（会把「位置 2 通常是什么」这种统计规律一起吸进去），而且<b>只能学到训练时见过的最大位置</b>（第 513 行根本不存在）。</span><br><span class='w'><b>② 正弦余弦</b> —— 治好了外推，而且用 cos(a−b) 证明了<b>点积只依赖相对距离</b>；但它是加在<b>输入</b>上的，而我们真正想影响的是<b>注意力层</b>。</span><br><span class='w'><b>③ T5 的相对位置偏置</b> —— 直接加进 softmax 里（把 m−n 分桶），但<b>要学</b>，于是又带回了过拟合。</span><br><span class='w'><b>④ ALiBi</b> —— 不学了，用确定性公式，<b>但太简单、太受限</b>（只是 n 和 m 的线性差）。</span><br><span class='k'><b>⑤ RoPE</b> —— 回到正弦余弦的世界，但改成<b>旋转 query 和 key</b>，于是 QKᵀ 天然只依赖 n−m，还多一个<b>长程衰减的上界</b>。今天多数模型用它。</span><br><b>⚠ 认准这条线的真正剧情：<u>量化的办法基本没变（一直是三角函数），变的是「注入的地方」—— 它一路从输入端搬进了注意力内部</u>。</b>");
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CME295 L2 · 完 ②","归一化两处，注意力两个正交方向",
+      "⚠ 别把「省计算」和「省显存」混成一件事");},
+    "<b>② 归一化，换了两处 —— 一处是位置，一处是形式。</b><br><span class='w'><b>位置：post-norm → pre-norm</b>。原来是 Norm(x + Sublayer(x))，现在是 x + Sublayer(Norm(x))。<b>差别在那条残差路径上：post-norm 里相加之后还要过一次 Norm，把「那条直路」挡住了；pre-norm 里 x 原封不动加上去 ⇒ 从最后一层到第一层有一条完全畅通的恒等路径</b>，于是能训深得多、几乎不需要 warmup。</span><br><span class='w'><b>形式：LayerNorm → RMSNorm</b>。砍掉了「减均值」和偏置 β，只剩「除以均方根 × 一个学出来的 γ」。<b>收敛性质相当，但少学一半参数、而且省掉一次全向量求和 ⇒ 更快</b>。</span><br><br><b>③ 注意力，两个方向，而讲者明说它们是「<u>正交的</u>」—— 意思是可以同时用。</b><br><span class='w'><b>滑动窗口</b>治 O(n²) 的<b>计算</b>：每个 token 只看左右各几千个邻居，而<b>感受野随层数累积（L 层 × 窗口 w）</b>，所以 Mistral 全是局部注意力也能撑 32K。</span><br><span class='w'><b>共享 K/V 投影（MQA / GQA / MHA）</b>治 KV 缓存的<b>显存</b>：三档其实只是一个参数 g（组数）的三个取值，<b>g=1 是 MQA、g=h 是 MHA</b>。</span><br><b>⚠ 这两件事常被混为一谈，但它们治的是<u>不同的资源</u> —— 而 Mistral 7B 正是两个一起用。</b>");
+  S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
+    setTitle("CME295 L2 · 完 ③","三类架构，与那条可以直接用的教训",
+      "赢的那一类不是更聪明，是更好扩展");},
+    "<b>★★ 下半场那条线同样值得单独记：三类架构里，<u>赢的那一类不是因为更聪明，而是因为更好扩展</u>。</b><b>讲者的原话是：人们意识到<u>算力预算最好全部投在 decoder 上</u>；而 next-word prediction「是你能做的最简单的事情」，却被证明效果惊人、而且和「当一个有用的聊天助手」天然对齐。</b><br><b>⭐ 把它和 T5 的 span corruption 对比就清楚了</b>：<b>span corruption 更<u>精巧</u></b>（要挖空、要 sentinel token、要按序重建、要定挖多长），<b>而 next-word prediction 更<u>笨</u></b>（任何一段文本不经任何处理就是训练数据）。<b>⚠ 结果是笨的那个赢了 —— 因为规模的敌人正是预处理。</b><br><b>而 BERT 那一大段的价值，在于它让你看清了<u>那条没被走下去的路</u>：双向、填空、分类 —— 每一样都做得很好，而每一样都通不到 ChatGPT。</b><span class='w'>（不过它也没过时：1.1 亿参数、毫秒级延迟、输出稳定可复现，今天工业界做分类仍然大量在用。）</span><br><br><b>★ 这条教训对你的课题是直接可用的：一个更精巧的目标或判据，如果代价是「难以扩展」或「需要额外的构造步骤」，那它在大规模下很可能输给一个更朴素但更容易扩展的方案。</b><b>⇒ 所以比较方法时，<u>把扩展性当成一个和精度并列的轴</u>来报，而不是只报固定预算下的精度。</b><br><b>⇒ 下一讲 L3 是 Transformers & Large Language Models：正式进入 LLM，而上半场提到的 KV 缓存就在那一讲。</b>");
 });
 window.__startProjector(CFG);
 })();''')
