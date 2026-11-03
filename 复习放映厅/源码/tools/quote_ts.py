@@ -16,6 +16,9 @@
     python quote_ts.py --check CME295 L1 build_cme295_L1.py cme295_L1_a.py ...
     python quote_ts.py --selftest CME295 L1
 
+    --fix     配 --check 用：把对不上的时间码**直接回写**进源码。
+              （写走查式片子时按 _merged.txt 的 [mm:ss] 取值，而那个标记常落在
+               句中、整句起点更早，所以必然有一小撮对不上 —— 让工具自己改。）
   --check   把这些源码文件里每一条 says("mm:ss","en") 的时间码重新核一遍，
             只报对不上的（容差默认 6 秒，cue 边界 + 口头语删减带来的抖动）。
   --selftest 阳性对照：拿 `_timed.txt` 里**已知时间码**的句子当题目反查，
@@ -134,6 +137,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--fix", action="store_true",
+                    help="把对不上的时间码直接回写进源码（配 --check 用）")
     ap.add_argument("--tol", type=int, default=6, help="--check 的容差秒数")
     ap.add_argument("course")
     ap.add_argument("key")
@@ -179,10 +184,11 @@ def main():
         return
 
     if a.check:
-        tot = wrongs = unknown = 0
+        tot = wrongs = unknown = fixed = 0
         for f in a.rest:
             p = f if os.path.isabs(f) else os.path.join(SRC, f)
             body = io.open(p, encoding="utf-8").read()
+            edits = []          # --fix 用：(整段 says 原文, 改好的 says)
             for m in SAYS.finditer(body):
                 tot += 1
                 mm, ss = m.group(1).split(":")[-2:]
@@ -196,9 +202,25 @@ def main():
                 d = min(abs(h[0] - want) for h in hits)
                 if d > a.tol:
                     wrongs += 1
-                    print("  ✗ %s  写的 %s，实际 %s（差 %.0f 秒）：%s…"
-                          % (os.path.basename(f), m.group(1),
-                             min(hits, key=lambda h: abs(h[0] - want))[1], d, quote[:52]))
+                    real = min(hits, key=lambda h: abs(h[0] - want))[1]
+                    print("  %s %s  写的 %s，实际 %s（差 %.0f 秒）：%s…"
+                          % ("↻" if a.fix else "✗", os.path.basename(f),
+                             m.group(1), real, d, quote[:52]))
+                    if a.fix:
+                        # ⚠ 只换这一段 says(...) 里的那个时间码，别动别处同样的字符串
+                        old_call = m.group(0)
+                        new_call = old_call.replace('"%s"' % m.group(1), '"%s"' % real, 1)
+                        edits.append((old_call, new_call))
+            if a.fix and edits:
+                for old_call, new_call in edits:
+                    if body.count(old_call) == 1:
+                        body = body.replace(old_call, new_call, 1)
+                        fixed += 1
+                io.open(p, "w", encoding="utf-8").write(body)
+        if a.fix:
+            print("  共 %d 条 says：改对了 %d 条，%d 条定位不到（定位不到的要自己查）"
+                  % (tot, fixed, unknown))
+            sys.exit(1 if unknown else 0)
         print("  共 %d 条 says：%d 条时间码对不上，%d 条定位不到" % (tot, wrongs, unknown))
         sys.exit(1 if (wrongs or unknown) else 0)
 

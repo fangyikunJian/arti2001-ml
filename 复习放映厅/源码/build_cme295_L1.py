@@ -112,11 +112,20 @@ def KP(name, shots, summ, quiz, t=0):
     b.append('});'); C.append("\n".join(b))
 
 
-import cme295_L1_a, cme295_L1_b, cme295_L1_c, cme295_L1_d
-cme295_L1_a.add(KP)   # NLP 三类任务 → 指标的两难 → 时间线 → 分词三种切法 → OOV
-cme295_L1_b.add(KP)   # one-hot → 余弦相似度 → 全正交 → 代理任务 → 玩具网络 → 两个硬限制
-cme295_L1_c.add(KP)   # 句向量求平均 → RNN → 三个病 → LSTM → 注意力的想法
-cme295_L1_d.add(KP)   # 自注意力 → Q/K/V → 架构 → 位置编码 → 多头 → 端到端走一遍
+# ⚠ 2026-11-03 重做为「走查式」：顺着字幕第 1 句走到第 924 句，每镜 ≤6 句。
+#   旧版四个模块 55 镜（每镜扛 16.8 句）被用户退回；新版九个模块 180 镜。
+#   覆盖用 tools/coverage.py 验（密度 / says 单调 / 相邻原话 ≤90 秒）。
+import cme295_L1_a, cme295_L1_b, cme295_L1_c, cme295_L1_d, cme295_L1_e
+import cme295_L1_f, cme295_L1_g, cme295_L1_h, cme295_L1_i
+cme295_L1_a.add(KP)   # 句 1–110    课程说明：讲者、目标、先修、考核、材料、两个免责声明
+cme295_L1_b.add(KP)   # 句 111–175  NLP 与三个桶 → 各桶的任务 → 分类桶的四个指标 → 类别不平衡
+cme295_L1_c.add(KP)   # 句 176–231  生成桶与机器翻译 → BLEU/ROUGE → perplexity → 一条时间线
+cme295_L1_d.add(KP)   # 句 232–290  tokenization 四种切法 → 序列变长为什么是代价 → OOV
+cme295_L1_e.add(KP)   # 句 291–367  one-hot → 余弦相似度 → 全正交 → 范数问答 → 词表多大
+cme295_L1_f.add(KP)   # 句 368–493  Word2vec 全程：代理任务 → 网络 → 前向反向 → 拿走绿色那层
+cme295_L1_g.add(KP)   # 句 494–575  句子表示 → RNN → 三类任务怎么用 → LSTM → 梯度消失 → 小结
+cme295_L1_h.add(KP)   # 句 576–730  注意力 → transformer → Q/K/V → 架构三处注意力 → 位置编码 → 多头
+cme295_L1_i.add(KP)   # 句 731–924  label smoothing → Shervine 的端到端走查（到 EOS 为止）
 
 C.append(r'''KP("完 · 这一讲给了你什么",function(){
   S(0,function(){clearScene();setBig(null);setCap(null);setEq(null);
