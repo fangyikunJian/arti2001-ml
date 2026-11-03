@@ -249,6 +249,9 @@ td:first-child{font-weight:600;white-space:nowrap}
     <tr><td>混淆矩阵<br>四指标</td><td>TP=18, FP=12, FN=6, TN=164（考纲示例）</td>
         <td>先声明正类；自查 18+12+6+164=200</td>
         <td><b>acc=0.91，precision=0.60<br>recall=0.75，F1=2/3≈0.667</b></td></tr>
+    <tr><td>指标与代价<br>（T3 Tutorial）</td><td>TP=42, FN=8, FP=18, TN=132；漏报代价 5、误报 1</td>
+        <td>acc .870 / prec .700 / rec .840 / F1 .764<br>代价 5(8)+18 = 58</td>
+        <td>降阈值后 TP=47,FN=3,FP=35 ⇒ 代价 <b>50 更优</b><br>⚠ 但 <b>precision .700→.573、accuracy .870→.810</b></td></tr>
     <tr><td>ROC 与 AUC</td><td>A(0.90,1) B(0.80,0) C(0.40,1) D(0.10,0)</td>
         <td>点 (0,0)→(0,0.5)→(0.5,0.5)→(0.5,1)→(1,1)<br>梯形 0.25+0.50；配对 3 胜/4 对</td>
         <td><b>AUC = 0.75</b>（两法一致）<br>⚠ <b>竖直段面积为 0</b></td></tr>
@@ -276,7 +279,7 @@ td:first-child{font-weight:600;white-space:nowrap}
   <div class="t"><b>在测试集上挑阈值或挑模型。</b><span class="ok">用验证集</span>；测试集只评估一次冻结的流程。</div>
   <div class="t"><b>看过测试结果后又继续开发。</b><span class="ok">那个测试集已成为开发历史的一部分</span>，新结论需要一次全新的独立评估。</div>
   <div class="t"><b>「训练强验证差 ⇒ 方差高」一口咬定。</b><span class="ok">先排除分布差异、验证集过小、泄漏。</span></div>
-  <div class="t"><b>背死了「混淆矩阵左上角是 TP」。</b><span class="ok">先定正类再逐格读行列标签</span>——⚠ <b>Canvas 讲义页左上角是 TP，而 M3 T3 复习课件左上角是 TN</b>（同 sklearn）。两份都是官方材料，顺序相反，计数却相同。</div>
+  <div class="t"><b>背死了「混淆矩阵左上角是 TP」。</b><span class="ok">先定正类再逐格读行列标签</span>——⚠ 四份官方材料里 <b>Canvas 讲义页与 T3 Tutorial（计分那份）是正类在前（左上 TP）</b>，<b>T3 复习课件与 sklearn 是负类在前（左上 TN）</b>。<span class="ok">不给标签时正类在前更可能</span>，但顺序相反的确实存在，计数则完全相同。</div>
   <div class="t"><b>把 F1 里的 P 当成概率。</b><span class="ok">P 是 precision</span>，R 是 recall。</div>
   <div class="t"><b>以为降低阈值 precision 一定变好。</b><span class="ok">recall 不会下降，precision 可升可降。</span></div>
   <div class="t"><b>用 AUC 回答「该用哪个阈值」。</b><span class="ok">AUC 不决定阈值、不衡量校准、不编码代价。</span></div>

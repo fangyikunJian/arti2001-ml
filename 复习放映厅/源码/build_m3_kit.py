@@ -388,6 +388,8 @@ A('''<h2 id="t3">T3 · 模型评估 <em>速查</em></h2>
 <tr><th style="width:170px">来源</th><th>摆法</th><th style="width:76px">左上角</th></tr>
 <tr><td><b>Canvas 讲义页</b></td><td>行 = 真实，列 = 预测，<b>正类在前</b> ⇒
   <code>[[TP, FN], [FP, TN]]</code></td><td>TP</td></tr>
+<tr><td class="k"><b>M3 T3 Tutorial</b>（计分）</td><td>行 = 真实，列 = 预测，<b>正类在前</b> ⇒
+  <code>[[TP, FN], [FP, TN]]</code></td><td class="k"><b>TP</b></td></tr>
 <tr><td class="w"><b>M3 T3 复习课件</b></td><td>行 = 真实，列 = 预测，<b>负类在前</b> ⇒
   <code>[[TN, FP], [FN, TP]]</code></td><td class="w"><b>TN</b></td></tr>
 <tr><td>sklearn <code>labels=[0,1]</code></td><td>同上 ⇒
@@ -401,7 +403,11 @@ A('''<h2 id="t3">T3 · 模型评估 <em>速查</em></h2>
   ⇒ 照课件自己给的办法做：<b>先定正类，再按「actual ?, predicted ?」逐格认，
   然后写一句「四格之和 = 样本数」自查。</b>
   四个计数在两种摆法下<b>完全相同</b>，变的只是位置。
-  <span class="k">知道这件事反而是送分点——无论题目用哪种排法你都不会填反。</span></p>
+  <span class="k">知道这件事反而是送分点——无论题目用哪种排法你都不会填反。</span><br>
+  ⭐ <b>2026-11-03 补：拿到三份官方 Tutorial 答案后口径更明确了</b>——
+  <b>四份官方材料里有两份（含那份要计分的 Tutorial）是「正类在前」</b>，
+  所以<b>题目不给标签时，正类在前是更可能的默认</b>；但复习课件确实是反的，
+  <b>仍然不能背摆法</b>。答题时写一句「本题约定正类为 X，行为真实、列为预测」再逐格标注。</p>
 </div>
 <div class="eq"><b>Accuracy</b>  = (TP+TN)/总数
 <b>Precision</b> = TP/(TP+FP)      分母 = <b>「我预测为正的」</b>
@@ -519,9 +525,10 @@ A('''<h2 id="en">英文句库 <em>直接抄进答卷</em></h2>
 
 # ═════════════════════ 陷阱清单 ═════════════════════
 A('''<h2 id="off">官方练习要点 <em>全部出自 Tutorial 与 Practical 原件</em></h2>
-<p class="lead">下面四条来自本地那两份官方材料（<code>M3 T1 Tutorial.pdf</code> 与
-<code>M3 T1 Prac solution.html</code>），完整版见
-<b>《M3 官方练习全解》</b>（<code>M3材料/笔记与阅读/M3_官方练习全解.pdf</code>，13 页）。</p>
+<p class="lead">⭐ <b>2026-11-03：三份官方 Tutorial 答案全部到手</b>（T1/T2/T3），
+下面七条是从中摘出的最高频考点。<b>完整全解见《M3 官方练习全解》</b>
+（<code>M3材料/笔记与阅读/M3_官方练习全解.pdf</code>），
+里面每个数字都复算过（官方 105 项 + T1 自解 54 项）。</p>
 
 <h3>⚠⚠ 一、M3 有<b>两张</b>学习率表，别记混</h3>
 <p>两个实验都是「四个观测、从同一起点只走一步、只改 η」，但<b>网络不同、数字不同、最优 η 也不同</b>。
@@ -565,7 +572,47 @@ old = [a.copy() for a in parameters]
 grads = gradients(X, y, old)              # <b>全部梯度在同一个状态上算</b>
 parameters = [a - rate*d for a, d in zip(old, grads)]</div>
 
-<h3>四、T1 Tutorial 的答题骨架（扩展题直接套）</h3>
+<h3>⭐ 四、三种<b>不同成因</b>的零梯度（T2 Tutorial 一题里全演示了）</h3>
+<table>
+<tr><th style="width:150px">哪个梯度为零</th><th>直接原因</th><th style="width:118px">怎么说</th></tr>
+<tr><td>某隐藏单元的<b>输入权重与偏置</b></td>
+    <td>它的分数为负 ⇒ <b>ReLU 导数为 0</b>，把传入的梯度挡住
+    <span class="w">（⚠ 此时 ∂L/∂h 其实<b>不为零</b>）</span></td><td class="k"><b>导数为零</b></td></tr>
+<tr><td>它的<b>输出权重</b> v<sub>j</sub></td><td>它的<b>输入激活 h<sub>j</sub> = 0</b></td>
+    <td class="k"><b>激活为零</b></td></tr>
+<tr><td>∂L/∂W₁ 的<b>某一整列</b></td><td>对应的<b>输入特征本身是 0</b>（x₁ = 0）</td>
+    <td class="k"><b>输入为零</b></td></tr>
+</table>
+<div class="box r">
+  <p style="margin:0">⚠⚠ <b>T2 Tutorial Q3 明确要求「说出两个不同的直接原因」</b>，
+  extension 又要求「解释两种不同的零条目成因」。
+  <b>只写一个、或者把三个说成同一个，都会丢分。</b>
+  ⭐ 三个都不能确立<b>永久</b>失活。</p>
+</div>
+
+<h3>⭐ 五、两种搭配的 logit 梯度幅度比有闭式</h3>
+<div class="eq">BCE：     ∂ℓ/∂z = p − y
+半平方：  ∂ℓ/∂z = (p − y)·p(1−p)
+
+<b>幅度比 = 1 / [p(1−p)]</b>      ← 只取决于 sigmoid 在该点的斜率
+
+  p = 0.6  ⇒ 1/0.24   ≈ <b>4.17</b>        （半平方 −0.096 vs BCE −0.4）
+  p = 0.02 ⇒ 1/0.0196 ≈ <b>51.02</b>       （半平方 −0.019208 vs BCE −0.98）</div>
+<div class="box g">
+  <p style="margin:0">⭐ <b>记这个式子比记数字值钱</b>：考场上给任何一个 p 都能立刻算出倍数。
+  官方的收尾句：<b>它取决于 sigmoid 的局部斜率，不是一个普适常数。</b></p>
+</div>
+
+<h3>⚠ 六、T3 Tutorial 里那句最容易被忽略的结论</h3>
+<div class="box r">
+  <p style="margin:0">把阈值调低之后（TP 42→47、FN 8→3、FP 18→35）：
+  <b>代价从 58 降到 50（更优）</b>，<b>recall 从 0.840 升到 0.940</b>，
+  但 <b>precision 从 0.700 跌到 0.573</b>，<b>而且 accuracy 也从 0.870 跌到 0.810</b>。<br>
+  ⭐⭐ 官方原话：<b>准确率也下降了，尽管代价改善了——准确率并不编码错误的代价。</b>
+  <span class="k">这是「为什么只看 accuracy 不够」最有力的一个具体例子，背下来直接用。</span></p>
+</div>
+
+<h3>七、T1 Tutorial 的答题骨架（扩展题直接套）</h3>
 <div class="eq">① 前向 z → h → s → p → L，<b>每步留 6 位，中间不四舍五入</b>
 ② 写出 <b>δ = p − y</b>，并说明它是 sigmoid + BCE 链式化简的结果
 ③ 用 <b>∂L/∂W₂ = δhᵀ、∂L/∂c = δ</b> 一次算完全部输出层梯度
@@ -609,6 +656,8 @@ A('''<h2 id="trap">陷阱清单 <em>考前 10 分钟看这栏</em></h2>
 <tr><td><b>T3</b></td><td>用 AUC 回答「该用哪个阈值」</td><td class="k">AUC <b>不决定阈值、不衡量校准、不编码代价</b></td></tr>
 <tr><td><b>T1/T3</b></td><td>把两张学习率表记混</td><td class="k">Canvas 那张起点 <b>0.580352</b>、最低在 η=10；Prac 那张起点 <b>0.745984</b>、最低在 η=1</td></tr>
 <tr><td><b>T2</b></td><td>只写一个零梯度解释</td><td class="k">要写<b>两个</b>：g′(z)=0 截断路径；h=0 让输出权重梯度为零</td></tr>
+<tr><td><b>T2</b></td><td>把三种零梯度说成同一个原因</td><td class="k">导数为零 / 激活为零 / <b>输入为零</b>，三种成因不同</td></tr>
+<tr><td><b>T3</b></td><td>以为「代价改善了准确率就会升」</td><td class="k">官方算例里<b>代价 58→50 的同时准确率 0.870→0.810</b></td></tr>
 <tr><td><b>全局</b></td><td>只写最终数字</td><td class="k">官方：<b>只给正确数字可能不足以体现理解</b></td></tr>
 </table>''')
 
