@@ -48,11 +48,15 @@ function seq(x0,y,toks,cls,bw,bh){
     cx.push(x+bw/2);}
   return cx;}
 
+/* ⚠ 2026-11-04：items 既收 ["文字", ...]，也收 [["文字","cls"], ...]。
+   走查式模块里绝大多数格子不需要单独配色，写成字符串省事。*/
 function stack(cx,ytop,items,bw,bh,gap){
   bw=bw||250; bh=bh||32; gap=gap==null?6:gap; var i,ys=[];
   for(i=0;i<items.length;i++){
-    var y=ytop+i*(bh+gap);
-    boxNode(cx-bw/2,y,bw,bh,items[i][0],items[i][1]||"");
+    var y=ytop+i*(bh+gap), it=items[i];
+    var lab=(typeof it==="string")?it:it[0],
+        cl =(typeof it==="string")?"":(it[1]||"");
+    boxNode(cx-bw/2,y,bw,bh,lab,cl);
     ys.push(y);
     if(i) link(cx,y,cx,y-gap);}
   return ys;}

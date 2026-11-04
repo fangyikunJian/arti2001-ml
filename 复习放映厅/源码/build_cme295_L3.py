@@ -48,11 +48,16 @@ function seq(x0,y,toks,cls,bw,bh){
     cx.push(x+bw/2);}
   return cx;}
 
+/* ⚠ 2026-11-04：items 既收 ["文字", …] 也收 [["文字","cls"], …]。
+   之前只认后者 ⇒ 传字符串时 items[i][0] 取成了「第一个字」，格子里只显示一个字。*/
 function stack(cx,ytop,items,bw,bh,gap){
   bw=bw||250; bh=bh||34; gap=gap==null?8:gap; var i,ys=[];
   for(i=0;i<items.length;i++){
     var y=ytop+i*(bh+gap);
-    boxNode(cx-bw/2,y,bw,bh,items[i][0],items[i][1]||"");
+    var it=items[i];
+    var lab=(typeof it==="string")?it:it[0],
+        cl =(typeof it==="string")?"":(it[1]||"");
+    boxNode(cx-bw/2,y,bw,bh,lab,cl);
     ys.push(y);
     if(i) link(cx,y,cx,y-gap);}
   return ys;}

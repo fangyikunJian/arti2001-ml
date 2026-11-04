@@ -85,7 +85,7 @@ def add(KP):
   says("65:33","instead of putting everything to the encoder, you would leave blanks");
   note("span corruption 是什么",640,186,"v");
   stack(640,200,["你的句子作为 encoder 的输入","但不是把「全部」都放进 encoder","⇒ 你要留下一些「空白」"],560,32,8);
-  note("⇒ 而这就是我们叫做 span corruption（片段损坏）的东西",640,318,"y");
+  note("⇒ 而这就是我们叫做 span corruption（片段损坏）的东西",640,328,"y");
   note("★ 而被损坏的那个 span，可以是「一个」也可以是「多个」token 缺失",640,356,"g");
   note("⚠ 注意「span（片段）」这个词 —— 它和 BERT 的「单个 token」掩码不一样",640,386,"r");''',
          "<b>做法本身很直观，而关键在那个「片段」上。</b><br><b>讲者的话</b>：<b>「<u>所以基本上你会有你的句子作为 encoder 的输入。而不是把所有东西都放进 encoder，你会留下一些空白。而这就是我们叫做 span corruption 的东西。然后这个 span corruption 可以是一个、也可以是多个 token 缺失</u>。」</b><br><b>★★★ 「<u>span（片段）</u>」这个词是 T5 和 BERT 的分界线，值得现在就对比清楚</b>：<b>⇒ <u>BERT 的 MLM</u>：随机挑<u>单个 token</u> 遮住（89:08 那镜会讲）。</b><b>⇒ <u>T5 的 span corruption</u>：挖掉<u>连续的一段</u>，而且<u>不告诉模型那段有多长</u>。</b><br><b>★★ 第二点是关键：<u>BERT 遮一个 token，模型知道要填一个词；T5 挖一段，模型得自己决定填几个词</u>。</b><b>⇒ 所以 span corruption <u>更难，而且更接近「生成」</u>。</b><br><b>⇒ 这也是为什么 T5 需要 decoder：<u>填一个词可以用一个分类头（BERT 那样），但填一段不定长的文本必须生成</u>。</b><br><b>⚠ 而这正好解释了三类架构的分工：<u>任务决定架构</u>。</b><b>⇒ T5 的任务要生成，所以它留着 decoder；<u>BERT 的任务只要分类，所以它可以扔掉 decoder</u>。</b>", 0),
@@ -111,7 +111,7 @@ def add(KP):
   says("66:26","to find each of these spans in series");
   note("⭐⭐⭐ decoder 这边怎么工作",640,186,"y");
   stack(640,200,["从一个「标示第一个被损坏 span」的 token 开始","一直解码，直到它预测出「下一个 sentinel token」","两个连续 sentinel 之间解出的 token = 被恢复的那一段"],620,32,8);
-  note("⇒ 一直这样走到第 n+1 个",640,318,"y");
+  note("⇒ 一直这样走到第 n+1 个",640,328,"y");
   note("★★ 所以 sentinel token 在输出里起的是「分隔符」的作用",640,356,"g");
   note("⚠ 讲者的定性：这基本上是对 next token prediction 目标函数的一个「转变」",640,386,"r");''',
          "<b>这是 span corruption 最精巧的一半：输出端怎么组织。</b><br><b>讲者的话</b>：<b>「<u>所以你们在 encoder 里有它们。然后 decoder 的工作就是按序把这些 span 一个个找出来。所以你从一个标示第一个被损坏 span 的 token 开始，然后你开始解码过程，直到它碰到一个预测出「下一个 sentinel token」的预测，一直到第 n+1 个 —— 其中两个连续的 sentinel token 之间被解码出来的那些 token，就对应着被恢复的那些损坏片段</u>。」</b><br><b>★★★ 用那个例句走一遍，整件事就清楚了</b>：<b>⇒ <u>encoder 输入</u>：<u>my ⟨id_0⟩ is reading</u>。</b><b>⇒ <u>decoder 目标输出</u>：<u>⟨id_0⟩ teddy bear cute and ⟨id_1⟩</u>。</b><br><b>★★ 请注意输出的形式：<u>它不是完整的原句，而是「每个 sentinel 后面跟着它该填的内容」</u>。</b><b>⇒ 为什么这样设计：<u>因为这样输出序列只包含被挖掉的部分，而不用重复抄一遍没被挖的部分</u>。</b><b>⇒ <u>于是训练效率高得多</u> —— 一个句子挖掉 15%，输出就只有 15% 那么长。</b><br><b>⚠ 而 sentinel token 在这里有<u>两个</u>角色：<u>在输入里它是占位符，在输出里它是分隔符</u>。</b><b>⇒ 一个符号干两件事，<u>这是很漂亮的设计</u>。</b>", 0)],
@@ -150,7 +150,7 @@ def add(KP):
   says("67:50","you do a teacher-forcing mechanism where you input everything in the decoder");
   note("⭐ 训练时怎么跑：teacher forcing",640,186,"y");
   stack(640,200,["把「全部」都输入到 decoder 里","然后试着「一次性」把全部重建出来","⇒ 这叫 teacher forcing（教师强制）"],560,32,8);
-  note("⇒ 讲者：如果你想知道训练是怎么工作的 —— 你做一个 teacher-forcing 机制",640,318,"y");
+  note("⇒ 讲者：如果你想知道训练是怎么工作的 —— 你做一个 teacher-forcing 机制",640,328,"y");
   note("★★ 关键在「一次性（all at once）」—— 训练时不是一个词一个词生成的",640,356,"g");
   note("⚠ 这是训练和推理的一个根本差异，很多人在这里卡住",640,386,"r");''',
          "<b>这是一个很重要的机制，而它解释了训练和推理为什么看起来完全不同。</b><br><b>讲者的话</b>：<b>「<u>然后如果你想知道训练是怎么工作的 —— 你做一个 teacher-forcing 机制，在那里你把所有东西都输入到 decoder 里，然后试着一次性把所有东西重建出来</u>。」</b><br><b>★★★ 把训练和推理并排看，差别很大</b>：<b>⇒ <u>推理时</u>：生成第 1 个词 ⇒ 把它接到输入上 ⇒ 生成第 2 个词 ⇒ …… <u>完全串行，n 个词要跑 n 次</u>。</b><b>⇒ <u>训练时（teacher forcing）</u>：<u>把正确答案整个塞进 decoder</u>，配上因果掩码，<u>一次前向就同时得到所有位置的预测</u>。</b><br><b>★★ 为什么能这样：<u>因为因果掩码保证了第 t 个位置看不到第 t 之后的内容</u>。</b><b>⇒ 所以虽然你把完整答案都塞进去了，<u>每个位置的预测仍然只依赖它之前的部分</u> —— <u>和串行生成在数学上等价</u>。</b><br><b>⚠ 而「<u>教师强制</u>」这个名字说的是：<u>每一步喂给模型的都是「正确答案」，而不是模型上一步自己的输出</u>。</b><b>⇒ 这带来一个著名的问题，叫 <u>exposure bias</u>：<u>训练时它从来没见过自己的错误，而推理时它必须接着自己的错误往下写</u>。</b>", 0)],
@@ -217,7 +217,7 @@ def add(KP):
   says("69:40","when you have no encoder, you do not have your encoder embeddings");
   note("⭐ 第三类：把 encoder 整个去掉",640,186,"y");
   stack(640,200,["没有 encoder ⇒ 没有 encoder 嵌入","而 cross-attention 本来是靠这些嵌入喂的","⇒ 所以 cross-attention 这个模块「整个消失」"],620,32,8);
-  note("⇒ 于是每一个被堆起来的 decoder 里，只剩下 masked self-attention 和一个 FFN",640,318,"y");
+  note("⇒ 于是每一个被堆起来的 decoder 里，只剩下 masked self-attention 和一个 FFN",640,328,"y");
   note("★★ 这就是今天 LLM 的架构 —— 一个 block 只有两样东西",640,356,"g");
   note("⚠ 对比原始 decoder：它有三样（masked self-attn、cross-attn、FFN）",640,386,"r");''',
          "<b>第三类架构，而它的结构简洁到让人意外。</b><br><b>讲者的话</b>：<b>「<u>然后还有最后一类。所以就像 Afshine 刚提到的，今天的 LLM 把 encoder 那部分整个去掉了。而当你没有 encoder 时，你在你那堆叠起来的 encoder 的末端就没有 encoder 嵌入可以喂给 cross-attention。所以这个模块整个消失了。所以每一个被堆起来的 decoder 里，就只有 masked self-attention 和一个 FFN 作为它的组成部分</u>。」</b><br><b>★★★ 把三种 block 并排数一下</b>：<b>⇒ <u>原始 encoder block</u>：自注意力 + FFN（<u>两样</u>）。</b><b>⇒ <u>原始 decoder block</u>：带掩码自注意力 + 交叉注意力 + FFN（<u>三样</u>）。</b><b>⇒ <u>今天的 decoder-only block</u>：带掩码自注意力 + FFN（<u>两样</u>）。</b><br><b>★★ 于是一个有点反直觉的事实：<u>今天 LLM 的 block 结构和原始的 encoder block 几乎一样</u>。</b><b>⇒ <u>唯一的区别就是那个因果掩码</u>。</b><br><b>⇒ 所以「decoder-only」这个名字其实有点误导：<u>它的 block 长得像 encoder，只是加了掩码</u>。</b><b>⇒ <u>它叫 decoder 是因为它的「功能」是解码（自回归生成），不是因为它的结构来自 decoder</u>。</b>", 0),
