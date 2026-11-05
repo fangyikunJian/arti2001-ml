@@ -175,6 +175,9 @@ def check(path):
         said = None
         for it in items:
             if it["k"] == "says":
+                if not (140 <= it["y"] <= 220):
+                    bad.append("L%d ⑤ says 的 y=%g 不在 [140,220] 里（多半是手滑）"
+                               % (line0, it["y"]))
                 said = it
                 prev_note = None
                 continue
