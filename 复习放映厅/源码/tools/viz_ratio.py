@@ -28,6 +28,8 @@ TXT = re.compile(r'"((?:[^"\\]|\\.)*)"')
 TAG = re.compile(r"<[^>]+>")
 # says() 是时间码锚点，每镜都有，基准那批片子没有 —— 不计入画面字数
 SAYS = re.compile(r"says\([^;]*?\);")
+# 每镜开头那串 clearScene();setEq(null);setBig(null);... 是「重置」,不算图
+RESET = re.compile(r"(?:clearScene|setEq|setBig|setCap|noTitle)\(\s*(?:null)?\s*\);")
 
 GOAL_VIS = 60
 GOAL_CHARS = 130
@@ -42,7 +44,7 @@ def per_shot(files):
             continue
         print("── %s ──" % f)
         for i, m in enumerate(SCENE.finditer(src), 1):
-            sc = SAYS.sub("", m.group(1))
+            sc = RESET.sub("", SAYS.sub("", m.group(1)))
             c = 0
             for t in TXT.findall(sc):
                 if t.startswith(("$$", "http")) or len(t) <= 3:
@@ -51,8 +53,7 @@ def per_shot(files):
             mark = []
             if "stack(" in sc:
                 mark.append("stack")
-            if not any(v in sc and not re.search(re.escape(v) + r"null\)", sc)
-                       for v in VIS):
+            if not any(v in sc for v in VIS):
                 mark.append("纯文字")
             print("   镜 %2d  %3d 字  %s" % (i, c, " ".join(mark)))
 
@@ -66,12 +67,12 @@ def audit(files, label, quiet=False):
         except OSError:
             continue
         for m in SCENE.finditer(s):
-            sc = SAYS.sub("", m.group(1))
+            sc = RESET.sub("", SAYS.sub("", m.group(1)))
             tot += 1
             hit = False
             for v in VIS:
                 # setEq(null) / setBig(null) 是「关掉」，不算图
-                if v in sc and not re.search(re.escape(v) + r"null\)", sc):
+                if v in sc:
                     hit = True
                     kinds[v[:-1]] = kinds.get(v[:-1], 0) + 1
             if hit:
