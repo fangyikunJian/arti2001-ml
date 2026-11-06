@@ -16,8 +16,18 @@ def add(KP):
        [(r'''clearScene();setEq(null);setBig(null);setCap(null);noTitle();
   says("95:49","with RL only, you can get reasoning level performance",166);
   note("⭐ R1-Zero 证完了，现在做产品",640,194,"y");
-  stack(640,218,["R1-Zero 证完了那件事（只用 RL 就能拿到推理级别的表现）","现在要把那些挑战调整进「一条完整的流水线」—— 那个叫 R1","⚠ 起点是一样的：同一个 V3 base（671B 的 MoE，未对齐版）","⇒ 所以 R1 不是在 R1-Zero 上继续训的，是从同一个基础模型重新开始"],780,32,6);
-  note("那 R1-Zero 的贡献是什么？不是权重，是它生成的那些推理链 —— 它被当成一个数据生成器",640,380,"r");''',
+  boxNode(60,222,230,40,"V3 base","b");
+  link(290,242,330,242);
+  boxNode(330,222,200,40,"① 冷启动 SFT","g");
+  link(530,242,570,242);
+  boxNode(570,222,180,40,"② RL","y");
+  link(750,242,790,242);
+  boxNode(790,222,200,40,"③ 混合 SFT","g");
+  link(990,242,1030,242);
+  boxNode(1030,222,190,40,"④ RL（对齐）","y");
+  note("R1 的四阶段：SFT → RL → SFT → RL —— 每次 RL 之后都跟一次 SFT 把它拉回来",640,290,"y");
+  note("⚠ 起点和 R1-Zero 是同一个 V3 base —— R1 不是在 R1-Zero 上继续训的",640,330,"r");
+  note("R1-Zero 的贡献不是权重，是它生成的那些推理链 —— 它被当成一个数据生成器",640,370,"g");''',
          "<b>R1-Zero 证完了，现在做产品 —— 而注意起点是一样的。</b><br>⭐ 请注意这个细节，<b>它经常被误解</b>：R1 不是「在 R1-Zero 上继续训的」。它是从「同一个 V3 base」重新开始的。<br>所以 R1-Zero 对 R1 的贡献不是权重，而是「它生成的那些推理链」—— 下一镜就会用到。<br>这个设计其实很聪明，<b>值得单独说</b>：R1-Zero 的权重有问题（混语言、语法乱）⇒ 在它上面继续训，问题会被带下去。但 R1-Zero 的「输出」很有价值 ⇒ 挑出好的、让人改一改，就是最好的 SFT 数据。<br>所以 R1-Zero 被当成了一个「数据生成器」,而不是一个「模型检查点」。<br>把 R1 的四个阶段先列出来，<b>这样接下来你有一张地图</b>：① <b>冷启动 SFT</b>（少量、人工整理过的推理链）。② <b>RL</b>（推理奖励 + 格式奖励 + 语言一致性奖励）。③ <b>大规模混合 SFT</b>（推理 + 非推理，3:1，拒绝采样）。④ <b>最后一个 RL</b>（有帮助 + 无害）。<br>而这四步的形状是：SFT → RL → SFT → RL。<br>⚠ 「<b>V3 base</b>」—— 指 DeepSeek-V3 的基础版（没做过对齐的那个），671B 的 MoE。", 0),
         (r'''clearScene();setEq(null);setBig(null);setCap(null);noTitle();
   says("96:36","they try to align it in a way that will nicely try to alleviate the issues we have seen",166);
