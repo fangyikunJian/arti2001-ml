@@ -1,0 +1,1918 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CME295 L6 深度笔记 · LLM 推理</title>
+<style>
+  :root{
+    --bg:#070a12; --panel:#0d1220; --line:#1d2537; --ink:#d7dced; --dim:#8a93ab;
+    --y:#f2c94c; --g:#6fcf97; --r:#eb8f7a; --v:#b39ddb; --b:#7fb3ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.85 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;}
+  header{position:sticky;top:0;z-index:9;background:rgba(7,10,18,.94);
+         border-bottom:1px solid var(--line);backdrop-filter:blur(8px);padding:14px 24px;}
+  header h1{margin:0;font-size:17px;letter-spacing:.3px}
+  header h1 small{color:var(--dim);font-weight:400;margin-left:10px;font-size:13px}
+  .wrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:28px;
+        max-width:1180px;margin:0 auto;padding:24px;}
+  nav{position:sticky;top:72px;align-self:start;max-height:calc(100vh - 100px);overflow:auto}
+  nav a{display:block;padding:6px 10px;border-radius:7px;color:var(--dim);
+        text-decoration:none;font-size:13.5px;line-height:1.5}
+  nav a b{color:var(--y);margin-right:7px;font-weight:600}
+  nav a:hover{background:#121a2b;color:var(--ink)}
+  section{margin:0 0 46px}
+  h2{font-size:19px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  h2 .tag{display:inline-block;font-size:11px;color:var(--bg);background:var(--y);
+          border-radius:5px;padding:2px 8px;margin-right:10px;vertical-align:2px;font-weight:700}
+  h2 small{display:block;color:var(--dim);font-size:12.5px;font-weight:400;margin-top:5px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:16px 20px;margin:0 0 14px}
+  .meta{display:flex;gap:12px;align-items:baseline;margin-bottom:10px;
+        padding-bottom:9px;border-bottom:1px dashed var(--line)}
+  .ts{color:var(--y);font:600 13px ui-monospace,SFMono-Regular,Menlo,monospace;flex:none}
+  .en{color:var(--dim);font:13px ui-monospace,SFMono-Regular,Menlo,monospace;
+      font-style:italic;word-break:break-word}
+  .body p{margin:0 0 9px}
+  .body p:last-child{margin-bottom:0}
+  .body p.star{color:var(--y)}
+  .body p.warn{color:var(--r)}
+  .body b{color:#fff;font-weight:600}
+  .body p.star b{color:var(--y)}
+  .body p.warn b{color:var(--r)}
+  .note{background:#101828;border:1px solid var(--line);border-left:3px solid var(--y);
+        border-radius:9px;padding:14px 18px;margin:0 0 26px;color:var(--dim);font-size:14.5px}
+  .note b{color:var(--ink)}
+  @media(max-width:860px){.wrap{grid-template-columns:1fr}nav{position:static;max-height:none;
+    display:flex;flex-wrap:wrap;gap:4px}nav a{font-size:12.5px}}
+</style></head><body>
+<header><h1>CME295 L6 深度笔记 · LLM 推理<small>放映厅精简版之外的延伸分析 ——
+174 段，按讲座时间顺序</small></h1></header>
+<div class="wrap">
+<nav><a href="#m-a"><b>a</b> 开场，与 L4 / L5 的回顾</a>
+<a href="#m-b"><b>b</b> vanilla LLM 的四个弱点，与「推理」的定义</a>
+<a href="#m-c"><b>c</b> 核心想法：把 chain of thought 放大</a>
+<a href="#m-d"><b>d</b> 时间线、思考摘要，与那张账单</a>
+<a href="#m-e"><b>e</b> 怎么量推理：benchmark、可验证，与 pass@k</a>
+<a href="#m-f"><b>f</b> pass@k 的推导：它只是无放回抽样</a>
+<a href="#m-g"><b>g</b> 温度与 pass@k，以及「为什么不走 SFT」</a>
+<a href="#m-h"><b>h</b> 两个可验证奖励、那张曲线，与思考预算</a>
+<a href="#m-i"><b>i</b> GRPO：它只改了 advantage 那一处</a>
+<a href="#m-j"><b>j</b> 两张流程图，与两个损失函数的异同</a>
+<a href="#m-k"><b>k</b> 最难的那一段，与长度膨胀这个 bug</a>
+<a href="#m-l"><b>l</b> 那个坏激励，与三个修改</a>
+<a href="#m-m"><b>m</b> R1-Zero 的配方，与它的两个问题</a>
+<a href="#m-n"><b>n</b> R1 的四个阶段，与蒸馏</a></nav>
+<main>
+<div class="note"><b>这份文档是什么。</b>放映厅那部片子（145 帧）走的是精简版：
+每一镜约 260 字，只留「讲者说了什么 + 关键机制 + 一个陷阱」。
+而这里是<b>没被砍的完整版</b> —— 方法论点评、和你课题的联系、论文背景、
+讲者的措辞与口误，全部保留，按讲座时间顺序排列。<br>
+用法建议：<b>先看片子走一遍主线，想深挖某一段时再回到这里按时间码查</b>。
+每张卡片的时间码和片子里的原话锚点是同一套。</div>
+<section id="m-a">
+  <h2><span class="tag">模块 a</span>开场，与 L4 / L5 的回顾<small>00:13–08:36</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">00:13</span><span class="en">a topic that has been trending over the past year or so which is LLM reasoning</span></div>
+  <div class="body"><p class=""><b>开场就说了两件事：这个话题很新，而且它直接接着上一讲。</b></p>
+<p class="star">⭐ 「<b>一个很好的衔接</b>」这句话不是客套，<b>它是一个很实在的提醒</b>：这一讲的核心算法 <b>GRPO</b>，是 <b>PPO 的一个变体</b>。它的 advantage、它的 clip、它的 KL 项，<b>全部来自 L5</b>。所以 L5 那一段 RL 如果没过，这一讲会很吃力。</p>
+<p class="">而「<b>过去一年左右</b>」这个时间范围也值得记：这节课录于 <b>2025 年春</b>。所以「<b>过去一年</b>」指的是 <b>2024 年到 2025 年初</b>。而那正好是 o1 和 DeepSeek-R1 出现的那一年。</p>
+<p class="">讲者接下来会说：几乎所有内容都来自 2024 或 2025 年。</p>
+<p class="warn">⚠ 这是这门课里时效性最强的一讲 —— <b>而它也是最接近今天研究前沿的一讲</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">01:29</span><span class="en">it only knows how to autocomplete a sequence</span></div>
+  <div class="body"><p class=""><b>回顾第一步，而这句话已经是第三次出现了。</b></p>
+<p class="star">⭐ 「<b>只知道怎么自动补全一个序列</b>」这句话在这门课里出现了三次：<b>L4</b>：用泰迪熊那个失败的例子演示出来。<b>L5</b>：「它是一个很棒的自动补全器，但还不是一个有用的模型」。<b>这里</b>：又说了一遍。</p>
+<p class="">三次都是为了同一个目的：<b>引出「所以还要下一步」</b>：<b>而这一讲会把这个论证结构用第四次</b>。只不过这一次引出的不是「下一步训练」，而是「一类新的模型」。</p>
+<p class="">所以请留意：这一讲的主角不是流水线上的第四步，而是「推理模型」这个新物种。</p>
+<p class="warn">⚠ 而「<b>最耗算力的一步</b>」在这一讲结尾会被挑战 —— <b>因为推理模型把算力挪到了推理端</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">02:02</span><span class="en">which is a high quality, curated data set that we can use to teach our model on how to behave</span></div>
+  <div class="body"><p class=""><b>回顾第二步，而这三步回顾里他只说「教什么」。</b></p>
+<p class="star">⭐ 请注意这三步回顾的<b>详略</b>：每一步他都只说「<b>教什么</b>」，不说「<b>怎么教</b>」：预训练：<b>教文本和代码的结构</b>。SFT：<b>教怎么表现</b>。偏好调优：<b>教该偏好什么</b>（下一镜）。</p>
+<p class="">而他完全没提 <b>LoRA、损失掩码、数据混合</b> 那些细节：<b>因为这一讲用不上它们</b>。他唯一讲得细的，是 RL 那一段 —— 因为 GRPO 要用。</p>
+<p class="">所以你从回顾的详略，就能预判这一讲要用哪些旧知识。</p>
+<p class="">这是一个很实用的听课技巧：<b>看讲者复述什么、跳过什么</b>：他复述的，接下来一定会用；他跳过的，接下来一定用不上。</p>
+<p class="warn">⚠ 而「<b>高质量、精心策展</b>」这两个词在 L4 和 L5 里都强调过 —— <b>这是 SFT 数据唯一的要求</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">02:47</span><span class="en">learning to distinguish good from bad using human preference data</span></div>
+  <div class="body"><p class=""><b>回顾第三步，而他明确点出了「哪一部分今天要用」。</b></p>
+<p class="star">⭐ 「<b>那一步今天会有用</b>」是一个非常明确的指路：RLHF 的<b>第一段</b>（训奖励模型）：<b>这一讲用不上</b>。RLHF 的<b>第二段</b>（RL）：<b>这一讲的核心</b>。</p>
+<p class="">而「<b>第一段用不上</b>」这件事本身就很有信息量：它暗示：这一讲的奖励不来自一个学出来的奖励模型。<b>那它来自哪</b>？</p>
+<p class="">答案是「可验证的奖励」—— 数学题对不对、代码跑不跑得过，直接用程序判。而这正是 L5 开场那句「或者对齐到我们定义的某个指标」留下的那扇门。</p>
+<p class="">所以这一讲在 L5 的框架里只换了一个零件：把「学出来的奖励模型」换成「程序判定的奖励」：而那一个零件的替换，带来了整个推理模型这一类东西。</p>
+<p class="warn">⚠ 请带着这个预判往下听 —— <b>它会让后面的内容容易很多</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">03:31</span><span class="en">a policy, which is nothing else than just a probability distribution over actions</span></div>
+  <div class="body"><p class=""><b>先把传统 RL 那一边复述一遍，而这次的措辞比 L5 更干脆。</b></p>
+<p class="star">⭐ 「policy 不过就是动作上的一个概率分布」—— 这句话值得单独记：在 L5 里他是先写公式 <b>π_θ(a|s)</b>，再解释。这里他<b>直接给了那句大白话</b>。复述时往往比第一次讲时更精炼 —— 因为他知道你已经见过了。</p>
+<p class="">而这个定义之所以重要，是因为它让「<b>训练一个策略</b>」变得具体：策略是一个<b>概率分布</b>。分布由<b>参数决定</b>。所以「训练策略」= 「调参数，让那个分布变成我们想要的样子」。</p>
+<p class="">而在 LLM 里，那个分布就是模型输出的 softmax。</p>
+<p class="warn">⚠ 这一段回顾讲得比 L5 快得多 —— <b>他默认你刚听过</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">04:11</span><span class="en">the environment that it interacts with is just a set of tokens that it can predict over</span></div>
+  <div class="body"><p class=""><b>那张对照表再过一遍，而他给 agent 加了引号。</b></p>
+<p class="star">⭐ 「<b>引号，agent</b>」这个小动作值得注意：他在 L5 里也做过同样的事：「<b>我指的是 RL 术语里的 agent</b>」。因为今天「agent」这个词已经被 LLM 圈用成别的意思了。而那个意思是 L7 的主题 —— 下一讲。</p>
+<p class=""><b>这个小心翼翼在这一讲里尤其必要</b>：因为这一讲讲的是<b>推理模型</b>，而推理模型<b>常常被叫做「agentic」</b>。但那是另一回事：推理是「想得久」，agent 是「会调工具、会行动」。</p>
+<p class="">两者今天经常被混着说，而这门课把它们分成了两讲。</p>
+<p class="">请把这个区分记住，<b>因为它会帮你读懂今天大量混乱的宣传</b>：<b>L6 讲「想」，L7 讲「做」</b>。</p>
+<p class="warn">⚠ 而 environment 那一格在 L5 里讲者自己就说过有点牵强 —— <b>这里他直接略过了那个保留</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">05:08</span><span class="en">the human preferences is encapsulated in the reward</span></div>
+  <div class="body"><p class=""><b>最后一格，而今天要换掉的正是这一格。</b></p>
+<p class="star">⭐ 「被封装在奖励里（encapsulated in the reward）」这个说法很准，<b>而它正是今天要动的地方</b>：<b>L5 的做法</b>：人类偏好 → 训一个奖励模型 → <b>奖励</b>。<b>L6 的做法</b>：<b>正确答案 → 程序判定 → 奖励</b>。「奖励」这个接口没变，变的只是它背后插的是什么。</p>
+<p class="">这是一个很漂亮的工程性质：<b>RL 那一整套机器完全不用改</b>：它<b>不关心奖励从哪来</b>。它只要<b>一个数</b>。</p>
+<p class="">所以把「人评」换成「程序判」，是一次「插拔式」的替换。</p>
+<p class="">而这次替换带来了一个巨大的好处，<b>请先想一下是什么</b>：程序判定的奖励没有 reward hacking 的空间（代码跑过了就是跑过了）。<b>而且它不要钱、不要人、可以无限地产生</b>。</p>
+<p class="">于是 L5 里那些关于「奖励模型不完美」的顾虑，一下子都不见了。</p>
+<p class="warn">⚠ 这就是为什么推理模型这条线能走得这么快 —— <b>它站在一个干净得多的奖励上</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">05:32</span><span class="en">it has some baseline to just reduce the variance of the gradient</span></div>
+  <div class="body"><p class=""><b>一句话复述完了 L5 讲了十分钟的东西。</b></p>
+<p class="star">⭐ 这句复述里压缩了 L5 的三个知识点，<b>请都认出来</b>：<b>advantage 而不是奖励</b>：我们最大化的是「<b>比预期好多少</b>」。<b>基线</b>：那个「<b>预期</b>」就是基线。<b>降方差</b>：减基线不改变梯度的期望，但减小方差。</p>
+<p class="">而「<b>基线</b>」这个词在这一讲里会变得格外重要：L5 里的基线<b>来自一个单独训练的价值模型</b>。而 <b>GRPO</b> 的全部创新，<b>就在于换了一个基线</b>。</p>
+<p class="">它用「同一个 prompt 采样一组回答的平均分」当基线 —— 于是价值模型整个被去掉了。</p>
+<p class="">所以请把「<b>基线</b>」这两个字记牢，<b>它是这一讲最关键的那个接口</b>：GRPO 这个名字里的 G，就是 Group —— 指的正是那「一组」采样。</p>
+<p class="warn">⚠ 讲者这里完全没提 value function —— <b>而那正是因为今天要把它拿掉</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">06:09</span><span class="en">the reason why we don't want to change too much is because our model has already learned a lot</span></div>
+  <div class="body"><p class=""><b>第二部分，而那两个参照物正是 L5 里那个最容易混的地方。</b></p>
+<p class="star">⭐ 两个参照物，<b>这正是 L5 里那个最容易混的地方</b>：<b>π_old</b>（上一次迭代）⇒ 管「<b>速度的上限</b>」⇒ 对应 <b>clip</b>。<b>π_ref</b>（SFT 模型）⇒ 管「<b>位移的上限</b>」⇒ 对应 <b>KL 惩罚</b>。</p>
+<p class="">而「<b>它已经相当能打</b>」这个理由，<b>在这一讲里会被重新审视</b>：L5 的逻辑是：<b>模型已经很好了，别弄坏它</b>。而这一讲要做的，恰恰是让模型学会一个它原来不太会的行为（长链条推理）。</p>
+<p class="">所以「别跑太远」这个约束，在推理训练里的分寸和 L5 不完全一样。</p>
+<p class="">请带着这个疑问往下听：如果我们要模型学会一个新行为，那「别跑太远」还对吗：而后面会看到：有些 GRPO 的变体干脆把 KL 项去掉了。</p>
+<p class="warn">⚠ 这是这一讲和 L5 之间一个很微妙、但很重要的张力。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">07:03</span><span class="en">R is actually not the reward, it is the ratio</span></div>
+  <div class="body"><p class=""><b>讲者主动承认那一段「有点吓人」，然后又把那个记号陷阱提了一次。</b></p>
+<p class="star">⭐ 这是 L5 那三个符号陷阱里的第二个，<b>而讲者隔了一周又主动提了一次</b>：他在 L5 里说过「这当初也把我搞糊涂了」。而现在他在复述时还要再说一遍 —— 这说明他真的认为这是最容易绊人的地方。</p>
+<p class=""><b>把那两个符号再分清楚一次</b>：<b>r(x, y)</b>：奖励模型给的分 —— <b>这条回答好不好</b>。<b>R(θ)</b>：两个策略的概率比值 —— <b>策略变了多少</b>。<b>一个关于「内容」，一个关于「变化」</b>。</p>
+<p class="">而「<b>旧策略是上一次 RL 迭代的那个</b>」也是 L5 那第三个陷阱：<b>它不是 SFT 模型</b>。<b>讲者在 L5 里把这句话连说了两遍</b>。</p>
+<p class="warn">⚠ 这一讲的 GRPO 会沿用同一个 R(θ) 记号 —— <b>所以现在把它钉死，后面会省很多事</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">08:14</span><span class="en">this KL divergence is typically applied to the base model, which is the SFT model</span></div>
+  <div class="body"><p class=""><b>两个变体，以及那处 2017 年碰上 2025 年的历史错位。</b></p>
+<p class="star">⭐ 这就是 L5 里讲过的那处历史错位，<b>而它值得再想一遍</b>：<b>2017 年的 PPO</b> 是为机器人和游戏设计的 —— <b>那里没有「基座模型」这个东西</b>。所以它唯一能参照的<b>只有「上一轮的自己」</b>。而 LLM 场景多了一个很宝贵的东西：一个已经很好的起点。</p>
+<p class=""><b>所以参照物换掉是有道理的</b>：参照上一轮 ⇒ 只能防「<b>步子太大</b>」。参照基座 ⇒ 还能防「<b>走着走着忘了自己是谁</b>」。</p>
+<p class="">而在 LLM 这里，后者是更紧要的那个风险。</p>
+<p class="">请把这个模式再记一次：借用一个成熟算法时，要问「它原本的场景和我的场景差在哪」：而差别最大的那个地方，往往就是你该改的那个零件。</p>
+<p class="warn">⚠ 而这一讲的 GRPO 正是这个模式的又一个例子 —— <b>它改的是「基线」那个零件</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">08:36</span><span class="en">we typically have some combination, some mix of these two loss functions</span></div>
+  <div class="body"><p class=""><b>回顾收口，而这八分钟几乎全在讲 RL —— 这本身就是一个信号。</b></p>
+<p class="star">⭐ 这段回顾一共八分钟，<b>而它的详略分布非常说明问题</b>：<b>预训练</b>：<b>三句话</b>。<b>SFT</b>：<b>四句话</b>。<b>偏好调优 + RL + PPO</b>：<b>将近六分钟</b>。</p>
+<p class="">所以从回顾的分配上你就能预判这一讲的结构：<b>它会大量使用 PPO 那一套机器</b>。<b>而它基本不碰 SFT 和预训练</b>。</p>
+<p class="">事实也确实如此：这一讲的核心 GRPO，就是 PPO 换了个基线。</p>
+<p class="">请把「<b>看回顾的详略来预判课的结构</b>」这个习惯带走：讲者花时间复述的，是他接下来真的要用的。这比看提纲准确得多，因为提纲是写课之前定的，而回顾是讲课当天定的。</p>
+<p class="warn">⚠ 接下来讲者会先讲「<b>vanilla LLM 的四个弱点</b>」—— <b>而推理只是其中第一个</b>。</p></div>
+</article>
+</section>
+<section id="m-b">
+  <h2><span class="tag">模块 b</span>vanilla LLM 的四个弱点，与「推理」的定义<small>09:15–15:27</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">09:15</span><span class="en">they know a lot about structure, of the text, they know a lot about codes</span></div>
+  <div class="body"><p class=""><b>先给旧模型一个名字，然后老老实实地列它的强项。</b></p>
+<p class="star">⭐ 「<b>vanilla（原味）</b>」这个词在系统和机器学习里是固定说法：它指「<b>最基本、没有加任何花样的那个版本</b>」。L4 里讲 FlashAttention 时也用过这个词（「<b>原味的注意力实现</b>」）。</p>
+<p class="">而讲者先列强项再说弱点，<b>这个顺序是有意的</b>：它避免了一个常见的误导：让你以为「推理模型出来了，普通 LLM 就过时了」。事实恰恰相反：绝大多数日常任务用普通 LLM 更合适，因为推理模型又慢又贵。</p>
+<p class="">而这一点在这一讲最后讲「思考预算」时会再回来。</p>
+<p class="">请把这个列表记一下，因为它定义了「推理模型不需要解决的问题」：写代码、找 bug、写文章、写诗 —— 这些普通 LLM 已经很好了。</p>
+<p class="warn">⚠ 注意这四项全是「<b>生成类</b>」任务 —— 而它们的共同点是：答案没有唯一标准，而且不需要多步演算。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">09:44</span><span class="en">they have, quote unquote, limited reasoning</span></div>
+  <div class="body"><p class=""><b>第一个弱点，而讲者给的理由非常到位。</b></p>
+<p class="star">⭐ 「<b>没有什么大的理由说它应该能</b>」—— 这句话是整个论证的核心：它用的还是那个老句式：<b>模型只会它被优化的那件事</b>。训练目标是「<b>预测下一个 token</b>」。而「解一道多步数学题」从来不在目标函数里。</p>
+<p class="">所以推理能力在 vanilla LLM 里是一个<b>副产品</b>，不是一个被优化的目标：它能做一点，<b>是因为训练数据里有大量人类的推理过程</b>。但它<b>没有被专门训练去做这件事</b>。</p>
+<p class="">于是碰到够难的题，它就「在半路上迷失」。</p>
+<p class="">这就直接给出了这一讲要做的事：把「推理」从副产品变成一个被直接优化的目标：<b>而这正是 GRPO 那一段在做的</b>。</p>
+<p class="warn">⚠ 「在半路上迷失（get lost in the way）」这个说法很形象 —— 它描述的是「前几步对了，后面跑偏了」这种典型的失败。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">10:40</span><span class="en">the knowledge that the LLM has acquired is bound to the cutoff date</span></div>
+  <div class="body"><p class=""><b>第二个弱点，而讲者用一个刚发生的事举了例。</b></p>
+<p class="star">⭐ 「<b>静态（static）</b>」这个词是这个弱点的根：预训练数据是<b>某个时刻的一个快照</b>。而模型的知识<b>就冻在那个快照上</b>。<b>世界继续往前走，而模型不会</b>。</p>
+<p class="">这个弱点的解法不是「<b>更频繁地重训</b>」：重训一次要<b>几千万美元</b>（L4 算过）。而世界<b>每天都在变</b>。</p>
+<p class="">所以解法是让模型「去外面查」—— 那就是 L7 的 RAG 和工具调用。</p>
+<p class="">这个例子也顺带透露了录课时间：<b>一场刚过去几天的选举</b>：而讲者稍后会说「今天是 2025 年 11 月 7 日」。</p>
+<p class="warn">⚠ 请注意他举的是一个「<b>你无法靠推理补上</b>」的例子 —— 再会推理也猜不出谁当选了，这说明弱点二和弱点一是两类不同的问题。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">11:17</span><span class="en">it's all talk, no action</span></div>
+  <div class="body"><p class=""><b>第三个弱点只有一句话，而它是下一讲的全部主题。</b></p>
+<p class="star">⭐ 「全是说，没有做（all talk, no action）」是一句英语习语：它原本是用来<b>说人的</b>：只会讲，不会干。用在 LLM 上非常贴切：它能告诉你怎么订机票，但它订不了。</p>
+<p class=""><b>这个弱点和前两个性质完全不同</b>：<b>弱点一</b>（推理）：是<b>能力</b>问题 ⇒ <b>靠训练解决</b>。<b>弱点二</b>（知识过时）：是<b>信息</b>问题 ⇒ <b>靠检索解决</b>。<b>弱点三</b>（不能行动）：是<b>接口</b>问题 ⇒ <b>靠给它工具解决</b>。</p>
+<p class="">三种问题，三种完全不同的解法 —— 所以它们被分到了三讲。</p>
+<p class="">而这三者在今天的产品里是叠在一起用的：一个能推理、能检索、能调工具的模型 ⇒ <b>那就是今天说的「agent」</b>。</p>
+<p class="warn">⚠ 讲者说「<b>你就只能自己去做</b>」—— 这正是 agent 这个概念要消除的那一步。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">11:38</span><span class="en">contrary to traditional NLP models LLMs, they generate free form texts</span></div>
+  <div class="body"><p class=""><b>第四个弱点，而它在这门课里已经被铺过两次了。</b></p>
+<p class="star">⭐ 这一条在这门课里已经被铺过两次了，<b>每次角度都不同</b>：<b>L4</b>：从「<b>没有哪一个数字能告诉你你关心的东西</b>」那个角度。<b>L5</b>：从「BLEU/ROUGE 比的是和参考答案的字面重合，而偏好调优根本没有参考答案」那个角度。<b>这里</b>：从「<b>自由形式的输出装不进旧框架</b>」这个角度。</p>
+<p class="">而这一讲马上要给出一个很重要的<b>例外</b>：数学题和编程题<b>是可以被自动判对错的</b>。所以「难评估」这件事，在推理这个场景里恰好不成立。</p>
+<p class="">而正是这个例外，让 RL 在推理上变得异常好用。</p>
+<p class="">请把这个因果链记住：推理任务可验证 ⇒ 奖励可以程序化 ⇒ RL 可以大规模地跑：这就是为什么「推理」成了 RL 在 LLM 上第一个真正成功的大规模应用。</p>
+<p class="warn">⚠ 讲者没有点破这个对比 —— <b>但它就埋在这里</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">12:57</span><span class="en">almost everything that we will see is either from 2024 or 2025</span></div>
+  <div class="body"><p class=""><b>四个弱点的分工，以及一句关于「为什么现在讲正合适」的话。</b></p>
+<p class="star">⭐ 把四个弱点和后面三讲对上，<b>整门课的结构就清楚了</b>：<b>弱点一（推理）</b> ⇒ <b>L6，就是今天</b>。弱点二（知识过时）+ 弱点三（不能行动） ⇒ <b>L7（Agentic LLMs）</b>。<b>弱点四（难评估）</b> ⇒ <b>L8（LLM Evaluation）</b>。</p>
+<p class="">而「<b>我们很幸运，因为现在有足够的后见之明</b>」这句话很诚实：它承认了：一年前讲这个，你分不清哪些方法会活下来。而现在（2025 年春）<b>已经能看出来了</b>。</p>
+<p class="">这也是为什么这一讲讲的是 GRPO 和 R1，而不是 2024 年那一堆已经被淘汰的尝试。</p>
+<p class="">对你这个「为科研看课」的用途，这一讲的时效性是双刃的：<b>好处</b>：它离前沿最近。<b>坏处</b>：它也最容易过期 —— 一年后这些细节可能就变了。</p>
+<p class="">所以听的时候要分清：哪些是「这一年的做法」，哪些是「不会过期的判断」。</p>
+<p class="warn">⚠ 我会在这部片子里尽量把这两类标出来。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">13:13</span><span class="en">the goal for today is going to be to know what reasoning models are</span></div>
+  <div class="body"><p class=""><b>今天的两个目标，而讲者把验收标准也说了。</b></p>
+<p class="star">⭐ 这两个目标正好对应这一讲的两半，<b>而它们的性质不同</b>：<b>目标一（是什么）</b>：一个<b>概念和定义</b>的问题。<b>目标二（怎么训）</b>：一个<b>算法和工程</b>的问题。</p>
+<p class="">而「<b>怎么训</b>」那一半会占掉这一讲的大部分时间：因为它要讲 <b>GRPO</b>、讲<b>可验证奖励</b>、讲 <b>DeepSeek-R1 的流水线</b>。而「是什么」那一半其实很短 —— 它基本上就是「把 CoT 放大」。</p>
+<p class="">我建议你听完之后真的拿这两个问题自测一遍：「<b>推理模型是什么</b>」⇒ 你能不能用三句话说清它和普通 LLM 的差别。「<b>它们怎么训</b>」⇒ 你能不能说出 GRPO 和 PPO 的那一处关键差别。</p>
+<p class=""><b>答得出，这一讲就过了</b>。</p>
+<p class="warn">⚠ 讲者在这门课里很少把验收标准说得这么明确 —— <b>这说明这一讲的内容是有明确边界的</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">13:47</span><span class="en">there's not a commonly agreed upon definition out there of what reasoning is</span></div>
+  <div class="body"><p class=""><b>坏消息先说：这个领域最核心的那个词，没有公认的定义。</b></p>
+<p class="star">⭐ 「<b>没有公认定义</b>」这件事值得停一下，<b>因为它有实际后果</b>：不同论文说「<b>推理能力提升了</b>」时，<b>说的可能不是同一件事</b>。有人指<b>数学题准确率</b>，有人指<b>逻辑一致性</b>，有人指<b>能不能分解问题</b>。所以读论文时，第一件事是看它怎么量「推理」。</p>
+<p class="">而讲者给的定义「<b>解决一个问题的能力</b>」是一个<b>操作性定义</b>：它不试图说清「<b>推理在本质上是什么</b>」。它只说「<b>我们用什么来判断有没有推理</b>」。</p>
+<p class="">这是一个很工程的处理：绕开哲学争论，直接给一个能测的标准。</p>
+<p class="">请注意这个做法和 L4 结尾那段是一脉相承的：<b>量不清的东西，就先定义一个能量的代理</b>。而代价是：你从此只能谈那个代理 —— 以及它会被 hack 掉。</p>
+<p class="warn">⚠ 讲者说「<b>我会尽我所能</b>」—— 他明确标注了这是他自己的定义，不是领域共识。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">14:29</span><span class="en">we typically need a multi-step reasoning process</span></div>
+  <div class="body"><p class=""><b>定义的第二半才是关键：它需要多步。</b></p>
+<p class="star">⭐ 完整的定义是两半，<b>而第二半才是真正起作用的那一半</b>：① <b>解决一个问题的能力</b>。② <b>而解决它需要一个多步的过程</b>。第一半太宽（什么都算），第二半才把范围收住。</p>
+<p class="">「<b>多步</b>」这个特征为什么是关键：它正好解释了为什么「<b>让模型多生成一些 token</b>」会有用。如果答案是<b>一步就能得到的</b> ⇒ <b>多想没用</b>。如果答案<b>需要多步</b> ⇒ <b>给它空间把这些步写出来，就真的有用</b>。</p>
+<p class="">所以「推理模型」这个方案，和「推理问题」这个定义是配套的。</p>
+<p class="">而「<b>数学题和编程题</b>」这个范围限定，<b>其实暴露了一个更深的原因</b>：这两类题不只是「需要多步」，它们还「可以被自动判对错」。<b>而后者才是它们成为训练场的真正理由</b>。</p>
+<p class="warn">⚠ 讲者说「<b>希望这些能力也能扩散到别的领域</b>」—— 这是一个期望，不是一个已经被证实的结论。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">15:27</span><span class="en">how old is that bear now in 2025</span></div>
+  <div class="body"><p class=""><b>两个例子一摆，区别就一眼看出来了。</b></p>
+<p class="star">⭐ 这两个例子的差别，<b>用一个词就能说清：查表 vs 演算</b>：<b>课程代码</b>：答案<b>已经在模型里了</b>，只需要取出来。<b>熊几岁</b>：答案<b>不在模型里</b>，必须现场算（2025 − 2020）。</p>
+<p class="">而这个区别直接对应两种不同的失败模式：知识题答错 ⇒ <b>要么没学过，要么记混了</b> ⇒ <b>靠检索解决</b>。推理题答错 ⇒ <b>知识都有，但步骤走错了</b> ⇒ <b>靠推理训练解决</b>。</p>
+<p class="">所以这两类问题要用完全不同的办法修 —— 这正是四个弱点被分到三讲的原因。</p>
+<p class="">不过讲者很诚实地加了一句：「<b>这个超级简单</b>」：2025 − 2020 确实不需要什么推理模型。他只是在演示那个「模式」，而真正的推理题是竞赛数学那个量级的。</p>
+<p class="warn">⚠ 而「<b>熊</b>」这个例子也延续了这门课的传统 —— <b>L1 到 L5 一直在用泰迪熊</b>。</p></div>
+</article>
+</section>
+<section id="m-c">
+  <h2><span class="tag">模块 c</span>核心想法：把 chain of thought 放大<small>15:59–22:09</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">15:59</span><span class="en">the core idea here is to leverage a concept we saw earlier in the class</span></div>
+  <div class="body"><p class=""><b>这一讲的核心想法，一句话就说完了：把一个旧技术放大。</b></p>
+<p class="star">⭐ <b>这句话的分量请不要低估</b>：推理模型的起点<b>不是一个新架构</b>。它不是一个新的注意力机制、不是更多参数、不是更长的上下文。它是一个 2022 年的 prompting 技巧（Wei et al.，Chain-of-Thought Prompting）。</p>
+<p class="">而「<b>借用一个前面看过的概念</b>」这个说法说明了这门课的设计：L2/L3 讲 CoT 时，它只是「prompting 的一个技巧」。到了这里，它成了「一整类模型的定义特征」。</p>
+<p class="">同一个东西在两个尺度上的意义完全不同 —— 这正是「放大」这个词的含义。</p>
+<p class="">请先把这条路线图记住，<b>因为这一讲剩下的全部内容都挂在它上面</b>：① CoT 是一个 prompting 技巧 ⇒ ② <b>把它放大</b> ⇒ ③ 怎么让模型「自己就这么做」而不用你 prompt ⇒ <b>那就是训练的部分</b>。</p>
+<p class="warn">⚠ 而讲者又在用提问的方式开场 —— 这门课里他每次要引入一个关键概念，都先把它交给学生说一遍。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">16:32</span><span class="en">thinking in steps instead of just giving just a blanket answer</span></div>
+  <div class="body"><p class=""><b>学生给了一个很精炼的回答。</b></p>
+<p class="star">⭐ 「thinking in steps instead of just giving a blanket answer」这十来个词，<b>就是 CoT 的全部定义</b>：「<b>blanket answer</b>」= <b>一个笼统的、不带过程的答案</b>。「<b>thinking in steps</b>」= <b>把中间过程写出来</b>。</p>
+<p class="">而请注意这里<b>什么都没变</b>：<b>模型没变、权重没变、架构没变</b>。变的只是「输出的形状」—— 从「答案」变成「过程 + 答案」。</p>
+<p class="">而这个输出形状的改变，就让准确率显著提升了。这件事在 2022 年是相当令人意外的。</p>
+<p class="">为什么写出过程会让答案更准？<b>讲者马上会给两个直觉</b>：① <b>把难题分解成模型见过的小题</b>。② <b>多生成 token = 多给算力</b>。</p>
+<p class="">这两个直觉值得分开记，因为后面的「思考预算」只建立在第二个上。</p>
+<p class="warn">⚠ 讲者话说一半被打断了（「<b>就为了说明 —— 对。哦，对</b>」）—— <b>又有学生举手，而那个追问很好</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">17:18</span><span class="en">typically LLMs they have something that we call preamble</span></div>
+  <div class="body"><p class=""><b>这个追问抓得很准，而它正好戳在刚才那个例子上。</b></p>
+<p class="star">⭐ 这个学生发现了那个熊的例子里的一个漏洞：「2020 年出生的熊在 2025 年多大」要算 <b>2025 − 2020</b>。但如果题目只说「<b>现在</b>」呢？<b>模型怎么知道「现在」是哪一年</b>？</p>
+<p class="">而「<b>preamble（前言）</b>」这个词值得记一下，<b>因为它是一个实际的工程细节</b>：它是系统 prompt 的一部分，由服务方自动塞在你的输入前面。里面典型地有：当前日期、模型自己的身份、一些行为约束。</p>
+<p class="">所以「今天是哪天」这件事，模型不是「知道」的，是「被告知」的。</p>
+<p class="">这也顺带把录课日期钉死了：<b>2025 年 11 月 7 日</b>：而前面那场「几天前的选举」就是美国 2025 年 11 月 4 日那场。</p>
+<p class="warn">⚠ 注意这和弱点二（知识截止）是<b>同一个问题的两个解法</b> —— preamble 解决「静态的一小块」（日期），而 L7 的检索解决「动态的一大块」（新闻、文档）。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">17:48</span><span class="en">in lecture 7, we will see how we can fetch that</span></div>
+  <div class="body"><p class=""><b>而讲者把边界划得很干净。</b></p>
+<p class="star">⭐ 「<b>扩展</b>」和「<b>基础性</b>」这个区分非常重要，<b>而它正是这一讲和下一讲的分界线</b>：<b>基础性（今天）</b>：模型<b>自己能不能把一个难题分步走完</b>。<b>扩展（L7）</b>：模型能不能<b>去外面取它没有的东西</b>。</p>
+<p class=""><b>为什么这个顺序是对的</b>：一个<b>不会推理</b>的模型，<b>就算给它检索也用不好</b>（它不知道该查什么、查到了也不会组合）。而一个<b>会推理</b>的模型，<b>加上检索就立刻强一个量级</b>。</p>
+<p class="">所以推理是底座，检索是放大器 —— 顺序不能倒。</p>
+<p class="">而这也解释了今天的 agent 为什么都是推理模型：「决定下一步该调哪个工具」本身就是一个多步推理问题。</p>
+<p class="warn">⚠ 讲者说「<b>绝对是一个会非常有用的东西</b>」—— 他在给下一讲打广告，但这个判断是对的：RAG 和工具调用是今天落地最多的那一块。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">18:34</span><span class="en">the way chain of thought did that was by having some in-context learning examples</span></div>
+  <div class="body"><p class=""><b>CoT 的机制，以及这一讲的全部纲领。</b></p>
+<p class="star">⭐ 注意 CoT 原始版本的机制：<b>它完全不训练任何东西</b>：它只是在 prompt 里放几个例题，而例题的答案里带着解题过程。模型看到这个<b>格式</b>，就<b>照着这个格式输出</b>。</p>
+<p class="">这是纯粹的 in-context learning（L2 讲过）：不改一个权重，只改输入。</p>
+<p class="">而讲者那句自我更正很有意思：「那就是粗略的想法 —— 不，那不是粗略的想法，那就是那个想法」：他本来想说「<b>大致是这样</b>」，然后<b>自己改口说「就是这样，没有更多了</b>」。意思是：CoT 真的就这么简单，没有隐藏的复杂性。</p>
+<p class="">「<b>在一个大得多的尺度上</b>」—— <b>这七个字是这一讲的全部纲领</b>：「尺度」指什么？指推理链的长度（从几句变成几千 token）、指它的来源（从 prompt 示例变成模型自己学会）。</p>
+<p class="warn">⚠ 所以「<b>推理模型</b>」的一句话定义是：把 CoT 从「你 prompt 它」变成「它自己就这么做，而且做得长得多」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">19:36</span><span class="en">there are very few chances that that problem appeared in the training sets</span></div>
+  <div class="body"><p class=""><b>第一个直觉，而它本质上是一个「覆盖率」论证。</b></p>
+<p class="star">⭐ 这个论证的结构非常清楚，而它完全建立在「下一个 token 预测」这一件事上：模型只会<b>重现它见过的模式</b>。一道<b>难题整体</b>：<b>训练集里几乎肯定没有</b>。但这道题的<b>每一个小步骤</b>：<b>训练集里有成千上万个例子</b>。</p>
+<p class="">所以把难题拆开，就把「没见过的东西」换成了「见过很多次的东西」。</p>
+<p class="">这是一个<b>覆盖率</b>论证，<b>而它解释了一个具体的现象</b>：为什么 CoT 在<b>多步算术</b>上提升巨大？<b>因为每一步单独看都是模型早就会的</b>。为什么 CoT 在<b>需要新知识</b>的题上<b>没用</b>？<b>因为分解不出模型见过的子问题</b>。</p>
+<p class="">「听起来可信（sound plausible）」这个措辞请留意：它诚实地说明了模型的默认行为：它优化的是「像人会说的话」，不是「对」。</p>
+<p class="warn">⚠ 而这正是为什么推理需要被单独训练 —— 「可信」和「正确」不是同一件事。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">20:06</span><span class="en">you try to link it back to something that you know</span></div>
+  <div class="body"><p class=""><b>讲者又把这个直觉接到你自己的考试经验上。</b></p>
+<p class="star">⭐ <b>这个类比其实比它看起来更准确</b>：你做一道<b>没见过的难题</b>时，你做的事情是什么？<b>你不是「凭空想出一个解法」</b>。你是在回忆：「这一步像我做过的哪道题」。</p>
+<p class="">而把题拆成几步，正是为了让每一步都能对上你记得的某个套路。</p>
+<p class="">而这个类比也点出了 CoT 的一个<b>限制</b>：如果某一步<b>完全不像任何你学过的东西</b> ⇒ <b>拆得再细也过不去</b>。模型也一样：分解只能把问题移到「它熟悉的区域」，移不进去就还是解不出。</p>
+<p class="">讲者把「<b>你学习的时候</b>」直接叫成「训练时（at training time）」：<b>这个人—模型的类比在这门课里反复出现</b>。L5 讲偏好调优时他用过「你怎么学会写得像个人」。</p>
+<p class="">它好用，但也要小心：类比能帮你记住机制，不能当成证据。</p>
+<p class="warn">⚠ 下一个直觉会完全不同 —— <b>它不靠类比，而是一个硬的计算量论证</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">20:37</span><span class="en">when you let the LLM generate more tokens, you're just giving it more compute</span></div>
+  <div class="body"><p class=""><b>第二个直觉，而这一条最硬 —— 它不是类比，是一个计算量恒等式。</b></p>
+<p class="star">⭐ 请把这一条和上一条分开记，<b>因为它们的性质完全不同</b>：<b>第一个直觉（分解）</b>：一个关于「模型见过什么」的论证 —— 是启发式的。<b>第二个直觉（算力）</b>：一个关于「花了多少 FLOPs」的论证 —— 是恒等式。</p>
+<p class=""><b>这个恒等式为什么成立</b>：一个标准 LLM 对<b>每一个</b>输出 token 做<b>一整次</b>完整的前向传播（L1/L4 讲过）。所以N 个 token = N 次完整前向传播。生成 1000 个 token 的「思考」= 比直接答一句话多花了几百倍的计算。</p>
+<p class="">而一个固定大小的模型，想在一次回答里多花算力，唯一的办法就是多生成 token。</p>
+<p class=""><b>这一条是后面一整块内容的地基</b>：它直接定义了「test-time compute（推理期算力）」这个概念。它让「思考预算（compute budget）」成为一个可以调的旋钮。而它也解释了推理模型为什么又慢又贵 —— 慢和贵不是实现问题，是这个方案的本质代价。</p>
+<p class="warn">⚠ 讲者在这里就把「<b>compute budget</b>」这个词预告了 —— <b>记住它，这一讲后面会回来</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">21:45</span><span class="en">we don't want to directly generate an answer</span></div>
+  <div class="body"><p class=""><b>讲者先确认大家跟上了，然后把两种模型并排摆出来。</b></p>
+<p class="star">⭐ 「We first want to think」—— <b>四个词，而这就是全部的结构差别</b>：<b>vanilla LLM</b>：问题 ⇒ <b>答案</b>。<b>推理模型</b>：问题 ⇒ <b>思考</b> ⇒ <b>答案</b>。</p>
+<p class="">就这一处差别。没有新架构，没有新的层，没有新的注意力机制。</p>
+<p class="">而这件事值得你停下来想一想，<b>因为它违反直觉</b>：一个让模型<b>在同一个自回归通道里多写一段话</b>的改动。却造就了 2024–2025 年最大的一次能力跃升。</p>
+<p class="">而这说明：瓶颈从来不在模型能表达什么，而在它被允许花多少步去表达。</p>
+<p class="">请注意讲者又用了一次「<b>引号，vanilla LLM</b>」：他加引号是因为这不是一个标准术语，是他自己为了对比而起的名字。</p>
+<p class="warn">⚠ 而他每次引入关键对比都会先确认一句「<b>大家清楚了吗</b>」—— <b>这是一个教学信号：下面这句话很重要</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">22:09</span><span class="en">it's the reasoning plus the answer</span></div>
+  <div class="body"><p class=""><b>一个式子就能写完这一讲的上半场。</b></p>
+<p class="star">⭐ 「<b>输出 = 推理 + 答案</b>」这个式子是整个下半场的前提：<b>它使得「思考摘要」成为一个问题</b>（推理那一段要不要给用户看）。<b>它使得「思考预算」成为一个旋钮</b>（推理那一段允许多长）。<b>它使得「只奖励答案」成为可能</b>（答案可以自动判对错，而推理过程不用管）。</p>
+<p class="">而最后那一点是 GRPO 能工作的全部原因，<b>所以请现在就记住</b>：既然输出<b>被分成了两段</b>。而我们<b>只需要判「答案」那一段对不对</b>。那就不需要任何人标注「推理过程好不好」—— 奖励可以完全程序化。</p>
+<p class="">而这正好绕开了 L5 里「偏好数据贵、奖励模型会被 hack」那一整套麻烦。</p>
+<p class="">对比一下 L5 和 L6 在这件事上的处境，<b>差别巨大</b>：<b>L5（偏好调优）</b>：输出是<b>自由文本</b> ⇒ 只能靠人标注偏好 ⇒ 训一个奖励模型 ⇒ 会被 hack。<b>L6（推理）</b>：输出<b>末尾是一个可判定的答案</b> ⇒ 奖励直接算 ⇒ 不会被 hack（至少不容易）。</p>
+<p class="warn">⚠ 这就是为什么 RL 在推理上的成功，比在对齐上的成功来得更干脆。</p></div>
+</article>
+</section>
+<section id="m-d">
+  <h2><span class="tag">模块 d</span>时间线、思考摘要，与那张账单<small>22:35–27:33</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">22:35</span><span class="en">reasoning models have started popping out</span></div>
+  <div class="body"><p class=""><b>一条时间线，而它的起点近得有点吓人。</b></p>
+<p class="star">⭐ 请把这两件事分开，<b>因为混起来会让你误判这个领域的成熟度</b>：「<b>推理</b>」作为研究课题：很老。CoT 是 2022 年，self-consistency 2022 年，tree-of-thought 2023 年。「<b>推理模型</b>」作为一类产品：<b>从 2024 年 9 月才开始</b>。</p>
+<p class="">所以差别不在「有人想到了推理」，而在「有人把它变成了一个可以训出来的能力」。</p>
+<p class="">「<b>popping out（冒出来）</b>」这个词选得很准：它描述的不是「逐渐改进」，而是「突然一个接一个地出现」。而这正是 2024 年底到 2025 年初那半年的实际情形。</p>
+<p class="">对你这个「<b>为科研看课</b>」的用途，这条时间线有一个直接含义：<b>这一整块的文献只有一年多，所以读得完</b>。而它也意味着：这里还没有定论，很多做法还会变。</p>
+<p class="warn">⚠ o1-preview 的「<b>preview</b>」也值得注意 —— OpenAI 自己当时都是以预览形式放出来的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">22:50</span><span class="en">you basically have everyone just wondering how OpenAI did it</span></div>
+  <div class="body"><p class=""><b>中间那几个月的实际状态：所有人都在猜。</b></p>
+<p class="star">⭐ 这一镜的关键信息不在时间线上，而在那句「所有人都在想它是怎么做到的」：OpenAI 发布 o1 时，没有公开方法。没有论文、没有技术细节、甚至不给你看推理链。</p>
+<p class="">所以这是一个「能力已被证明存在，但做法未知」的局面。</p>
+<p class="">而这种局面在科研上是一个<b>很特殊的状态</b>：它<b>排除了「做不到」这个可能</b> ⇒ <b>你知道一定有路</b>。但它<b>不告诉你路在哪</b> ⇒ <b>于是所有人同时去搜索</b>。</p>
+<p class="">这种「存在性已知、构造未知」的激励极强，所以几个月内就被破解了。</p>
+<p class="">请把这一镜记住，因为它是下一镜那篇论文为什么轰动的全部前提：R1 的贡献不只是「效果好」，而是「它把做法写出来了」。</p>
+<p class="warn">⚠ Gemini 2.0 Flash Thinking 的名字里直接带「<b>Thinking</b>」—— 而这个命名习惯马上会成为「怎么认出推理模型」的那条线索。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">23:31</span><span class="en">to match OpenAI's reasoning ability performance with a method that they were actually describing in their paper</span></div>
+  <div class="body"><p class=""><b>这一镜是整条时间线的重心，而重点不在「效果」。</b></p>
+<p class="star">⭐ 请仔细听那句话的重心，<b>它被讲者刻意加长了</b>：不是「<b>他们做得一样好</b>」。而是「<b>他们做得一样好</b>」<b>＋</b>「<b>而且他们真的在论文里把方法描述出来了</b>」。</p>
+<p class=""><b>后半句才是「造成很大声响」的原因</b>。</p>
+<p class="">为什么「<b>写出来</b>」这件事的分量这么重：在那之前，o1 的做法是一个黑盒 ⇒ 全行业都在猜。R1 之后，做法公开了 ⇒ 任何有算力的团队都能复现。</p>
+<p class="">所以句 178 说「在那之后所有其它模型也都加上了推理能力」—— 这不是巧合，这是因果。</p>
+<p class="">而这一讲后面那一大块（<b>GRPO、可验证奖励、R1 的流水线</b>）<b>讲的就是这篇论文</b>：换句话说：这门课能讲清推理模型怎么训，是因为 R1 把它写出来了。讲者讲不了 o1，因为没人知道 o1 怎么训的。</p>
+<p class="warn">⚠ 这也是一个对你写论文有用的观察：一篇把做法讲清楚的论文，影响力可以超过一个效果更好的闭源产品。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">24:07</span><span class="en">this timeline is not exhaustive</span></div>
+  <div class="body"><p class=""><b>把时间线收尾，而那句总结值得单独记。</b></p>
+<p class="star">⭐ 「<b>它基本上是从 2024 年末才开始的</b>」—— <b>请把这句话和你的直觉校准一下</b>：这一讲是 <b>2025 年 11 月</b>讲的。所以整个「<b>推理模型</b>」这件事，<b>到讲课时只有 14 个月</b>。</p>
+<p class=""><b>而它已经改变了几乎所有主流产品的形态</b>。</p>
+<p class="">这个速度有一个实际后果，<b>而讲者前面已经点过</b>：「哪一块比别的更重要」现在刚刚能看出来。<b>而一年前看不出来，一年后可能又变了</b>。</p>
+<p class="">所以这一讲的价值不在「告诉你最新的模型」，而在「给你那个不会过期的框架」。</p>
+<p class="">那个框架其实很短，<b>你现在就可以先收着</b>：① <b>输出 = 推理 + 答案</b>。② <b>答案可验证 ⇒ 奖励可程序化</b>。③ 更多 token = 更多算力 ⇒ 有一个预算可调。</p>
+<p class=""><b>这三条不会因为换了一个新模型而失效</b>。</p>
+<p class="warn">⚠ 「<b>不是穷举的</b>」这个免责声明讲者说了两次了 —— 他在提醒你不要把这张图当成一份完整的榜单。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">24:33</span><span class="en">when the model that you're interacting with is a reasoning model</span></div>
+  <div class="body"><p class=""><b>又一道现场题，而这道题有实际价值。</b></p>
+<p class="star">⭐ 这个问题看起来是个小常识，<b>但它有三个实际后果</b>：<b>钱</b>：推理模型按输出 token 收费，<b>而推理 token 也算输出</b>（马上会讲）。<b>时间</b>：它要先生成几百到几千个思考 token 才开始答。<b>可信度</b>：推理模型在数学/代码上明显更准，在闲聊上没有优势。</p>
+<p class="">所以「我现在在跟哪种模型说话」是一个你每天都应该知道的事。</p>
+<p class="">而讲者用「<b>我前几天在和 ChatGPT 对话</b>」来引入，<b>这又是他的习惯</b>：L5 用的是「课末的掌声」，L4 用的是「我自己的 GPU 账单」。他总是先给一个你能验证的、属于日常的例子。</p>
+<p class="">答案就在截图上的一个词里，<b>下一镜学生会说出来</b>：而那个词的选择在全行业出奇一致，这件事本身就值得注意。</p>
+<p class="warn">⚠ 「<b>如果不是全部的话</b>」—— <b>这是一句客套，但他说的大概是实话</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">24:58</span><span class="en">the key word here is thinking</span></div>
+  <div class="body"><p class=""><b>答案是一个词，而全行业用的是同一个词。</b></p>
+<p class="star">⭐ 请注意这个用词的一致性，<b>它在整个行业里出奇地统一</b>：<b>ChatGPT</b>：「<b>Thinking…</b>」/「Thought for 8 seconds」。<b>Gemini</b>：模型名字里就带「<b>Thinking</b>」。<b>Claude</b>：「<b>extended thinking</b>」。</p>
+<p class=""><b>而这不是巧合</b>。</p>
+<p class="">为什么大家都要在界面上<b>显式地</b>标出来：因为推理模型<b>有一段明显的空白等待</b>（几秒到几十秒）。而一个<b>没有解释的等待</b>会被用户读成「<b>卡住了</b>」。</p>
+<p class="">所以「Thinking…」这三个字其实是在做一件产品设计的事：把一个技术代价翻译成一个用户能接受的叙事。</p>
+<p class="">而它<b>顺带</b>还做成了一件事：它把「我花了更多算力」变成了一个可见的卖点，而不是一个缺点。「它在认真想」比「它比较慢」好听得多，而两句话说的是同一件事。</p>
+<p class="warn">⚠ 下一镜会给出一个更重要的事实：这个界面给你看的「思考」，并不是模型真正的推理链。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">25:29</span><span class="en">that time thinking is actually the time that is needed to produce the reasoning chain</span></div>
+  <div class="body"><p class=""><b>这里埋了一句伏笔，而顺带给出了「思考预算」的产品形态。</b></p>
+<p class="star">⭐ 两件事在这一镜里被串起来了，<b>请分别记</b>：① 界面上的「思考」是一个摘要，不是原始链 ⇒ <b>下一个知识点会讲三个理由</b>。② 「standard / extended」这个开关，就是前面预告的「compute budget」。</p>
+<p class="">第二点值得多说一句，因为它把一个抽象概念落到了你见过的界面上：你在 ChatGPT 里选 extended thinking。<b>你做的事情就是「把思考预算调大」</b>。<b>而代价是：更慢、更贵</b>。</p>
+<p class="">所以这个旋钮不是一个「要不要开更好的模型」的开关，而是一个「花多少算力买多少准确率」的滑块。</p>
+<p class="">而「<b>思考的时间 = 产生推理链所需的时间</b>」这个等式也值得记：它说明那个等待时间不是在「搜索」，不是在「查资料」。它就是在一个 token 一个 token 地写。</p>
+<p class="warn">⚠ 所以等待时间长短<b>基本上正比于推理链的 token 数</b> —— <b>而这正是第二个直觉的直接推论</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">25:59</span><span class="en">thought summary that you see is not the raw reasoning chain</span></div>
+  <div class="body"><p class=""><b>一个很多人每天用却不知道的事实，以及前两个理由。</b></p>
+<p class="star">⭐ 先把这个事实本身记住，<b>因为它经常被误解</b>：你在界面上看到的<b>那几行「我在考虑…」</b>。<b>不是模型真的生成的那条链</b>。它是另一个（通常更小的）模型对那条链做的摘要。</p>
+<p class="">所以你无法从界面上读出模型真实的推理过程。</p>
+<p class="">而讲者在这里<b>非常明确地加了一句「我在做假设」</b>：这三个理由是他的推测，不是任何官方声明。而他在这门课里每次给推测都会这样标注（L5 讲 reward hacking 时也是）。</p>
+<p class="">这个习惯值得学：区分「我知道」和「我猜」，比两者都说得斩钉截铁要有用得多。</p>
+<p class=""><b>前两个理由各自的性质</b>：<b>理由一（不可理解）</b>：一个<b>关于原始链真实样子</b>的技术观察 —— 它可能语法破碎、反复自我纠正、夹杂无意义的试探。<b>理由二（太长）</b>：一个<b>纯粹的产品</b>理由。</p>
+<p class="warn">⚠ 而第三个理由完全不同 —— 它是一个商业理由，而且讲者说「这将是我们要看到的东西」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">26:29</span><span class="en">you can maybe train a model that is trained on these chains</span></div>
+  <div class="body"><p class=""><b>第三个理由的分量最重，而它是后面「蒸馏」那一段的全部前提。</b></p>
+<p class="star">⭐ <b>这个理由为什么比前两个重得多</b>：前两个理由说的是「<b>给你看也没好处</b>」。第三个理由说的是「<b>给你看对我们有坏处</b>」。</p>
+<p class="">而后者才是一个真正的、不会被产品改版推翻的理由。</p>
+<p class=""><b>这里的机制你已经有能力理解了</b>：一条<b>高质量的推理链</b> = <b>一条完美的 SFT 训练样本</b>（L4 讲过）。收集几万条 ⇒ <b>在一个小模型上做 SFT</b>。<b>小模型就能「模仿」出大模型的推理行为</b>。</p>
+<p class="">这件事有名字，叫「蒸馏（distillation）」，而这一讲后面会专门讲 —— DeepSeek-R1 正是这么把能力传给一系列小模型的。</p>
+<p class="">所以「<b>不给你看原始链</b>」这个决定，<b>本质上是在保护一份资产</b>：原始链不是日志，它是「最值钱的那份训练数据」。把它公开，等于把你最贵的训练成果免费送给竞争对手。</p>
+<p class="warn">⚠ 而讲者说「<b>这将会是我们要看到的东西</b>」—— 他在明确告诉你：这个理由不是闲话，它后面会变成一个正式的技术话题。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">27:18</span><span class="en">those output tokens, they also include reasoning tokens</span></div>
+  <div class="body"><p class=""><b>一个你会在账单上直接看到的后果，而它有一处不太对称的地方。</b></p>
+<p class="star">⭐ 请把两句话摆在一起读，<b>那个不对称就出来了</b>：「<b>你不一定能拿到全部的推理链</b>」。「但你是按输出 token 收费的，而输出 token 包括推理 token」。</p>
+<p class="">所以你为一批你看不到的 token 付了钱。</p>
+<p class="">这不是在指控谁，<b>它只是这个方案的必然结果</b>：那些 token <b>真的被生成了</b> ⇒ <b>真的烧了 GPU</b> ⇒ <b>成本真实存在</b>。而出于上一个知识点的第三个理由，<b>它们不能给你看</b>。</p>
+<p class="">于是「付费却看不到」就成了唯一可能的安排。</p>
+<p class="">实际影响有多大？<b>这个数要有概念</b>：一道难题的推理链<b>可以是几千个 token</b>。而最终答案<b>可能只有几十个 token</b>。</p>
+<p class="">所以你的账单上，可能 95% 以上是「看不见的思考」。</p>
+<p class="warn">⚠ 讲者说「<b>总是有一句或两句话</b>」—— 他的意思是：这件事写在文档里，但不显眼。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">27:33</span><span class="en">this also gives an incentive to have the maximum reasoning ability for a minimum amount of reasoning token</span></div>
+  <div class="body"><p class=""><b>一个优化目标在这里自己浮出来了，而它是被定价逼出来的。</b></p>
+<p class="star">⭐ 这句话的形状请看清楚，<b>它是一个标准的约束优化</b>：<b>最大化</b>：推理能力（准确率）。<b>最小化</b>：推理 token 数。</p>
+<p class="">而这正是「思考预算（compute budget）」那一整块内容要解决的问题。</p>
+<p class="">而我想强调它<b>是从哪里来的</b>：<b>它不是从一个学术好奇心来的</b>。<b>它是从一张账单来的</b>。</p>
+<p class="">这件事在这门课里出现过不止一次：L4 的量化和 FlashAttention 也是被成本逼出来的，不是被理论逼出来的。</p>
+<p class="">对你的课题，这个形状应该看起来很熟悉：「<b>在给定算力预算下最大化解的质量</b>」= <b>你那个「最便宜可行配置」的搜索</b>。「<b>每一步要不要再想一下</b>」= <b>你那个「要不要再展开这个节点」</b>。</p>
+<p class="">而推理模型这边的做法（固定预算、提前停止、按难度分配）在你那边几乎可以直接搬。</p>
+<p class="warn">⚠ 讲者说「<b>我们后面会看怎么应对那个</b>」—— <b>记住这个欠条，这一讲后面会还</b>。</p></div>
+</article>
+</section>
+<section id="m-e">
+  <h2><span class="tag">模块 e</span>怎么量推理：benchmark、可验证，与 pass@k<small>28:05–35:08</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">28:05</span><span class="en">some of the benchmarks that people use to quantify reasoning abilities</span></div>
+  <div class="body"><p class=""><b>第一块讲完了，现在换到「怎么量」这个问题。</b></p>
+<p class="star">⭐ 讲者自己把那个定义叫「<b>尝试性的（tentative）</b>」：<b>他没有假装那是一个定论</b>。而这和他前面说「外面并没有一个被普遍同意的定义」是一致的。</p>
+<p class="">而这个顺序值得注意：<b>先定义，再量化</b>：<b>定义（tentative）</b>：推理 = <b>解决一个需要多步的问题</b>。<b>量化</b>：那就找一堆<b>需要多步、而且能判对错</b>的题。</p>
+<p class="">所以 benchmark 的选择不是任意的，它是从那个定义直接推出来的。</p>
+<p class="">请带着一个问题听接下来这一整块：<b>为什么偏偏是「编程」和「数学」</b>？答案不是「因为它们难」，而是下一镜那句话。</p>
+<p class="warn">⚠ 「<b>修一个 bug</b>」也被列成了目标 —— <b>注意它比「写一段代码」更接近真实工作</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">28:50</span><span class="en">this is our way of verifying that a response that was generated is actually a correct one</span></div>
+  <div class="body"><p class=""><b>这一句话是这一讲后半场的全部地基，请单独记住它。</b></p>
+<p class="star">⭐ 表面上这是在讲 benchmark，<b>实际上它在讲「奖励从哪来」</b>：<b>有测试用例</b> ⇒ <b>答案能被程序判对错</b>。<b>能判对错</b> ⇒ <b>奖励可以是一个函数，而不是一个模型</b>。<b>奖励是一个函数</b> ⇒ 不需要标注、不会被 hack、可以无限量地生成训练信号。</p>
+<p class="">这条链是 GRPO 和 R1 能成立的全部原因。</p>
+<p class="">请把它和 L5 的处境对照一下，<b>差别是结构性的</b>：<b>L5（偏好调优）</b>：「<b>这段话写得好不好</b>」<b>没有程序能判</b> ⇒ 只能请人标 ⇒ 训奖励模型 ⇒ 会被 hack。<b>L6（推理）</b>：「<b>这段代码对不对</b>」<b>跑一下测试就知道</b> ⇒ <b>奖励直接算</b>。</p>
+<p class="">所以「为什么偏偏是编程和数学」的答案是：因为它们是极少数「机器能判对错」的任务。</p>
+<p class=""><b>这也给了一个重要的边界</b>：这一讲的全部方法，都依赖「答案可验证」这个前提。换到「写一封好邮件」上，整套东西就不成立了。</p>
+<p class="warn">⚠ 讲者在这里说得很平淡 —— <b>但这是整讲最关键的一句话，请划下来</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">29:14</span><span class="en">a set of 100 something coding problems that were human written</span></div>
+  <div class="body"><p class=""><b>三个编程 benchmark，而它们的来源不同、意思也不同。</b></p>
+<p class="star">⭐ 这三个的排列顺序正好是「<b>越来越像真实工作</b>」：<b>HumanEval</b>（164 道）：<b>人手写的小函数题，每题几行</b>。「<b>Human</b>」指的是<b>题目是人写的，不是从网上爬的</b> —— <b>这是为了避免训练集污染</b>。<b>CodeForces</b>：<b>竞技编程题，需要算法设计</b>。<b>SWE-bench</b>：真实 GitHub 仓库里的真实 issue，要在一个大代码库里改对地方。</p>
+<p class="">「<b>所以它才叫 HumanEval</b>」这个解释值得记一下：<b>它不是说「由人来评测」</b>。<b>它是说「题目由人原创编写」</b>。</p>
+<p class="">而原因很实际：如果题目是从网上抓的，模型可能在预训练时就见过答案 —— 那测的就不是能力，是记性。</p>
+<p class="">SWE-bench 的意义和前两个完全不同：<b>前两个测「会不会写算法」</b>。SWE-bench 测「能不能在一个你没写过的大项目里找到该改的地方并改对」。</p>
+<p class="">而后者才是工程师真正在做的事，所以它也是今天被引用最多的那个。</p>
+<p class="warn">⚠ 讲者两次说「<b>我相信</b>（I believe）」—— 他在凭记忆说数字，所以具体数值你最好自己核一下。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">29:38</span><span class="en">these are real practical problems</span></div>
+  <div class="body"><p class=""><b>从编程换到数学，而验证方式必须换一套。</b></p>
+<p class="star">⭐ 数学和编程在「<b>怎么验证</b>」上有一个实际差别：<b>编程</b>：有<b>测试用例</b>可以<b>跑</b> ⇒ <b>验证是「执行」</b>。<b>数学</b>：<b>没有东西可跑</b> ⇒ <b>验证只能是「比较字符串」</b>。</p>
+<p class="">而「比较字符串」比「跑测试」脆弱得多 —— 下一镜就会看到为什么。</p>
+<p class="">而「<b>在报告里</b>」这个措辞请留意：它指各家发布模型时的 technical report / model card。那里面典型地就是一张表，列着这些 benchmark 的分数。</p>
+<p class="">所以认识这些名字有一个很实际的用处：你看一份模型报告时能知道它在测什么。</p>
+<p class="">请注意「<b>你是让你的模型生成一些推理的</b>」这句的位置：它是顺口说的，但它意味着：评测时推理链是被允许、甚至被期待的。换句话说，benchmark 只看最终答案，不看过程。</p>
+<p class="warn">⚠ 而「<b>只看答案不看过程</b>」这件事后面会变成一个问题 —— 一个过程全错但答案蒙对的回答，和一个过程正确的回答，拿到的奖励是一样的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">30:16</span><span class="en">by parsing the answer like so and then comparing it with some ground truth</span></div>
+  <div class="body"><p class=""><b>数学的验证方式，而「怎么解析」是一个真问题。</b></p>
+<p class="star">⭐ 这个细节听起来很琐碎，<b>但它是实际做这件事时的第一个坑</b>：模型输出的是<b>一大段自由文本</b>。你要从里面<b>把「那个答案」挑出来</b>。如果挑错了，一个对的回答会被判成错 —— 而这会直接污染你的奖励信号。</p>
+<p class="">「<b>放在 box 的括号里</b>」指的是 LaTeX 的 <b>\\boxed{...}</b>：这是数学竞赛题的惯例写法，而所有主流数学 benchmark 都沿用它。于是流程变成：prompt 里要求「把最终答案放进 \\boxed{} 里」⇒ 正则抓出 \\boxed 的内容 ⇒ 和标准答案比。</p>
+<p class="">所以「可验证奖励」不是免费的：它需要一个格式约定，而那个约定要靠 prompt 强加给模型。</p>
+<p class="">注意讲者用的词是「<b>force（强迫）</b>」，<b>而他马上自己解释了</b>：不是改架构、不是加约束解码，就是「在 prompt 里要求」。而模型会不会听？大部分时候会，但不保证 —— 这也是一处噪声来源。</p>
+<p class="warn">⚠ 「<b>有很多不同的方式做这件事</b>」是一句委婉话 —— 实际含义是：没有统一标准，各家的解析脚本不一样，所以跨报告比分数要小心。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">31:04</span><span class="en">you can let your model generate some reasoning chain along with the answer</span></div>
+  <div class="body"><p class=""><b>一道数学题在 benchmark 里的完整形状，而请注意哪一列需要人。</b></p>
+<p class="star">⭐ 请盯着这三列看一眼，<b>然后数一下「哪些需要人」</b>：<b>问题</b>：需要人（<b>但题库是现成的，一次性成本</b>）。<b>推理链 + 答案</b>：<b>模型自己生成，完全不需要人</b>。<b>ground truth</b>：需要人（<b>但同样是现成的，一道题只要一个答案</b>）。</p>
+<p class=""><b>所以训练时的边际标注成本是：零</b>。</p>
+<p class="">把这个和 L5 的偏好数据摆在一起，<b>成本差距是几个数量级</b>：<b>L5</b>：每一对回答都要请人读两遍再选一个 ⇒ 边际成本随样本数线性增长。<b>L6</b>：题目和答案是现成的，模型可以对同一道题采样一万次 ⇒ 边际成本是 GPU 时间。</p>
+<p class="">而 GPU 时间可以靠买卡解决，人工标注不能。</p>
+<p class="">这就是「可验证奖励（RLVR, RL with Verifiable Rewards）」这个词的全部含义：<b>「可验证」= 不需要人来判，程序能判</b>。而这一讲后面 GRPO 那一整块，都建立在这件事上。</p>
+<p class="warn">⚠ 注意中间那一列「<b>推理链 + 答案</b>」里，只有「答案」被检查 —— 推理链本身没有任何监督。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">31:31</span><span class="en">it's a math exam to qualify for the US math olympiads</span></div>
+  <div class="body"><p class=""><b>两个数学 benchmark，而它们的难度差得非常远。</b></p>
+<p class="star">⭐ 这两个 benchmark 分处难度的两端，<b>而它们的用途也不同</b>：<b>AIME</b>（American Invitational Mathematics Examination）：美国数学奥林匹克的资格考，15 道题、答案是 0–999 的整数。<b>GSM8K</b>（Grade School Math 8K）：<b>八千多道小学应用题，几步算术</b>。</p>
+<p class="">为什么两个都还在用，<b>这件事反映了这个领域的进展速度</b>：GSM8K 在 2021 年是一个很难的 benchmark。到 2025 年，好模型在它上面已经 95% 以上 —— 也就是「饱和」了。于是大家转向 AIME，而 AIME 现在也在被逼近。</p>
+<p class="">这是一个反复出现的模式：benchmark 被刷满 ⇒ 换更难的 ⇒ 再被刷满。</p>
+<p class="">而 AIME 的「<b>答案是 0–999 的整数</b>」这个格式<b>不是巧合</b>：它恰好让「解析答案并比较」变得极其可靠 —— 一个整数，没有歧义。所以 AIME 流行，一半是因为它难，另一半是因为它好判。</p>
+<p class="warn">⚠ 讲者说「<b>并不那么平凡</b>」—— 这是在回应他自己前面那个「2020 年出生的熊」的例子：真正用来评测的题，不是那个量级的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">32:22</span><span class="en">a metric that tries to estimate the probability that at least one of k attempts succeeds</span></div>
+  <div class="body"><p class=""><b>有了题库，还得有一个指标，而讲者提前打了招呼说它不那么显然。</b></p>
+<p class="star">⭐ 这个定义里有<b>三个</b>要素，请分开记：① 「<b>至少有一次</b>」：<b>不是「平均对几次」，是「有没有对过」</b>。② 「<b>k 次尝试</b>」：<b>你允许模型试 k 次</b>。③ 「<b>试图估计</b>」：它是一个「估计量」，不是一个直接数出来的比例。</p>
+<p class="">第三点是讲者说「<b>不那么显然</b>」的原因，<b>而他会为它花一整段</b>：为什么「估计」会难？因为你不能真的跑无限次。你跑了 n 次，想推断「如果只给 k 次机会，成功率是多少」。</p>
+<p class="">而最朴素的做法（直接跑 k 次看有没有成功）方差大得没法用 —— 下一个知识点会给出正确的估计量。</p>
+<p class="">先把 <b>pass@1</b> 这个特例记住，<b>因为它最常被引用</b>：<b>pass@1</b> = <b>只给一次机会的正确率</b> = <b>日常意义上的「准确率」</b>。而 <b>pass@k</b>（k 更大）<b>总是不小于 pass@1</b>。</p>
+<p class="warn">⚠ 讲者说「<b>我们现在就要看它</b>」—— 这是一个信号：下面是一段真正的数学，不是一句定义就完事。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">32:45</span><span class="en">the probability that at least one of these k answers passes the tests</span></div>
+  <div class="body"><p class=""><b>用一个具体例子把定义坐实，然后讲者又抛了一个问题。</b></p>
+<p class="star">⭐ 讲者抛的这个问题其实很尖锐，<b>值得你自己先想一秒</b>：「<b>至少一次对</b>」这个指标，<b>听起来像是在放宽标准</b>。如果一个模型要试 100 次才对一次，它真的「会」做这道题吗？</p>
+<p class="">所以 pass@k 凭什么是一个有意义的指标，而不是一个粉饰数字的办法？</p>
+<p class="">答案在下一个知识点，<b>但我先把形状告诉你</b>：它的正当性<b>不是统计上的，是「使用场景」上的</b>。如果你在一个「能检查答案对不对」的场景里，那「试 k 次取对的那个」是一个真的能用的做法。</p>
+<p class="">于是 pass@k 衡量的就不是「它会不会」，而是「在这种用法下它有多有用」。</p>
+<p class="">而这就把指标和<b>部署方式</b>绑在了一起：pass@1 对应「只问一次就用」的场景。pass@k 对应「可以多试几次再筛」的场景。</p>
+<p class="">所以报哪个指标，取决于你打算怎么用这个模型 —— 这和 L4 说「没有哪一个数字能告诉你你关心的东西」是同一件事。</p>
+<p class="warn">⚠ 「<b>它不是超级平凡的</b>」—— 讲者在承认这个指标确实需要辩护，而他马上就会辩护。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">33:36</span><span class="en">in a problem like coding, the good thing is you can check whether your answer is correct or not</span></div>
+  <div class="body"><p class=""><b>辩护来了，而它的关键一环是「你能检查答案对不对」。</b></p>
+<p class="star">⭐ 这个辩护的结构请看清楚，<b>因为它有一个必要条件</b>：生成 <b>k 个答案</b> ⇒ 其中<b>至少一个对</b>的概率更高。但「至少一个对」要变成「我拿到了对的那个」，你必须「能认出哪个是对的」。</p>
+<p class="">而在编程和数学里你能认出来（跑测试、比答案）—— 所以 pass@k 在这里是一个真实可用的指标。</p>
+<p class="">把这个条件去掉，<b>pass@k 立刻变成一个假指标</b>：假设任务是「<b>写一封好邮件</b>」。生成 100 封，<b>其中「至少有一封好的」概率当然很高</b>。但<b>你分不出哪一封好</b> ⇒ <b>这个高 pass@k 对你毫无用处</b>。</p>
+<p class="">所以 pass@k 不是一个通用指标，它是「可验证任务」专属的指标。</p>
+<p class="">这一镜和前面「<b>这就是我们验证的方式</b>」那一镜是同一件事的两面：可验证 ⇒ 奖励能算（训练那边的好处）。可验证 ⇒ 多试几次能筛（部署那边的好处）。</p>
+<p class="warn">⚠ 「<b>你负担得起</b>（you can afford）」这个说法出现了两次 —— <b>它在提醒你这是一个花钱买准确率的交易</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">34:18</span><span class="en">best of n is this method that we saw last week</span></div>
+  <div class="body"><p class=""><b>讲者自己把它接回上一讲，而这个对照非常有用。</b></p>
+<p class="star">⭐ 先把 L5 的 Best-of-N 完整回忆一遍，<b>因为对照全在细节里</b>：<b>做法</b>：采 n 个回答 ⇒ 用奖励模型给每个打分 ⇒ 返回分最高的。<b>卖点</b>：<b>一个权重都不训</b>。<b>代价</b>：每一次服务都要生成 n 遍 ⇒ 永久变贵。</p>
+<p class="">而那个最漂亮的论证是：就算钱无限，「n 条里最慢那条」的延迟也救不回来。</p>
+<p class="">而 pass@k 和 Best-of-N 在<b>形式上几乎一样</b>：都是「采 k/n 个候选，然后挑一个」。<b>差别只在「怎么挑」</b>。</p>
+<p class="">而下一镜会说清这个差别，它比看起来重要得多。</p>
+<p class="">请注意讲者在这门课里<b>反复</b>做这种跨讲的连接：L5 结尾预告 GRPO ⇒ L6 开头回顾 PPO ⇒ 这里回顾 Best-of-N。而每次连接都不是客套，是真的在用上一讲的结论。</p>
+<p class="warn">⚠ 学生说「<b>对，大致记得</b>」—— 而讲者立刻就把它完整复述了一遍，没有让这个「大致」糊过去。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">34:38</span><span class="en">we do not have a reward model, we have a deterministic, verifiable way of checking whether something is correct</span></div>
+  <div class="body"><p class=""><b>唯一的差别只有一句话，但它消掉了 L5 的两大麻烦。</b></p>
+<p class="star">⭐ 把这一字之差的后果列出来，<b>你就知道它为什么是这一讲的主线</b>：<b>奖励模型</b>：<b>要人标偏好数据</b> ⇒ <b>要训一个模型</b> ⇒ <b>它不完美</b> ⇒ <b>会被 reward hacking</b>。<b>确定性验证器</b>：<b>不用标注</b> ⇒ <b>不用训</b> ⇒ <b>它不会错</b> ⇒ <b>hack 不了（答案对就是对）</b>。</p>
+<p class="">所以 L5 里那个「搜索越强越会骗过代理」的根本困境，在这里直接消失了。</p>
+<p class="">「<b>确定性（deterministic）</b>」这个词也请留意：奖励模型给的分是<b>连续的、有噪声的、依赖它自己的参数</b>。验证器给的是一个布尔值，而且同样的输入永远得到同样的结果。</p>
+<p class="">而「同样的输入永远同样的结果」正是 RL 训练稳定性的一个巨大优势。</p>
+<p class="">不过也请公平地记下代价，<b>因为讲者没有在这里说</b>：布尔奖励比连续奖励「信息量少得多」—— 它只说对错，不说「差多少」。而这会让 RL 的信号变得极其稀疏（一整条几千 token 的链，只换回一个 0 或 1）。</p>
+<p class="">这正是 GRPO 要解决的问题之一，请记住这个伏笔。</p>
+<p class="warn">⚠ 而「<b>花几分钟把理解对齐</b>」是一个预告：<b>下面那一段是真的要推一个估计量</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">35:08</span><span class="en">do you choose a particular temperature</span></div>
+  <div class="body"><p class=""><b>一个被按住的好问题，而它问得非常到位。</b></p>
+<p class="star">⭐ 这个学生抓到了 pass@k 的一个<b>要害</b>：pass@k 的前提是「<b>生成 k 个答案</b>」。但如果这 k 个答案<b>一模一样</b>呢？那「至少一个对」就等于「那一个对」—— pass@k 退化成 pass@1，整个指标失效。</p>
+<p class="">而「<b>有多不一样</b>」正是<b>温度</b>在控制的东西（L1 讲过）：<b>温度 = 0</b>：贪心解码 ⇒ k 个答案完全相同 ⇒ pass@k 毫无意义。<b>温度太高</b>：<b>答案够多样，但每一个的质量都掉下来</b>。</p>
+<p class="">所以 pass@k 里一定有一个温度的最优点，而它取决于 k。</p>
+<p class="">这个依赖关系有一个很实际的后果：报 pass@k 时不报温度，这个数字是不可比的。而 k 和温度应该一起调：k 大 ⇒ 温度可以高一点（更赌多样性）；k=1 ⇒ 温度应该接近 0。</p>
+<p class="">讲者说他「有一张幻灯讲那个」—— 所以这件事确实会被正面回答，记住这张欠条。</p>
+<p class="warn">⚠ 「<b>把你的问题先按住几张幻灯</b>」—— 这个处理方式本身值得学：不打断主线，但也不把问题丢掉。</p></div>
+</article>
+</section>
+<section id="m-f">
+  <h2><span class="tag">模块 f</span>pass@k 的推导：它只是无放回抽样<small>35:47–44:39</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">35:47</span><span class="en">if you only do this k times, your estimate can be very noisy</span></div>
+  <div class="body"><p class=""><b>最自然的做法是什么，以及它为什么不行。</b></p>
+<p class="star">⭐ 请把这段推导的动机记清楚，<b>它只有一个词：方差</b>：<b>要估计的量</b>：「<b>k 次里至少一次对</b>」的概率。<b>最朴素的估计</b>：真的跑 k 次，看有没有对过 ⇒ 得到一个 0 或 1。</p>
+<p class="">而「一个 0 或 1」作为一个概率的估计，方差大到毫无意义。</p>
+<p class=""><b>讲者给的那个例子正是在说这件事</b>：<b>同一个模型、同一道题</b>。这一轮 <b>5 次里对 3 次</b>，下一轮 <b>5 次里对 1 次</b>。</p>
+<p class="">而你报哪一个？两个都是「真实观测」，但它们差了三倍。</p>
+<p class="">所以问题的形状是：<b>样本太少，估计不稳</b>：而解法在统计上很标准：多采样本，然后用一个方差更小的估计量。而「方差更小的估计量」不是「多跑几次取平均」那么简单 —— 下一镜会看到为什么。</p>
+<p class="warn">⚠ 讲者在推导前先确认了两次「<b>大家都超级清楚了</b>」—— <b>他知道接下来要花掉好几分钟</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">36:07</span><span class="en">you typically generate not k, but n answers</span></div>
+  <div class="body"><p class=""><b>关键的一招：把「跑了多少次」和「指标里允许几次」分开。</b></p>
+<p class="star">⭐ 这一招值得单独说清楚，<b>因为它是整段推导的全部聪明之处</b>：<b>n</b>：<b>你实际生成了多少个答案</b>（可以很大，比如 100）。<b>c</b>：<b>这 n 个里对了多少个</b>。<b>k</b>：<b>你想报的那个指标里允许几次尝试</b>（通常是 1、5、10）。</p>
+<p class="">于是 n 和 k 解耦了：跑 n=100 次，然后算「如果只给 k=5 次机会会怎样」。</p>
+<p class=""><b>为什么这么做方差就小了</b>：方差来自「样本少」—— 而现在样本是 n 个，不是 k 个。<b>n 越大，c/n 这个比例就越稳</b>。</p>
+<p class="">而「k 次里至少一次对」的概率可以从 c 和 n 算出来，不需要真的只跑 k 次。</p>
+<p class="">请把这个问题的形状看清楚，<b>因为它决定了下面用什么数学</b>：手里有 n 个球，c 个白的、n−c 个黑的。随机抓 k 个，问「至少抓到一个白的」的概率。</p>
+<p class="">这是一个纯粹的组合问题 —— 而它的名字叫「无放回抽样」，讲者马上会点出来。</p>
+<p class="warn">⚠ 注意 <b>k ≤ n</b> 是一个隐含要求 —— 你不能从 100 个里「选」出 200 个。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">37:13</span><span class="en">the reason why I want to do that is because the answer is not necessarily trivial</span></div>
+  <div class="body"><p class=""><b>时间紧，但他还是决定推一遍 —— 而理由说得非常好。</b></p>
+<p class="star">⭐ 这个取舍值得你记住，<b>因为它是一个很好的教学判断</b>：他<b>时间不够</b>。而他砍掉的<b>不是推导</b>。</p>
+<p class="">因为「见过来历」比「记住结果」耐用得多：公式会忘，但「这就是无放回抽样」这个认识不会。</p>
+<p class="">「<b>我不想让你被它长什么样太吓到</b>」这句话也很诚实：pass@k 的公式里有两个组合数，第一次看确实会愣一下。而一旦你知道它是「<b>1 减去全错的概率</b>」，<b>它就变得完全自然</b>。</p>
+<p class="">所以这段推导真正的产出不是公式，是「它不可怕」这个感觉。</p>
+<p class="">这和 L5 里他推 Bradley-Terry 和 DPO 时是同一个做法：<b>L5</b>：<b>从第一性原理四步推出奖励模型的损失</b>。<b>L5</b>：<b>从 PPO 目标四步解出 DPO</b>。<b>这里</b>：从「至少一个」的补事件推出 pass@k。</p>
+<p class="">而我说过：这个习惯本身比任何单个结论都值钱。</p>
+<p class="warn">⚠ 接下来五镜是纯数学，<b>但每一步都很浅，请跟着走一遍</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">37:28</span><span class="en">the probability that at least one attempt out of k that we select out of these n samples is correct</span></div>
+  <div class="body"><p class=""><b>先把要求的东西老老实实写下来。</b></p>
+<p class="star">⭐ 请注意他用的词是「<b>估计（estimate）</b>」：真正的 pass@k 是一个关于「模型在这道题上的分布」的量，我们永远不知道它。<b>我们能做的只是从 n 个样本里估它</b>。</p>
+<p class="">所以这个公式是一个「估计量（estimator）」，不是一个「概率」—— 而这正是讲者说「不那么显然」的那一点。</p>
+<p class="">而「<b>至少有一次</b>」这四个字是一个<b>触发词</b>：在概率里，「<b>至少有一个</b>」几乎总是<b>用补事件算</b>。因为「至少一个」要分 k 种情况（正好 1 个、正好 2 个、…），而「全都不是」只有一种情况。</p>
+<p class="">而下一镜讲者会明确把这个技巧点出来，还会问大家知不知道。</p>
+<p class="">在往下走之前，<b>请先把三个符号在脑子里固定住</b>：<b>n</b> = 一共生成了多少个答案。<b>c</b> = 其中<b>正确</b>的有几个（c = correct）。<b>k</b> = 指标里允许试几次。</p>
+<p class="warn">⚠ 混淆 n 和 k 是读这个公式时最常见的错误 —— <b>而它们在公式里出现的位置完全不同</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">38:14</span><span class="en">if you have a probability of at least one, it's 1 minus the probability of having all of them being incorrect</span></div>
+  <div class="body"><p class=""><b>第一步是整段推导里唯一的技巧，而它很标准。</b></p>
+<p class="star">⭐ 为什么「<b>至少有一个</b>」几乎总要取补，<b>原因是算数量级的</b>：<b>直接算</b>：「<b>正好 1 个对</b>」＋「<b>正好 2 个对</b>」＋ … ＋「<b>正好 k 个对</b>」⇒ <b>k 项相加，每项都是一个组合数</b>。<b>取补算</b>：「<b>全都不对</b>」⇒ <b>只有一种情况，一个式子</b>。</p>
+<p class="">而两者的答案一样 —— 所以当然选后者。</p>
+<p class="">这个技巧的一般形式你应该背下来，<b>它在概率题里出现的频率极高</b>：P(至少一个 A) = 1 − P(没有一个 A)。而它成立只需要一件事：「至少一个」和「一个都没有」互为补事件。</p>
+<p class="">不需要独立性，不需要同分布 —— 这就是它为什么这么好用。</p>
+<p class="">请注意讲者在这里停下来问了一句「你们都知道这个技巧吗」：<b>他在确认地基，而不是直接往上盖</b>。这一讲里他做了至少四次这种确认（而上一讲更多）。</p>
+<p class="warn">⚠ 接下来三镜要算的就是那个「<b>全都不对</b>」的概率 —— <b>而它是一个无放回抽样</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">39:04</span><span class="en">what is the probability of you finding an unsuccessful attempt</span></div>
+  <div class="body"><p class=""><b>第一次抽，而它简单到不需要解释。</b></p>
+<p class="star">⭐ 这一步就是最朴素的「<b>有利情形 / 全部情形</b>」：<b>不成功的答案有 n − c 个</b>。<b>一共有 n 个答案</b>。随机抽一个，抽到不成功的概率 = (n − c) / n。</p>
+<p class="">不过请停一下，<b>注意这里悄悄做了一个假设</b>：「<b>随机抽一个</b>」意味着<b>这 n 个答案是等可能被选中的</b>。也就是说：我们把「生成 k 个答案」建模成「从那 n 个里均匀随机取 k 个」。</p>
+<p class="">而这正是为什么这个估计量成立：它假设那 n 个样本是从同一个分布独立采出来的。</p>
+<p class="">这个假设有一个实际的含义，<b>而它和那个被按住的温度问题有关</b>：n 个样本必须用「同一个温度、同一个 prompt」采出来。如果你中途改了温度，这个估计量就不成立了。</p>
+<p class="warn">⚠ 接下来两镜要做的，就是「<b>第二次、第三次……第 k 次也都不对</b>」—— <b>而每一次分母都会少一个</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">39:42</span><span class="en">you have n minus c minus 1 other unsuccessful attempts over n minus 1 because you already took one</span></div>
+  <div class="body"><p class=""><b>第二次之后，分子分母都要少一个 —— 而原因讲者说得很清楚。</b></p>
+<p class="star">⭐ 「<b>因为你已经取掉了一个</b>」这一句话解释了全部的减一：第 1 次抽完，<b>池子里只剩 n − 1 个</b>。而不成功的也只剩 n − c − 1 个（因为刚才抽走的那个就是不成功的）。所以第 2 次的概率是 (n−c−1)/(n−1)。</p>
+<p class="">第 i 次的通项请自己写一下，<b>它有一个很整齐的规律</b>：第 <b>i</b> 次：(n − c − i + 1) / (n − i + 1)。<b>i = 1</b> ⇒ <b>(n−c)/n</b> ✓。<b>i = k</b> ⇒ <b>(n−c−k+1)/(n−k+1)</b> ✓（正是讲者写的最后一项）。</p>
+<p class="">所以「全都不对」的概率就是这 k 项连乘。</p>
+<p class="">而这里用的是<b>乘法公式</b>（链式法则），<b>不是独立性</b>：P(A₁ ∩ A₂ ∩ … ∩ A_k) = P(A₁)·P(A₂|A₁)·P(A₃|A₁A₂)·…。<b>这个式子永远成立，不需要任何假设</b>。</p>
+<p class="">而每一项的「已知前面都不对」正好让分子分母同时减一 —— 这就是无放回。</p>
+<p class="warn">⚠ 请注意这里的减一<b>不是</b>「独立 × 修正」—— <b>它就是条件概率本身</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">40:58</span><span class="en">it's basically the same as sampling without replacement</span></div>
+  <div class="body"><p class=""><b>讲者给这个结构点了名字，然后引入组合数记号准备化简。</b></p>
+<p class="star">⭐ 「<b>它基本上就是无放回抽样</b>」—— <b>这句话是这段推导真正的收获</b>：<b>你不需要记住那个公式</b>。你只需要记住「这是从 n 个球里不放回地抓 k 个」。</p>
+<p class=""><b>而公式随时能从这句话重新推出来</b>。</p>
+<p class="">这个分布其实有名字，<b>讲者没有点，但你应该知道</b>：「n 个球里 c 个白的，抓 k 个，问抓到几个白的」= 超几何分布（hypergeometric）。而 pass@k 就是「超几何分布取 0 个白球」的概率的补。</p>
+<p class="">所以如果你在论文里看到「hypergeometric」这个词，它说的就是这件事。</p>
+<p class="">而引入组合数的理由纯粹是<b>为了好写</b>：那个 k 项连乘很难看，也不好在论文里排版。而它恰好能写成两个组合数的比 —— 下一个知识点就是做这件事。</p>
+<p class="warn">⚠ 讲者说「<b>对知道的人来说</b>」然后还是把定义写了出来 —— <b>这是一个很体贴的处理</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">41:49</span><span class="en">it's factorial n minus c over factorial n minus c minus k</span></div>
+  <div class="body"><p class=""><b>先把那个连乘的分子和分母分别写成阶乘比。</b></p>
+<p class="star">⭐ 这一步只用到一个事实，<b>而它值得你自己验一遍</b>：(n−c)! = (n−c)(n−c−1)⋯(n−c−k+1) × (n−c−k)!。两边同除 <b>(n−c−k)!</b>。<b>剩下的正好是分子那 k 项连乘</b> ✓。</p>
+<p class=""><b>分母同理</b>：n! = n(n−1)⋯(n−k+1) × (n−k)!。所以分母那 k 项连乘 = n! / (n−k)!。</p>
+<p class="">于是整个连乘 = [(n−c)!/(n−c−k)!] ÷ [n!/(n−k)!]。</p>
+<p class="">这是一个纯代数操作，<b>没有任何概率内容</b>：讲者做它的唯一理由是：下一步要凑出组合数。而组合数需要分母上有一个 k!，所以他马上要「乘一个 k! 再除一个 k!」。</p>
+<p class="warn">⚠ 讲者这里说的「<b>分子是 (n−k)! </b>」口误了位置 —— (n−k)! 在那个比的分母上，但他写在幻灯上是对的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">42:25</span><span class="en">I'll take that as a yes</span></div>
+  <div class="body"><p class=""><b>那个技巧其实只有一句话：上下同乘一个 k!。</b></p>
+<p class="star">⭐ 这一镜的口头表达比较绕，<b>但做的事情很简单</b>：他要把 <b>(n−c)!/(n−c−k)!</b> 变成 <b>C(n−c, k)</b>。而 C(n−c, k) = (n−c)! / [k!·(n−c−k)!]。所以缺一个 k! 在分母上 ⇒ 补一个。</p>
+<p class="">而为了不改变数值，同一个 k! 要在别处乘回来 —— 那就乘到分母那一项的分子上。</p>
+<p class=""><b>把两边凑完之后的样子</b>：左边那一块：(n−c)! / [(n−c−k)!·k!] = C(n−c, k) ✓。右边那一块：k!·(n−k)! / n! = 1 / C(n, k) ✓。</p>
+<p class="">两块相乘 ⇒ C(n−c, k) / C(n, k)。</p>
+<p class="">「<b>我就当作是同意了</b>」这句话值得记一下，<b>它是一个教学上的小决定</b>：<b>他在时间紧的时候选择不等更多确认</b>。而他之所以敢这么做，是因为这一步纯粹是代数，没有新概念。</p>
+<p class="warn">⚠ 「某种程度上提上来（pop the expression up）」说的就是把阶乘凑成组合数这个动作。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">43:11</span><span class="en">I basically multiplied the numerator and the denominator by k factorial</span></div>
+  <div class="body"><p class=""><b>结果出来了，而它读起来非常自然。</b></p>
+<p class="star">⭐ 请把这个公式用<b>中文读一遍</b>，它一下就自然了：<b>C(n, k)</b>：从 n 个答案里挑 k 个，<b>一共有多少种挑法</b>。<b>C(n−c, k)</b>：只从那 n−c 个「错的」里挑 k 个，有多少种挑法。两者之比 = <b>「挑中的 k 个全是错的」的概率</b>。</p>
+<p class="">1 减它 ⇒ 「至少挑中一个对的」的概率 ⇒ 这就是 pass@k ✓。</p>
+<p class="">几个边界情形请自己代一下，<b>它们能帮你确认公式没记错</b>：<b>c = 0</b>（全错）⇒ C(n,k)/C(n,k) = 1 ⇒ pass@k = 0 ✓。<b>c = n</b>（全对）⇒ C(0,k) = 0 ⇒ pass@k = 1 ✓。<b>k = 1</b> ⇒ C(n−c,1)/C(n,1) = (n−c)/n ⇒ pass@1 = c/n ✓（就是普通准确率）。</p>
+<p class="">而讲者有一处口误：他先说了「n−c 除以 n」，然后自己改口说「抱歉，n−c choose k 除以 n choose k」：前者是 k=1 的特例，后者是一般情形 —— 他改对了。</p>
+<p class="warn">⚠ 注意 <b>C(n−c, k)</b> 在 <b>n−c &lt; k</b> 时按惯例是 0 —— 也就是「错的答案不够 k 个，不可能全挑中错的」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">44:04</span><span class="en">this formula can be a little bit daunting to look at</span></div>
+  <div class="body"><p class=""><b>讲者自己把这段推导真正的产出说出来了。</b></p>
+<p class="star">⭐ <b>请把这句话当成这一整段的结论</b>：<b>公式本身会忘</b>。<b>「它只是无放回抽样」这句话不会忘</b>。<b>而有了后者，前者随时能重推出来</b>。</p>
+<p class="">这是一种很具体的学习方式，<b>而它比背公式有效得多</b>：对每一个公式，<b>问「它在数什么」</b>。<b>pass@k</b> 在数：从 n 个里挑 k 个，有多少种挑法全是错的。</p>
+<p class="">一旦你能用一句中文说出它在数什么，公式就只是那句话的转写。</p>
+<p class="">而「你会在论文里看到人们有这个 pass@k 指标」是一句很实际的提醒：每一份推理模型的报告都会报 pass@1，很多也报 pass@k。而现在你知道那个数是怎么算出来的，也知道它依赖 n 和温度。</p>
+<p class="">所以你看到两份报告的 pass@k 不一样时，第一个问题应该是「n 和温度一样吗」。</p>
+<p class="warn">⚠ 「<b>发怵（daunting）</b>」这个词他用得很准 —— 两个组合数叠在一起，第一次看确实会愣住。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">44:39</span><span class="en">pass@1 is defined as the probability of a single attempt succeeding</span></div>
+  <div class="body"><p class=""><b>pass@1 就是准确率，只是换了个名字。</b></p>
+<p class="star">⭐ 但请你<b>亲手代一遍</b> —— 这是检验「你是不是真懂那个公式」的最快方式：k=1 时 C(n−c,1)=n−c、C(n,1)=n ⇒ pass@1 = 1 − (n−c)/n = <b>c/n</b>，正好是「n 次里对了几次」。对得上，说明你记的公式没错；对不上，立刻回去找哪一步抄错了。</p>
+<p class="">而这一镜真正要你带走的，不是 pass@1 本身，是<b>它和 pass@100 的差距</b>：差距大 ⇒ 模型「会做，但一次做对的概率低」⇒ 这是<b>采样/稳定性</b>问题；差距小而且都低 ⇒ 它<b>真不会</b> ⇒ 这是<b>能力</b>问题。</p>
+<p class="">为什么值钱：RL 很擅长把第一种变好，对第二种几乎无能为力。所以这个差距是在替你回答「这个模型还值不值得继续训」。</p></div>
+</article>
+</section>
+<section id="m-g">
+  <h2><span class="tag">模块 g</span>温度与 pass@k，以及「为什么不走 SFT」<small>45:07–51:15</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">45:07</span><span class="en">it will be just a proportion of successful attempts</span></div>
+  <div class="body"><p class=""><b>先把 pass@1 的化简亲自确认一遍，然后他回去还那张欠条。</b></p>
+<p class="star">⭐ 「<b>直觉上也说得通</b>」这个自检方式请学会，<b>它在读任何公式时都适用</b>：找一个<b>你本来就知道答案的特例</b>。<b>代进去</b>。<b>看它是不是退化成那个你知道的东西</b>。</p>
+<p class="">对得上 ⇒ 公式大概没抄错；对不上 ⇒ 立刻去找哪里错了。</p>
+<p class="">而「<b>回到你的问题</b>」指的是前面那个被按住的<b>温度</b>问题：讲者说过「我有一张幻灯讲那个，我会把你的问题先按住几张幻灯」。<b>而现在他回来还这张欠条了</b>。</p>
+<p class="">这个习惯本身值得学：按住一个问题，但一定要还。</p>
+<p class="">接下来四镜是这一讲里一段被低估的内容：<b>它表面上只是在回答「温度选多少」</b>。但它实际上说清了「采样多样性」和「单次质量」之间的张力。</p>
+<p class="">而这个张力在你那个搜索课题里是同一个东西：探索 vs 利用。</p>
+<p class="warn">⚠ 「<b>你的问题</b>」—— <b>注意他记得是谁问的，这是前面那位学生</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">45:33</span><span class="en">something that will influence your results is how diverse the solutions that you will generate will be</span></div>
+  <div class="body"><p class=""><b>讲者直接确认那个学生说对了，然后把问题做成一个三选一。</b></p>
+<p class="star">⭐ 先把<b>温度是什么</b>快速过一遍（L1 讲过）：模型在每一步给出一个 <b>logits 向量</b>。采样前把它<b>除以温度 T</b>，再做 softmax。T 小 ⇒ 分布变尖 ⇒ 几乎总选最可能的那个 token。T 大 ⇒ 分布变平 ⇒ 不那么可能的 token 也会被选中。</p>
+<p class="">为什么 pass@k 对温度<b>格外</b>敏感：pass@k 的全部价值<b>来自「k 个答案不一样」</b>。而「<b>不一样的程度</b>」<b>完全由温度控制</b>。</p>
+<p class="">所以温度不是一个「调参细节」，它是这个指标能不能成立的前提。</p>
+<p class="">这个三选一的答案是「<b>介于两者之间</b>」，<b>但请不要只记住答案</b>：<b>要记住的是「两端各自是怎么坏的」</b>。太低 ⇒ 没有多样性 ⇒ k 个答案一样 ⇒ 多采白花钱。太高 ⇒ 有多样性但每个都差 ⇒ 没有一个对的。</p>
+<p class="">而「两端都坏」正是「中间有最优点」的标准论证形状。</p>
+<p class="warn">⚠ 讲者说「<b>你完全说对了</b>」—— <b>而那个学生确实点到了这个指标的要害</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">46:16</span><span class="en">that quantity will not change, which is seen with this graph with the T equal to 0</span></div>
+  <div class="body"><p class=""><b>低温那一端：pass@k 完全不随 k 增长，而那条平线非常直观。</b></p>
+<p class="star">⭐ <b>T = 0</b> 时发生的事情很极端，<b>值得说清楚</b>：<b>T = 0</b> 就是<b>贪心解码</b>：每一步都取概率最高的那个 token。没有随机性 ⇒ 同一个 prompt 永远得到逐字相同的输出。</p>
+<p class="">所以「生成 100 个答案」其实是「把同一个答案抄了 100 遍」。</p>
+<p class=""><b>于是 pass@k 退化成什么</b>：那<b>一个</b>答案对 ⇒ <b>pass@k = 1</b>（对所有 k）。那<b>一个</b>答案错 ⇒ <b>pass@k = 0</b>（对所有 k）。</p>
+<p class="">所以曲线是平的 —— 而这正是讲者说的「它不变」。</p>
+<p class="">而 <b>T = 0.2</b> 就开始涨了，<b>这个变化说明了一件重要的事</b>：只需要一点点随机性，「多采几次」就开始有回报。因为不同的采样会走进不同的推理路径，而其中某些路径能走通。</p>
+<p class="">这就是「多样性有价值」的机制：不是答案本身变好了，是你多了几次走对路的机会。</p>
+<p class="warn">⚠ 实际工程含义：要报 pass@k（k &gt; 1），温度绝不能设成 0 —— 否则你在花 k 倍的钱买同一个答案。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">46:41</span><span class="en">maybe the tokens that were not that likely will become likely</span></div>
+  <div class="body"><p class=""><b>高温那一端：多样性有了，但每一个答案都变差。</b></p>
+<p class="star">⭐ 「本来不那么可能的 token 会变得可能」—— <b>这一句就是全部的机制</b>：温度把分布<b>压平</b>。于是本来概率 1% 的那个 token，可能变成 5%。而一条几千 token 的推理链里，只要踩错一步，整条就废了。</p>
+<p class="">所以高温对「长输出」的伤害是累积的 —— 这一点对推理模型格外要命。</p>
+<p class="">请把两端的失败方式对照记，<b>它们的形状完全不同</b>：<b>低温</b>：每一条都是同一条好路 ⇒ 不敢走岔路 ⇒ 多采无用。<b>高温</b>：每一条都走不同的路 ⇒ 但每一步都可能踩错 ⇒ 没一条走到底。</p>
+<p class=""><b>而这个张力你应该已经认出来了</b>：它就是「探索 vs 利用」（exploration vs exploitation）。<b>低温 = 纯利用；高温 = 纯探索</b>。</p>
+<p class="">而最优点在中间，这是所有搜索问题的共同结构 —— 你的课题里也是。</p>
+<p class="warn">⚠ 「<b>t = 1.2 在这个例子里是极端的</b>」—— 注意他说「在这个例子里」，这不是一个普适的阈值。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">47:19</span><span class="en">people always specify the temperature that they chose to produce the benchmark results</span></div>
+  <div class="body"><p class=""><b>典型选择，而那个论文惯例是这一段最实用的产出。</b></p>
+<p class="star">⭐ 请注意那句「<b>在往更大的样本数那边</b>」，<b>它藏着一个重要的依赖关系</b>：<b>最优温度不是一个常数，它依赖 k</b>。<b>k 小（比如 1）</b> ⇒ 你<b>只有一次机会</b> ⇒ <b>应该用低温，赌最稳的那一条</b>。<b>k 大（比如 100）</b> ⇒ 你<b>有一百次机会</b> ⇒ <b>应该用高一点的温度，赌覆盖面</b>。</p>
+<p class="">所以那张图上不同的 T 曲线会「交叉」—— 这正是讲者说「这里就不清楚了，也许 0.4」的原因。</p>
+<p class="">而「<b>论文总是指明温度</b>」这件事请真的记住，<b>它有两个用处</b>：<b>读别人的报告时</b>：温度没报 ⇒ 这个 pass@k 不可比。<b>写自己的报告时</b>：温度、n、k 三个都要报，否则别人无法复现。</p>
+<p class="">这一段其实在示范一件更一般的事：一个指标总是带着一组采样超参数，而那组超参数是指标定义的一部分。<b>报了数字却不报超参数，等于没报</b>。</p>
+<p class="">而这对你写论文是一条可以直接执行的规矩。</p>
+<p class="warn">⚠ 讲者连说了三次「<b>我相信 / 我想</b>」—— 他在读一张不是他自己做的图，所以具体数值你别当定论。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">47:40</span><span class="en">consensus at k, which is the answer that is coming from the highest number of times</span></div>
+  <div class="body"><p class=""><b>另一个指标，而它和 pass@k 的前提不同。</b></p>
+<p class="star">⭐ 请把两个指标的<b>前提</b>对照一下，<b>差别很重要</b>：<b>pass@k</b>：「<b>k 个里至少一个对</b>」⇒ <b>需要你「能认出哪个对」</b> ⇒ <b>只能用在可验证任务上</b>。<b>consensus@k</b>：「<b>出现最多的那个答案对不对</b>」⇒ <b>不需要你能验证，只需要能数票</b>。</p>
+<p class="">所以 consensus@k 适用范围更广，但它也更弱：如果模型系统性地错在同一个地方，多数票会一致地错。</p>
+<p class="">而 <b>self-consistency</b> 就是把 consensus 当成一个<b>推理策略</b>来用（L3 讲过）：采 k 条推理链 ⇒ 取每条的最终答案 ⇒ 投票 ⇒ 返回票数最多的。<b>它比贪心解码好，而且不需要任何验证器</b>。</p>
+<p class="">所以 self-consistency 是「部署时就能用」的方法，pass@k 更多是「评测时用的指标」。</p>
+<p class="">一句很实际的提醒：<b>这三个很容易混</b>：<b>pass@k</b> = 指标，<b>要验证器</b>。<b>consensus@k</b> = 指标，<b>要投票</b>。<b>self-consistency</b> = 方法，<b>就是投票那件事本身</b>。</p>
+<p class="warn">⚠ 而 accuracy / exact match 这些是老熟人 —— 讲者一句带过，因为它们在 L4 已经讲过了。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">48:30</span><span class="en">now we're going to go into the most interesting part of the lecture</span></div>
+  <div class="body"><p class=""><b>第一部分收尾，而讲者自己承认超时了。</b></p>
+<p class="star">⭐ 回到开场那两个目标，<b>第一个到这里打勾了</b>：<b>目标一（推理模型是什么）</b>：<b>✓ 完成</b>。<b>目标二（它们是怎么被训练的）</b>：<b>从这里开始</b>。</p>
+<p class="">而这一半会占掉剩下的全部时间 —— 讲者说它是「最有意思的部分」，我同意。</p>
+<p class="">如果你现在就要自测目标一，<b>答案应该是这三条</b>：① 输出从「答案」变成「推理链 + 答案」。② 本质上是「把 CoT 放大」，不是新架构。③ 多生成 token = 多花算力，所以有一个「预算」可调。</p>
+<p class=""><b>能说出这三条，第一部分就过了</b>。</p>
+<p class="">而讲者说「<b>需要走快一点</b>」有一个实际后果，<b>请提前知道</b>：后面那几块（尤其是 R1 的流水线和蒸馏）会讲得比前面快。<b>所以那几块我会在旁白里补得更满一些</b>。</p>
+<p class="warn">⚠ 「<b>花了很多时间</b>」—— 而他花时间的地方是 pass@k 的推导，我认为那是值得的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">48:52</span><span class="en">to somehow incentivize the model to produce a chain of thought</span></div>
+  <div class="body"><p class=""><b>问题被明确摆出来了，而「激励」这个词选得非常准。</b></p>
+<p class="star">⭐ 「<b>激励（incentivize）</b>」这个词值得单独停一下，<b>它和「教（teach）」是两件事</b>：「<b>教</b>」= <b>给它看正确答案，让它模仿</b> ⇒ <b>那是 SFT</b>。「<b>激励</b>」= 给它一个奖励，让它自己发现什么做法能拿到奖励 ⇒ <b>那是 RL</b>。</p>
+<p class="">所以这一个词已经把答案透露了：这一讲的方案是 RL，不是 SFT。</p>
+<p class="">而「<b>大规模地（at scale）</b>」这三个字是这一部分的真正难点：让模型写一条推理链：CoT prompting 早就能做（L2/L3）。让模型自己总是写、而且写得很长很好：这才是新问题。</p>
+<p class="">所以「怎么造一个推理模型」=「怎么把 CoT 从一个 prompt 技巧变成一个内置能力」。</p>
+<p class="">「<b>写推理链是一个非常难的任务</b>」—— <b>请注意这句话说的是「谁」难</b>：<b>它说的是「人类写推理链很难」</b>。而这正是下一个知识点要展开的第一条理由：SFT 需要这些链，但没人写得出来。</p>
+<p class="warn">⚠ 讲者说「<b>翻一下我们的工具箱</b>」—— <b>接下来三镜是一个很漂亮的排除法</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">49:33</span><span class="en">the problem with SFT is you need high quality data</span></div>
+  <div class="body"><p class=""><b>第一个事实：那份 SFT 数据根本不存在。</b></p>
+<p class="star">⭐ 请回忆 <b>L4</b> 里 SFT 的定义，<b>这条反驳才站得住</b>：SFT 需要「一个高质量的、精心策划的数据集」。那个数据集的每一条是「<b>输入 → 理想输出</b>」。</p>
+<p class="">而这里「理想输出」= 一条完整正确的长推理链。</p>
+<p class="">为什么「<b>那非常难</b>」不是夸张：一条竞赛数学题的完整推理链<b>可能几千字</b>。而它不能只是「<b>正确</b>」—— <b>它还得是「模型应该学会的那种写法」</b>。要凑几万条这样的链，你需要几万人时的数学专家劳动。</p>
+<p class="">而这件事贵到没有任何实验室愿意作为起点去做。</p>
+<p class="">注意讲者的用词是「<b>一张票（one vote）</b>」：他在做一个「投票式」的论证：每个事实投一票，三票之后结论自己浮出来。这个结构比「所以我们必须用 RL」要诚实得多。</p>
+<p class="warn">⚠ 而他特意加了一句「<b>如果我们没有任何推理链的话</b>」—— 这个前提很重要：有链的时候 SFT 其实很好用，而这正是后面「蒸馏」那一段在做的事。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">50:04</span><span class="en">the way the model reasons may be different from the way we reason</span></div>
+  <div class="body"><p class=""><b>第二个事实比第一个深，而讲者说得非常克制。</b></p>
+<p class="star">⭐ 两条反驳的性质完全不同，<b>请分开记</b>：<b>第一条</b>：「<b>做不到</b>」—— <b>那份数据太贵，凑不出来</b>。<b>第二条</b>：「<b>就算做到了也不一定好</b>」—— <b>人类的推理路径未必是模型的最优路径</b>。</p>
+<p class="">所以第二条即使在钱无限的情况下仍然成立，而第一条不成立。</p>
+<p class="">为什么「<b>模型推理的方式可能和我们不同</b>」是合理的：人类推理受<b>工作记忆</b>限制，所以我们会<b>尽量少写中间步骤</b>。模型<b>没有这个限制</b>：它可以把中间结果<b>全写在上下文里</b>。所以模型的最优策略可能是「写得极其啰嗦、反复验算、把失败的尝试也写出来」。</p>
+<p class="">而一个人类专家绝不会那样写题解 —— 太难看了。</p>
+<p class="">这一条后来被 R1 的结果<b>强烈证实</b>了，<b>而这是这一讲最有意思的发现之一</b>：R1 自己学出来的推理链里，有大量「等一下，我再检查一遍」式的自我纠正。那种写法没有任何人类会写进题解，但它确实提高了正确率。</p>
+<p class="">所以「让它自己摸索」真的比「让它学人类」更好 —— 这一条讲者这里只是猜，但后来被验证了。</p>
+<p class="warn">⚠ 注意他的措辞：「<b>可能不同</b>」「<b>也许不是最好</b>」—— 他没有断言人类的方式更差，只说不一定最好。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">50:34</span><span class="en">these reasoning tasks, they have a very natural reward, which is actually verifiable</span></div>
+  <div class="body"><p class=""><b>第三个事实的方向不同：它不是在反对 SFT，而是在支持 RL。</b></p>
+<p class="star">⭐ 请看清这三票的<b>方向</b>，<b>它们不是三条同类的理由</b>：<b>事实一</b>：<b>SFT 需要的数据不存在</b> ⇒ <b>反对 SFT</b>。<b>事实二</b>：<b>人写的链未必是最好的教材</b> ⇒ <b>反对 SFT</b>。<b>事实三</b>：<b>奖励信号是现成的</b> ⇒ <b>支持 RL</b>。</p>
+<p class="">两个关门 + 一个开门 = 一个干净的排除法。</p>
+<p class="">「<b>自然的（natural）</b>」这个词用得很准确，<b>它是在对比 L5</b>：<b>L5 的奖励是「人造的」</b>：你得先收偏好数据，再训一个模型来当奖励。<b>L6 的奖励是「自然的」</b>：<b>它本来就在任务定义里，不需要你造</b>。</p>
+<p class=""><b>而这个差别决定了两讲的全部技术路线</b>。</p>
+<p class="">注意他给编程举了<b>两个</b>判定条件，<b>这个细节有意思</b>：「<b>通过测试用例</b>」—— <b>正确性</b>。「<b>能编译</b>」—— <b>连编译都过不了的，是一个更低的门槛</b>。</p>
+<p class="">而实践中这两层会被做成「分级奖励」：能编译给一点分，全部通过给满分。</p>
+<p class="">这样奖励就不是纯 0/1 了，而稀疏奖励正是 RL 最怕的东西。</p>
+<p class="warn">⚠ 请记住这个词：「可验证奖励（verifiable reward）」—— <b>它是这一讲后半场的核心术语</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">51:15</span><span class="en">let's try RL then</span></div>
+  <div class="body"><p class=""><b>结论，而讲者顺手说明了一下这门课为什么是这个顺序。</b></p>
+<p class="star">⭐ 这个结论的形状非常干净，<b>而它值得你照抄到自己的论文里</b>：<b>列出候选方案（工具箱）</b>。给出排除每个方案的具体事实（而不是「它不好」）。<b>剩下的那个就是答案</b>。</p>
+<p class="">这比「我们提出用 RL」有说服力得多，因为读者自己就能看出别的路走不通。</p>
+<p class="">而「<b>上周我们看过了 RL</b>」不是巧合，<b>它是课程设计</b>：L5 花了一整讲讲 RLHF、PPO、奖励模型、KL 惩罚、advantage。而 L5 结尾明确预告了「下一讲会讲 GRPO」。</p>
+<p class="">所以 L5 那一整套词汇，到这里全部要被用上 —— 如果你 L5 没跟上，这里会很吃力。</p>
+<p class="">请先把 L5 的关键词在脑子里过一遍，<b>因为接下来全要用</b>：<b>policy（策略）= 你的 LLM</b>；<b>action = 下一个 token</b>；<b>reward = 对整条回答的打分</b>。<b>advantage = 比基线好多少</b>；KL penalty = 别离参考模型太远；<b>clip = 别一步走太大</b>。</p>
+<p class="">而 GRPO 要动的，正是这里面的「advantage 怎么算」这一处。</p>
+<p class="warn">⚠ 「那时机正好（great timing）」—— 讲者在自我调侃课程安排，但这个安排确实是有意的。</p></div>
+</article>
+</section>
+<section id="m-h">
+  <h2><span class="tag">模块 h</span>两个可验证奖励、那张曲线，与思考预算<small>51:48–58:27</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">51:48</span><span class="en">we first want to have a reward that checks whether the reasoning chain is there</span></div>
+  <div class="body"><p class=""><b>第一个奖励简单到让人意外：它只检查两个标签在不在。</b></p>
+<p class="star">⭐ 请注意这个奖励<b>检查的是什么，以及不检查什么</b>：<b>它检查</b>：输出里有没有 &lt;think&gt; … &lt;/think&gt; 这一对标签。<b>它不检查</b>：标签里面写的推理「对不对」、「好不好」。</p>
+<p class="">所以它是一个纯粹的「格式奖励（format reward）」。</p>
+<p class="">这件事为什么重要：<b>它是「可程序化」的极端例子</b>：<b>判断一段推理好不好</b> ⇒ <b>需要一个模型，而且会被 hack</b>。<b>判断两个标签在不在</b> ⇒ <b>一个正则表达式</b>。</p>
+<p class=""><b>而后者零成本、零噪声、完全确定</b>。</p>
+<p class="">不过这里有一个你应该想到的疑问：只奖励「有标签」，模型不会学会「写一对空标签」然后直接答吗？<b>会的 —— 如果只有这一个奖励</b>。</p>
+<p class="">而这正是为什么必须配上第二个奖励：标签在、而且答案对。两个奖励一起，才逼出「真的用那段空间去推理」这个行为。</p>
+<p class="warn">⚠ 「<b>指示（instruct）你的模型去用</b>」—— 这个格式是靠 prompt 要求的，和前面「强迫它把答案放进 box」是同一个手法。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">52:18</span><span class="en">the second reward that you want to have is to check that the solution that it produced actually works</span></div>
+  <div class="body"><p class=""><b>第二个奖励就是前面铺了半小时的那件事，现在它变成了训练信号。</b></p>
+<p class="star">⭐ 请把这件事和前面那半小时连起来看，<b>它们是同一个东西</b>：<b>前面</b>：「<b>跑测试用例</b>」「<b>比 ground truth</b>」是<b>评测</b>的方式。<b>这里</b>：<b>同一套检查，变成了训练时的奖励函数</b>。</p>
+<p class="">所以「评测方式」和「训练信号」在这里是同一个东西 —— 而这在机器学习里其实是一个相当特殊的情形。</p>
+<p class="">为什么特殊？<b>因为通常它们是分开的</b>：<b>一般情形</b>：你用交叉熵训练，用准确率评测 —— 训的和测的不是一回事。<b>这里</b>：<b>你直接优化那个评测指标</b>。</p>
+<p class="">而这件事的好处是不会「训了半天优化错了东西」，坏处是「直接优化指标就是 benchmark 过拟合的定义」。</p>
+<p class="">所以这里有一个真实的风险，<b>讲者没有在这里点</b>：你在 AIME 风格的题上做 RL ⇒ 它在 AIME 上涨。但它在「没见过的那类推理」上涨多少？这是一个开放问题。</p>
+<p class="">而讲者在定义「推理」时说过「希望这些能力也能扩散到别的领域」—— 那个「希望」在这里才真正有了代价。</p>
+<p class="warn">⚠ 注意数学那边的检查<b>只比最终答案</b> —— 一个过程全错但答案蒙对的回答，拿到的奖励和完美回答一样。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">53:11</span><span class="en">no need for a model</span></div>
+  <div class="body"><p class=""><b>整个方案可以用一句话说完，而那句「不需要一个模型」是全场最重的四个字。</b></p>
+<p class="star">⭐ 「不需要一个模型（No need for a model）」—— <b>请把这五个字和 L5 整整一讲对照</b>：L5 的 RLHF 要同时养「四个模型」：<b>策略、参考、奖励、价值</b>。<b>而其中「奖励模型」是最麻烦的那个</b>：<b>要收偏好数据、要训、会被 hack</b>。</p>
+<p class="">而这里：那个模型被一个正则表达式和一次单元测试取代了。</p>
+<p class="">这是这两讲之间最大的一处结构差异，<b>后果是连锁的</b>：<b>不用奖励模型</b> ⇒ <b>不用收偏好数据</b> ⇒ <b>边际成本归零</b>。<b>不用奖励模型</b> ⇒ 没有 reward hacking 的空间。<b>不用奖励模型</b> ⇒ 少一个模型要放进显存（L4 算过那很贵）。</p>
+<p class="">所以推理这个场景不只是「能用 RL」，而是「用 RL 特别便宜」。</p>
+<p class="">请注意那个词：「<b>组合（combination）</b>」：两个奖励不是二选一，是加在一起（典型做法是加权求和）。而权重怎么定是一个实际的调参问题，讲者这里没展开。</p>
+<p class="warn">⚠ 这一镜是这一讲上半场所有线索的汇合点 —— <b>如果你只记一镜，记这一镜</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">54:10</span><span class="en">only with these two verifiable rewards</span></div>
+  <div class="body"><p class=""><b>而它真的管用 —— 而这件事的惊人之处值得说清楚。</b></p>
+<p class="star">⭐ 请把这件事的惊人之处说清楚，<b>因为它很容易被当成一张普通的上升曲线</b>：<b>没有任何人教过它「怎么推理」</b>。<b>没有一条人写的推理链作为示范</b>。只有两个信号：「你写了 think 标签」和「你的答案对了」。</p>
+<p class=""><b>而它自己摸出了一整套多步推理的行为</b>。</p>
+<p class="">这就是「<b>Zero</b>」这个名字的含义，<b>而这个命名是在致敬</b>：<b>AlphaGo</b>：先学人类棋谱，再自我对弈。<b>AlphaGo Zero</b>：<b>完全不看人类棋谱，纯自我对弈</b> ⇒ <b>反而更强</b>。<b>DeepSeek-R1-Zero</b>：<b>完全不做 SFT，纯 RL</b>。</p>
+<p class="">而「Zero」在两处的含义一样：零人类示范。</p>
+<p class="">这也正好验证了前面那个「<b>第二个事实</b>」：讲者猜「模型推理的方式可能和我们不同」。R1-Zero 证明了：不但可能不同，而且让它自己摸索真的能行。</p>
+<p class="warn">⚠ 不过请记住「<b>R1-Zero</b>」不是「<b>R1</b>」—— R1-Zero 是纯 RL 的那个版本，它的推理链可读性差、会混语言；R1 在它基础上加了 SFT 冷启动，而后面会讲。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">54:29</span><span class="en">there are some prompts that do not need the model to think too much</span></div>
+  <div class="body"><p class=""><b>前面那张欠条还了：怎么控制「想多久」。</b></p>
+<p class="star">⭐ 把这个问题的两头都说清楚，<b>它是一个双向的问题</b>：<b>想太少</b>：难题答不出 ⇒ <b>准确率低</b>。<b>想太多</b>：简单题也烧几千 token ⇒ <b>慢、贵，而且准确率并不会更高</b>。</p>
+<p class="">所以「想多久」不是「越多越好」，它是一个真正的最优化问题。</p>
+<p class="">「<b>过度思考（overthinking）</b>」在这里是一个<b>技术术语</b>，<b>不是比喻</b>：它指：问「2+2 等于几」，模型生成两千个 token 讨论加法的定义。这件事真的会发生，而且是早期推理模型最常被抱怨的问题。</p>
+<p class="">而根源很清楚：RL 只奖励「答对」，没有惩罚「写得长」。</p>
+<p class="">请把这件事接回前面那个由定价逼出来的目标：「用最少的推理 token 拿到最大的推理能力」。而「dynamic budget（动态预算）」就是对这个目标的直接回答：按题目难度分配预算。</p>
+<p class="">这和你那个课题里「给不同实例分配不同搜索预算」是同一个问题。</p>
+<p class="warn">⚠ 讲者用「<b>社区里一直有很多工作</b>」这种措辞 —— <b>这是在说「这里还没有标准答案」</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">55:24</span><span class="en">those LLMs, they have a limited context window</span></div>
+  <div class="body"><p class=""><b>第一个解法，以及一个完全不同性质的第二个约束。</b></p>
+<p class="star">⭐ 那个「<b>快速分类器</b>」方案的形状很简单，<b>而它的问题也很明显</b>：<b>做法</b>：一个小模型看一眼 prompt ⇒ 判「难」或「易」⇒ 据此设预算。<b>问题</b>：「这道题难不难」本身就是一个需要推理才能判断的问题。</p>
+<p class="">所以这是一个「要先解决问题才能知道问题有多难」的循环 —— 这就是讲者说「更像是一个开放问题」的原因。</p>
+<p class="">而「<b>上下文窗口</b>」这个约束<b>性质完全不同</b>：<b>分类器那个</b>：「<b>该不该多想</b>」⇒ 一个<b>经济</b>问题（花钱值不值）。<b>上下文那个</b>：「<b>还能不能多想</b>」⇒ 一个<b>硬限制</b>（物理上放不下了）。</p>
+<p class=""><b>而后者没有权衡可谈：超了就是超了</b>。</p>
+<p class=""><b>请想一下这个硬限制有多紧</b>：推理链<b>可以几千到几万 token</b>。而上下文窗口<b>还要装 prompt、要装最终答案</b>。</p>
+<p class="">所以模型其实需要一种「我还剩多少空间」的意识 —— 而这件事它天然是没有的。</p>
+<p class="">而这也顺带解释了为什么推理模型都特别强调长上下文：不是为了读长文档，是为了给思考留地方。</p>
+<p class="warn">⚠ 「<b>这更像是一个开放问题</b>」—— 请把这句话记在这一讲所有「解法」的旁边：这一块整体上还没有定论。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">56:00</span><span class="en">there is this term, budget forcing, that I think was introduced in this paper, S1</span></div>
+  <div class="body"><p class=""><b>一个很土但出奇有效的手法：直接往它嘴里塞一个词。</b></p>
+<p class="star">⭐ <b>请停一下体会这件事有多朴素</b>：模型<b>快要写完推理链</b>了（要输出 <b>&lt;/think&gt;</b> 了）。你<b>不让它输出那个结束标签</b>，而是<b>替它写一个「Wait」</b>。模型看到「Wait」之后，就会继续往下写 —— 典型地是开始复查刚才的推理。</p>
+<p class="">于是你就「延长」了它的思考，而完全没有改任何权重。</p>
+<p class="">为什么这招有效：<b>它利用的是自回归的本性</b>：模型<b>只会「续写当前上下文」</b>。而「<b>Wait</b>」这个词在训练数据里<b>后面跟的几乎总是「重新考虑」</b>。</p>
+<p class="">所以塞一个「Wait」就等于给了它一个「重新考虑」的强提示。</p>
+<p class="">这篇 <b>S1</b>（Simple test-time scaling, Muennighoff et al. 2025）值得一提，<b>因为它的结论很有冲击力</b>：它用 1000 条样本做 SFT + budget forcing。就达到了接近 o1-preview 的数学表现。</p>
+<p class="">而它的作者正是斯坦福的人 —— 所以讲者提它不只是因为相关。</p>
+<p class="warn">⚠ 反方向也成立：想让它停，就强行插入 &lt;/think&gt; 和一句「答案是」—— 下一镜讲这个。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">56:31</span><span class="en">sometimes the model will output something like, oh wait, wait, wait</span></div>
+  <div class="body"><p class=""><b>而最有意思的是：这个「Wait」的行为是模型自己学出来的。</b></p>
+<p class="star">⭐ 请把上一镜和这一镜<b>连起来</b>看，<b>顺序很重要</b>：<b>先</b>：模型在 RL 里「自己」学会了说「Wait」然后重走一条路。<b>后</b>：人类发现了这个行为，于是「手动塞一个 Wait」来触发它。</p>
+<p class="">所以 budget forcing 不是一个人为设计的机制，它是在模仿模型的自发行为。</p>
+<p class="">这个自发行为在 R1 的论文里有一个名字，<b>而它是整件事最戏剧性的部分</b>：它被叫做「aha moment（顿悟时刻）」。指的就是：模型在纯 RL 训练中，没有任何人示范，自己开始写「等一下，让我重新想想」。</p>
+<p class="">而这正是前面那个「第二个事实」最有力的证据：这种写法没有任何人类会写进题解。</p>
+<p class="">不过也请保持清醒，<b>不要把它浪漫化</b>：<b>模型并没有「意识到自己错了」</b>。它只是学到了「在某些状态下写出『等一下』，后续答对的概率更高」。</p>
+<p class="">这是一个被奖励塑造出来的行为模式，不是一个认知事件 —— 但它的效果是真的。</p>
+<p class="warn">⚠ 「<b>一张我还没真的讲过的幻灯</b>」—— 他是临时指过去的，所以这一段讲得比较散。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">57:08</span><span class="en">models may think on some other space, maybe not in the language space</span></div>
+  <div class="body"><p class=""><b>反方向的强制，以及一条更激进的研究线。</b></p>
+<p class="star">⭐ 先把那个反方向的手法说清楚，<b>它和「Wait」完全对称</b>：<b>想让它多想</b> ⇒ <b>插入「Wait」</b>。<b>想让它停</b> ⇒ <b>插入「你的时间到了。现在我的答案是」</b>。</p>
+<p class="">两招都是「替模型写一小段，然后让它续写」—— 这就是 budget forcing 的全部技术内容。</p>
+<p class="">而「连续思考（continuous thoughts）」那条线的动机非常直接：现在的推理链是<b>一串 token</b>，也就是<b>人类语言</b>。但模型内部的状态是<b>高维连续向量</b>。所以用 token 思考 = 每一步都要把高维状态「压缩成一个词」，再在下一步重新展开。</p>
+<p class="">而这是一道货真价实的信息瓶颈 —— 为什么不让它直接在向量空间里想？</p>
+<p class="">讲者说「<b>更有意义，但也更压缩</b>」，<b>这两个词都要解释</b>：「<b>更有意义</b>」：一个连续向量能携带的信息远多于一个离散 token。「<b>更压缩</b>」：所以同样的「想法」需要的步数更少 ⇒ 更省算力。</p>
+<p class="">而代价是：你完全看不懂它在想什么 —— 可解释性归零。</p>
+<p class="warn">⚠ 讲者提的那篇 2024 年的论文是 Coconut（Chain of Continuous Thought, Hao et al.） —— <b>而这条线至今没有成为主流</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">57:42</span><span class="en">it's very much active area of research</span></div>
+  <div class="body"><p class=""><b>一个很坦白的说明：这一块每隔几天就有新论文。</b></p>
+<p class="star">⭐ 「<b>就在几天前我也看到了另一篇</b>」—— <b>这句话很有信息量</b>：<b>他在备课时还在读新论文</b>。而这意味着：这一块的内容在他讲的时候就已经在变了。</p>
+<p class="">这对你有一个很具体的影响，<b>我说得直接一点</b>：<b>这一讲里「不会过期」的部分</b>：那三条框架（输出 = 推理 + 答案；可验证 ⇒ 奖励可算；更多 token = 更多算力）。<b>这一讲里「会过期」的部分</b>：具体的 budget 控制手法、具体的模型名字、具体的 benchmark 分数。</p>
+<p class=""><b>所以记前者，用后者的时候去查最新的</b>。</p>
+<p class="">而「<b>连续思考</b>」这条线特别值得你留意一下：它是这一讲里唯一一条「还没成功」的研究方向。讲者 2025 年 11 月说它活跃，而它到今天仍然不是主流。</p>
+<p class="">一条活跃但没成为主流的方向，对找课题的人来说往往比一条已经成熟的更有价值。</p>
+<p class="warn">⚠ 「<b>有一篇我们链了的</b>」—— 课程网页上有参考文献链接，这门课的 cheatsheet 和论文清单是公开的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">58:12</span><span class="en">we want to use RL to incentivize our model to think more if we start from scratch</span></div>
+  <div class="body"><p class=""><b>讲者亲口给的 takeaway，而那个前置条件是它最重要的部分。</b></p>
+<p class="star">⭐ 请把那个前置条件和结论<b>一起</b>记，<b>只记结论会出错</b>：<b>结论</b>：<b>用 RL 去激励模型多想</b>。<b>前置条件</b>：「如果我们从零开始」，也就是「我们没有推理链」。</p>
+<p class="">所以这不是「RL 比 SFT 好」，而是「在没有推理链的时候，只能走 RL」。</p>
+<p class="">这个区分有一个非常实际的后果，<b>而它马上就会出现</b>：<b>第一个推理模型</b>（没有任何链可用）⇒ <b>必须用 RL</b>。<b>第二个之后</b>（可以从第一个那里拿到链）⇒ <b>SFT 就够了，而且便宜得多</b>。</p>
+<p class="">而这正是「蒸馏」那一段要讲的：R1 训出来之后，用它的链去 SFT 一堆小模型。</p>
+<p class="">所以这一讲的整条逻辑线现在完整了：没有链 ⇒ 用 RL 从零长出推理能力（R1-Zero / R1）。有了链 ⇒ 用 SFT 把能力传下去（蒸馏）。</p>
+<p class="">而前面那三张「不做 SFT 的票」，只对第一步成立。</p>
+<p class="warn">⚠ 讲者问「<b>我用那些论证把你们说服好了吗</b>」—— 他在主动邀请反驳，这一讲里他问了好几次。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">58:27</span><span class="en">so is everyone good with this</span></div>
+  <div class="body"><p class=""><b>一个「大致吧」，然后他直接进入这一讲的核心。</b></p>
+<p class="star">⭐ 「<b>大致吧，对</b>」这个回答很真实，<b>而讲者的处理值得注意</b>：<b>学生没有完全确信</b>。而讲者选择往前走（「我就当这是一个是」）。</p>
+<p class="">这是第二次了 —— 前面推 pass@k 时他也说过一次同样的话。</p>
+<p class="">我想在这里替你做一次检查，<b>因为接下来是整讲最重的一块</b>：你能说出「为什么不用 SFT」的三条吗？（数据不存在 / 人写的未必最好 / 奖励现成）⇒ <b>你能说出那两个奖励吗</b>？（think 标签在不在 / 答案对不对）⇒ 你能说出「不需要一个模型」指的是不需要哪个模型吗？（奖励模型）</p>
+<p class="">三个都能答 ⇒ 往下走；有一个答不上 ⇒ 建议回去把那一镜看一遍。</p>
+<p class="">而「<b>你可能已经很多次听到这个缩写了</b>」是在说 <b>GRPO</b>：它从 2025 年初开始几乎出现在每一篇推理相关的论文里。而它其实只对 PPO 改了一处 —— 下一个知识点开始讲。</p>
+<p class="warn">⚠ 从这里开始，L5 的那套 RL 词汇<b>全部要被用上</b>。</p></div>
+</article>
+</section>
+<section id="m-i">
+  <h2><span class="tag">模块 i</span>GRPO：它只改了 advantage 那一处<small>58:58–66:04</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">58:58</span><span class="en">it has been the go to RL algorithm for all these reasoning tasks</span></div>
+  <div class="body"><p class=""><b>这一讲最常被引用的那个缩写，终于登场了。</b></p>
+<p class="star">⭐ 先把它的来历钉清楚，<b>因为这件事经常被搞错</b>：GRPO 出自「DeepSeekMath」那篇论文（2024 年 2 月）。<b>而 R1 是 2025 年 1 月</b>。</p>
+<p class="">所以 R1 不是 GRPO 的发明者，它是 GRPO 最成功的使用者。</p>
+<p class="">「<b>首选（go-to）</b>」这个词在这里不是修辞：2025 年之后，几乎每一个开源推理模型的训练流程里都是 GRPO。而它的变体（DAPO、GSPO、Dr. GRPO 等）也都是从它改的。</p>
+<p class="">所以这一块是这一讲里「最该学会」的部分 —— 它的保质期比别的部分长。</p>
+<p class="">我先把结论给你，<b>这样接下来四镜你会听得更轻松</b>：<b>GRPO 和 PPO 的目标完全一样</b>。GRPO 和 PPO 的约束也完全一样。它们只在「advantage 怎么算」这一处不同。</p>
+<p class=""><b>而那一处的改动，省掉了一整个模型</b>。</p>
+<p class="warn">⚠ 讲者说「<b>你可能已经很多次听到这个缩写了</b>」—— 他说得对，这个词在 2025 年的论文里密度极高。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">59:11</span><span class="en">GRPO stands for group relative policy optimization</span></div>
+  <div class="body"><p class=""><b>名字里的三个词，每一个都在说一件事。</b></p>
+<p class="star">⭐ 把名字拆开读，<b>整个算法就说完了一半</b>：「Policy Optimization」：和 PPO 一样 —— <b>优化策略（也就是你的 LLM）</b>。「<b>Relative</b>」：advantage 是「相对的」—— 相对于某个参照。「<b>Group</b>」：而那个参照是「同一个 prompt 的一组 completion」。</p>
+<p class="">所以名字本身就是算法的定义：在一组里相对地算优势，然后优化策略。</p>
+<p class="">请把 <b>advantage</b> 的定义再确认一遍（L5 讲过），<b>因为它是全部重点</b>：advantage = 「实际拿到的」−「本来预期的」。<b>它为正</b> ⇒ 这次比预期好 ⇒ 把这个行为的概率往上调。<b>它为负</b> ⇒ <b>这次比预期差 ⇒ 往下调</b>。</p>
+<p class="">而「<b>本来预期的</b>」是什么，就是 PPO 和 GRPO 唯一的分歧点：<b>PPO</b>：预期由一个专门训练的 value function 给出。<b>GRPO</b>：预期就是同一组其它 completion 的平均奖励。</p>
+<p class="">请把这一句记住，这一整块的内容都是它的展开。</p>
+<p class="warn">⚠ 「<b>比你会预期的更好</b>」—— 注意 advantage 关心的从来不是「好不好」，而是「比预期好不好」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">60:16</span><span class="en">there is a key difference</span></div>
+  <div class="body"><p class=""><b>第二件事，然后是这一整块的那句关键的话。</b></p>
+<p class="star">⭐ 他把 L5 那两层「<b>别跑太远</b>」又说了一遍，<b>而这两层很容易混</b>：偏离「旧模型」（π_old，上一轮 RL 迭代） ⇒ <b>由 clip 管</b> ⇒ <b>管的是「速度的上限」</b>。偏离「基础模型」（π_ref，SFT 阶段的那个） ⇒ <b>由 KL 惩罚管</b> ⇒ <b>管的是「位移的上限」</b>。</p>
+<p class="">两条约束并存，不是二选一 —— 这是 L5 里反复强调过的那个符号陷阱。</p>
+<p class="">所以 GRPO 的「<b>继承清单</b>」现在很清楚了：<b>目标</b>：<b>最大化 advantage</b> ✓ <b>和 PPO 一样</b>。<b>约束一</b>：<b>clip（别一步走太大）</b> ✓ <b>和 PPO 一样</b>。<b>约束二</b>：<b>KL 惩罚（别离参考模型太远）</b> ✓ <b>和 PPO 一样</b>。<b>advantage 怎么算</b>：<b>✗ 不一样</b>。</p>
+<p class="">这个「<b>只改一处</b>」的结构本身值得学：GRPO 不是一个新框架，它是对一个成熟算法的一处替换。<b>而那一处替换省掉了一整个要训练的模型</b>。</p>
+<p class="">这是最好的那种论文：改动最小，收益最大，而且你一眼就能看懂改了什么。</p>
+<p class="warn">⚠ 从这里开始的四镜是这一讲的技术核心 —— <b>请放慢</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">60:50</span><span class="en">along with something else that it was training jointly at training time, which was called the value function</span></div>
+  <div class="body"><p class=""><b>先把 PPO 那一套完整回忆一遍，不然下一镜的对比没有意义。</b></p>
+<p class="star">⭐ 请把 <b>value function</b> 的那个定义原样记住，<b>它在 L5 里出现过</b>：<b>输入</b>：一段<b>部分生成</b>（prompt + 已经写了一半的回答）。<b>输出</b>：「如果按当前策略把它写完，最终奖励大概是多少」。</p>
+<p class="">所以它是一个「预期」的估计器 —— 而 advantage 就是「实际 − 预期」。</p>
+<p class="">为什么 PPO <b>需要</b>这个东西：奖励只在<b>整条 completion 写完</b>之后才有一个数。但 RL 要<b>对每一个 token</b> 决定「该上调还是下调它的概率」。</p>
+<p class="">所以你需要一个东西，告诉你「写到这里为止，形势是好还是坏」—— 那就是 value function。</p>
+<p class="">而这件事在 L5 里有一个名字：功劳分配（credit assignment）。</p>
+<p class="">注意「联合训练（training jointly）」这四个字，<b>它是下一镜那个瓶颈的源头</b>：value function 不是现成的，它要和策略一起训。而它典型地和策略一样大（因为它也得读懂整个上下文）。</p>
+<p class="warn">⚠ 所以 PPO 训练时<b>显存里要放两个大模型的梯度</b> —— 而那正是 L5 说的「四个模型」里最贵的一笔。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">61:37</span><span class="en">you had to train a value function jointly with your policy</span></div>
+  <div class="body"><p class=""><b>那个瓶颈，而讲者顺手承认了 L5 跳过了 GAE 的公式。</b></p>
+<p class="star">⭐ 先替你确认一件事：<b>L5 真的跳过了 GAE</b>：L5 讲了 advantage 是什么、讲了 value function 是什么。但没有写出 GAE 那个公式 —— 讲者这里说「我们其实没有看过」，他记得没错。</p>
+<p class="">而这不影响你理解 GRPO：因为 GRPO 恰好是把 GAE 整个扔掉了。</p>
+<p class="">把那个瓶颈的代价<b>算一下</b>，<b>你就知道为什么这是个大问题</b>：value function 典型地<b>和策略一样大</b>（比如 7B）。它要存<b>参数 + 梯度 + 优化器状态</b>（Adam 要两份动量）。<b>所以它大致把训练显存需求翻了一倍</b>（L4 算过这笔账）。</p>
+<p class="">而它还要调超参、还可能训不稳 —— 它自己就是一个会出问题的模型。</p>
+<p class="">请注意这个瓶颈是<b>两重</b>的，<b>而两重都值得记</b>：<b>计算上</b>：<b>多一个和策略同等大小的模型要训</b>。<b>方法上</b>：value function 自己估不准时，advantage 就错，而策略会跟着错。</p>
+<p class="">所以去掉它不只是省钱，也去掉了一个误差来源。</p>
+<p class="warn">⚠ 「<b>一个非常复杂的公式</b>」—— GAE 的公式确实不短，但它的想法只是「把不同步数的回报按指数加权平均」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">61:59</span><span class="en">compare it with the average of rewards of completions for that same prompt</span></div>
+  <div class="body"><p class=""><b>整个 GRPO 的核心，就这四句话。</b></p>
+<p class="star">⭐ 请看清这一招的本质，<b>它只换了一样东西</b>：advantage 需要一个「<b>预期</b>」作为基线。<b>PPO</b>：那个预期由<b>一个模型「预测」出来</b>。<b>GRPO</b>：那个预期由<b>同组其它样本「当场测」出来</b>。</p>
+<p class="">也就是：用「蒙特卡洛估计」替换「学出来的估计器」。</p>
+<p class="">为什么这招在 LLM 上特别合适，<b>而在传统 RL 上不行</b>：<b>传统 RL</b>：一个状态<b>只能走一次</b>（你没法把机器人倒回去重走）。<b>LLM</b>：同一个 prompt 可以采样无数次 —— 每次都是一个完整独立的轨迹。</p>
+<p class="">所以「同一个起点重开 g 次」这件事在 LLM 上是免费的，在机器人上是不可能的。</p>
+<p class="">而这正是为什么 GRPO 必须等到 LLM 时代才被发明。</p>
+<p class="">请注意那句「<b>同一个 prompt</b>」，<b>它是全部的关键</b>：<b>比较只能在同一道题内部进行</b>。跨题比较没有意义（难题的奖励本来就低）。</p>
+<p class="">而这一点正是下面那个「简单题 vs 难题」例子要说的事。</p>
+<p class="warn">⚠ 「<b>我们不要那么做</b>」—— 讲者在用 GRPO 作者的口吻说话，而这个语气很准确：GRPO 的论文正是这么论证的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">62:35</span><span class="en">a relative measure of the reward for that completion and all the other rewards of the other completions</span></div>
+  <div class="body"><p class=""><b>一个具体例子，把「组」这个词坐实。</b></p>
+<p class="star">⭐ 用一行把它写清楚，这就是 GRPO 的 advantage:⇒ 对第 i 条 completion：A_i = r_i − mean(r₁ … r_g)。其中 <b>g</b> 是这一组的大小（<b>典型地 8 到 64</b>）。</p>
+<p class="">而稍后会看到实际还除了一个标准差 —— 讲者自己会说那一处可能不是最好的做法。</p>
+<p class="">「<b>那个 prompt 是共享的</b>」这句话请不要跳过：一组里的 g 条 completion，回答的是同一道题。它们唯一的差别是<b>采样的随机性</b>（所以温度又回来了）。</p>
+<p class="">于是「比较」是公平的：难度相同、prompt 相同，只有运气和走法不同。</p>
+<p class="">这个设计有一个漂亮的副作用，<b>请自己想一下</b>：如果一组里 g 条全对 ⇒ 平均 = 满分 ⇒ 所有 advantage 都是 0 ⇒ 这道题不产生任何梯度。如果一组里 g 条全错 ⇒ 同样，所有 advantage 都是 0。</p>
+<p class="">所以 GRPO 自动忽略「太简单」和「太难」的题，只从「有的对有的错」的题上学。那正是信息量最大的那些题 —— 一个免费得到的课程学习（curriculum）效果。</p>
+<p class="warn">⚠ 不过这也是一个已知缺点：全对或全错的那一组算力完全白费了，而后续的变体（如 DAPO）专门在修这件事。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">63:02</span><span class="en">the big benefit here is that we do not use value functions</span></div>
+  <div class="body"><p class=""><b>好处用一句话说完，而那个交换非常清楚。</b></p>
+<p class="star">⭐ 请把这笔交换完整地算一下，<b>因为它不是「净赚」</b>：<b>省下</b>：一个和策略同等大小的 value function（参数 + 梯度 + 优化器状态 + 调参 + 不稳）。<b>付出</b>：每个 prompt 要生成 g 条 completion 而不是 1 条（<b>推理算力 × g</b>）。</p>
+<p class=""><b>所以它是「把训练成本换成了推理成本」</b>。</p>
+<p class="">为什么这笔交换是划算的，<b>而理由很具体</b>：生成 completion 是「推理」 ⇒ 不需要存梯度、可以大批量并行、可以用量化和 FlashAttention（L4 那一整讲）。训练一个 value function 是「训练」 ⇒ 要存梯度和优化器状态，显存占用是推理的好几倍。</p>
+<p class="">所以「多生成几条」比「多训一个模型」便宜得多，而且工程上简单得多。</p>
+<p class="">而「<b>我们做的唯一一件事</b>」这个说法值得记住：GRPO 的全部实现差异，就是「采 g 条，然后减去均值」。没有新的网络、没有新的损失项、没有新的超参（除了 g）。</p>
+<p class="">这就是为什么它被这么快地普及：改动小到几十行代码。</p>
+<p class="warn">⚠ 「<b>那你会改做什么呢？</b>」—— 讲者在把一个学生的追问重述给全班，而那个问题是「为什么要这么做」，下一个知识点就是答它。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">63:53</span><span class="en">they have been developed before all these LLMs became a thing</span></div>
+  <div class="body"><p class=""><b>讲者的回答从一个时间差开始，而这个角度很有启发。</b></p>
+<p class="star">⭐ 这是一个很有用的思维习惯，<b>请记下来</b>：一个方法的设计假设，来自它被发明时的那个问题。<b>而不是来自你现在的问题</b>。</p>
+<p class="">所以搬用一个方法之前，先问：「它当初是为什么样的问题设计的」。</p>
+<p class="">把 <b>PPO 当初的世界</b>想一下，<b>你就知道差别在哪</b>：<b>2017 年的 RL 场景</b>：Atari 游戏、机器人控制、连续控制。<b>那里的特征</b>：一条轨迹很长、每一步都有即时奖励、而且「重开一局」很贵。</p>
+<p class="">所以你必须用一个学出来的 value function 去「猜」形势，因为你没法重采样同一个状态。</p>
+<p class="">而 <b>LLM 的世界</b>恰好反过来：一条轨迹<b>只有一个终局奖励</b>（答案对不对）。而「重开一局」几乎免费（同一个 prompt 再采一次）。</p>
+<p class="">所以那个「必须学一个估计器」的理由在 LLM 上消失了 —— 而 GRPO 只是注意到了这件事。</p>
+<p class="warn">⚠ 「<b>也许在语言这个世界里不是</b>」—— 这句话很克制，但它其实是在说「PPO 的 value function 在 LLM 上是一个多余的复杂度」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">64:51</span><span class="en">use that as some kind of baseline to put this reward into context</span></div>
+  <div class="body"><p class=""><b>高层直觉，而「把奖励放进上下文」这个说法非常准。</b></p>
+<p class="star">⭐ 「把奖励放进上下文（put the reward into context）」—— <b>这个说法值得单独记</b>：一个奖励数字<b>本身没有意义</b>。「这条回答拿了 1 分」告诉你什么？什么也不告诉你。除非你知道「同一道题的其它尝试拿了多少分」。</p>
+<p class="">所以「上下文」= 同组的其它尝试，而 advantage 就是把奖励放进这个上下文之后得到的量。</p>
+<p class="">这个想法其实在统计上有一个标准名字：<b>它就是「减去基线以降低方差」</b>（L5 讲 advantage 时讲过）。而 GRPO 的贡献<b>不是提出这个想法</b>。</p>
+<p class="">它的贡献是「找到一个不用训练就能得到的基线」。</p>
+<p class="">请注意讲者描述作者动机时的用词：「<b>不必拥有这个非常昂贵的联合模型</b>」：他把 GRPO 的动机说成是「省掉一个麻烦」，而不是「一个理论突破」。而这个描述是准确的：GRPO 的论文本身也是这么论证的。</p>
+<p class="">一个「为了省事」而提出的改动，最后成了全行业标准 —— 这种事在系统领域很常见。</p>
+<p class="warn">⚠ 「<b>一个别的「相对」的方式</b>」—— <b>「相对」这个词就是名字里的那个 R</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">65:21</span><span class="en">if you find a good solution, it's a good solution to a hard problem</span></div>
+  <div class="body"><p class=""><b>那个例子说清了「相对」为什么必要，而它自动实现的方式很优雅。</b></p>
+<p class="star">⭐ 请注意这件事是<b>怎么自动实现的</b>，<b>不需要任何额外机制</b>：<b>简单题</b>：g 条里大部分都对 ⇒ 组内平均奖励高 ⇒ 你答对了，advantage 很小。<b>难题</b>：g 条里大部分都错 ⇒ 组内平均奖励低 ⇒ 你答对了，advantage 很大。</p>
+<p class="">所以「难题的好解更值钱」这件事，是「减去组内均值」这个操作的直接后果。</p>
+<p class="">把这个和 PPO 对照一下，<b>差别就很清楚</b>：<b>PPO</b>：也靠基线做这件事，<b>但那个基线是一个模型「猜」的</b>。而那个模型猜得准不准，直接决定了这个校正对不对。</p>
+<p class="">GRPO 的基线是「当场测的」，所以它在这一点上天然更可靠。</p>
+<p class="">「<b>烤进（bake into）</b>」这个词用得很好：它指「不是外加一个规则，而是让它成为公式的自然结果」。而这正是一个好设计的标志：你想要的性质，是机制的副产品，不是补丁。</p>
+<p class="">这一点对你写论文也有用：如果一个性质要靠额外规则来保证，那通常说明你的主机制还没找对。</p>
+<p class="warn">⚠ 「<b>上调那些 token 的权重</b>」—— 注意最终被改的是「每一个 token 的生成概率」，advantage 只是那个改动的幅度。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">65:37</span><span class="en">GRPO was developed a year ago</span></div>
+  <div class="body"><p class=""><b>这是那个时间差论证的收尾，而它把话说圆了。</b></p>
+<p class="star">⭐ 把两个算法的出生环境<b>并排</b>放一次，<b>这个论证就完整了</b>：<b>PPO（2017）</b>：世界里没有 LLM ⇒ 它为「长轨迹、密集奖励、不能重采样」而设计。<b>GRPO（2024）</b>：世界里 LLM 遍地 ⇒ 它为「单一终局奖励、可以无限重采样」而设计。</p>
+<p class="">所以 GRPO 不是「改进了 PPO」，而是「为一个不同的问题重新设计了 advantage」。</p>
+<p class=""><b>这个区分对你读论文很有用</b>：「改进」意味着：原方法在同一个问题上做得不够好。「重新设计」意味着：问题变了，原方法的假设不再适用。</p>
+<p class="">而后者往往贡献更大，因为它需要你先看清「问题变了」这件事。</p>
+<p class="">请注意讲者在这里还是在用「<b>我会那样去想它</b>」这种措辞：他在给一个「理解方式」，而不是在陈述论文里写的动机。而他之前标注过「我在做假设」，这里也是同一种克制。</p>
+<p class="">所以这个时间差的解释是他的诠释，不一定是作者的原话 —— 但它确实很有说服力。</p>
+<p class="warn">⚠ 「<b>一年前</b>」—— 讲课是 2025 年 11 月，而 DeepSeekMath 是 2024 年 2 月，所以严格说是一年零九个月。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">66:04</span><span class="en">we will have a walkthrough of exactly how it works</span></div>
+  <div class="body"><p class=""><b>一个很体贴的预告：不懂没关系，马上会有一次图示走查。</b></p>
+<p class="star">⭐ 这个处理方式值得记一下，<b>它是一个很好的教学安排</b>：<b>先讲「想法」（为什么要这么做）</b>。<b>再讲「流程」（数据怎么流动）</b>。</p>
+<p class="">而不是倒过来 —— 因为先看流程图的人容易只记住箭头，记不住为什么。</p>
+<p class="">在走查开始之前，<b>我建议你先自己把 GRPO 说一遍</b>：① 对一道题，采 g 条 completion。② <b>每条算一个奖励（可验证的那两个）</b>。③ advantage = 自己的奖励 − 这 g 条的平均。④ 用 advantage 更新策略，同时 clip 和 KL 惩罚照旧。</p>
+<p class="">能说出这四步，下面的流程图就只是在给它配图。</p>
+<p class="">而接下来那次走查会补上<b>一个本镜没说的细节</b>：advantage 实际上不只减均值，还除了一个标准差。而讲者会主动说「那可能不是最好的做法」—— 这是一个很诚实的补充。</p>
+<p class="">请留意那一处，它是这一讲里少见的「作者自己也不确定」的地方。</p>
+<p class="warn">⚠ 「<b>完全同样的东西，但把它图示出来</b>」—— 所以下面的内容是重复的，而重复在这里是有意的。</p></div>
+</article>
+</section>
+<section id="m-j">
+  <h2><span class="tag">模块 j</span>两张流程图，与两个损失函数的异同<small>66:49–73:16</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">66:49</span><span class="en">you pass them through the reward model that gives you g rewards</span></div>
+  <div class="body"><p class=""><b>一张流程图，四步就走完了。</b></p>
+<p class="star">⭐ 请把这四步和 PPO 的四步<b>提前对照一下</b>，<b>差别只在第三步</b>：<b>PPO</b>：query ⇒ 策略 ⇒ <b>1 条</b> completion ⇒ <b>1 个</b>奖励。<b>GRPO</b>：query ⇒ 策略 ⇒ <b>g 条</b> completion ⇒ <b>g 个</b>奖励。</p>
+<p class="">就这一处。而它带来的后果是整个 value function 可以不要了。</p>
+<p class="">「<b>g</b>」这个字母就是名字里的那个 <b>G（Group）</b>：g 是组大小，是 GRPO 唯一新增的超参数。<b>典型取值 8 到 64</b>。</p>
+<p class="">g 太小 ⇒ 均值估计不准 ⇒ advantage 噪声大。g 太大 ⇒ 每一步要生成的 token 数线性增长 ⇒ 慢。</p>
+<p class="">请注意这里说的是「<b>奖励模型</b>」，<b>而这是一个流程图上的通用画法</b>：在一般的 GRPO 里，那一格确实可以是一个训好的奖励模型。但在推理这个场景里，那一格是一个验证器（跑测试 / 比答案）。</p>
+<p class="">而讲者后面会专门把这件事说清楚 —— 请先记住这个区别。</p>
+<p class="warn">⚠ 「<b>我们试着训练的那个 LLM</b>」—— 策略模型就是最终要交付的那个模型，别的都是辅助。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">67:09</span><span class="en">it's reward minus the average over the standard deviation of those rewards is how they defined it</span></div>
+  <div class="body"><p class=""><b>实际公式比「减均值」多了一步，而讲者立刻就给那一步打了问号。</b></p>
+<p class="star">⭐ 先说清楚「<b>除以标准差</b>」在做什么：它把这一组的 advantage <b>标准化成「均值 0、标准差 1」</b>。<b>目的</b>：<b>让不同难度的题产生的梯度尺度大致一致</b>。</p>
+<p class="">这是机器学习里一个非常常规的操作（和 batch norm 的动机同类）。</p>
+<p class="">但它有一个很具体的问题，<b>而讲者稍后会讲</b>：想象一组里<b>只有一条对，其余全错</b> ⇒ <b>标准差很小</b> ⇒ <b>除完之后 advantage 巨大</b>。再想象一组里<b>对错各半</b> ⇒ <b>标准差最大</b> ⇒ 除完之后 advantage 反而被压小。</p>
+<p class="">于是「几乎答不出的题」被放大，而「刚好在能力边界上的题」被压制 —— 这恰好和你想要的相反。</p>
+<p class="">这一处是这一讲最值得你记住的「<b>作者也不确定</b>」的地方：后来的 Dr. GRPO 那篇论文正是把这个标准差去掉了。<b>而它报告说去掉之后训练更稳</b>。</p>
+<p class="">所以：一个被全行业抄了一年的公式，其中一项其实是可疑的。</p>
+<p class="warn">⚠ 请记住讲者这句「<b>顺带说一句</b>」—— <b>它是一张欠条，而这一讲后面会还</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">67:30</span><span class="en">we, of course, don't want to deviate too much</span></div>
+  <div class="body"><p class=""><b>最后两步，GRPO 就讲完了 —— 一共五步。</b></p>
+<p class="star">⭐ 请把这五步背下来，<b>它是这一讲的技术核心</b>：① 对一个 prompt，采 g 条 completion。② <b>每条算一个奖励（推理场景里：验证器）</b>。③ advantage = (自己 − 组内均值) / 组内标准差。④ 用 advantage 调策略（带 clip）。⑤ <b>加一个 KL 项，别离参考模型太远</b>。</p>
+<p class="">注意 KL 那一项在 GRPO 里的位置，<b>它和 PPO 不一样（后面会专门讲）</b>：<b>GRPO</b>：<b>KL 是「目标函数里显式的一项」</b>。<b>PPO</b>：KL 典型地「被塞进 advantage 的奖励里」。</p>
+<p class="">而讲者说这「更像是一个技术细节」—— 但它在读代码时会直接影响你找哪一行。</p>
+<p class="">请注意这里没有的东西，<b>那才是重点</b>：<b>没有 value function</b>。<b>没有 GAE</b>。<b>没有「每 token 的价值估计」</b>。</p>
+<p class="">而少掉这三样，就是 GRPO 的全部卖点。</p>
+<p class="warn">⚠ 「<b>我们现在就要看 PPO 是怎么工作的</b>」—— 接下来四镜是 PPO 的同一张图，而它会明显更复杂。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">68:00</span><span class="en">you only have one completion</span></div>
+  <div class="body"><p class=""><b>PPO 的前三步，差别只在「一条」还是「g 条」。</b></p>
+<p class="star">⭐ 这一步的信息量其实很大，<b>请停一下</b>：PPO 只采一条，所以它「没有可比对象」。于是它必须从别处得到「预期值」—— 那就是 value function 存在的全部理由。</p>
+<p class="">所以「只采一条」和「必须训一个 value function」是因果关系，不是两个独立的设计选择。</p>
+<p class="">反过来也成立，<b>这是理解 GRPO 的最短路径</b>：GRPO 采 g 条 ⇒ 有了可比对象 ⇒ 不再需要「预测预期值」的模型。</p>
+<p class="">所以 GRPO 不是「发明了一个新的 advantage」，它是「用采样换掉了一个模型」。</p>
+<p class="">注意「那一整条 completion 的一个奖励」这个措辞：奖励是「completion 级」的 —— 一整条回答，一个数。而策略更新需要「token 级」的信号。</p>
+<p class="">这个粒度差距，就是下面那个 per-token 实现细节要处理的事。</p>
+<p class="warn">⚠ 「<b>如果你记得</b>」—— 这整段是 L5 的回顾，所以如果这里听不懂，是 L5 的债。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">68:51</span><span class="en">only the last token has the reward of the whole completion</span></div>
+  <div class="body"><p class=""><b>一个 L5 跳过的实现细节，而它值得看清楚。</b></p>
+<p class="star">⭐ 请把这个数据结构<b>画出来</b>，<b>它很具体</b>：一条 completion 有 <b>T</b> 个 token ⇒ 奖励是一个<b>长度 T 的向量</b>。<b>第 1 到 T−1 格</b>：只有 −β·KL（那一个 token 的 KL 惩罚）。<b>第 T 格（最后一个）</b>：<b>任务奖励 r ＋ −β·KL</b>。</p>
+<p class="">所以任务奖励是「稀疏的」：一整条几千 token，只有最后一格有它。</p>
+<p class="">为什么要把 KL 写成「<b>每 token</b>」而不是一个总项：因为 KL 本来就是<b>逐 token 定义</b>的（比较两个分布在每一步的差异）。而把它<b>塞进奖励向量</b>，就能让它自动走完 GAE 那一整套 advantage 计算。</p>
+<p class="">也就是说：这是一个「不用改算法，只改输入」的实现技巧。</p>
+<p class="">这件事解释了 L5 那个让人困惑的地方：L5 的公式里 KL 写在目标函数里（max E[r] − β·KL）。<b>但实际代码里它在奖励里</b>。</p>
+<p class="">两者数学上等价，而讲者在这里把这层对应关系补上了。</p>
+<p class="warn">⚠ 「<b>我们上次没看到</b>」—— 这是讲者在补 L5 的一个空白，而他下一镜会说这件事「不是超级重要」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">69:01</span><span class="en">it's just good to know that people implement it that way</span></div>
+  <div class="body"><p class=""><b>然后 value function 登场，而它也是「每 token」的。</b></p>
+<p class="star">⭐ 请把 PPO 现在手上的两个向量<b>并排</b>看一眼：<b>奖励向量</b>（长度 T）：<b>最后一格有任务奖励，每一格有 KL</b>。<b>价值向量</b>（长度 T）：<b>每一格是「从这里写完能拿多少」的预测</b>。</p>
+<p class="">而 GAE 的工作就是：把这两个向量揉成一个 advantage 向量。</p>
+<p class="">所以 PPO 的复杂度来源现在很清楚了：<b>它要在「token 级」上做功劳分配</b>。而为此它需要一个「每一步都能给出预测」的模型。</p>
+<p class="">而那个模型必须和策略同等规模，因为它也要读懂整个上下文。</p>
+<p class="">请对照 GRPO 在这件事上的选择，<b>它非常激进</b>：GRPO 干脆不做 token 级的功劳分配。一整条 completion 里的每一个 token，共享同一个 advantage 值。</p>
+<p class="">所以 GRPO 的 advantage 是「序列级」的，PPO 的是「token 级」的。这是一个真实的精度损失 —— 但实践证明在 LLM 上它不要紧，而省下的成本很大。</p>
+<p class="warn">⚠ 「<b>不是超级重要要记住的</b>」—— 讲者在时间紧的时候给出的优先级判断，我同意：这一段是实现细节。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">69:45</span><span class="en">you can think of it as some complicated formula</span></div>
+  <div class="body"><p class=""><b>GAE 被一句带过，然后讲者说了一句很直接的话。</b></p>
+<p class="star">⭐ 「<b>这个和那一个相比是复杂的</b>」—— <b>这句话就是 GRPO 流行的全部原因</b>：两张图<b>并排放在一张幻灯上</b>。<b>GRPO 那张：四个框</b>。PPO 那张：七八个框，还有一个要联合训练的模型。</p>
+<p class="">而两者在推理任务上的效果相当 —— 所以没有人会选复杂的那个。</p>
+<p class="">我替你把 <b>GAE</b> 一句话讲完，<b>这样你不会留一个空洞</b>：它要估「从第 t 步开始，比预期好多少」。<b>最短视的估法</b>：只看下一步（偏差小、方差小，但看得太近）。<b>最远视的估法</b>：<b>看到序列结束（无偏，但方差巨大）</b>。</p>
+<p class="">GAE 的做法：把所有步长的估计按 λ 的幂加权平均 —— 一个在偏差和方差之间的旋钮。</p>
+<p class="">所以它「复杂」只是因为那个加权和写出来很长，想法本身不难。</p>
+<p class="">而 GRPO 对这整件事的处理是：<b>跳过</b>：不估「从第 t 步开始」的优势，只估「这整条回答」的优势。于是 λ、价值函数、偏差方差权衡，全部不需要了。</p>
+<p class="warn">⚠ 讲者两次说「<b>我们不会看</b>」GAE —— L5 没讲，L6 也不讲，所以你不需要为它焦虑。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">70:06</span><span class="en">you use advantages that are a result of this group computation</span></div>
+  <div class="body"><p class=""><b>把两者的 advantage 来源并排说一次，然后一个学生问了一个极好的问题。</b></p>
+<p class="star">⭐ 这个学生的问题问得极好，<b>而它问的正是最实际的那一点</b>：<b>流程图上画了好几个框，但框不等于模型</b>。有些框是「要训的模型」，有些是「冻住的模型」，有些根本不是模型。</p>
+<p class="">而「要训几个模型」才是决定成本的那个数。</p>
+<p class="">在看答案之前，<b>你可以先自己数一遍</b>：<b>PPO 的框</b>：<b>策略、参考、奖励、价值</b>。<b>GRPO 的框</b>：<b>策略、参考、奖励</b>。</p>
+<p class="">那么其中哪些要训？哪些冻住？—— 这就是下面两镜的内容。</p>
+<p class="">而这个问题的答案会把 L5 那个「<b>四个模型</b>」的说法<b>精确化</b>：L5 说 RLHF 要「同时养四个模型」—— 那是对的。但「养」里面，「要训」和「只要前向」的成本差好几倍。</p>
+<p class="">所以这一问把那个粗略的说法变成了一个精确的账。</p>
+<p class="warn">⚠ 「<b>每 token 的</b>」—— 讲者又强调了一次 PPO 的 advantage 是 token 级的，这是两者精度上的差别。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">70:52</span><span class="en">in the reasoning case, we are actually not training a reward model</span></div>
+  <div class="body"><p class=""><b>先说「冻住的」那些，而推理场景里少掉了一整个。</b></p>
+<p class="star">⭐ 请把「<b>冻结（frozen）</b>」这个词的实际含义弄清楚：冻结 = 只做前向，不算梯度，不更新参数。所以它<b>只占「参数」的显存</b>，<b>不占梯度和优化器状态的显存</b>。</p>
+<p class="">而梯度 + Adam 状态大致是参数的 3 倍 —— 所以「冻结」和「要训」在成本上差 4 倍。</p>
+<p class="">而「<b>推理场景里根本没有奖励模型</b>」这件事，<b>把账又减了一笔</b>：<b>一般 RLHF</b>：奖励模型是一个<b>和策略同等规模的、训好后冻住的网络</b>。<b>推理场景</b>：那一格是一段 Python 代码 —— 跑单元测试，或者比字符串。</p>
+<p class="">所以它不占显存、不占 GPU、也不会给错答案。</p>
+<p class="">请把这一讲和 L5 的模型清单<b>对照</b>一次，<b>差距很直观</b>：<b>L5 的 RLHF + PPO</b>：策略（训）+ 价值（训）+ 参考（冻）+ 奖励（冻）= 4 个神经网络。<b>L6 的推理 + GRPO</b>：策略（训）+ 参考（冻）= 2 个神经网络 + 1 段代码。</p>
+<p class="">而「要训的」从 2 个降到 1 个 —— 这是最贵的那一项减半。</p>
+<p class="warn">⚠ 「<b>我们过去训练过的</b>」—— 指的是 L5 里那个用 Bradley-Terry 损失训出来的奖励模型。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">71:21</span><span class="en">in the GRPO case, we only train the policy model</span></div>
+  <div class="body"><p class=""><b>关键差别，讲者亲口定性。</b></p>
+<p class="star">⭐ 请注意讲者<b>两次</b>说「关键差别」，<b>而两次说的内容不同</b>：<b>第一次</b>（前面）：「差别在于它怎么计算 advantage」⇒ <b>方法上的说法</b>。<b>第二次</b>（这里）：「<b>差别在于我们训练哪些模型</b>」⇒ <b>成本上的说法</b>。</p>
+<p class="">而这两句说的是同一件事：换掉 advantage 的算法，就省掉了那个模型。</p>
+<p class="">把最终的账摆出来，<b>这就是全部的结论</b>：<b>PPO 要训</b>：策略 + value function（两个同等规模的模型）。<b>GRPO 要训</b>：<b>策略</b>（一个）。</p>
+<p class="">而「要训」是最贵的那一类 —— 所以这大致把训练显存需求砍掉一半。</p>
+<p class="">顺便把这件事放进这门课的大图景里：<b>L4</b>：怎么<b>让一次训练/推理更省</b>（量化、FlashAttention、MoE）。<b>L5</b>：怎么<b>对齐</b>，而代价是四个模型。<b>L6</b>：在<b>可验证任务上</b>，<b>把那四个砍到两个 + 一段代码</b>。</p>
+<p class="">所以这门课从头到尾都在算同一笔账：怎么用更少的资源拿到同样的能力。</p>
+<p class="warn">⚠ 「<b>这两者是一样的</b>」—— 指冻结的那些模型在两个算法里一样，差别只在要训的那些。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">71:57</span><span class="en">they look scary</span></div>
+  <div class="body"><p class=""><b>从图切到数学，而讲者的处理方式很聪明。</b></p>
+<p class="star">⭐ 请注意他没有做的事：<b>他不逐符号解释那两个公式</b>：<b>而是「找相同点，找不同点」</b>。于是你只需要记住差异，而共同部分 L5 已经讲过了。</p>
+<p class="">这是读任何「X 的改进版」论文的正确姿势：只读 diff。</p>
+<p class="">「<b>它们看起来很可怕</b>」—— <b>而这是真的，所以先给你一个结构</b>：两个公式<b>各自都有三块</b>：ratio（概率比）、clip（截断）、KL（约束）。外面<b>各自都套了一层求平均</b>（<b>GRPO 多一层：对组内 g 条平均</b>）。</p>
+<p class=""><b>看清这个骨架，公式就不可怕了</b>。</p>
+<p class="">接下来讲者会给出<b>两个相同点和两个不同点</b>，<b>我先列给你</b>：<b>相同点一</b>：都作用在「新策略 / 旧策略」的概率比上。<b>相同点二</b>：<b>都用 clip 限制更新幅度</b>。<b>不同点一</b>：KL 的位置（目标函数里 vs advantage 里）。<b>不同点二</b>：advantage 怎么算（这个你已经知道了）。</p>
+<p class="warn">⚠ 「<b>让我们看点数学</b>」—— 这是这一讲第二段真正的数学，上一段是 pass@k。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">72:11</span><span class="en">both of them, they operate on the ratio of the probability of the current policy and the probability of the old policy</span></div>
+  <div class="body"><p class=""><b>两个相同点，而这里正好踩在 L5 那两个符号陷阱上。</b></p>
+<p class="star">⭐ 请把 L5 那两个符号陷阱在这里再确认一遍，<b>它们非常容易中招</b>：<b>陷阱一</b>：这个 <b>r_θ 不是奖励（reward）</b> —— 它是「新策略给这条输出的概率 ÷ 旧策略给的概率」。<b>陷阱二</b>：<b>下标 old 不是 SFT 模型</b> —— <b>它是「RL 阶段上一轮迭代的策略」</b>。</p>
+<p class="">而真正的 SFT 模型叫 π_ref，它出现在 KL 那一项里。</p>
+<p class="">这个比值在做什么，<b>一句话说清</b>：<b>比值 &gt; 1</b> ⇒ <b>新策略比旧策略更倾向于这条输出</b>。<b>比值 &lt; 1</b> ⇒ <b>新策略更不倾向于它</b>。</p>
+<p class="">而这个比值乘上 advantage，就是「往好的方向推，推多少由 advantage 定」。</p>
+<p class="">而 <b>clip</b> 在做什么，<b>也一句话说清</b>：它把这个比值<b>截断在 [1−ε, 1+ε]</b>（典型 ε = 0.2）。于是「一次更新最多把概率改变 20%」。</p>
+<p class="">目的：防止一次大步长把策略推到一个坏区域，而 RL 从坏区域很难回来。</p>
+<p class="warn">⚠ 讲者说「<b>我建议你把那些图过一遍</b>」—— 指 L5 里 advantage 为正／为负时 clip 的两张图，那两张图值得回去看。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">72:58</span><span class="en">this clipping function just allows you to not make updates that are too big</span></div>
+  <div class="body"><p class=""><b>讲者直接把你送回 L5 的那两张图，而我替你把结论说一遍。</b></p>
+<p class="star">⭐ 那两张图的结论，<b>我直接给你</b>：advantage 为正（这条输出比预期好 ⇒ 想提高它的概率）：比值一旦超过 1+ε，目标就被削平 ⇒ 再提高也不给额外奖励。advantage 为负（这条输出比预期差 ⇒ 想降低它的概率）：比值一旦低于 1−ε，目标也被削平 ⇒ 再降低也不给额外奖励。</p>
+<p class="">所以 clip 的作用是「单边封顶」：往对的方向走可以，但一步走太远就没有收益了。</p>
+<p class="">为什么要这样设计，<b>而不是直接加一个惩罚项</b>：<b>加惩罚项</b>：会把梯度一直拉回来，哪怕那一步本来是对的。<b>clip</b>：在允许范围内完全不干扰，超出范围后梯度直接变零。</p>
+<p class="">也就是「不罚你，只是不再奖励你」—— 一个更温和的约束方式。</p>
+<p class="">请记住 clip 和 KL 管的是<b>两件不同的事</b>（L5 的重点）：<b>clip</b> 参照 <b>π_old</b>（上一轮）⇒ 管「<b>速度的上限</b>」。<b>KL</b> 参照 <b>π_ref</b>（SFT 模型）⇒ 管「<b>位移的上限</b>」。</p>
+<p class="">两条并存。而下一镜讲的「不同点」正是关于 KL 那一条放在哪里。</p>
+<p class="warn">⚠ 「<b>但现在 —— 什么是不同的？</b>」—— <b>讲者的语气在这里停了一下，下面是正题</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">73:16</span><span class="en">the KL divergence is actually something that is explicitly part of the objective function</span></div>
+  <div class="body"><p class=""><b>第一个不同点：同一个 KL，写在两个不同的地方。</b></p>
+<p class="star">⭐ 请先确认一件事：<b>这两种写法想做的事是一样的</b>：<b>两边都在说「别离参考模型太远」</b>。差别只在「这个约束被放在公式的哪一层」。</p>
+<p class="">所以讲者说它「更像是一个技术细节」，这个判断是对的。</p>
+<p class="">但它<b>有一个实际后果</b>，<b>而讲者没有展开</b>：<b>PPO（KL 在奖励里）</b>：KL 会<b>经过 GAE 那一整套加权</b> ⇒ <b>它的实际强度被 λ 和 γ 影响</b>。<b>GRPO（KL 在目标里）</b>：KL <b>直接以 β 的系数出现</b> ⇒ <b>它的强度就是 β，可控、可读</b>。</p>
+<p class="">所以 GRPO 这一处其实更干净 —— 它把一个被埋起来的约束拿到了明面上。</p>
+<p class="">对读代码的人来说，<b>这个差别非常实际</b>：<b>找 PPO 的 KL</b> ⇒ <b>去看奖励向量是怎么拼的</b>。<b>找 GRPO 的 KL</b> ⇒ <b>去看损失函数的最后一项</b>。</p>
+<p class="">而如果你在 GRPO 的实现里去奖励里找 KL，你会找不到。</p>
+<p class="warn">⚠ 顺带一个后续发展：很多 GRPO 的实践（包括 DAPO）干脆把 KL 项整个去掉了，因为在可验证奖励下 reward hacking 的风险本来就小。</p></div>
+</article>
+</section>
+<section id="m-k">
+  <h2><span class="tag">模块 k</span>最难的那一段，与长度膨胀这个 bug<small>73:54–81:23</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">73:54</span><span class="en">the second difference is the way we compute advantages</span></div>
+  <div class="body"><p class=""><b>第二个不同点，而它正是你已经知道的那一个。</b></p>
+<p class="star">⭐ 到这里，GRPO 的全部内容已经讲完了，<b>我替你收一次</b>：<b>相同点一</b>：<b>都用新旧策略的概率比</b>。<b>相同点二</b>：<b>都用 clip 限制步长</b>。<b>不同点一</b>：KL 的位置（目标里 vs 奖励里）—— 技术细节。<b>不同点二</b>：advantage 怎么算 —— 这才是实质。</p>
+<p class="">而「<b>实质</b>」这个判断不是我加的，<b>讲者自己排过序</b>：他说 KL 位置「更像是一个技术细节」。而他说 advantage 那一处是「关键差别」，还说了两次。</p>
+<p class="">所以如果你只记一处差别，记 advantage 那一处。</p>
+<p class="">请再确认一下你能一句话说出这个差别：<b>PPO：预期由一个学出来的模型预测</b>。GRPO：预期由同组其它样本当场测出来。</p>
+<p class=""><b>说得出 ⇒ 这一块你过了</b>。</p>
+<p class="warn">⚠ 讲者问「<b>到这里还好吗</b>」—— <b>而下一镜他会说一句很实在的话</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">74:30</span><span class="en">probably the hardest part of the whole class</span></div>
+  <div class="body"><p class=""><b>讲者亲口给这一段定了难度等级，而这句话值得你收下。</b></p>
+<p class="star">⭐ 请把这句话<b>原样</b>收下，<b>我是认真的</b>：<b>讲课的人自己说：这是整门课最难的部分</b>。所以如果你刚才那几镜读得吃力，那不是你的问题。</p>
+<p class="">而这门课前面已经讲过注意力、FlashAttention、MoE、DPO 推导 —— 他说这一段比那些都难。</p>
+<p class="">我想说一下为什么这一段<b>确实</b>最难，<b>它有一个具体的原因</b>：它要求你<b>同时持有四五个概念</b>：advantage、value function、ratio、clip、KL。而这些概念<b>来自上一讲</b>，并且<b>每一个都有自己的符号陷阱</b>。</p>
+<p class="">所以难点不在单个概念，而在「同时记住五个彼此纠缠的定义」。</p>
+<p class="">而这也正是「<b>只记差异</b>」这个策略最有价值的地方：<b>你不需要同时持有五个概念</b>。你只需要持有一句话：「GRPO 用同组均值替代了 value function」。</p>
+<p class="">剩下四个概念在两个算法里完全一样，所以它们不构成「差别」，不用放在工作记忆里。</p>
+<p class="warn">⚠ 「把场子开放一下（open the floor）」—— <b>而接下来发生的事有点尴尬，下一镜</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">74:39</span><span class="en">I actually see this as more of an alarm for myself</span></div>
+  <div class="body"><p class=""><b>没人提问，而讲者把这当成一个警报 —— 这是这一讲里最坦白的一刻。</b></p>
+<p class="star">⭐ 「<b>没人提问是一个警报</b>」—— <b>这个判断非常正确，而原因值得说清</b>：听懂了的人会问「边界在哪」「如果换成…会怎样」。完全听不懂的人问不出问题，因为他不知道该从哪里问起。</p>
+<p class="">所以沉默更可能是后者 —— 而讲者知道这件事。</p>
+<p class=""><b>这也给你一个很实用的自测方法</b>：读完一段之后，<b>问自己「我能提出一个关于它的问题吗」</b>。<b>提得出 ⇒ 你真的在理解它</b>。<b>提不出 ⇒ 你大概只是在跟读</b>。</p>
+<p class="">我替你准备三个这一段该问的问题，<b>你可以拿来检查自己</b>：① 如果一组里 <b>g 条全对</b>，GRPO 会学到什么？（什么都学不到，advantage 全为 0）⇒ ② <b>g</b> 设成 1 会怎样？（advantage 恒为 0，完全退化）⇒ ③ 为什么 <b>PPO 不能也用同组均值</b>？（<b>它能 —— 那就变成 GRPO 了</b>）</p>
+<p class=""><b>能答这三个，说明你不是在跟读</b>。</p>
+<p class="warn">⚠ 「<b>因为这也许 —— 我也不知道</b>」—— 他话说一半停住了，大概想说「也许是我讲得不够清楚」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">75:07</span><span class="en">these algorithms, they're just there to tune your model in the RL stage</span></div>
+  <div class="body"><p class=""><b>第一句要记的话，而它的作用是帮你降维。</b></p>
+<p class="star">⭐ 这句话在做一件很有用的事：<b>把它放回那三步训练里</b>：<b>第一步 预训练</b>：下一个 token 预测。<b>第二步 SFT</b>：在精选数据上监督微调。<b>第三步 RL</b>：而 PPO / GRPO 就是「这一步用什么算法更新权重」。</p>
+<p class="">所以它们不是一个新的训练范式，它们是第三步里的优化器。</p>
+<p class="">而「<b>PPO 两边都用</b>」这件事也值得记：<b>L5（偏好调优）</b>：PPO <b>把模型推向人类偏好</b>。<b>L6（推理）</b>：PPO <b>也能用，只是 GRPO 更便宜</b>。</p>
+<p class="">所以这两讲不是两套不同的技术，是同一套技术在两种奖励信号下的两种用法。</p>
+<p class="">请把这个「<b>降维</b>」的习惯学会，<b>它在读任何论文时都有用</b>：碰到一个复杂方法，先问：<b>「它在整个流程的哪一格」</b>。知道了那一格，你就知道它的输入是什么、输出是什么、它不负责什么。</p>
+<p class=""><b>而公式的细节可以之后再补</b>。</p>
+<p class="warn">⚠ 「那就有点东西了（that is something）」—— 讲者在说「记住这一句，就已经不是白听了」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">75:39</span><span class="en">GRPO differs from PPO in that GRPO does not need a value function</span></div>
+  <div class="body"><p class=""><b>第二句要记的话，而这两句就是这一整块的可带走版本。</b></p>
+<p class="star">⭐ 把讲者给的两句话写在一起，<b>这就是官方的最小集</b>：① 「这些算法只是在 RL 阶段用来调模型的」。② 「GRPO 和 PPO 的差别是：GRPO 不需要 value function，它用同组其它 completion 的奖励做比较」。</p>
+<p class="">讲者说「如果这说得通，这已经是一件很好的事了」—— 他把及格线划在这里。</p>
+<p class="">我再给你一个更短的版本，<b>方便你在考试或面试里用</b>：「PPO 靠一个学出来的 value function 当基线；GRPO 靠同组采样的均值当基线。」⇒ <b>一句话，而它包含了全部的实质</b>。</p>
+<p class="">而请注意讲者说的是「<b>你需要告诉自己</b>」：他在教一个学习方法：把一个复杂内容压缩成一两句你能对自己复述的话。而那一两句话就是你之后能从记忆里重建细节的「索引」。</p>
+<p class="">这个方法比「记住整个公式」有效得多，因为公式可以从索引重推，索引丢了公式就没用了。</p>
+<p class="warn">⚠ 讲者<b>连续三镜</b>都在安抚和压缩 —— 他很清楚这一块超出了大部分人的消化速度。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">76:20</span><span class="en">this is very heavy and can be technical</span></div>
+  <div class="body"><p class=""><b>一个很实在的建议，而它对这种内容是真的有效。</b></p>
+<p class="star">⭐ 「<b>重看几遍</b>」为什么对这种内容<b>特别</b>有效：这一段的难点是「<b>同时持有五个概念</b>」。而重看一遍，<b>其中两三个概念会变成「熟悉项」</b>。</p>
+<p class="">熟悉项不占工作记忆的位置 —— 于是剩下的那两三个就装得下了。</p>
+<p class="">所以重看不是「同样的事做两遍」，它每一遍面对的其实是一个更小的问题。</p>
+<p class="">而这正是这部片子存在的理由，<b>我顺便说清楚</b>：讲者说「重看录像」—— 但一段 107 分钟的录像不好重看。<b>而这里是把它拆成了一镜一镜的走查</b>。</p>
+<p class="">所以你可以只重看那两三镜难的，而不是整段。</p>
+<p class="">剩下的 <b>11 分钟</b>要讲什么，<b>先给你一个预告</b>：<b>一个真实存在的问题</b>：RL 训着训着，输出越来越长，而表现早就不涨了。<b>一个诊断</b>：问题出在 GRPO 损失里的那个 1/|o_i|。<b>一个修法</b>：把它从「每条各自除」改成「整组一起除」。</p>
+<p class="">而这一段是整讲里最接近「前沿」的内容，因为它讲的是「大家刚发现的一个 bug」。</p>
+<p class="warn">⚠ 「<b>交给 Shervine</b>」—— 这门课是两位讲者分工的，下半场由另一位讲 R1 的流水线和蒸馏。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">76:50</span><span class="en">it has gained enough traction for us to talk about it in this class</span></div>
+  <div class="body"><p class=""><b>接下来讲的是「刚发生的事」，而讲者又把那张定价欠条拿出来了。</b></p>
+<p class="star">⭐ 「它已经获得了足够的关注，让我们在这门课上讲它」—— <b>这句话里有一个判断标准</b>：一门课<b>不能讲每一篇新论文</b>。所以要有一个门槛：<b>「有足够的关注（traction）」</b>。</p>
+<p class="">而这个标准比「新」或「效果好」都更合理：被很多人跟进的工作，说明它解决的是一个真问题。</p>
+<p class="">请注意讲者<b>第三次</b>回到「定价」这件事了：<b>第一次</b>：讲推理 token 也算输出 token。<b>第二次</b>：讲「用最少 token 拿最大能力」这个目标。<b>第三次</b>：这里 —— <b>用它给一个纯技术问题找动机</b>。</p>
+<p class="">所以「长度膨胀」这件事在这一讲里不是一个算法缺陷，它是一个会出现在账单上的问题。</p>
+<p class="">而对你的课题，这个动机链条值得照抄：<b>「我的方法更快」是一个弱动机</b>。「我的方法让使用者少付钱 / 少等」是一个强动机。</p>
+<p class="">而讲者全程都在用后者，哪怕他讲的是损失函数里的一个因子。</p>
+<p class="warn">⚠ 「<b>过去几个月</b>」—— 这一段的内容在 2025 年 11 月是几个月新的，所以它也是最容易过期的一段。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">77:31</span><span class="en">there is an incentive to see what we can optimize from the output length perspective</span></div>
+  <div class="body"><p class=""><b>一个现象，而它的关键是「没人要求它这么做」。</b></p>
+<p class="star">⭐ 请先把这件事的性质说清楚：<b>这是一个涌现的行为</b>：奖励里<b>只有两项</b>：<b>有 think 标签、答案对</b>。<b>没有任何一项鼓励「写长一点」</b>。</p>
+<p class="">但模型就是一路写得越来越长 —— 没人要求它，它自己变成了这样。</p>
+<p class="">为什么会这样？<b>有两个层次的解释，而它们都对</b>：<b>有益的那一半</b>：更长的推理链真的能解更难的题（这是我们想要的）。<b>有害的那一半</b>：损失函数里有一个因子，让「写长」在数学上占便宜（这是一个 bug）。</p>
+<p class="">而这一段剩下的内容，就是在把这两半分开 —— 保留前者，修掉后者。</p>
+<p class="">注意讲者同时提了「<b>用户侧</b>」和「<b>提供方侧</b>」：<b>用户</b>：<b>不想为看不到的 token 付钱</b>。<b>提供方</b>：输出短 = 吞吐高 = 同样的卡能服务更多人。</p>
+<p class="">所以这件事两边的利益是一致的 —— 这很少见，而它解释了为什么这个问题被这么多人跟进。</p>
+<p class="warn">⚠ 「<b>以致于你要为它付费</b>」—— 注意这里的因果：不是「生成太多不好」，而是「生成太多你要付钱」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">78:09</span><span class="en">the answer that the LLM is outputting is getting longer and longer</span></div>
+  <div class="body"><p class=""><b>第一张图：长度一路上涨，而到这里为止这是一件好事。</b></p>
+<p class="star">⭐ 请把这个因果顺序看清楚，<b>它在前半段是正向的</b>：<b>RL 奖励「答对」</b>。<b>模型发现「多想几步更容易答对」</b>。<b>于是它写得更长</b>。<b>而确实答对得更多了</b>。</p>
+<p class="">所以这一段的长度增长是「能力增长的副产品」—— 它是我们想要的。</p>
+<p class="">而这正好印证了这一讲前面那个「<b>第二个直觉</b>」：<b>更多 token = 更多算力</b>。<b>而 RL 自己发现了这件事，没人教它</b>。</p>
+<p class="">所以「test-time compute scaling」不只是一个人为的推理策略，它也是 RL 自发学到的策略。</p>
+<p class="">「<b>推理链变得越来越复杂</b>」这句话里有具体内容，<b>我补一下</b>：<b>更多的分步</b>。<b>更多的自我复查（那些「Wait」）</b>。<b>更多的「换一条路再试」</b>。</p>
+<p class="">而这三样都确实有用 —— 所以长度和表现相关是真的，不是假象。</p>
+<p class="warn">⚠ 但「<b>相关</b>」这个词请留意 —— 下一镜就会看到这个相关在某一点之后断掉了。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">78:51</span><span class="en">the performance of your model tends to stabilize, but then your output length still continues increasing</span></div>
+  <div class="body"><p class=""><b>第二张图：相关断掉了，而这就是整段的问题所在。</b></p>
+<p class="star">⭐ 请把两张图叠起来看，<b>那个分岔点就是全部的问题</b>：<b>分岔点之前</b>：<b>长度涨，表现也涨</b> ⇒ <b>划算</b>。<b>分岔点之后</b>：<b>长度还在涨，表现平了</b> ⇒ <b>纯亏</b>。</p>
+<p class="">而「纯亏」的意思非常具体：你的推理成本还在线性增长，而你什么也没换到。</p>
+<p class="">「<b>这里有点什么在发生</b>」这个说法很准确，<b>它描述的是一个研究是怎么开始的</b>：<b>不是先有理论，而是先看到一张图不对劲</b>。<b>然后去找原因</b>。</p>
+<p class="">而原因最后被定位在损失函数里的一个因子上 —— 这是一个很漂亮的诊断过程。</p>
+<p class="">请先自己猜一下原因，<b>因为答案很反直觉</b>：<b>不是「模型学坏了」</b>。<b>不是「奖励设计错了」</b>。而是「GRPO 的损失在数学上偏爱长输出」—— 一个纯粹的归一化问题。</p>
+<p class="">而这件事之所以难发现，正是因为它不在奖励里，它在损失的分母里。</p>
+<p class="warn">⚠ 「<b>缓解（mitigate）</b>」—— 注意不是「解决」，讲者用词很准：这件事还没有被彻底解决。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">79:25</span><span class="en">there is one formula that I will try to explain</span></div>
+  <div class="body"><p class=""><b>又一次预警，而这一讲一共预警了三次。</b></p>
+<p class="star">⭐ 把这一讲的三处预警列出来，<b>它们正好是三个难点</b>：<b>第一处</b>：「<b>它不那么显然，我们现在就要看它</b>」⇒ <b>pass@k 的推导</b>。<b>第二处</b>：「<b>这大概是整门课最难的部分</b>」⇒ <b>GRPO vs PPO</b>。<b>第三处</b>：这里 ⇒ <b>GRPO 损失里的归一化</b>。</p>
+<p class=""><b>所以如果你要挑三段重读，就是这三段</b>。</p>
+<p class="">不过我要先给你一个安心的话，<b>这一段其实比上一段简单</b>：<b>上一段难在「同时持有五个概念」</b>。这一段只需要盯住一个东西：那个 1/|o_i|。</p>
+<p class="">而它要讲的事也只有一句：「每条各自除以自己的长度」会让长输出占便宜。</p>
+<p class=""><b>所以我建议你这样读接下来五镜</b>：<b>前三镜</b>：把损失的各项认一遍（大部分你已经知道了）。<b>后两镜</b>：<b>盯住那个被搬动位置的因子</b>。</p>
+<p class=""><b>而真正的新东西只在最后两镜</b>。</p>
+<p class="warn">⚠ 「请忍一下我（bear with me）」—— 讲者在时间只剩 9 分钟的时候还决定讲这个，说明他认为它重要。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">79:45</span><span class="en">seems like a very complicated formula</span></div>
+  <div class="body"><p class=""><b>先把符号认一下，而这里有一个 L5 就埋过的陷阱。</b></p>
+<p class="star">⭐ 请注意这个记号习惯，<b>它是 L5 那个符号陷阱的延续</b>：<b>J</b>（objective）= <b>要「最大化」的目标</b>。<b>L</b>（loss）= <b>要「最小化」的损失</b>。</p>
+<p class="">而讲者口头上说「损失」，公式里写的却是 J —— 所以别被绕进去：GRPO 的 J 是要最大化的。</p>
+<p class="">L5 里这个陷阱被专门点过，<b>我再提一次</b>：L5 说：PPO-Clip 写成 L = …，但它其实是要最大化的。而这里反过来：写的是 J（该最大化），讲者口头叫它「损失」。</p>
+<p class="">所以判断方向不要看字母，要看式子里 advantage 的符号怎么起作用。</p>
+<p class="">「<b>它其实不是一个复杂的</b>」这句话我同意，<b>而理由是它只有三块</b>：<b>第一块</b>：ratio × advantage（往好的方向推）。<b>第二块</b>：<b>clip（别推太猛）</b>。<b>第三块</b>：<b>−β·KL（别离参考模型太远）</b>。</p>
+<p class="">外面套两层求和（组内 g 条 × 每条的 token）—— 就这样，没有别的。</p>
+<p class="warn">⚠ 「用大白话解释（explain in plain terms）」—— 这正是接下来三镜在做的事，而他做得很好。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">80:01</span><span class="en">the objective function of GRPO is to maximize this quantity</span></div>
+  <div class="body"><p class=""><b>三块认完，而它们你都已经见过。</b></p>
+<p class="star">⭐ 请把三块的分工再确认一次，<b>它们各自管一件事</b>：<b>ratio × advantage</b>：「往哪边推、推多少」—— 这是「动力」。<b>clip</b>：「一步最多走多远」—— 这是「速度限制」。<b>KL</b>：「总共最多离家多远」—— 这是「位移限制」。</p>
+<p class="">一个动力 + 两个刹车。整个 RL 目标就是这三样。</p>
+<p class="">注意讲者又把「<b>基础模型</b>」和「<b>参考模型</b>」说成一回事：他说「离基础模型太远」，然后补一句「那个参考模型」。两个词指的是同一个东西：SFT 阶段结束时的那个模型，π_ref。</p>
+<p class="">而它在整个 RL 过程中是冻住的 —— 它是那个「原点」。</p>
+<p class="">所以一个 RL 更新在干什么，<b>可以用一句很具象的话说</b>：「从 π_ref 出发，一小步一小步地走（clip 限制步长），朝 advantage 为正的方向走，但总共不许走出 KL 画的那个圈。」</p>
+<p class="">而 GRPO 的全部贡献，是换了一个更便宜的方式来判断「哪个方向的 advantage 为正」。</p>
+<p class="warn">⚠ 接下来两镜是真正的新内容 —— <b>那两层求和，以及那个被搬动的因子</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">80:39</span><span class="en">they correspond to you going through that process for all completions in your group</span></div>
+  <div class="body"><p class=""><b>两层求和，而看懂它们是看懂那个 bug 的前提。</b></p>
+<p class="star">⭐ 把两层求和的含义写清楚，<b>请盯住每一层「除以什么」</b>：<b>外层</b>：对 <b>i = 1 … g</b>（组里的 <b>g</b> 条 completion）求和，<b>然后除以 g</b>。<b>内层</b>：对 <b>t = 1 … |o_i|</b>（<b>第 i 条的每一个 token</b>）求和，<b>然后除以 |o_i|</b>。</p>
+<p class="">注意内层除的是「这一条自己的长度」—— 这就是问题所在。</p>
+<p class="">为什么要除，<b>先把动机说清楚（动机是好的）</b>：<b>除以 g</b>：让<b>不同组大小的梯度尺度一致</b>。<b>除以 |o_i|</b>：让<b>不同长度的回答在梯度里「权重相同」</b>。</p>
+<p class="">也就是：不想让一条 5000 token 的回答，仅仅因为它长，就比一条 100 token 的回答对梯度影响大 50 倍。</p>
+<p class="">但「<b>每条各自除以自己的长度</b>」有一个后果，<b>而讲者下一镜就要说它</b>：一条<b>很长</b>的回答 ⇒ <b>1/|o_i| 很小</b> ⇒ 它里面每个 token 的梯度被压得很小。于是「长回答里的每一个 token，受到的惩罚（或奖励）都更轻」。</p>
+<p class="">而如果这条长回答是错的，它受到的惩罚就被摊薄了 —— 写长成了一种「免责」。</p>
+<p class="warn">⚠ 请记住这一句，<b>它是下一镜的全部内容</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">81:23</span><span class="en">I just swapped the 1 over length of output number I</span></div>
+  <div class="body"><p class=""><b>讲者把那个因子挪了个位置，而这一挪就是整段的关键。</b></p>
+<p class="star">⭐ 请看清这个「<b>挪位置</b>」在数学上做了什么：<b>什么都没做</b>：1/|o_i| 和内层求和的下标 t 无关。所以把它写在内层求和外面、还是乘进每一项里，完全等价。</p>
+<p class="">而挪动它的唯一目的是「让你看清它是什么」。</p>
+<p class=""><b>挪完之后看清的那件事是什么</b>：它是一个<b>只依赖 i（哪一条回答）的常数</b>。它对这一条里的「每一个 token」乘同一个系数。</p>
+<p class="">也就是：它给「这一整条回答」统一打了一个折扣，折扣率是 1/长度。</p>
+<p class="">于是那个 bug 就看出来了，<b>我把它说完整</b>：一条 <b>5000 token</b> 的回答 ⇒ <b>折扣 1/5000</b>。一条 <b>100 token</b> 的回答 ⇒ <b>折扣 1/100</b>。</p>
+<p class="">所以长回答里每个 token 承受的梯度，是短回答里每个 token 的 1/50。如果这条长回答是错的（advantage 为负），它每个 token 受到的「别这么写」的压力也只有 1/50。</p>
+<p class="">于是：写得越长，犯错的代价越小 ⇒ 模型学会了「写长一点就不容易被罚」。</p>
+<p class="warn">⚠ 这就是「表现平了、长度还在涨」的机制性解释 —— 而修法是把「每条各自除」改成「整组一起除」。</p></div>
+</article>
+</section>
+<section id="m-l">
+  <h2><span class="tag">模块 l</span>那个坏激励，与三个修改<small>82:11–89:40</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">82:11</span><span class="en">the contribution of a token with respect to the objective function depends on the output that it is in</span></div>
+  <div class="body"><p class=""><b>一句话就把这个 bug 说清了。</b></p>
+<p class="star">⭐ 请把这个结构看清楚，<b>它是两项相乘</b>：<b>左边那一项（1/|o_i|）</b>：<b>只取决于「这一整条回答有多长」</b>。右边那一项（ratio × advantage 等）：是「token 特定」的，每个 token 不同。</p>
+<p class="">所以每个 token 的实际贡献 = 它自己的那一项 × 一个「整条共用的折扣」。</p>
+<p class=""><b>而那个折扣的大小完全由长度决定</b>：<b>短回答（100 token）</b> ⇒ <b>1/100 = 0.01</b> ⇒ <b>相对大</b>。<b>长回答（5000 token）</b> ⇒ <b>1/5000 = 0.0002</b> ⇒ <b>相对小</b>。</p>
+<p class="">于是同一个 token，放在短回答里权重大，放在长回答里权重小。</p>
+<p class="">请停一下，<b>想清楚为什么这本身就不该发生</b>：一个 token 好不好，应该只取决于「它是不是一个好的选择」。而不应该取决于「它所在那条回答恰好有多长」。</p>
+<p class="">所以这不是一个权衡，这是一个纯粹的不该有的依赖关系。</p>
+<p class="warn">⚠ 接下来三镜会把这个不该有的依赖，推成一个具体的坏行为。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">83:18</span><span class="en">we would want to upweight the probability of this token happening again</span></div>
+  <div class="body"><p class=""><b>先看 advantage 为正的那一半，而这一半听起来甚至像好事。</b></p>
+<p class="star">⭐ 把正 advantage 这一半的后果写出来：一条<b>短而且对</b>的回答 ⇒ <b>每个 token 被强烈地鼓励</b>。一条<b>长而且对</b>的回答 ⇒ <b>每个 token 只被轻微地鼓励</b>。</p>
+<p class="">所以模型被推向「短而对」—— 而这恰好是我们想要的！</p>
+<p class="">所以请记住一件事，<b>它很容易被误解</b>：这个 1/|o_i| 在「答对」的情形里是帮我们的。<b>它鼓励简洁的正确回答</b>。</p>
+<p class="">问题完全出在「答错」的那一半 —— 而那一半的方向是反的。</p>
+<p class="">请先自己想一下为什么反，<b>这是一个很好的练习</b>：advantage 为负 ⇒ 我们要<b>降低</b>这些 token 的概率。而短回答的权重<b>更大</b> ⇒ <b>意味着「降低得更狠」</b>。</p>
+<p class=""><b>于是……？—— 下一镜给出那个结论</b>。</p>
+<p class="warn">⚠ 讲者在这里又确认了一次「<b>大家都同意我吗</b>」—— <b>这是一个多步论证，他在一步一步校准</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">83:58</span><span class="en">this is a bad incentive</span></div>
+  <div class="body"><p class=""><b>而 advantage 为负的那一半，方向是反的 —— 这就是那个坏激励。</b></p>
+<p class="star">⭐ 请注意讲者那句自我更正：「<b>所以不是『你想』</b>」：<b>他本来要说「你想让…」，然后立刻改口</b>。因为没有人「想」这样 —— 这不是一个设计意图，是公式的副作用。</p>
+<p class="">而这个区分很重要：bug 和设计选择不是一回事。</p>
+<p class=""><b>把这个坏激励用一句话说完</b>：同样是<b>答错</b>。<b>写得短</b> ⇒ <b>每个 token 被狠狠地压</b>。<b>写得长</b> ⇒ <b>每个 token 只被轻轻地压</b>。</p>
+<p class="">于是模型学到的是：「要错，就错得长一点」。</p>
+<p class="">这件事为什么会造成「长度一直涨」，<b>现在完全说得通了</b>：训练后期，容易的题已经都对了 ⇒ 剩下的大多是答错的那些。<b>而答错的那些，梯度在推它「写长」</b>。</p>
+<p class="">所以：表现不涨了（难题还是答不对），而长度一直涨（错解在被推着变长）。</p>
+<p class=""><b>两条曲线分岔的机制，就是这个</b>。</p>
+<p class="warn">⚠ 「坏的激励（bad incentive）」—— 注意这个词和 reward hacking 的亲缘关系：都是「优化目标和真实意图不一致」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">84:43</span><span class="en">to prefer longer bad outputs as opposed to shorter bad outputs</span></div>
+  <div class="body"><p class=""><b>讲者第三次重述同一件事，而这次是最完整的那一版。</b></p>
+<p class="star">⭐ 讲者<b>三次</b>重述同一件事，<b>这件事本身值得注意</b>：<b>第一次</b>：从「权重」的角度。<b>第二次</b>：从「advantage 正负」的角度。<b>第三次</b>：从「它偏好什么样的输出」的角度。</p>
+<p class="">而这正是讲一个反直觉的论证时该做的事：换三个角度说同一件事，总有一个能接上听者的直觉。</p>
+<p class="">请留意那个措辞：「人们『假设』的（people are hypothesizing）」：这是一个被广泛接受的解释，但它仍然是一个假设。严格的因果需要做对照实验 —— 而下一镜那张图正是那个实验。</p>
+<p class="">讲者又一次把「这是推测」标出来了，这是他的习惯。</p>
+<p class="">而我想强调这个诊断过程本身，<b>因为它很漂亮</b>：① <b>先看到一个经验现象（两条曲线分岔）</b>。② 去损失函数里找机制（那个 1/|o_i|）。③ 推出一个可检验的预测（错解会变长，对解不会）。④ <b>改掉那一项，看预测是否成立</b>。</p>
+<p class="">这是一个完整的科研闭环，而它值得你照着做。</p>
+<p class="warn">⚠ 「<b>我们一会儿就会看到那个</b>」—— 指下一镜那张「改掉之后长度就不涨了」的图。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">85:14</span><span class="en">there is one paper that came out in March, DAPO</span></div>
+  <div class="body"><p class=""><b>修法一：把分母从「这一条的长度」换成「整组的总长度」。</b></p>
+<p class="star">⭐ 这个修法的实际改动只有一个字母，<b>而效果是彻底的</b>：<b>原来</b>：每条除以 <b>|o_i|</b>（<b>自己的长度</b>）⇒ <b>每条的折扣率不同</b>。<b>改后</b>：整组除以 <b>Σ|o_i|</b>（<b>这一组所有 token 的总数</b>）⇒ <b>所有 token 折扣率相同</b>。</p>
+<p class="">于是「一个 token 的贡献只取决于它自己」，那个不该有的依赖消失了。</p>
+<p class="">「<b>等化（equalize）</b>」这个词说得很准：它不是「补偿长输出」，也不是「惩罚长输出」。它只是让每个 token 的权重变得一样。</p>
+<p class="">所以它不引入新的偏好，它只是去掉了一个旧的偏见 —— 这是最干净的那种修法。</p>
+<p class="">顺便说一下 <b>DAPO</b> 是什么，<b>因为它确实很流行</b>：<b>DAPO</b> = Decoupled Clip and Dynamic sAmpling Policy Optimization（字节跳动 Seed，2025 年 3 月）。它一共提了<b>四项改动</b>，而这个「token 级归一化」只是其中一项。</p>
+<p class="">另外三项里有两项，讲者接下来也会提到（非对称 clip、以及跳过全对/全错的组）。</p>
+<p class="warn">⚠ 「<b>现在相当流行的一篇</b>」—— 而它流行的原因之一正是它把这些小问题一次性列清了。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">85:42</span><span class="en">that paper actually proposes to remove the factor altogether</span></div>
+  <div class="body"><p class=""><b>修法二更激进：干脆把那个因子整个去掉。</b></p>
+<p class="star">⭐ 两种修法的差别其实很小，<b>但值得分清</b>：<b>DAPO</b>：把分母<b>换成整组总长度</b> ⇒ <b>还有归一化，只是统一了</b>。<b>Dr. GRPO</b>：<b>把那个分母整个删掉</b> ⇒ <b>连归一化都不做了</b>。</p>
+<p class="">两者都消除了「长度依赖」，所以都能解决问题。</p>
+<p class="">而 <b>Dr. GRPO</b> 那篇还做了一件更重要的事，<b>正好是前面那张欠条</b>：它同时把 advantage 里那个「除以标准差」也去掉了。还记得讲者说「那可能不是做这件事的最好方式」吗？—— 指的就是这篇。</p>
+<p class="">所以 Dr. GRPO = GRPO 减去两个归一化项（长度、标准差）。</p>
+<p class="">「<b>Dr. GRPO</b>」这个名字的玩法，<b>讲者自己都念不准</b>：全称是 GRPO Done Right ⇒ 缩成 Dr. GRPO。所以它既读作「Doctor GRPO」，也是「Done Right」的首字母 —— 一个双关。</p>
+<p class="">而一篇论文敢叫「把 GRPO 做对」，这个标题本身就是一个很强的声明。</p>
+<p class="warn">⚠ 「你的模型就不会再一次又一次地增加它的长度了」—— <b>这就是那个可检验预测的验证结果</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">86:26</span><span class="en">the corrected policy is having an average length that's much lower</span></div>
+  <div class="body"><p class=""><b>而最漂亮的是：只有「错解」变短了，「对解」一点没变。</b></p>
+<p class="star">⭐ 请把这个结果和前面那个推理<b>对上</b>，<b>这是整段最漂亮的地方</b>：<b>推理说</b>：坏激励只在 advantage 为负（答错）时起作用。<b>所以预测</b>：修掉它应该只让「错解」变短，「对解」不受影响。<b>实验结果</b>：<b>对解长度吻合，错解长度大幅下降</b> ✓。</p>
+<p class="">预测和观测完全对上 —— 这才是「这个诊断是对的」的证据。</p>
+<p class="">为什么这个「<b>只有一半变了</b>」比「长度降下来了」更有说服力：「<b>长度降下来了</b>」可以有很多别的原因（比如整体梯度变小了）。但「<b>只有错解变短、对解不变</b>」<b>只能被那个特定机制解释</b>。</p>
+<p class="">所以这是一个「能区分假设」的证据，而不只是一个「符合假设」的证据。</p>
+<p class="">这个区别在写论文时非常重要：找那种只有你的解释能预测的现象。</p>
+<p class="">而「意图中的后果（intended consequence）」这个说法很有意思：它是在反用「unintended consequence（意外后果）」这个常见说法。原来的 GRPO 产生了一个意外后果（长度膨胀），而这个修改产生的是意图中的后果。</p>
+<p class="warn">⚠ 讲者说「很重要 —— 我想很重要 —— 一个重要的修改」，<b>他把「重要」说了三遍</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">87:13</span><span class="en">the standard deviation that is within the advantage formula</span></div>
+  <div class="body"><p class=""><b>前面那张欠条还了：那个标准差会按难度产生偏差。</b></p>
+<p class="star">⭐ 请把这个机制算清楚，<b>它和前面那个 bug 是同一类</b>：<b>一道极难的题</b>：<b>g 条里 1 条对、7 条错</b> ⇒ <b>奖励几乎全是 0 ⇒ 标准差很小</b>。advantage = (r − mean) / std ⇒ 分母小 ⇒ advantage 被放大。</p>
+<p class="">于是这道「几乎做不出」的题，产生了不成比例的大梯度。</p>
+<p class="">为什么这是个问题，<b>而不是好事</b>：那唯一一条对的，可能是「蒙对的」（答案正好猜中）。而它却得到了最大的 advantage ⇒ 模型会强烈地去模仿那条侥幸的路径。</p>
+<p class="">也就是：标准差归一化把「运气」放大成了「学习信号」。</p>
+<p class="">请注意这个偏差的方向，<b>它和「难题的好解更值钱」不是一回事</b>：「<b>减去均值</b>」已经做到了「难题的好解更值钱」—— <b>那是对的</b>。「<b>再除以标准差</b>」在此之上<b>又放大了一次</b> —— <b>而这一次是过头的</b>。</p>
+<p class="">所以 Dr. GRPO 的做法是：保留减均值，去掉除标准差。</p>
+<p class="warn">⚠ 「<b>在一分钟里</b>」—— 讲者只剩一分钟，所以接下来两镜讲得很快，我在旁白里补得更满。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">88:07</span><span class="en">it is kind of unfair to just give it a small epsilon to grow</span></div>
+  <div class="body"><p class=""><b>第二个修改：给上界和下界用两个不同的 epsilon。</b></p>
+<p class="star">⭐ 「<b>这个 epsilon 是被乘上去的</b>」—— <b>这七个字是全部的关键</b>：clip 约束的是<b>比值</b>：π_new / π_old ∈ [1−ε, 1+ε]。等价地：π_new ≤ (1+ε) · π_old。</p>
+<p class="">所以允许的「绝对增长量」正比于 π_old 本身。</p>
+<p class="">把这件事用具体数字算一遍，<b>问题就很明显</b>：一个 token 原概率 <b>0.5</b>，ε = 0.2 ⇒ <b>最多涨到 0.6（+0.1）</b>。一个 token 原概率 <b>0.0001</b>，ε = 0.2 ⇒ 最多涨到 0.00012（+0.00002）。</p>
+<p class="">所以一个本来概率极低的 token，哪怕 advantage 很大，一轮也几乎涨不动。</p>
+<p class="">为什么这件事在推理上<b>特别</b>要命：推理的突破<b>往往来自一个「本来不太可能」的步骤</b>（换一个思路、回头检查）。而那些步骤的<b>初始概率就是很低的</b>。</p>
+<p class="">于是 clip 把「探索新路径」这件事卡死了：低概率的好想法，永远长不起来。</p>
+<p class="">这就是 DAPO 那篇说的「熵坍缩（entropy collapse）」：模型越训越不敢尝试新东西。</p>
+<p class="warn">⚠ 「有点不公平（kind of unfair）」—— 这个说法很准：被卡住的不是坏 token，是「还没来得及证明自己」的 token。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">89:10</span><span class="en">you want to introduce an asymmetry between the lower and the upper bounds</span></div>
+  <div class="body"><p class=""><b>所以解法是：上界放宽一点，下界留着 —— 一个非对称的 clip。</b></p>
+<p class="star">⭐ 请把这个「<b>非对称</b>」的两头各自的理由分开记：<b>上界（ε_high）要放宽</b>：让低概率的好 token 有机会长起来 ⇒ 保住探索。<b>下界（ε_low）不能放宽</b>：如果放宽，一个原本概率很高的 token 可能一步被压到接近 0 ⇒ 模型会突然「失忆」。</p>
+<p class="">所以上下两头的风险不对称，那么约束也不该对称。</p>
+<p class="">这个修改在 <b>DAPO</b> 里有一个名字：<b>它叫「Clip-Higher」</b>。典型取值：ε_low = 0.2（照旧），ε_high = 0.28。</p>
+<p class="">而论文报告说：只改这一处，生成的熵就不再坍缩，模型持续保持探索。</p>
+<p class="">请注意这一段三个修改的<b>共同形状</b>，<b>它很有启发</b>：① <b>1/|o_i|</b>：一个归一化项，<b>意外引入了长度偏好</b>。② <b>除以 std</b>：一个归一化项，<b>意外引入了难度偏好</b>。③ <b>对称的 ε</b>：一个对称约束，<b>意外压制了低概率探索</b>。</p>
+<p class="">三个都是「看起来中立的技术细节，实际上塞进了一个你没打算要的偏好」。</p>
+<p class="">而这正是这一讲最值得带走的方法论：每一个归一化、每一个对称假设，都是一个隐含的偏好声明。</p>
+<p class="warn">⚠ 讲者说「<b>大致（roughly）</b>」说了两次 —— <b>他在赶时间，所以这一段说得不太严谨</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">89:18</span><span class="en">so this was a lot</span></div>
+  <div class="body"><p class=""><b>上半场结束，而讲者自己承认「这是很多」。</b></p>
+<p class="star">⭐ 我替你把上半场的五块收一次，<b>它的结构其实非常清楚</b>：① <b>推理是什么</b>（定义 + CoT 放大 + 输出 = 推理 + 答案）。② <b>怎么量</b>（benchmark + pass@k 的推导 + 温度）。③ <b>为什么用 RL</b>（三张票：数据不存在 / 人写的未必好 / 奖励现成）。④ <b>GRPO</b>（和 PPO 只差 advantage 怎么算）。⑤ <b>三个修补</b>（长度归一化 / 标准差 / 非对称 clip）。</p>
+<p class="">这五块之间是<b>一条线</b>，不是五个话题：① 定义了目标 ⇒ ② 给了可测的标准 ⇒ ③ 选了方法 ⇒ ④ 讲了算法 ⇒ ⑤ 修了算法的毛病。</p>
+<p class="">而一个「定义 → 度量 → 方法 → 算法 → 修补」的结构，正是一篇完整论文的骨架。</p>
+<p class="">「这是很多（this was a lot）」—— <b>而他说得对</b>：这 87 分钟里有两段完整的数学推导、一个算法的逐项对照、三个前沿修补。所以如果你一遍没消化完，那是正常的 —— 他自己也说了「重看几遍」。</p>
+<p class="warn">⚠ 「<b>课后会有一些时间</b>」—— <b>而那部分不在录像里，所以我们也听不到</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">89:40</span><span class="en">thank you, Afshine, for covering all the hard parts</span></div>
+  <div class="body"><p class=""><b>Shervine 接手，而第一句话就把下半场定了性。</b></p>
+<p class="star">⭐ 这个分工<b>很说明问题</b>，<b>而它对你怎么听下半场有直接影响</b>：<b>上半场</b>：「<b>每个零件怎么工作</b>」⇒ <b>要理解机制 ⇒ 难</b>。<b>下半场</b>：「<b>这些零件怎么被装成 R1</b>」⇒ <b>要记住顺序 ⇒ 容易</b>。</p>
+<p class="">所以下半场不会有新算法，它是一条流水线的说明书。</p>
+<p class="">而「<b>容易一点</b>」这个判断是对的，<b>但有一个前提</b>：<b>前提是你已经知道那些零件是什么</b>。如果你不知道 GRPO 是什么，那「R1 用 GRPO 做了第二阶段」这句话对你没有信息。</p>
+<p class=""><b>所以上半场的投入，是在下半场兑现的</b>。</p>
+<p class="">下半场要讲的内容，<b>我先给你一个地图</b>：先讲「传统 LLM」的训练流程（预训练 → SFT → RL），作为对照。然后 R1-Zero 的配方：纯 RL，作为一个「概念验证」。然后 R1 的完整流水线：多个阶段，拿到一个「超强的模型」。<b>最后是蒸馏：用 R1 的链去教小模型</b>。</p>
+<p class="">而「概念验证 + 完整流水线」这个两段式，正是 DeepSeek 那篇论文的结构。</p>
+<p class="warn">⚠ 这部片子到此是 L6 字幕第 740 句 —— 后面还有 137 句，是 Shervine 的下半场。</p></div>
+</article>
+</section>
+<section id="m-m">
+  <h2><span class="tag">模块 m</span>R1-Zero 的配方，与它的两个问题<small>90:17–95:23</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">90:17</span><span class="en">you proceeded to do your alignments, which was composed of SFT and then RL</span></div>
+  <div class="body"><p class=""><b>下半场开场，先把旧流程摆出来作为对照。</b></p>
+<p class="star">⭐ 这三步你应该已经很熟了，<b>而它正好是 L4 和 L5 的内容</b>：<b>预训练</b>（L1–L4）：互联网文本上的下一个 token 预测。<b>SFT</b>（L4）：<b>指令微调 —— 教它「怎么回应」</b>。<b>RL</b>（L5）：RLHF / DPO —— 教它「什么样的回应更受偏好」。</p>
+<p class="">所以「传统 LLM」在这门课里不是一个贬义词，它指的就是 L1 到 L5 讲完的那个东西。</p>
+<p class="">而「<b>不是推理那种 RL，而是常规的那个</b>」这句澄清很必要：两种 RL 的算法可以是同一个（都能用 PPO）。差别在<b>奖励从哪来</b>：常规的 RL 用「人类偏好训出来的奖励模型」。推理的 RL 用「可验证的奖励（跑测试 / 比答案）」。</p>
+<p class="">所以这是「同一个优化器，两种监督信号」—— 请不要把它们当成两套不同的技术。</p>
+<p class="">接下来下半场要做的事，<b>就是改这张图</b>：<b>R1-Zero</b>：<b>把 SFT 那一格「删掉」</b>。<b>R1</b>：<b>把这三格扩成四个阶段</b>。</p>
+<p class="warn">⚠ 「<b>更新的（newer）</b>」—— <b>注意这里说的「新」只是一年以内的事</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">90:46</span><span class="en">how powerful can the RL stage be if you apply the verifiable rewards</span></div>
+  <div class="body"><p class=""><b>R1 那篇论文的结构：先证明一件事，再把它做成产品。</b></p>
+<p class="star">⭐ 请把这个两段式记住，<b>因为它经常被混为一谈</b>：<b>R1-Zero</b> = 一个<b>科学实验</b>：「<b>光靠 RL 能不能长出推理能力</b>」。<b>R1</b> = 一个<b>工程产品</b>：「<b>怎么把它做得可用</b>」。</p>
+<p class="">所以 R1-Zero 的价值不在于它好用（它不好用），而在于它证明了一件事。</p>
+<p class="">而这个「<b>先证明，再落地</b>」的论文结构非常值得你照抄：<b>第一部分</b>：一个最简设置，只为回答一个科学问题（去掉所有能去掉的东西）。<b>第二部分</b>：把实用需要的东西加回来，给一个能用的系统。</p>
+<p class="">第一部分让论文有「发现」，第二部分让论文有「影响」—— 两者都要。</p>
+<p class="">对你的课题，这个结构可以直接套：<b>先做一个最干净的版本</b>：只验证「用代理模型引导搜索真的有效」这一件事。<b>再做完整系统</b>：加上精确求解器复核、加上预算分配、加上工程细节。</p>
+<p class="">而不要一上来就做完整系统 —— 那样你会分不清是哪一部分起了作用。</p>
+<p class="warn">⚠ 「<b>他们走了多个阶段</b>」—— 而「阶段」这个词在接下来会反复出现：R1 一共有四个训练阶段。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">91:47</span><span class="en">they reuse a trick called multi-latent attention, MLA</span></div>
+  <div class="body"><p class=""><b>起点是一个普通但很现代的基础模型，而这两个名字你在 L4 见过。</b></p>
+<p class="star">⭐ 这两个名字都来自 <b>L4</b>，<b>我替你各回忆一句</b>：MoE（mixture of experts）：每个 token 只激活一小部分专家 ⇒ 参数量大但计算量小。MLA（multi-latent attention）：把 KV cache 压缩到一个低维潜空间 ⇒ 推理时显存省一个量级。</p>
+<p class="">所以 DeepSeek 的基础模型是一个「参数很大但跑得起」的设计。</p>
+<p class="">不过请把这件事的因果关系看清楚，<b>它很容易被夸大</b>：<b>推理能力来自 RL，不来自架构</b>。MoE 和 MLA 解决的是「怎么养得起这么大的模型」。</p>
+<p class="">所以它们是「前提条件」，不是「原因」—— 一个普通的稠密模型也能用同样的 RL 长出推理能力。</p>
+<p class="">而「<b>pre-norm</b>」这个细节讲者下一镜会提，<b>我先说清</b>：<b>pre-norm</b> = <b>LayerNorm 放在子层「之前」</b>（而不是之后）。它让深层网络的训练稳定得多，是 2020 年之后的标准做法（L1 讲过）。</p>
+<p class="">所以讲者提它只是在说「这是一个标准的现代 transformer，没有什么特殊的」。</p>
+<p class="warn">⚠ 「所有那些花里胡哨（all the bells and whistles）」—— 一个英语惯用语，指「该有的新东西都有」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">92:14</span><span class="en">this is where the fun starts</span></div>
+  <div class="body"><p class=""><b>而这里是整篇论文最大胆的一步：SFT 那一格被直接删掉了。</b></p>
+<p class="star">⭐ <b>请停下来体会这一步有多反常识</b>：一个「刚预训练完」的基础模型，根本不会「回答问题」。它只会「续写」—— 你问它一个问题，它可能接着再写三个问题。</p>
+<p class="">而 SFT 的全部作用就是教它「对话的格式」。所以跳过 SFT 直接做 RL，等于让一个不会对话的模型去学解数学题。</p>
+<p class="">而它居然成功了，<b>这件事说明了什么</b>：「怎么回应」这件事，RL 也能顺带学会 —— 因为格式奖励在逼它。而「怎么推理」这件事，预训练数据里本来就有（人类写的解题过程）。</p>
+<p class="">所以 RL 做的不是「教它新东西」，而是「把它本来就有的能力调出来」。</p>
+<p class="">而这正好接上 L5 那把总钥匙：「我们不想学新的事实，只是把模型该返回的那一个挪一下」。</p>
+<p class="">为什么作者要这么做？<b>因为这是唯一干净的实验</b>：如果先做 SFT 再做 RL ⇒ <b>你分不清推理能力是哪一步给的</b>。而跳过 SFT ⇒ 能力只可能来自 RL。</p>
+<p class="">所以「还没见过任何监督」不是为了省事，它是为了让结论无可争辩。</p>
+<p class="warn">⚠ 「有意思的地方开始了（this is where the fun starts）」—— <b>讲者在这里语气明显兴奋起来</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">92:39</span><span class="en">all they incentivize the model to do is to increase the rewards based on the outputs</span></div>
+  <div class="body"><p class=""><b>奖励只有两样，而论文把 prompt 模板的原文都给出来了。</b></p>
+<p class="star">⭐ 「全部事情（all they incentivize）」这个说法请留意：<b>两个奖励，没有第三个</b>。没有「推理过程要清晰」、没有「步骤要正确」、没有「不要太长」。</p>
+<p class=""><b>而就这两个，长出了一整套多步推理行为</b>。</p>
+<p class="">而「<b>论文给出了模板的确切内容</b>」这件事本身值得一提：<b>这是 R1 之所以能被复现的关键之一</b>。算法公开 + 奖励公开 + prompt 模板公开 ⇒ 任何人都能照着跑。</p>
+<p class="">而 o1 一样都没给 —— 所以前面讲者说「他们真的在论文里描述出来了」是有分量的。</p>
+<p class="">请注意「<b>格式奖励</b>」在这个配方里的地位比你想的重要：没有 SFT ⇒ 模型<b>不知道该怎么组织输出</b>。而格式奖励<b>就是那个替代 SFT 的东西</b>：它用奖励（而不是示范）教会模型输出格式。</p>
+<p class="">所以「格式奖励」不是一个附属的小项，它承担了原本属于 SFT 的职责。</p>
+<p class="warn">⚠ 讲者说「输入-答案（input answer）」—— 这里他口误了，他指的是模型给出的那个答案。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">93:33</span><span class="en">whatever you want to think about, just do it, but put it into think boxes</span></div>
+  <div class="body"><p class=""><b>模板的内容真的就是几句大白话，而这件事比它看起来重要。</b></p>
+<p class="star">⭐ 请注意这里的<b>分工</b>，<b>它是整个配方的关键设计</b>：<b>prompt 负责「说清要求」</b>：把中间过程放进 &lt;think&gt;，最终答案放进 &lt;answer&gt;。<b>奖励负责「逼它遵守」</b>：<b>标签不在就没有格式奖励</b>。</p>
+<p class="">两者缺一不可：光有 prompt 它会忘，光有奖励它不知道要什么格式。</p>
+<p class="">而「<b>不管你想想什么，就去想</b>」这句话里有一个很重要的留白：<b>它没有规定「要想什么」</b>。<b>也没有规定「要怎么想」</b>。<b>只规定了「想的内容放哪里」</b>。</p>
+<p class="">所以 think 标签提供的是「一个被允许自由发挥的空间」—— 而模型在那个空间里自己摸出了推理。</p>
+<p class="">这个设计思路非常漂亮：不规定内容，只划出场地。</p>
+<p class="">对你的课题，这个「<b>划场地而不规定内容</b>」的思路可以借：<b>你不需要告诉搜索「该怎么剪枝」</b>。你只需要给它一个「可以自由尝试并被评分」的结构，然后让奖励塑形。</p>
+<p class="warn">⚠ 「搭好场子（set up the stage）」—— 指 system prompt 那几句「你是一个助手」之类的开场。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">94:21</span><span class="en">without any prior supervision, just having these as a reward increases scores</span></div>
+  <div class="body"><p class=""><b>模板讲完，然后那张图第二次出现 —— 这次是从 R1 论文的角度。</b></p>
+<p class="star">⭐ 请注意这张图在这一讲里出现了<b>两次</b>，<b>而两次的用途不同</b>：<b>上半场（Afshine）</b>：用它证明「<b>可验证奖励 + RL 真的有效</b>」。<b>下半场（Shervine）</b>：用它说「这就是 R1-Zero 这个概念验证的全部成果」。</p>
+<p class="">同一个证据，在两个论证里各起一次作用 —— 这说明它确实是整件事的核心证据。</p>
+<p class="">「<b>你给模型一个回应的机会</b>」指的是模板最后那一步，<b>我说清楚</b>：prompt 的末尾留一个「Assistant:」或类似的开头。于是模型的任务就是「续写这个位置之后的内容」。</p>
+<p class="">而这正是为什么一个基础模型也能被 RL 训起来：它做的事还是「续写」，只是续写的内容被奖励塑形了。</p>
+<p class="">把 R1-Zero 的完整配方收一次，<b>它只有四样东西</b>：① <b>一个预训练基础模型（没有 SFT）</b>。② 一个 prompt 模板（说清格式要求）。③ <b>两个可验证奖励（格式 + 答案）</b>。④ <b>GRPO</b>。</p>
+<p class="">就这四样。而它拿到了接近 o1-preview 的数学表现。</p>
+<p class="warn">⚠ 「<b>红色部分</b>」—— 幻灯上用红色标出模板里要被实际题目替换的占位符。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">94:40</span><span class="en">all is solved, it's great, no SFT, and we already have the best performance possible</span></div>
+  <div class="body"><p class=""><b>讲者先替你说出那个过于乐观的结论，然后立刻推翻它。</b></p>
+<p class="star">⭐ 请注意这两个问题的<b>性质</b>，<b>它们有一个共同点</b>：<b>混语言</b>：推理链里<b>中英文混着写</b>。<b>语法问题</b>：<b>句子不完整、标记错乱</b>。</p>
+<p class="">而这两个都「不影响答对率」—— 答案照样是对的。<b>它们只影响「人能不能读」</b>。</p>
+<p class="">所以这是一个<b>benchmark 测不出来</b>的问题，<b>而这件事本身很值得记</b>：你的奖励只看「答案对不对」+「标签在不在」。那么「推理链好不好读」就完全不在优化目标里。</p>
+<p class="">于是模型在那个维度上自由漂移 —— 而漂到哪里都不会被惩罚。</p>
+<p class="">这正是 L4 和 L5 反复说的那件事：你没量的东西，模型不会替你保住。</p>
+<p class="">而「<b>混语言</b>」为什么会发生，<b>有一个很具体的解释</b>：预训练数据是<b>多语言</b>的 ⇒ 模型内部的「<b>想法</b>」<b>本来就不绑在某一种语言上</b>。而<b>没有任何奖励要求它「用一种语言」</b>。</p>
+<p class="">所以它会挑「在那一步最顺手」的语言 —— 对某些数学表达，中文可能真的更短。</p>
+<p class="">也就是说：混语言不是一个错误，它是一个在没有约束下的最优行为。</p>
+<p class="warn">⚠ 「<b>没那么容易（not so easy）</b>」—— 讲者在用这个转折引出 R1（而不是 R1-Zero）存在的理由。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">95:23</span><span class="en">it doesn't really have, as a background, a strong supervision signal to anchor on</span></div>
+  <div class="body"><p class=""><b>讲者给的解释，而「锚」这个词用得极好。</b></p>
+<p class="star">⭐ 「<b>锚（anchor）</b>」这个词值得单独记，<b>它说出了 SFT 的第二个作用</b>：<b>SFT 的第一个作用</b>（大家都知道）：<b>教模型「怎么回应」</b>。<b>SFT 的第二个作用</b>（这里揭示的）：<b>给后面的 RL 一个「合理的原点」</b>。</p>
+<p class="">而那个原点就是 π_ref —— KL 惩罚要求 RL「别离它太远」。</p>
+<p class="">把这件事和 L5 的 KL 惩罚连起来，<b>整个逻辑就通了</b>：<b>正常的 RLHF</b>：π_ref 是一个「已经会好好说话」的 SFT 模型 ⇒ KL 把你拉在一个好区域里。<b>R1-Zero</b>：π_ref 是一个「只会续写互联网文本」的基础模型 ⇒ KL 把你拉在那个区域里。</p>
+<p class="">而那个区域里本来就包含混语言、语法混乱的文本 —— 所以 KL 不但没有阻止这些问题，它甚至是容许的。</p>
+<p class="">所以 R1 的修法现在可以预测了，<b>你自己应该能猜到</b>：<b>把 SFT 加回来</b>。但不是「用几十万条数据正经做一遍 SFT」。而是「用很少量的、人工整理过的推理链，先给它一个锚」。</p>
+<p class="">而这个东西在论文里叫「冷启动数据（cold start data）」—— 下一个知识点就是它。</p>
+<p class="warn">⚠ 「<b>去优化任何它想要的东西</b>」—— 这是一个很准确的描述：没有锚的 RL 就是在一个没有边界的空间里优化。</p></div>
+</article>
+</section>
+<section id="m-n">
+  <h2><span class="tag">模块 n</span>R1 的四个阶段，与蒸馏<small>95:49–106:48</small></h2>
+<article class="card">
+  <div class="meta"><span class="ts">95:49</span><span class="en">with RL only, you can get reasoning level performance</span></div>
+  <div class="body"><p class=""><b>R1-Zero 证完了，现在做产品 —— 而注意起点是一样的。</b></p>
+<p class="star">⭐ 请注意这个细节，<b>它经常被误解</b>：R1 不是「在 R1-Zero 上继续训的」。它是从「同一个 V3 base」重新开始的。</p>
+<p class="">所以 R1-Zero 对 R1 的贡献不是权重，而是「它生成的那些推理链」—— 下一镜就会用到。</p>
+<p class="">这个设计其实很聪明，<b>值得单独说</b>：R1-Zero 的权重有问题（混语言、语法乱）⇒ 在它上面继续训，问题会被带下去。但 R1-Zero 的「输出」很有价值 ⇒ 挑出好的、让人改一改，就是最好的 SFT 数据。</p>
+<p class="">所以 R1-Zero 被当成了一个「数据生成器」,而不是一个「模型检查点」。</p>
+<p class="">把 R1 的四个阶段先列出来，<b>这样接下来你有一张地图</b>：① <b>冷启动 SFT</b>（少量、人工整理过的推理链）。② <b>RL</b>（推理奖励 + 格式奖励 + 语言一致性奖励）。③ <b>大规模混合 SFT</b>（推理 + 非推理，3:1，拒绝采样）。④ <b>最后一个 RL</b>（有帮助 + 无害）。</p>
+<p class="">而这四步的形状是：SFT → RL → SFT → RL。</p>
+<p class="warn">⚠ 「<b>V3 base</b>」—— 指 DeepSeek-V3 的基础版（没做过对齐的那个），671B 的 MoE。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">96:36</span><span class="en">they try to align it in a way that will nicely try to alleviate the issues we have seen</span></div>
+  <div class="body"><p class=""><b>这一次不直接上 RL —— 先给它一个锚。</b></p>
+<p class="star">⭐ 「<b>冷启动（cold start）</b>」这个词值得说一下，<b>它是借来的</b>：<b>它原本来自推荐系统</b>：一个新用户什么行为都没有，你怎么给他推荐。<b>借到这里</b>：一个基础模型完全不会写推理链，你怎么让 RL 起步。</p>
+<p class="">而答案一样：先用一点点人工数据把它推过那个起步门槛。</p>
+<p class="">请注意 R1 和 R1-Zero 的结构差别<b>只有这一处</b>：<b>R1-Zero</b>：<b>基础模型 ⇒ RL</b>。<b>R1</b>：基础模型 ⇒ 一小段 SFT ⇒ RL ⇒ …。</p>
+<p class="">而就这一小段 SFT，解决了混语言和语法混乱。</p>
+<p class="">这件事对「<b>SFT 还有什么用</b>」这个问题给了一个很好的答案：R1-Zero 证明了「SFT 不是必需的」（能力上）。R1 证明了「SFT 仍然是必要的」（可用性上）。</p>
+<p class="">两个结论不矛盾：SFT 不负责「会不会推理」,它负责「推得人能不能看」。</p>
+<p class="">而这正好是前一个知识点那个「锚」的含义。</p>
+<p class="warn">⚠ 「<b>非推理版本</b>」—— 强调这个起点和 R1-Zero 的起点完全一样，是同一个未对齐的基础模型。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">97:02</span><span class="en">they used humans to rewrite some of these</span></div>
+  <div class="body"><p class=""><b>冷启动数据是怎么来的 —— 而这是一个很聪明的循环。</b></p>
+<p class="star">⭐ 请看清这个循环，<b>它解决了前面那个「数据不存在」的死结</b>：① R1-Zero 生成推理链（质量不稳，但内容是对的）。② 人去「重写」—— 修格式、统一语言，而不是从零写。③ 得到合规的推理链 ⇒ 变成 SFT 数据。④ <b>用它训出 R1 的起点</b>。</p>
+<p class="">请注意第 ② 步里的那个词：「<b>重写（rewrite）</b>」,<b>而不是「写（write)</b>」：前面讲者说过：从零写推理链「非常难」—— 那是不可行的。但「修改一条已有的、内容正确的链」容易得多。</p>
+<p class="">所以 R1-Zero 真正的贡献在这里：它把「写」这个不可行的任务，变成了「改」这个可行的任务。</p>
+<p class="">这个思路值得你记住，<b>因为它有很强的一般性</b>：当你需要一份「没人写得出来」的数据集时。<b>先用一个不完美的自动方法生成草稿</b>。再让人去修 —— 人的成本从「创作」降到「编辑」。</p>
+<p class="">而这在今天已经是标准做法了（叫 human-in-the-loop 数据生成）。</p>
+<p class="warn">⚠ 讲者说「prompt 和重写过的 prompt」—— 他这里口误了，第二个应该是「重写过的回答」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">97:35</span><span class="en">it could have been several orders of magnitude less than some of the other stages</span></div>
+  <div class="body"><p class=""><b>这一步有多小 —— 而「小」正是它的要点。</b></p>
+<p class="star">⭐ 请把这个量级对比记住，<b>它是整条流水线最漂亮的一处</b>：<b>方案 A（前面被否掉的）</b>：从零写<b>几十万条</b>推理链 ⇒ <b>不可行</b>。<b>方案 B（R1 实际做的）</b>：让模型生成，人<b>改几千条</b> ⇒ <b>可行</b>。</p>
+<p class="">而这几千条就足够了 —— 因为它的任务不是「教会它推理」,只是「给它一个锚」。</p>
+<p class="">为什么几千条就够，<b>这件事有一个很好的解释</b>：模型「怎么推理」已经在 RL 里学了 —— 不需要 SFT 教。SFT 只需要告诉它「用一种语言、把句子写完整」—— 这是一个很窄的要求。</p>
+<p class=""><b>而很窄的要求，用很少的数据就能传达</b>。</p>
+<p class="">这一点对你用 LLM 做事也很实用：<b>要改「能力」⇒ 需要海量数据或 RL</b>。要改「格式 / 风格 / 语言」⇒ 几百到几千条就够了。</p>
+<p class="">所以在动手之前先分清：你想改的是能力，还是形式？</p>
+<p class="warn">⚠ 「<b>没有给出数字</b>」—— 讲者在诚实地说明这是他从措辞推测的，不是论文明写的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">98:28</span><span class="en">there was something called a language consistency reward</span></div>
+  <div class="body"><p class=""><b>三个奖励，而第三个是专门为了那个毛病加的。</b></p>
+<p class="star">⭐ 请注意这个解法有多直白，<b>而这正是它的优点</b>：<b>问题</b>：模型混语言。<b>解法</b>：加一项奖励 = 「这条链里，目标语言的 token 占多少比例」。</p>
+<p class="">一个比例，一个数字，不需要任何模型 —— 它仍然是「可验证奖励」。</p>
+<p class="">把三个奖励摆在一起，<b>你会看到一个很清楚的分工</b>：<b>答案奖励</b>：<b>管「对不对」</b>（能力）。<b>格式奖励</b>：<b>管「有没有按结构写」</b>（结构）。<b>语言一致性奖励</b>：<b>管「能不能读」</b>（可读性）。</p>
+<p class="">而三个都是程序能算的 —— 所以仍然「不需要一个奖励模型」。</p>
+<p class="">这一处最值得学的，是那个<b>工作方法</b>：① <b>观察到一个具体的失败模式（混语言）</b>。② 设计一个最简单能量它的指标（目标语言 token 比例）。③ <b>把那个指标直接加进奖励</b>。</p>
+<p class="">这是 RL 最直接的用法：你能量的，你就能优化 —— 而反过来，你不量的，它就会漂走。</p>
+<p class="warn">⚠ 不过这也带来一个新的权衡：强制单一语言可能让模型在某些步骤上用一个不那么顺手的表达，从而轻微损失准确率 —— 这是一笔真实的交易。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">99:15</span><span class="en">they mix both reasoning and non-reasoning data</span></div>
+  <div class="body"><p class=""><b>第三步又是一次 SFT，而这一次解决的是一个还没被提过的问题。</b></p>
+<p class="star">⭐ 请先想清楚这一步在解什么问题，<b>讲者没有明说</b>：第二步的 RL <b>只在数学题和编程题上做</b>。而 RL 会<b>把模型往奖励高的方向推</b>。</p>
+<p class="">所以一个只练数学和代码的模型，可能变得「只会做题」—— 你问它别的，它答得反而变差了。这个现象有名字：alignment tax（对齐税），或者更一般地说，就是灾难性遗忘。</p>
+<p class="">而解法就是「<b>混数据</b>」,<b>这是一个很标准的做法</b>：<b>推理数据</b>：<b>保住刚学到的推理能力</b>。<b>非推理数据</b>：<b>把写作、问答、常识这些能力找回来</b>。</p>
+<p class="">所以这一步不是在「提升」什么，它是在「补回」被 RL 挤掉的东西。</p>
+<p class="">请注意这四个阶段的<b>节奏</b>，<b>它很有意思</b>：SFT（窄，给锚）⇒ RL（窄，长能力）⇒ SFT（宽，补回通用）⇒ RL（宽，对齐偏好）。</p>
+<p class="">每一次 RL 之后都跟一次 SFT 来「拉回来」—— 这是一个「先专精、再拓宽」反复交替的结构。</p>
+<p class="">而这个结构在今天的后训练流水线里已经很常见了。</p>
+<p class="warn">⚠ 「<b>一个非常有意思的策略</b>」—— 讲者指的是下面那个「3 比 1」的配比和拒绝采样。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">99:42</span><span class="en">about 200k pairs</span></div>
+  <div class="body"><p class=""><b>非推理数据是「回收」来的，而配比是 3 比 1。</b></p>
+<p class="star">⭐ 「<b>回收（recycled）</b>」这个词值得注意，<b>它说明了成本结构</b>：那 20 万对非推理数据不是为 R1 新做的。它是 V3 做指令微调时就有的，直接拿来用。</p>
+<p class="">所以这一步的边际数据成本接近零 —— 而这正是「有一个前代模型」的好处。</p>
+<p class="">把那个 <b>3 比 1</b> 算一下，<b>数字就具体了</b>：<b>非推理</b>：约 <b>20 万对</b>（回收的）。<b>推理</b>：约 <b>60 万对</b>（新生成的）。合计约 <b>80 万对</b>。</p>
+<p class="">对照一下冷启动的「几千对」—— 两百倍的差距，而这正是讲者说「更大的规模」的意思。</p>
+<p class="">而「<b>3 比 1 偏向推理</b>」这个配比本身是一个设计决定：<b>偏向推理</b> ⇒ 保住刚长出来的推理能力（这是主要目标）。<b>但留 1/4 给通用</b> ⇒ <b>足够把日常能力拉回来</b>。</p>
+<p class="">这个比例没有理论依据，它是调出来的 —— 而论文给出它，别人才能复现。</p>
+<p class="warn">⚠ 「<b>指令微调那一讲</b>」—— 指 L4，那里讲过 SFT 数据该覆盖哪些领域。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">100:23</span><span class="en">they used the model that had been trained so far to generate a response</span></div>
+  <div class="body"><p class=""><b>那 60 万条推理数据从哪来 —— 而这里有一个漂亮的自举。</b></p>
+<p class="star">⭐ 请看清这个<b>自举（bootstrap）</b>,<b>它是整条流水线的核心机制</b>：第二步的 RL 训出了一个「会推理但可能答错」的模型。<b>用它对一堆题各生成几个回答</b>。<b>只留下「答对的 / 完美的」那些</b>。</p>
+<p class="">于是你得到了 60 万条高质量推理链 —— 完全没有人工写作。<b>模型在给自己造教材</b>。</p>
+<p class="">「<b>拒绝采样</b>」这个词在统计里本来是另一个意思，<b>这里是借用</b>：<b>统计上</b>：从一个易采的分布采样，按比例拒绝，得到目标分布的样本。<b>这里</b>：从模型采样，按「对不对」拒绝，得到「只有正确答案」的数据。</p>
+<p class="">共同点是「生成很多，筛掉大部分」—— 而这正是 Best-of-N 的同一个结构。</p>
+<p class="">请注意这件事和前面那张「<b>不做 SFT 的三张票</b>」的关系：那三张票里最重的一张是「没有推理链可用」。而到了这一步，推理链已经有了 —— 是前两步造出来的。</p>
+<p class="">所以 SFT 在这里重新变得可用，而且比 RL 便宜得多。这正好印证了讲者那个 takeaway 的前置条件：「如果我们从零开始」。</p>
+<p class="warn">⚠ 「<b>某个评判者（some judge）</b>」—— 下一镜会说这是 LLM judge，而那是 L8 的内容。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">101:17</span><span class="en">they went on to a last stage</span></div>
+  <div class="body"><p class=""><b>为什么用自动评判，以及第四步开场。</b></p>
+<p class="star">⭐ 「LLM judge（用 LLM 当评判者）」在这里第一次作为工具出现，<b>而它有两个用途</b>：<b>这里的用途</b>：筛数据 —— 判断一条生成的回答够不够好，留下还是扔掉。<b>L8 的用途</b>：评测模型 —— 判断一个模型的输出好不好。</p>
+<p class="">而两处是同一个技术：拿一个强模型当裁判。</p>
+<p class="">为什么这里<b>必须</b>自动做，<b>讲者说得很清楚</b>：要筛<b>60 万条</b>。<b>人工审 60 万条推理链 ⇒ 不可能</b>。</p>
+<p class="">所以「自动」不是一个偷懒的选择，它是唯一可行的选择。而代价是：评判者本身会犯错，于是数据里会混进一些「judge 看错了」的样本。</p>
+<p class="">而「可能会让你想起非推理流水线里的那些阶段」这句话，<b>是在说第四步其实就是普通的 RLHF</b>：<b>第四步不再是推理专用的东西</b>。它就是 L5 讲的那一套：用人类偏好对齐「有帮助」和「无害」。</p>
+<p class="">所以 R1 的最后一步，是把它变回一个「正常的助手」。</p>
+<p class="warn">⚠ 「<b>这些是工作得相当好的启发式</b>」—— 讲者在为自动评判辩护，而这个辩护是基于「实际效果」而不是「原理保证」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">102:01</span><span class="en">the harmlessness was a reward that was applied on the whole tokens that were outputted</span></div>
+  <div class="body"><p class=""><b>两个新奖励，而「无害」那一项有一个很重要的细节。</b></p>
+<p class="star">⭐ 请把这个区分记清楚，<b>它是一个很好的设计判断</b>：<b>无害（harmlessness）</b>：覆盖「所有」输出的 token —— 包括 think 里的思考过程。<b>有帮助（helpfulness）</b>：只看「用户那一层看到的」—— 也就是最终答案。</p>
+<p class="">两个奖励作用在不同的范围上 —— 而这个差别是有道理的。</p>
+<p class="">为什么无害<b>必须</b>覆盖思考过程：思考过程可能被泄露（界面显示摘要、API 返回、日志记录）。更重要的是：一个在思考里就开始规划有害内容的模型，最终答案也不可能真正安全。</p>
+<p class="">所以安全性不能只管「门口」,它要管「整个房间」。</p>
+<p class="">而为什么有帮助<b>不需要</b>覆盖思考过程：思考过程本来就是「杂乱的、试错的」—— 那是它该有的样子。如果你要求思考过程也「对用户有帮助」,你就会把它压成一篇整洁的作文。</p>
+<p class="">而那恰好会破坏它的作用：思考需要允许犯错和改口。</p>
+<p class="">所以这个范围差别不是偷懒，它是在保护推理过程的自由度。</p>
+<p class="warn">⚠ 「<b>有帮助 + 无害</b>」这一对概念来自 Anthropic 的 HH 框架，<b>而它在 L5 讲偏好调优时出现过</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">103:01</span><span class="en">R1 was pretty competitive with respect to closed source models</span></div>
+  <div class="body"><p class=""><b>结果有两个观察，而第一个比具体分数重要。</b></p>
+<p class="star">⭐ 「<b>两簇（two clusters）</b>」这个观察比任何具体分数都重要：它说明：「是不是推理模型」造成的差距，比「哪一家做的模型」更大。也就是说：一个小一点的推理模型，可能打败一个大得多的非推理模型。</p>
+<p class="">所以在推理类任务上，「用不用推理模型」是一个比「用哪个厂的」更重要的决定。</p>
+<p class="">而第二个观察 —— <b>追上闭源</b> —— 的意义在前面已经讲过了：<b>追上了，而且方法公开了</b>。所以从那一刻起，「推理能力」不再是任何一家的护城河。</p>
+<p class="">而这正是 2025 年开源模型集体跟上的那个转折点。</p>
+<p class="">不过也请对这类结果保持一点清醒：benchmark 分数是「直接被优化的目标」（前面讲过）。所以「在 AIME 上追上」不完全等于「推理能力追上」。</p>
+<p class="">而讲者用的词是「相当有竞争力（pretty competitive）」,而不是「超过」—— 这个措辞是准确的。</p>
+<p class="warn">⚠ 「声称是基于推理的（claim to be reasoning-based）」—— 讲者在这里用了「声称」,因为闭源模型没公开做法，你只能信它说的。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">103:30</span><span class="en">let's say you don't have a 600B MOE at your disposal</span></div>
+  <div class="body"><p class=""><b>最后一块，而这个问题对绝大多数人才是真问题。</b></p>
+<p class="star">⭐ 这个问题的实际意义比它听起来大得多：R1 是 671B 的 MoE —— 自己部署它需要多卡服务器。而绝大多数人手上能跑的是 7B 到 32B。</p>
+<p class="">所以「怎么把大模型的推理能力搬到小模型上」才是大多数人真正要解决的问题。</p>
+<p class="">而这一块也是 R1 那篇论文被<b>实际用得最多</b>的部分：R1 论文同时放出了一系列蒸馏出来的小模型（1.5B 到 70B）。而真正被下载、被跑在个人机器上的，大多是这些小的。</p>
+<p class="">所以「蒸馏」不是一个附录，它是这篇论文落地的主要途径。</p>
+<p class="">请注意讲者又一次「<b>先回忆旧定义</b>」：这一讲他做了至少五次：CoT、advantage、value function、KL、现在是蒸馏。而每次回忆都不是客套，是因为接下来要在那个定义上做一个修改。</p>
+<p class="">所以听到「让我给你一个提醒」时，你就该知道：下面要改的正是这个东西。</p>
+<p class="warn">⚠ 「<b>600B 的 MoE</b>」—— R1 实际是 671B 总参数，每个 token 激活约 37B。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">104:04</span><span class="en">so for example, for next token prediction, you know the text you want the model to fit on</span></div>
+  <div class="body"><p class=""><b>旧的蒸馏设定，而「数据是固定的」这四个字是整个对比的关键。</b></p>
+<p class="star">⭐ 请盯住「<b>固定的（fixed）</b>」这个词，<b>它是下面那个转折的全部前提</b>：<b>预训练</b>：那段文本是给定的 ⇒ 你知道每一步的「正确下一个 token」。<b>SFT</b>：那些对是给定的 ⇒ 你知道「正确回答」是什么。</p>
+<p class="">所以在这两种情形里，「要拟合什么」是一个已知量。</p>
+<p class="">而推理这个场景<b>恰好不是</b>，<b>这就是问题</b>：你没有一份「正确推理链」的数据集（这是这一讲反复说的）。<b>所以你不知道「要拟合什么」</b>。</p>
+<p class="">于是旧的蒸馏方法在这里直接用不上 —— 它少了最关键的那个输入。</p>
+<p class="">这就是讲者说「<b>另一种口味的蒸馏</b>」的原因，<b>我先把答案给你</b>：<b>旧蒸馏</b>：数据固定 ⇒ <b>学教师在每一步的「概率分布」</b>。<b>新蒸馏</b>：数据不固定 ⇒ 先让教师「生成」数据，再学它「生成的那个序列」。</p>
+<p class="">所以差别不只在「学什么」,也在「数据从哪来」。</p>
+<p class="warn">⚠ 「<b>几讲之前</b>」—— 指 L4，那里讲过知识蒸馏作为一种压缩手段。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">104:32</span><span class="en">you fit it instead the whole probability distribution of the teacher model</span></div>
+  <div class="body"><p class=""><b>旧蒸馏的核心：学「整个概率分布」而不是「硬标签」。</b></p>
+<p class="star">⭐ 为什么「<b>学分布</b>」比「<b>学硬标签</b>」好，<b>这是蒸馏的全部精髓</b>：<b>硬标签</b>：「<b>正确答案是『猫』</b>」⇒ 一个 one-hot 向量，信息量极小。<b>教师分布</b>：「猫 0.7、虎 0.2、狗 0.05、桌子 0.0001」。</p>
+<p class="">后者多出的信息是：「教师认为哪些是「次好的」、哪些是「完全离谱的」」。而这些「相对关系」正是教师学到的「知识」。</p>
+<p class="">这件事有一个很好的说法（Hinton 的原话大意）：<b>硬标签告诉你「答案」</b>。软分布告诉你「教师是怎么看这个世界的」。</p>
+<p class="">所以蒸馏传递的不只是答案，还有教师的「相似性结构」。</p>
+<p class="">而这就是为什么学生能用小得多的参数达到不错的效果。</p>
+<p class="">那么「<b>在这个情形里你会怎么做</b>」—— <b>请自己先想一下</b>：要学教师的概率分布 ⇒ 你需要「每一步的分布」。而拿到每一步的分布 ⇒ 你需要能访问教师的 logits。</p>
+<p class="">而且你还需要「一份固定的数据」来跑那个前向。两个条件在推理这个场景里都不成立 —— 所以答案必然是一个「变通版本」。</p>
+<p class="warn">⚠ 「<b>硬标签（hard label）</b>」—— 指 one-hot 的真值标签，对应的是「软标签（soft label）」也就是教师的概率分布。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">105:13</span><span class="en">we use the teacher model here, R1, to generate some sample responses including thinking tokens</span></div>
+  <div class="body"><p class=""><b>先让教师「造数据」—— 这是关键的一步。</b></p>
+<p class="star">⭐ 请看清这一步解决的是什么，<b>它正是上一个知识点那个缺口</b>：<b>缺口</b>：没有一份「固定的、带推理链的」SFT 数据。<b>解法</b>：让 R1 自己生成一批 —— 于是数据就「固定」了。</p>
+<p class="">所以这一步是在「把一个没有数据的问题，变成一个有数据的问题」。</p>
+<p class="">「<b>离线（offline）</b>」这三个字有很实际的含义：<b>离线</b>：先一次性把数据造完、存成文件，然后正常跑 SFT。<b>在线</b>（对比）：训练中每一步都调用教师，拿它的实时输出。</p>
+<p class="">离线便宜得多：教师只跑一次，而那批数据可以反复用、也可以给别人用。</p>
+<p class="">而这也是为什么 R1 的蒸馏数据可以被开源出来给社区用。</p>
+<p class="">请注意这件事和前面「<b>思考摘要为什么不给你看</b>」那一镜的呼应：那一镜的第三个理由是：「有了链，你就能训一个模仿它的模型」。而这里，DeepSeek 自己正是这么做的 —— 用自家 R1 的链去训小模型。</p>
+<p class="">所以那个「担忧」是真实存在的，因为它真的可行，而且 DeepSeek 做了。</p>
+<p class="warn">⚠ 「不一定有开箱即用的（not necessarily out of the box）」—— <b>委婉说法，实际意思是「根本没有」</b>。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">105:51</span><span class="en">you just try to predict the same sequence of tokens that the teacher has outputted</span></div>
+  <div class="body"><p class=""><b>第二步，而这个「另一种口味」其实就是普通的 SFT。</b></p>
+<p class="star">⭐ 请把两种蒸馏并排写出来，<b>差别就非常清楚了</b>：<b>经典蒸馏</b>：固定数据 + 学教师的「软分布」（需要 logits）。<b>这里的蒸馏</b>：教师生成数据 + 学教师的「硬序列」（只需要文本）。</p>
+<p class="">所以这个「另一种口味」其实就是「在教师生成的数据上做普通的 SFT」。</p>
+<p class="">这件事有一个很实际的好处，<b>讲者没有明说</b>：只需要教师的「文本输出」,不需要它的 logits。而这意味着：你甚至可以用一个只提供 API 的闭源模型当教师。</p>
+<p class="">所以这种蒸馏在工程上门槛极低 —— 这也是它在今天被用得这么广的原因。</p>
+<p class="">不过也请注意它<b>丢掉</b>了什么：经典蒸馏传递「教师的相似性结构」（次好的是什么）。这里只传递「教师最后选了哪个 token」。</p>
+<p class="">所以它的信息效率比经典蒸馏低 —— 理论上需要更多数据才能达到同样效果。但它换来的是「只要能调 API 就能做」,而这个便利压倒了那点效率损失。</p>
+<p class="warn">⚠ 讲者说「<b>拟合到你那个蒸馏出来的模型上</b>」—— 他口误了，应该是「拟合到那批蒸馏出来的数据上」。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">106:11</span><span class="en">the results, once again, are very competitive with closed source alternatives</span></div>
+  <div class="body"><p class=""><b>小模型也追上了对应的闭源小模型，而这一次的实际影响更大。</b></p>
+<p class="star">⭐ 请注意这件事在<b>两个尺度</b>上都成立了：<b>大尺度</b>：<b>R1（671B）追上 o1</b>。<b>小尺度</b>：<b>蒸馏出来的小模型追上 o1-mini</b>。</p>
+<p class="">而后者的实际影响更大，因为它是绝大多数人真能跑起来的那一档。</p>
+<p class="">这一讲里「<b>追上闭源</b>」出现了两次，<b>而它们的意义不同</b>：<b>第一次（R1 vs o1）</b>：证明<b>方法可行</b> ⇒ <b>科学意义</b>。第二次（蒸馏版 vs o1-mini）：证明<b>能力可搬运</b> ⇒ <b>实用意义</b>。</p>
+<p class="">两件事合起来，才让这篇论文真正改变了行业格局。</p>
+<p class="">对你的用途，这里有一个很具体的推论：<b>你不需要 671B 才能用上推理能力</b>。一个 7B 到 32B 的蒸馏版推理模型，在数学和代码上已经相当可用。</p>
+<p class="">所以如果你想在自己的课题里用一个推理模型做实验，这条路是开着的。</p>
+<p class="warn">⚠ 「<b>声称是一个推理模型的更小版本</b>」—— 讲者又用了「声称」,因为 o1-mini 的做法同样没有公开。</p></div>
+</article>
+<article class="card">
+  <div class="meta"><span class="ts">106:48</span><span class="en">distilling the knowledge is more efficient in terms of performance than directly learning from scratch</span></div>
+  <div class="body"><p class=""><b>整讲最后一个问题，而这个答案很重要。</b></p>
+<p class="star">⭐ 这个问题问得很好，<b>而答案推翻了一个很自然的假设</b>：<b>自然的假设</b>：既然 RL 能在大模型上长出推理，那在小模型上也该能。<b>实际结果</b>：<b>在小尺寸上，蒸馏比直接 RL 更有效</b>。</p>
+<p class="">所以 RL 不是在所有尺度上都最优的选择。</p>
+<p class="">为什么会这样，<b>有一个很直观的解释</b>：RL 是一个「搜索」过程 —— 模型要自己摸索出好的推理路径。而能摸到什么，取决于「它本来有多大可能生成那种路径」。</p>
+<p class="">一个小模型的初始分布里，那些复杂的推理路径概率极低 ⇒ 它几乎采不到 ⇒ 也就学不到。而蒸馏绕过了搜索：直接把答案摆在它面前让它模仿。</p>
+<p class="">所以整讲最后的结论可以这么收，<b>而我认为这是最该带走的一条</b>：推理能力需要「足够大的模型 + RL」才能第一次「长」出来。但它一旦长出来，就可以被「传」到小模型上。</p>
+<p class="">所以「发现」和「复制」的成本完全不对称 —— 第一次很贵，之后很便宜。</p>
+<p class="">而这正好解释了这一整年的格局：一家做出来，全行业几个月内就都有了。</p>
+<p class="warn">⚠ 「<b>祝你有一个很棒的周末</b>」—— 这一讲到此结束。而下一讲是 L7：Agentic LLMs。</p></div>
+</article>
+</section>
+</main></div></body></html>
