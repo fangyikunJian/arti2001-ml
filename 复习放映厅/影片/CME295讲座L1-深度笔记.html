@@ -1,0 +1,1179 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CME295 讲座 L1 · Transformer · 深度笔记</title>
+<style>
+  :root{--bg:#070a12;--panel:#0d1220;--line:#1d2537;--ink:#d7dced;--dim:#8a93ab;
+        --y:#f2c94c;--g:#6fcf97;--r:#eb8f7a;--v:#b39ddb;--b:#7fb3ff;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.85 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;}
+  header{position:sticky;top:0;z-index:9;background:rgba(7,10,18,.94);
+         border-bottom:1px solid var(--line);backdrop-filter:blur(8px);padding:14px 24px;}
+  header h1{margin:0;font-size:17px;letter-spacing:.3px}
+  header h1 small{color:var(--dim);font-weight:400;margin-left:10px;font-size:13px}
+  .wrap{display:grid;grid-template-columns:270px minmax(0,1fr);gap:28px;
+        max-width:1180px;margin:0 auto;padding:24px;}
+  nav{position:sticky;top:72px;align-self:start;max-height:calc(100vh - 100px);overflow:auto}
+  nav a{display:block;padding:6px 10px;border-radius:7px;color:var(--dim);
+        text-decoration:none;font-size:13.5px;line-height:1.5}
+  nav a b{color:var(--y);margin-right:7px;font-weight:600}
+  nav a:hover{background:#121a2b;color:var(--ink)}
+  section{margin:0 0 46px}
+  h2{font-size:19px;margin:0 0 18px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  h2 .tag{display:inline-block;font-size:11px;color:var(--bg);background:var(--y);
+          border-radius:5px;padding:2px 8px;margin-right:10px;vertical-align:2px;font-weight:700}
+  h2 small{display:block;color:var(--dim);font-size:12.5px;font-weight:400;margin-top:5px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+        padding:16px 20px;margin:0 0 14px}
+  .meta{display:flex;gap:12px;align-items:baseline;margin-bottom:10px;
+        padding-bottom:9px;border-bottom:1px dashed var(--line)}
+  .ts{color:var(--y);font:600 13px ui-monospace,SFMono-Regular,Menlo,monospace;flex:none}
+  .en{color:var(--dim);font:13px ui-monospace,SFMono-Regular,Menlo,monospace;
+      font-style:italic;word-break:break-word}
+  .body p{margin:0 0 9px} .body p:last-child{margin-bottom:0}
+  .body p.star{color:var(--y)} .body p.warn{color:var(--r)}
+  .body b{color:#fff;font-weight:600}
+  .body p.star b{color:var(--y)} .body p.warn b{color:var(--r)}
+  .note{background:#101828;border:1px solid var(--line);border-left:3px solid var(--y);
+        border-radius:9px;padding:14px 18px;margin:0 0 26px;color:var(--dim);font-size:14.5px}
+  .note b{color:var(--ink)}
+  @media(max-width:860px){.wrap{grid-template-columns:1fr}
+    nav{position:static;max-height:none;display:flex;flex-wrap:wrap;gap:4px}
+    nav a{font-size:12.5px}}
+</style></head><body>
+<header><h1>CME295 讲座 L1 · Transformer · 深度笔记<small>放映厅精简版之外的延伸分析 —— 189 段，按讲座时间顺序</small></h1></header>
+<div class="wrap"><nav><a href="#m-a"><b>a</b> 字幕第 1–110 句（0:05–10:38）：这门课是谁开的、为什么开、 你能拿到什么、先修与后勤、材料清单、课堂问答、两个免责声明</a>
+<a href="#m-b"><b>b</b> 字幕第 111–175 句（10:38–17:31）：NLP 是什么、三个桶、 每个桶里有哪些任务、分类桶走一遍（数据集 + 四个指标）、⚠ 类别不平衡、多分类的指标粒度</a>
+<a href="#m-c"><b>c</b> 字幕第 176–231 句（17:31–23:23）：生成桶走一遍（机器翻译、WMT）、 ⚠ 生成的评估为什么棘手、BLEU 与 ROUGE、参考文本的代价与 reference-free 的预告、 perplexity、以及从 80 年代到 2020 年代的简史</a>
+<a href="#m-d"><b>d</b> 字幕第 232–290 句（23:23–30:13）：tokenization 是什么、 任意切 / 词级 / 子词级 / 字符级四种切法各自的利弊、⚠ 为什么「序列变长」是代价、 OOV（Out Of Vocabulary）、三者总对照</a>
+<a href="#m-e"><b>e</b> 字幕第 291–367 句（30:13–37:49）：one-hot 编码、余弦相似度、 ⚠ one-hot 让所有向量两两正交这个致命问题、关于「为什么不管范数」的问答、 词表该多大（英语几万 / 多语言几十万）</a>
+<a href="#m-f"><b>f</b> 字幕第 368–493 句（37:49–53:17）：Word2vec 全程</a>
+<a href="#m-g"><b>g</b> 字幕第 494–575 句（53:17–65:00）：句子表示的朴素做法丢了什么、 RNN 登场与它怎么跑、三类任务各怎么用 RNN、⚠ 长程依赖与 LSTM、梯度消失/爆炸、 以及「到这一步为止表示还缺什么」的小结</a>
+<a href="#m-h"><b>h</b> 字幕第 576–730 句（65:00–83:16）：注意力的想法（直接链接）、 Attention is All You Need 与 self-attention、★ Q/K/V、矩阵形式与 softmax(QK)V、 encoder-decoder 架构与三处注意力、位置编码、端到端流程、多头</a>
+<a href="#m-i"><b>i</b> 字幕第 731–924 句（83:16–101:33）：多头的投影会不会学成一样、 label smoothing、以及 Shervine 的端到端走查（分词与 BOS/EOS、嵌入 + 位置嵌入、 三个投影、★ 逐步拆解 QKᵀ 与为什么除 √d_k、多头拼接与 W_o、FFN 隐层更大、 N 层堆叠、解码循环到 EOS）</a></nav><main>
+<div class="note"><b>这份文档是什么。</b>放映厅那部片子走的是精简版：每一镜约 260 字，
+只留「讲者说了什么 + 关键机制 + 一个陷阱」。而这里是<b>没被砍的完整版</b> ——
+方法论点评、和你课题的联系、论文背景、讲者的措辞与口误，全部保留，按讲座时间顺序排列。<br>
+用法建议：<b>先看片子走一遍主线，想深挖某一段时再回到这里按时间码查</b>。
+每张卡片的时间码和片子里的原话锚点是同一套。</div>
+<section id="m-a"><h2><span class="tag">模块 a</span>字幕第 1–110 句（0:05–10:38）：这门课是谁开的、为什么开、 你能拿到什么、先修与后勤、材料清单、课堂问答、两个免责声明<small>句 1–110 · 0:05–10:38</small></h2>
+<article class="card"><div class="meta"><span class="ts">00:05</span><span class="en">Hello everyone, and welcome to CME 295-- Transformers and Large Language Models</span></div><div class="body"><p class=""><b>开场先认人，因为这门课的风格和这两个人的背景直接相关。</b></p>
+<p class=""><b>讲者的自我介绍</b>：<b>「<u>大家好，欢迎来到 CME 295 —— Transformers and Large Language Models。我叫 Afshine，我会和 Shervine 一起教这门课，他在后排</u>。」</b></p>
+<p class=""><b>⇒ 然后他说了一件有意思的事：<u>我们是双胞胎兄弟，而且背景也很相似</u>。</b></p>
+<p class=""><b>两条几乎平行的履历</b>：<b><u>我们都上了法国一所叫 Centrale Paris 的学校，然后各走各的路 —— 我去了 MIT，Shervine 去了 Stanford 读 ICME 的硕士项目</u>。</b><b>⇒ <u>而在那之后，我们的工业界背景也非常相似：我先去了 Uber，然后 Shervine 也来了 Uber；后来 Shervine 去了 Google，我也去了 Google；最近我加入了 Netflix，Shervine 也加入了 Netflix</u>。</b></p>
+<p class=""><b>★ 他的收口：<u>而我们一直在做大语言模型</u>。</b></p>
+<p class=""><b>⇒ <u>所以我想我们是技术背景，而且主要是朝着 LLM 这个方向的</u>。</b></p>
+<p class="star"><b>⭐ 为什么这段值得听？因为它预告了这门课的性质：<u>讲者不是纯学术研究者，而是在 Uber、Google、Netflix 做过工业系统的人</u>。</b><b>你后面会看到这一点反复体现 —— 课程里大量出现「实践中人们通常怎么做」「这个量级大概是多少」「这个在生产里划不划算」，而不只是论文里的理想形式。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">01:07</span><span class="en">So yeah, I guess we have technical backgrounds, and mostly oriented towards LLMs</span></div><div class="body"><p class=""><b>这门课是怎么来的，讲者讲了一条很清楚的线。</b></p>
+<p class=""><b>他的自问</b>：<b>「<u>好，那我们为什么要开这门课？</u>」</b></p>
+<p class=""><b>起点</b>：<b><u>从 2020 年开始，Shervine 和我一直在专攻 NLP。而我们一直在以「工作坊」的形式讲这门课，每年办一次</u>。</b><b>⇒ <u>所以 2021、2022、2023、2024 都办过 —— 而 ChatGPT 是 2022 年出来的，突然之间大家对 LLM 有了巨大的兴趣</u>。</b></p>
+<p class=""><b>★ 变成正式课</b>：<b>「<u>而实际上是去年春天，我们才开始把这门课作为 Stanford 的一门正式课程来开，也就是现在这门 CME 295 —— 而这是第二次开</u>。」</b></p>
+<p class="warn"><b>⚠ 这个信息对你怎么看待这门课很重要</b>：<b><u>它不是一门讲了十年的成熟课程，而是跟着这个领域一起长起来的</u>。</b></p>
+<p class=""><b>⇒ 两个直接后果，你听下去就会验证</b>：<b>① <u>内容非常新</u> —— 后面好几讲的主干都是 2024、2025 年的论文（比如推理模型那一讲，讲者说「几乎所有东西都来自 2024 或 2025」）；② <u>讲者会主动区分「已经稳下来的」和「还在动的」</u>，而这个分寸在一门老课里反而不常见。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">01:40</span><span class="en">And so it is actually last spring that we started to offer this class as a Stanford course</span></div><div class="body"><p class=""><b>这一条是我补的背景，因为它能帮你校准对这门课的预期。</b></p>
+<p class="warn"><b>⚠ 先说清：<u>这不是讲者在课上说的</u>，是我补的 —— 但它是公开信息，而且很有用。</b></p>
+<p class=""><b>★ Afshine 和 Shervine Amidi 这两个名字，在机器学习圈里还有另一个身份：<u>他们是那套被广泛传播的 CS229 速查表（cheat sheet）的作者</u>。</b><b>就是你在网上大概率见过的那种「一页纸讲完监督学习 / 深度学习 / 概率论」的图。</b></p>
+<p class=""><b>⇒ 为什么这件事值得知道？因为<u>它解释了这门课的一个很突出的特点：压缩和排版能力</u>。</b><b>你后面会看到他们反复做同一件事 —— <u>把一个方法拆成「它想做什么 / 它怎么做 / 它的代价是什么」三栏，然后用一张图摆平</u>。</b></p>
+<p class="warn"><b>⚠ 而这个能力也有它的另一面，值得你留意：<u>压缩得好的东西，听起来总是比实际更干净</u>。</b><b>讲者自己在课上会不断补回被压掉的部分（「实践中其实没那么简单」「这只是一种做法」），<u>而这些补充往往比主干更值钱</u>。</b></p>
+<p class=""><b>⇒ 所以我建议你听这门课时专门留意那些「补充」。这个片子也会特意把它们单独拎出来。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">02:14</span><span class="en">So the first one is to learn about the underlying mechanism that makes all this work</span></div><div class="body"><p class=""><b>讲者给这门课立了两个目标，而这两个目标正好对应了九讲的两半。</b></p>
+<p class=""><b>他的开场判断</b>：<b>「<u>首先，LLM 现在基本上无处不在。而我想我们这里的目标是双重的</u>。」</b></p>
+<p class=""><b>目标一：底层机制。</b><b><u>第一个是去了解那个让这一切运转起来的底层机制。而我们要看的就是 transformer —— 让这一切得以运转的那个基础架构</u>。</b></p>
+<p class=""><b>目标二：训练与应用。</b><b><u>第二件事是知道这些 LLM 是怎么被训练出来的，以及它们被应用在哪里</u>。</b></p>
+<p class=""><b>★★ 把这两个目标和九讲的编排对一下，你会发现它们分得很干净</b>：<b><u>L1 到 L3 回答「里面是什么」（transformer、它的变体、什么是 LLM）；L4 到 L7 回答「怎么训出来、怎么用」（预训练与微调、偏好调优、推理训练、接到外部世界）；L8 L9 回答「怎么判断好坏、现在到哪了」</u>。</b></p>
+<p class=""><b>⇒ 所以这两个目标不是客套话，<u>它是课程大纲的实际骨架</u>。</b></p>
+<p class="star"><b>⭐ 而我建议你在听的时候一直问自己：<u>我现在听的这一段，是在回答「里面是什么」，还是在回答「怎么做出来」？</u> 这两类内容的学法完全不同 —— 前者要推导和画图，后者要记量级和取舍。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">02:31</span><span class="en">So in case you are still wondering if this class is good for you</span></div><div class="body"><p class=""><b>讲者花了一整段讲「这门课适合谁」，而他列的三类人各有不同的诉求。</b></p>
+<p class=""><b>他的原话结构</b>：<b>「<u>如果你还在想这门课适不适合你，我会说：这门课非常适合那些总体上对这个领域有兴趣的人</u>。」然后他分了三类。</b></p>
+<p class=""><b>① <u>想把它当职业目标的</u>：<u>要么是因为你想让它成为你的职业方向 —— 想当研究科学家、或者 ML 科学家</u>。</b></p>
+<p class=""><b>② <u>想做项目的</u>：<u>或者你想开发一个在某种程度上依赖 LLM 的个人项目</u>。</b><b>★ 而他给这一类人的描述特别实在：<u>就是为了知道那些注意事项（caveats）—— 我想就是什么管用、什么不管用</u>。</b></p>
+<p class=""><b>③ <u>跨领域的</u>：<u>或者你干脆是另一个领域的人，只是想知道 AI、生成式 AI、LLM 这一整套到底是怎么回事，以及你怎么把它用到你自己的领域里</u>。</b></p>
+<p class=""><b>★★★ 我想请你特别留意第 ② 类那句「<u>知道什么管用、什么不管用</u>」，因为它是这门课区别于「读论文」的地方</b>：<b>论文只会告诉你一个方法在作者的设定下有效；<u>而这门课会告诉你人们实际上用不用它、为什么不用、以及用了之后会撞上什么</u>。</b><b>⇒ 你后面会看到大量这种判断：beam search「更优但不用」、BLEU/ROUGE「如今不太常用了」、HyDE「可能管用也可能不管用」。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">03:14</span><span class="en">So now in terms of prerequisites</span></div><div class="body"><p class=""><b>先修要求这一段，讲者的措辞很有分寸，值得照搬他的说法。</b></p>
+<p class=""><b>他的原话</b>：<b>「<u>现在说到先修要求，我会说：最低限度，你应该有一些机器学习的基础 —— 基本上知道一个模型是怎么被训练的、什么是神经网络；另外还要有一些线性代数的基础，基本上就是比如矩阵是怎么相乘的</u>。」</b></p>
+<p class="warn"><b>⚠ 他随即软化了这个要求</b>：<b>「<u>但即使你在这个领域的能力还在发展中，我想也没关系，我们还是会在这儿帮你的。不过我想这大概是那个理想的先修集合</u>。」</b></p>
+<p class=""><b>★★ 我想请你认真对待「<u>矩阵是怎么相乘的</u>」这一条，因为它听起来最不起眼，实际上最要紧</b>：<b>这门课的核心公式 <u>softmax(QKᵀ/√d_k)·V</u> 几乎全部的理解都落在「<u>这两个矩阵相乘之后，每一行、每一列各代表什么</u>」上。</b></p>
+<p class=""><b>⇒ 本讲最后 Shervine 的端到端走查里，有连续好几镜就是在干这件事：<u>Q 的每一行是一个 query、Kᵀ 的每一列是一个 key，相乘之后每一行就是「这个 query 投到所有 key 上」的结果</u>。</b><b>⚠ 如果你对矩阵乘法只停留在「会算」而没有「每一行每一列是什么」的直觉，那一段会很难跟。</b></p>
+<p class=""><b>⇒ 所以这个片子在那几镜会把形状一步步画出来。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">04:18</span><span class="en">So as you could tell from the setup, we are basically recording this class</span></div><div class="body"><p class=""><b>后勤这一段看似可以跳过，但里面有一条会直接影响你看录像的体验。</b></p>
+<p class=""><b>上课安排</b>：<b><u>这门课每周五 3:30 到 5:20 上，就在这里。这门课是两个学分，你可以选择按字母打分，或者按 credit / non-credit</u>。</b></p>
+<p class=""><b>★ 录像</b>：<b>「<u>从这个布置你也能看出来，我们基本上是在录这门课的。如果你因为某些原因没法在这个时段来，我们会和 Shervine 一起确保把录像放出来 —— 要么当天晚上，也就是每个周五晚上，要么周六</u>。」</b></p>
+<p class=""><b>⇒ 而他之后（第 5 条）会补一个由此而来的习惯：<u>因为在录像，学生提问时观众可能听不清问的是什么，所以他会刻意把每个问题复述一遍</u>。</b><b>⭐ 这个习惯对你这样的录像观众价值极大 —— <u>这门课里有相当一部分最有价值的内容，是藏在「所以这个问题是…」后面的</u>。</b></p>
+<p class="warn"><b>⚠ 这个片子在处理时也照此办理：<u>凡是讲者复述学生提问的地方，都会标出是「课堂提问带出来的」</u>。因为那些地方通常是讲稿里没有、但真实存在困惑的点。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">04:49</span><span class="en">So one is the midterm, which will be happening during our fifth instance, which is October 24</span></div><div class="body"><p class=""><b>考核结构非常简单，而它的简单本身说明了这门课的侧重。</b></p>
+<p class=""><b>两场考试</b>：<b><u>在成绩方面，这个季度我们的做法是有两场考试。一场是期中考，会在我们第五次课上进行，也就是 10 月 24 日。第二场是期末考，会在 12 月 8 日那一周举行 —— 日期还待定，我们会通知大家</u>。</b></p>
+<p class=""><b>权重</b>：<b>后面有学生专门问了这个，讲者答得很干脆：<u>没有作业。50% 是期中，50% 是期末。没有别的权重</u>。</b><b>他还总结了一句：<u>长话短说，50% 期中、50% 期末</u>。</b></p>
+<p class=""><b>★★ 范围</b>：<b>期中在第 5 次课，所以考的是 <u>L1 到 L4</u>；而关于期末，学生当时问「期末是不是只考后半段？」讲者说<u>我们还没出题，但我们是这么想的 —— 期末大概会是关于后半部分的主题</u>。</b><b>⇒ 他在 L5 开场时确认了这一点：<u>期末考 L5 到 L9</u>。</b></p>
+<p class="warn"><b>⚠ 对你（看录像自学、不考试的人）来说，这个结构有一个实际用处：<u>它告诉你这门课把内容切成了 1–4 和 5–9 两块，而且讲者认为这两块各自是自洽的</u>。</b><b>⇒ 如果你时间有限、只想看和你课题最近的部分，<u>从 L5 开始看是说得通的</u>（讲者在 L5 会重新交代 L4 的必要背景）。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一条不是讲者说的，是我根据九讲的实际依赖关系给你的建议。</b></p>
+<p class=""><b>★ 先说那个硬门槛</b>：<b><u>L1 讲的 Q/K/V 和自注意力，是后面每一讲的默认前提</u>。</b><b>L2 讲各种注意力变体（滑窗、MQA/GQA）时不会再解释 Q/K/V；L3 讲 KV 缓存时直接用 K 和 V；L4 讲 FlashAttention 时整段都在说怎么算那个 softmax(QKᵀ)V。</b><b>⇒ <u>所以这一讲不能跳，而且这一讲的后半段（Q/K/V 到端到端走查）是整门课最该反复看的部分</u>。</b></p>
+<p class=""><b>系统学的路线</b>：<b><u>L1 → L9 顺着看</u>。L1–L3 是地基（架构 / 变体 / 什么是 LLM 并怎么生成），L4–L7 是怎么训与怎么用，L8–L9 是评估与现状。</b></p>
+<p class=""><b>为某个课题来的路线</b>：<b><u>先补 L1 的后半段（注意力与架构），再看 L3（LLM 的定义与解码），然后直接跳到你需要的那一讲</u>。</b><b>⇒ 讲者每一讲开场都会回顾上一讲，所以跳着看的成本比想象中低。</b></p>
+<p class="warn"><b>⚠ 一个例外要提醒：<u>L6（推理）明确依赖 L5（偏好调优）的 RL 那一半</u> —— 讲者在 L6 开场就说「我们在第 5 讲用的很多方法，正是这一讲要用作地基的那些」。<u>这两讲要连着看</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">05:21</span><span class="en">And in case you are interested, we also have the syllabus in there</span></div><div class="body"><p class=""><b>这一段是材料清单，而对你这种看录像自学的人，它的价值比对课堂学生还大。</b></p>
+<p class=""><b>讲者的说法</b>：<b>「<u>每次有课，我们都会把幻灯和录像发到网站上。而如果你有兴趣，我们在那里也放了 syllabus（教学大纲），这样你就能知道我们会讲哪些主题</u>。」</b></p>
+<p class=""><b>★★ 为什么 syllabus 对自学者特别有用</b>：<b><u>它是这门课的「目录」—— 它让你在开始之前就知道整条线会走到哪里</u>。</b><b>⇒ 而这门课的内容是强依赖的（L6 依赖 L5、L7 依赖 L1 的注意力），<u>提前知道目录能让你判断哪些可以跳、哪些不能</u>。</b></p>
+<p class="warn"><b>⚠ 一个实际提醒</b>：<b>幻灯确实有，但<u>这个系列片子的底料是字幕而不是幻灯</u>。</b><b>原因很简单：<u>讲者在课上说的，比幻灯上写的多得多</u>。</b><b>幻灯上是结论，而「为什么是这个结论」「什么时候它不成立」「人们实际上用不用」这些，<u>只在他说出来的话里</u>。</b></p>
+<p class=""><b>⇒ 所以这个片子的每一处判断都带着讲者原话的时间码 —— <u>你可以随时跳回去听他到底是怎么说的</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">05:55</span><span class="en">And also, we did some very short, condensed version of this whole class</span></div><div class="body"><p class=""><b>两份配套读物，而第二份对你可能比第一份更有用。</b></p>
+<p class=""><b>课本</b>：<b><u>这门课的课本是这本 Super Study Guide — Transformers & LLMs。我们这儿有一本，想看可以来看看。我想这门课里很多概念其实都会在书里出现，所以它也是跟上这门课的一个有帮助的方式</u>。</b></p>
+<p class=""><b>★★ VIP cheat sheet</b>：<b>「<u>另外，我们还做了一个把整门课压缩得非常短、非常浓缩的版本，我们叫它 VIP cheat sheet。这一份放在 GitHub 上，有兴趣可以看。而且我们现在也把它翻译成了好几种语言</u>。」</b><b>⇒ 他还补了一句很友好的话：<u>顺便说，如果你的语言不在里面，告诉我们，也很乐意一起来做</u>。</b></p>
+<p class=""><b>★★★ 为什么我建议你专门去找这份 cheat sheet</b>：<b>回到第 1 条提到的那件事 —— <u>这两位正是那套著名 CS229 速查表的作者</u>。</b><b>他们做压缩版的能力是被验证过的。</b></p>
+<p class=""><b>⇒ 而一份好的 cheat sheet 对你的实际用法是：<u>学的时候不看它（会让你以为自己懂了），学完之后用它来「自检和回忆」</u>。</b><b>⚠ 反过来用会很糟：<u>先看压缩版，你会记住结论的形状，却不知道每个结论是从哪推出来的、什么时候失效</u> —— 而那恰恰是这门课最值钱的部分。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">06:27</span><span class="en">But there is also a tab on Canvas that is called Ed</span></div><div class="body"><p class=""><b>这一小段是通知与答疑的渠道，顺手透露了这门课的规模。</b></p>
+<p class=""><b>渠道</b>：<b><u>通知方面，我们会把东西发在 Canvas 上。如果你有任何问题，当然可以联系我们。但 Canvas 上还有一个标签页叫 Ed —— 我相信你们都熟悉。你就点进去发个帖，然后 Shervine 和我会回复</u>。</b><b>⇒ <u>而要联系我们，还有这个邮件列表。或者我们就两个人，直接戳我们就行</u>。</b></p>
+<p class="star"><b>⭐ 「<u>我们就两个人，直接戳我们就行</u>」这句话顺带告诉了你这门课的规模</b>：<b>没有助教团队，两位讲者自己答疑。</b><b>⇒ 而后面在回答候补名单（waitlist）的问题时，讲者会说<u>候补名单现在是 6 个人</u> —— 这是一门规模不大的课。</b></p>
+<p class=""><b>★★ 这件事对你听课有一个实际影响，值得点出来：<u>课堂提问很多、而且讲者几乎每个都认真答</u>。</b><b>在一门几百人的大课里，提问会被压缩；<u>而这门课里，学生的追问常常把讲者逼到讲稿之外去</u>。</b></p>
+<p class=""><b>⇒ 这正是前面说的「藏在『所以这个问题是…』后面的内容」为什么这么多的原因。<u>这个片子会把这些地方一个不落地标出来</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">06:57</span><span class="en">given that we are recording this class</span></div><div class="body"><p class=""><b>这一条讲的是一个讲课习惯，而我认为它是这门课录像之所以好用的关键。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>还有一件我忘了说的事：鉴于我们在录这门课，如果你提问，观看录像的人可能不太清楚你的问题是什么。所以我会努力把你的问题复述一遍。这听起来会有点怪，但我尽量不忘</u>。」</b></p>
+<p class=""><b>★★★ 为什么这件事对你价值极大</b>：<b>大多数公开课录像里，<u>学生的提问是听不见的</u>，你只能看到讲者突然开始回答一个你不知道是什么的问题。</b><b>⇒ 而这门课里，<u>每个问题都会被复述一遍，所以问答是完整可用的</u>。</b></p>
+<p class=""><b>★★ 而这件事之所以重要，是因为这门课里<u>相当一部分最好的内容是被学生问出来的</u>，而不是讲稿里的。几个例子（后面都会讲到）</b>：<b><u>「奖励模型是成对的还是逐点的？」—— 带出了整讲最妙的一个洞察；「分数的尺度有约束吗？」—— 带出了「尺度只在它进入损失函数时才重要」；「那这不就是 RAG 吗？」—— 带出了两阶段结构的通用性</u>。</b></p>
+<p class=""><b>⇒ 所以<u>这个片子凡是遇到「讲者在复述学生提问」的地方，都会明确标出来</u>。那些地方通常是讲稿没覆盖、但真实存在困惑的点 —— 而你大概率也会在同一个地方困惑。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">07:29</span><span class="en">So the question is whether there are coding parts in the exams</span></div><div class="body"><p class=""><b>接下来是四个学生提的实际问题，而第一个顺带说明了这门课的性质。</b></p>
+<p class=""><b>① 考试考不考编程？</b><b><u>所以问题是考试里有没有编程的部分。答案是没有。考试会纯粹聚焦在我们课上看到的概念上</u>。</b><b>★ 他还加了一句很体贴的话：<u>而且它不是用来设陷阱坑你的。我想如果你跟着课走、看了幻灯和我们讲的那些概念，应该就没问题</u>。</b></p>
+<p class=""><b>★★ 这一条值得你记住，因为它定义了这门课的性质</b>：<b><u>九讲下来没有一次编程作业</u>（讲者在别处也确认过「没有作业」）。</b><b>⇒ 所以这门课的目标不是让你会写 transformer，而是<u>让你能判断一个方法在做什么、代价是什么、什么时候不该用</u>。</b><b>⚠ 这意味着如果你想要的是动手实现，这门课不够 —— 但如果你想要的是<u>判断力</u>，它非常合适。</b></p>
+<p class=""><b>② 候补名单怎么办？</b><b><u>问题是如果你在候补名单上该怎么办。我想从经验上看，很多人会把课表定下来，有些人会退、有些人不会。如果你还在候补上，来找我们聊。但我挺有信心会没事的，因为我觉得候补名单现在是 6 个人</u>。</b></p>
+<p class=""><b>⇒ 这顺带印证了前面那一条：<u>这是一门规模不大的课</u>，所以问答才这么充分。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">08:26</span><span class="en">So the question was, where are the slides</span></div><div class="body"><p class=""><b>后两个问题，而第四个里藏着一条对自学者有用的信息。</b></p>
+<p class=""><b>③ 幻灯在哪？</b><b><u>所以问题是幻灯在哪里。它们在网站上。它们会在网站上，而且我们也会确保在 Canvas 上发个链接</u>。</b></p>
+<p class=""><b>④ 考试权重。</b><b><u>所以问题是关于考试的权重。没有作业。所以 50% 是期中，50% 是期末。没有别的权重</u>。</b></p>
+<p class=""><b>★ 然后他对那些时间有冲突的人说了一句很实在的话</b>：<b><u>特别是，如果这个时段和什么冲突了，记住我们在录像。所以你来不了这一场也没关系</u>。</b></p>
+<p class=""><b>★★ 而最后那个追问，对你安排学习顺序有用</b>：<b>有学生问「<u>期末是不是只考这门课的后半部分？</u>」讲者答：<u>我们还没出题，但我想这是我们在考虑的方向。所以期末大概会是关于后半部分的主题</u>。</b><b>⇒ 他在 L5 开场时把这件事确认了：<u>期末考 L5 到 L9</u>。</b></p>
+<p class=""><b>⇒ <u>所以这门课在讲者自己心里就是分成两块的：L1–L4 是「transformer 与它怎么训出来」，L5–L9 是「怎么对齐、怎么推理、怎么接外部、怎么评估」</u>。</b><b>这两块各自有相对完整的逻辑，而这是你判断「能不能跳着看」的依据。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">09:36</span><span class="en">And it is a fun class</span></div><div class="body"><p class=""><b>开始讲正课之前，讲者给了两个免责声明，而两个都很实在。</b></p>
+<p class=""><b>免责声明一：每页都标出处。</b><b><u>我还想提一件事：每次我们谈到什么，你都会看到幻灯底部会有一个 source（出处）。它主要是为了两件事 —— 首先是给出引用的信用，不管我们引用的是什么；但也是为了让你在感兴趣的时候，能够再往那些材料里深挖一点</u>。</b></p>
+<p class=""><b>★★ 而他给出的理由，是这门课最诚实的一句话之一</b>：<b>「<u>因为当然，我们每周只有两个小时，而且总共只有九到十周，所以远远没有足够的时间让我们讲完一切</u>。」</b></p>
+<p class=""><b>⇒ 请认真对待这句话，因为它定义了这门课能给你什么、不能给你什么</b>：<b><u>它给你的是一张「地图」和一套判断力，不是一本百科全书</u>。</b><b>每个主题他都会讲到「够你判断」的深度，然后给你一个出处让你自己去挖。</b></p>
+<p class="star"><b>⭐ 这个片子沿用了同样的做法，只是出处换成了<u>讲者原话的时间码</u>：每一条判断都标着它来自录像的第几分几秒，<u>你随时可以跳回去听他是怎么说的、以及他有没有加限定词</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">10:07</span><span class="en">we only have nine or 10 weeks</span></div><div class="body"><p class=""><b>第二个免责声明，而它定义了这门课的一个实际成果。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>第二个免责声明是：你会看到这个领域里全是缩写。我自己刚开始的时候被它们完全吓到了。但希望到这门课结束时，你会有一张心智映射表，知道这些缩写各自对应着什么</u>。」</b><b>⇒ <u>所以是的，如果你在课程快结束的时候有了这张心智映射，那我们就知道我们做得不错了</u>。</b></p>
+<p class=""><b>★★ 我建议你把这句话当成一个<u>可检验的学习目标</u>，因为它比「听懂了」具体得多。</b><b>⇒ 到第九讲结束时，这些缩写你应该能不假思索地展开：<u>NLP、NER、OOV、OHE、RNN、LSTM、BOS/EOS、FFN、RoPE、MQA/GQA、MoE、KV cache、MLA、SFT、RLHF、PPO、DPO、GRPO、GAE、CoT、RAG、BM25、NDCG、MRR、MCP、A2A</u>。</b></p>
+<p class="warn"><b>⚠ 而讲者处理缩写的方式也值得学：<u>他每引入一个缩写，都会把全称念出来，而且常常解释为什么叫这个名字</u>（比如 BLEU 是 Bilingual Evaluation Under Study、RAG 是 Retrieve-Augment-Generate 三步的首字母、PPO 的 proximal 是因为「不想离基座模型太远」）。</b></p>
+<p class=""><b>⇒ <u>名字里往往藏着这个方法的核心设计</u>，所以别把缩写当成要背的符号 —— 把它当成一句被压缩的话。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">10:38</span><span class="en">if you have a mental mapping towards the end of the class, then we know e did a good job</span></div><div class="body"><p class=""><b>后勤讲完，正课从这里开始。而讲者对起点的交代，决定了你该用什么姿态听这门课。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>那么我们就开始。而我想我们会从一个非常高的层面开始，因为我会直接假设我们是从零起步的。我们要讲的是 NLP 总体上是什么</u>。」</b><b>⇒ <u>所以 NLP 将是我们的第一个缩写</u>。</b></p>
+<p class=""><b>★★ 「<u>从零起步</u>」这个承诺，在整门课里确实兑现了 —— 但我要提醒你它的另一面</b>：<b><u>起点低，不等于终点低</u>。</b></p>
+<p class=""><b>⇒ 这一讲的轨迹就很能说明问题：<u>它从「NLP 是什么」开始，111 分钟之后结束在「softmax(QKᵀ/√d_k)V 的每一行每一列代表什么、多头怎么拼回去、解码器怎么一个 token 一个 token 地跑到 EOS」</u>。</b><b>这是一条非常陡的曲线。</b></p>
+<p class=""><b>★ 所以我建议的听法是：<u>前半段（NLP 三个桶、指标、分词、one-hot）可以走快一点，它们是在铺词汇；但从 Word2vec 开始要慢下来，从注意力开始要非常慢</u>。</b><b>⇒ 这个片子的镜头密度也是这么分配的：<u>越往后，每一句字幕摊到的讲解越多</u>。</b></p>
+<p class=""><b>⇒ 下面就从第一个缩写 NLP 开始。</b></p></div></article>
+</section>
+<section id="m-b"><h2><span class="tag">模块 b</span>字幕第 111–175 句（10:38–17:31）：NLP 是什么、三个桶、 每个桶里有哪些任务、分类桶走一遍（数据集 + 四个指标）、⚠ 类别不平衡、多分类的指标粒度<small>句 111–175 · 10:38–17:31</small></h2>
+<article class="card"><div class="meta"><span class="ts">11:12</span><span class="en">And it is a field that is around manipulating text, just computing things with text</span></div><div class="body"><p class=""><b>正课的第一个词。讲者说过这个领域全是缩写，而这是第一个。</b></p>
+<p class=""><b>定义</b>：<b><u>NLP 代表 Natural Language Processing（自然语言处理）。它是一个围绕「操纵文本」的领域 —— 就是拿文本来算东西</u>。</b></p>
+<p class=""><b>⇒ 注意这个定义有多宽：<u>只要你在对文本做计算，就算 NLP</u>。它不要求你理解语义、也不要求输出是文本。</b></p>
+<p class=""><b>★ 然后他立刻给了一个分类框架</b>：<b>「<u>而在一个很高的层面上，基本上可以把 NLP 任务分成三个桶</u>。」</b></p>
+<p class=""><b>⇒ 这三个桶是：<u>分类、多分类、生成</u>。</b></p>
+<p class=""><b>★★ 我建议你把这三个桶当成一个<u>一直用到最后的坐标系</u>，因为讲者后面会反复把东西挂回去</b>：<b>讲 RNN 时他会说「分类任务取最后一个隐状态、多分类取对应 token 的、生成要先编码再解码」；讲 BERT 时会说它适合前两个桶；讲 decoder-only 时会说它赢在第三个桶。</b></p>
+<p class=""><b>⇒ 所以现在花两分钟把三个桶记牢，后面会省很多力气。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>先看前两个桶，而区分它们的标准是<u>输出的形状</u>，不是任务的难度。</b></p>
+<p class=""><b>① 分类（classification）</b>：<b><u>我们有一段输入文本作为输入，然后我们想预测某个东西</u>。</b><b>⇒ 关键在于「<u>某个东西</u>」是单数：<u>整段文本对应一个标签</u>。</b></p>
+<p class=""><b>② 多分类（multi-classification）</b>：<b><u>我们仍然有文本作为输入，但这一次我们预测的不止一个东西</u>。</b><b>⇒ 典型形态是<u>给句子里的每个词各打一个标签</u>。</b></p>
+<p class="warn"><b>⚠ 这里有个术语要小心，因为它和你在别处学的可能不一样</b>：<b>在通常的机器学习语境里，「multi-class classification」指的是<u>类别多于两个</u>的单标签分类（比如三分类）；而讲者这里说的「multi-classification」指的是<u>一次预测多个位置</u>（序列标注）。</b></p>
+<p class=""><b>⇒ 从他举的例子（NER —— 标出句子里哪些词是地点、时间）可以确认他说的是后者。<u>听的时候按他的用法理解即可，但你读别人的材料时要留个心</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>把三个桶的输出形状并排看，一个很重要的梯度就出来了。</b></p>
+<p class=""><b>输出空间的大小</b>：<b>① 分类 —— <u>有限且固定</u>（正/负/中，三个）；② 多分类 —— <u>有限，但要填很多个位置</u>；③ 生成 —— <u>无限</u>（任意长度的任意 token 序列）。</b></p>
+<p class=""><b>★★ 而评估的难度正好跟着这个梯度走</b>：<b>① 分类可以直接数对错；② 多分类也能数，只是要决定在哪个粒度上数（下面马上会讲）；③ <u>生成没法直接数</u> —— 因为「对的输出」有无穷多个。</b><b>⇒ 讲者下面讲机器翻译时会说这句话：<u>评估你的模型的表现实际上要难得多，因为正如你能想象的，同一个东西可以有很多种不同的翻译方式</u>。</b></p>
+<p class=""><b>★ 这门课讲的 LLM 几乎全部落在第 ③ 个桶里</b>，<b>所以「评估难」这件事会一路跟着你到 L8。</b></p>
+<p class="warn"><b>⚠ 但别得出「前两个桶过时了」的结论</b>：<b><u>L2 会专门讲 BERT 那一类 encoder-only 模型，而它们正是为前两个桶设计的</u>。</b><b>⇒ 讲者在 L2 会给出一个很清楚的判断：<u>decoder-only 之所以赢，不是因为它在每个任务上都更好，而是因为「预测下一个词」这个目标更能扩展</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">11:34</span><span class="en">So one example is you have a movie review and you want to predict whether the sentiment is positive, negative, or neutral</span></div><div class="body"><p class=""><b>第一个桶里的任务，讲者一口气举了四个。</b></p>
+<p class=""><b>① 情感分析</b>：<b><u>一个例子是你有一篇影评，你想预测它的情感是正面、负面还是中性</u>。</b></p>
+<p class=""><b>② 意图识别（intent detection）</b>：<b><u>就是弄清楚比如这个人想做什么。假设你说「我想为明天设一个闹钟」—— 那这里的意图就是「设闹钟」</u>。</b></p>
+<p class=""><b>⇒ 这个任务在语音助手里是核心：<u>先把一句自由的话归到有限的几个意图里，后面才能走确定的流程</u>。</b></p>
+<p class=""><b>③ 语种识别</b>：<b><u>比如如果你写的是法语，你想检测出这段文本是法语的</u>。</b></p>
+<p class=""><b>④ 主题建模（topic modeling）</b>。</b></p>
+<p class=""><b>★ 四个任务的共同点：<u>整段文本进去，一个标签出来</u>。</b></p>
+<p class="star"><b>⭐ 而值得留意的是这四个任务今天的处境：<u>它们在 LLM 时代并没有消失，而是变成了「用一个 prompt 就能做」的事</u>。</b><b>⇒ 但这不意味着它们不值得专门做 —— L2 讲 BERT 时你会看到，<u>对这类固定输出的任务，一个小得多的专用模型往往更快更便宜</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">12:14</span><span class="en">So we still have a text as input, but this time we predict more than one thing</span></div><div class="body"><p class=""><b>第二个桶，而最有代表性的那个任务你一定会反复遇到。</b></p>
+<p class=""><b>讲者的说法</b>：<b><u>我们仍然有文本作为输入，但这次我们预测的不止一个东西。这个桶里也有不少任务，而其中非常流行的一个叫 Named Entity Recognition，简称 NER</u>。</b></p>
+<p class=""><b>NER 在做什么</b>：<b><u>这个任务做的事是：给定一段输入文本，我们想基本上给某些特定的词打上标签 —— 比如识别出某个东西是不是一个地点、是不是一个时间，等等</u>。</b></p>
+<p class=""><b>★★ 请留意这里发生的变化：<u>标签的「挂载点」从整句变成了单个词</u>。</b><b>⇒ 这个变化看起来小，但它会连带影响后面所有东西</b>：<b>① <u>模型要输出的不是一个向量，而是每个位置一个向量</u>；② <u>指标也得跟着换粒度</u>（下面第 10 条会讲，讲者专门说了这一点）；③ <u>用 RNN 做这类任务时，你取的是「对应那个 token 的隐状态」，而不是最后一个</u>（第 g 模块会讲）。</b></p>
+<p class=""><b>⇒ 所以「输出挂在哪一级」是一个会一路传导的设计选择，值得现在就建立意识。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">12:49</span><span class="en">And then you have some other tasks as well that are a little bit more on the linguistic side</span></div><div class="body"><p class=""><b>这一小段讲者讲得很快，但他说的那句评价本身就是信息。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>然后还有一些别的任务，更偏语言学那一侧。我想它们现在不那么时髦了，但大概十年前是人们会大量研究的东西</u>。」</b></p>
+<p class=""><b>这些任务是</b>：<b><u>词性标注（part of speech tagging）—— 就是弄清楚哪个词是名词、哪个是动词等等；以及一些句法分析相关的任务 —— 依存句法分析（dependency parsing）或成分句法分析（constituency parsing）</u>。</b></p>
+<p class=""><b>★★ 那句「十年前人们研究得很多、现在不那么流行了」值得停一下</b>：<b>⇒ 它说的是一件挺重要的事：<u>这个领域里「什么算重要」变得非常快</u>。</b></p>
+<p class="warn"><b>⚠ 而变化的机制也值得想清楚：<u>这些任务并没有被「解决」，而是被「绕过」了</u>。</b><b>以前要先做词性标注、再做句法分析、再在这些结构上做下游任务；<u>而现在的做法是直接端到端地学，中间那些显式的语言学结构就不再被单独建模了</u>。</b></p>
+<p class=""><b>⇒ 这是一个在机器学习里反复出现的模式：<u>当端到端的方法足够强时，中间那些「人设计的表示」就会消失</u>。<u>特征工程之于深度学习、句法分析之于 LLM，都是同一件事</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">13:19</span><span class="en">And then the last bucket, which is very popular these days is the generation bucket</span></div><div class="body"><p class=""><b>第三个桶，而它和前两个有一个结构性的差别。</b></p>
+<p class=""><b>讲者的定义</b>：<b><u>最后一个桶、也是如今非常流行的那个，是生成桶。你有文本作为输入，也有文本作为输出。而这里长度是可变的 —— 意思是你事先并不知道你输出文本的长度会是多少</u>。</b></p>
+<p class=""><b>★★★ 请把「<u>长度事先不知道</u>」这一句单独记住，因为这一讲乃至整门课的很多东西都是从它长出来的。</b></p>
+<p class=""><b>⇒ 它直接导致了几件事（后面都会遇到）</b>：<b>① <u>你需要一个特殊 token 来表示「停」</u> —— 本讲后面有学生问「生成什么时候停？不然它不就永远停不下来了吗」，答案是 <u>EOS（end of sequence）</u>。</b><b>② <u>你没法像分类那样一次算完</u> —— 必须一个 token 一个 token 地生成，每次把已生成的再喂回去（本讲最后的走查里会看到）。</b><b>③ <u>评估变得极难</u> —— 因为「对的输出」不止一个，这正是下面 BLEU、ROUGE 要处理的问题，也是 L8 整整一讲的主题。</b></p>
+<p class=""><b>⇒ 所以这不只是一个分类标签，<u>它是「这类任务为什么特别难」的根源</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">13:50</span><span class="en">So you ask a question and you have a response</span></div><div class="body"><p class=""><b>第三个桶里的任务，而讲者点名了你每天在用的那个。</b></p>
+<p class=""><b>① 机器翻译</b>：<b><u>比如把英文的东西翻成德文</u>。</b><b>⇒ 这个任务在本讲里地位特殊：<u>transformer 那篇原论文做的就是它，而本讲最后的端到端走查走的也是它</u>。</b></p>
+<p class=""><b>② 问答（question answering）</b>：<b><u>典型就是你正在用的 ChatGPT、Gemini 这些助手。你问一个问题，你得到一个回答</u>。</b></p>
+<p class=""><b>③ 摘要（summarization）</b>：<b><u>比如你想概括一篇文章</u>。</b></p>
+<p class=""><b>④ 「就是生成点什么」</b>：<b><u>这个「某些东西」可以是生成代码、生成一首诗，也可以是很多别的东西</u>。</b></p>
+<p class=""><b>★★ 我想请你注意第 ④ 类的措辞有多松：「<u>可以是很多东西</u>」。</b><b>⇒ 这不是讲者偷懒，<u>它恰恰反映了生成任务的本质 —— 输出空间是无限的，所以任务的边界也是模糊的</u>。</b></p>
+<p class="warn"><b>⚠ 而这个模糊会在 L8 变成一个真问题：<u>当「任务」本身都没法枚举时，你怎么评估一个模型好不好？</u> 讲者在 L4 结尾给过一个很诚实的回答：<u>没有哪一个数字能告诉你你关心的东西</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">14:21</span><span class="en">So we are going to start with the first bucket, which is the classification bucket</span></div><div class="body"><p class=""><b>三个桶定义完，讲者开始逐个走一遍。第一个是分类桶。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>现在我们要做的，是把这些任务一个个过一遍，来说明人们通常是怎么处理它们的。我们从第一个桶开始，也就是分类桶。而我们用情感抽取这个任务来举例</u>。」</b></p>
+<p class=""><b>★ 例子</b>：<b><u>假设我们有一句话：「this teddy bear is so cute」（这只泰迪熊太可爱了）。我们希望模型预测它是正面情感</u>。</b></p>
+<p class="star"><b>⭐ 这是泰迪熊第一次出场，而我要提醒你：<u>它会一直陪你到第九讲</u>。</b><b>后面你会看到「一只可爱的泰迪熊在读书」被拿来讲分词、讲注意力、讲端到端走查；L5 用「给泰迪熊建议一个活动」讲偏好对；L7 用「找一只附近的泰迪熊」讲工具调用、用「泰迪熊怕冷」讲 agent 循环。</b></p>
+<p class=""><b>⇒ 这种「<u>一个例子用到底</u>」的做法很值得学：<u>它让你每次只需要关注「这次变的是什么」，而不用重新建立一个场景</u>。</b></p>
+<p class=""><b>数据集</b>：<b><u>典型会用情感抽取的数据集。我提到了影评，就是 IMDb 的评论。但你也有商品评论，比如 Amazon 的评论，或者推文 —— 现在它叫 X 了，所以是 X 上的帖子</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">15:03</span><span class="en">And the way you would evaluate such outputs would be by typically using traditional classification metrics</span></div><div class="body"><p class=""><b>分类任务怎么评，讲者从最熟的那个讲起，然后很快转向两个更要紧的。</b></p>
+<p class=""><b>他的交代</b>：<b><u>而你评估这种输出的方式，通常就是用传统的分类指标</u>。</b></p>
+<p class=""><b>accuracy（准确率）</b>：<b><u>你有 accuracy，它是「你正确预测的观测占的百分比」</u>。</b></p>
+<p class=""><b>★ 然后是转折</b>：<b>「<u>但你还有两个关键指标，我这就提醒一下 —— 我不确定是不是每个人都知道它们</u>。」</b></p>
+<p class=""><b>⇒ 请注意讲者在这里的分寸：<u>他没有假设大家都懂 precision 和 recall，而是停下来把定义念了一遍</u>。</b><b>这和他在后勤那段说的「假设我们从零起步」是一致的。</b></p>
+<p class=""><b>★★ 而为什么要在这门讲 transformer 的课上花时间讲 precision 和 recall？</b><b>⇒ 因为<u>它们会一路用到最后</u>：L7 讲检索时，第一阶段的指标就是 recall（「漏了就永远救不回来」），而 precision@k 和 recall@k 是 RAG 的标准评测指标。</b><b>⇒ <u>这不是补基础，是在铺后面要用的工具</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">15:23</span><span class="en">But you also have two key metrics, which I am just going to remind</span></div><div class="body"><p class=""><b>两个指标的定义，我建议你直接按讲者的句式记，因为那个句式本身就把分母说清楚了。</b></p>
+<p class=""><b>precision（精确率）</b>：<b><u>在你做出的所有正例预测里，哪些是正确的？</u></b></p>
+<p class=""><b>recall（召回率）</b>：<b><u>在所有真实的标签里，你正确地把多少个预测成了正例？</u></b></p>
+<p class=""><b>★★ 这两句的差别全在<u>分母</u>上，而这正是记住它们的窍门</b>：<b><u>precision 的分母是「你说是的那些」；recall 的分母是「真的是的那些」</u>。</b></p>
+<p class=""><b>⇒ 由此可以直接推出两者各自会被什么「作弊」策略骗到</b>：<b>① <u>想要 precision 高？只在最有把握的那一个上说「是」</u> —— 分母只有 1，很容易全对；② <u>想要 recall 高？全都说「是」</u> —— 分母是全部真正例，而你一个没漏。</b></p>
+<p class=""><b>★ 所以它们必须成对看，<u>单看任何一个都能被轻易操纵</u>。这也正是下一镜 F1 存在的理由。</b></p>
+<p class=""><b>⇒ 而 L7 里那条「第一阶段的指标必须是 recall」现在就能理解了：<u>检索的第一级宁可多留（牺牲 precision），也绝不能漏（保住 recall），因为漏掉的后面永远找不回来</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">15:47</span><span class="en">And you have this metric called the F1 score</span></div><div class="body"><p class=""><b>把两个指标合成一个数，用的是调和平均 —— 而「为什么是调和平均」值得想清楚。</b></p>
+<p class=""><b>讲者的话</b>：<b><u>而你有这个叫 F1 分数的指标，它基本上取 precision 和 recall 的调和平均，好给你一个数</u>。</b></p>
+<p class=""><b>★★ 为什么是调和平均？因为<u>它偏袒小的那一个</u>。</b><b>⇒ 用极端情形一验就明白：<u>precision = 1.0、recall = 0.0 时，算术平均是 0.5（看起来还行），而 F1 = 2×(1×0)/(1+0) = 0</u>。</b></p>
+<p class=""><b>⇒ 这正是我们要的行为：<u>上一镜说过，precision 和 recall 各自都能被作弊策略单独做高</u>。</b><b>「只在最有把握的那个上说是」能把 precision 做到 1.0，但 recall 会趴在地上；「全都说是」能把 recall 做到 1.0，但 precision 会很低。</b><b>★ <u>调和平均让这两种作弊都拿不到分</u> —— 你必须两个都不差。</b></p>
+<p class="warn"><b>⚠ 一个推论值得记：<u>任何时候你想把多个指标合成一个数，都要先问「我希望它惩罚短板，还是允许长板补短板？」</u></b><b>要惩罚短板就用调和平均（或取最小值），允许互补才用算术平均。<u>选错了，优化出来的东西会往你没想到的方向跑</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">16:26</span><span class="en">Because if you have a model that would predict everything as the majority class</span></div><div class="body"><p class=""><b>讲者自己提出了那个该问的问题，而答案是一个你一定要有的警觉。</b></p>
+<p class=""><b>他的自问</b>：<b>「<u>那你现在可能会想：为什么需要所有这些指标？</u>」</b></p>
+<p class=""><b>短答</b>：<b><u>短的答案是：有时候你会遇到一些任务和数据集，它们的类别非常不平衡</u>。</b><b>⇒ <u>比如你可能有 99% 的数据集是正例标签，然后只有 1% 的数据集是负例</u>。</b></p>
+<p class="warn"><b>⚠ 后果</b>：<b><u>而这时如果你拿 accuracy 这样的指标，它会非常误导人。因为如果你有一个模型，它把所有东西都预测成多数类，那你就会有一个「了不起的分类器」—— 但事实并不是这样</u>。</b><b>⇒ <u>所以这就是为什么 precision 和 recall 真正起作用</u>。</b></p>
+<p class=""><b>★★ 把这个例子算一遍你会印象更深：<u>一个什么都不学、永远输出「正例」的模型，在 99:1 的数据上 accuracy 是 99%</u>。</b><b>而它的 <u>recall（对负例）是 0</u> —— 它一个负例都没找出来。</b></p>
+<p class=""><b>⇒ 所以这类情形下的正确做法是：<u>永远先看数据的类别分布，再决定看哪个指标</u>。</b><b>⚠ 而更隐蔽的版本是：<u>有人给你报了一个 accuracy，但没告诉你分布</u> —— 这时那个数字几乎没有信息量。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">17:01</span><span class="en">And we are illustrating this with the NER task</span></div><div class="body"><p class=""><b>第二个桶怎么评，讲者只用了两句话，但那两句话里有一个重要的概念。</b></p>
+<p class=""><b>他的话</b>：<b><u>我们用 NER 任务来说明这个桶 —— 如我提到的，它是关于识别给定词的类别。所以这里比如我们想识别出 teddy bear 是一个实体</u>。</b></p>
+<p class=""><b>★★ 指标怎么用</b>：<b>「<u>我想为此你会用分类指标，但不是在句子这一级上，而更多是在 token 这一级、或者在「实体类型」这一级上</u>。」</b></p>
+<p class=""><b>⇒ 这正好印证了第 8 条里那句话：<u>输出挂在哪一级，指标就得跟到哪一级</u>。</b></p>
+<p class="warn"><b>⚠ 而「<u>在哪一级算</u>」这件事在实践中会显著改变数字，值得知道</b>：<b>同一个预测，<u>按 token 算</u>和<u>按实体算</u>可以差很多 —— 比如一个三词的实体你只标对了两个词：<u>token 级会给你 2/3 的分，而实体级会判你全错</u>（因为实体没有被完整识别出来）。</b></p>
+<p class=""><b>⇒ 所以读别人的 NER 结果时，<u>第一件事是确认它是在哪一级算的</u>，否则没法横向比。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">17:31</span><span class="en">And by that I mean, let us suppose you have a category, let us say location</span></div><div class="body"><p class=""><b>讲者把「实体类型级」这个说法展开了一句，而这一句包含了一个很实用的做法。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我的意思是：假设你有一个类别，比如说「地点」。而你想知道你在那个类别里的词预测得有多好。那你通常就会把这些指标按那个类别来聚合</u>。」</b></p>
+<p class=""><b>★★ 这个做法的价值在于<u>它把一个总分拆成了可诊断的几个分</u></b>：<b>一个 0.82 的总体 F1 不告诉你任何可以行动的东西；<u>而「地点 0.95 / 人名 0.88 / 组织 0.61」立刻告诉你该去修什么</u>。</b></p>
+<p class=""><b>⇒ 这是一条非常通用的实验习惯：<u>报总分的同时，按你关心的维度拆开报</u>。</b><b>⚠ 而它的反面也很常见：<u>只报一个加权平均，于是某一类上的灾难被别的类掩盖掉了</u> —— 尤其当那一类样本少的时候。</b></p>
+<p class=""><b>⇒ 后面你会看到这条习惯在这门课里反复出现：<u>L6 修长度膨胀时，证据不是「平均长度下降了」，而是「正确样本长度不变、错误样本长度大降」</u>；<u>L5 讲奖励模型时强调「奖励总是相对某个维度（有用/友好/安全）而言的」</u>。</b><b>⇒ <u>同一个判断，在三讲里换了三种面貌</u>。</b></p></div></article>
+</section>
+<section id="m-c"><h2><span class="tag">模块 c</span>字幕第 176–231 句（17:31–23:23）：生成桶走一遍（机器翻译、WMT）、 ⚠ 生成的评估为什么棘手、BLEU 与 ROUGE、参考文本的代价与 reference-free 的预告、 perplexity、以及从 80 年代到 2020 年代的简史<small>句 176–231 · 17:31–23:23</small></h2>
+<article class="card"><div class="meta"><span class="ts">17:56</span><span class="en">So I am illustrating this with the machine translation task</span></div><div class="body"><p class=""><b>第三个桶走一遍，而讲者挑的例子会一直用到这一讲结束。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>好，我们去最后一个类别，也就是我说过的最流行的那个。这个是文本进、文本出。我用机器翻译这个任务来说明它 —— 它是关于把一段文本从源语言翻译到目标语言</u>。」</b></p>
+<p class=""><b>例子</b>：<b><u>这里你有英文到法文的例子：「a cute teddy bear is reading」，翻成「un ours en peluche mignon lit」</u>。</b></p>
+<p class=""><b>★★ 这个例子的地位值得现在就点明：<u>它不只是一个举例，它是这一讲的主线</u>。</b></p>
+<p class=""><b>⇒ 你后面会看到它反复出现：<u>讲分词时切的是它；讲 one-hot 时用的是它的词；讲 Word2vec 的前向时「a → cute → teddy bear」走的是它；讲 RNN 时一步步处理的是它；讲注意力时「teddy bear 要看其它所有 token」说的是它；而本讲最后 Shervine 的端到端走查，从分词一路走到生成出 EOS，走的还是它</u>。</b></p>
+<p class=""><b>⇒ 所以这不是随口举的例子，<u>而是一条被精心设计的主线</u>。这个片子也会一路跟着它。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">18:36</span><span class="en">And that one contains a bunch of paired sequences in different languages</span></div><div class="body"><p class=""><b>生成任务的第一个麻烦出现在数据这一侧，而讲者点得很直接。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>至于这个任务，我想获取数据集更难一些，因为这里你需要有成对的文本</u>。」</b></p>
+<p class=""><b>⇒ 想一下差别有多大：<u>分类任务只要「一段文本 + 一个标签」，而标签可以很快打；翻译任务要「一段文本 + 它的完整译文」，而那等于让一个双语的人把整句重写一遍</u>。</b></p>
+<p class=""><b>数据集</b>：<b><u>你有一个非常流行的数据集叫 WMT，它代表 Workshop on Machine Translation。那个数据集包含一堆不同语言之间的成对序列</u>。</b></p>
+<p class=""><b>★ 而来源很有意思</b>：<b><u>比如你有英语—法语、英语—德语的，它们来自欧洲议会（European Parliament）的数据集</u>。</b></p>
+<p class="star"><b>⭐ 这个来源本身就说明了成对数据有多稀缺：<u>人们不得不去找那些「因为别的原因，本来就被逐句翻成多种语言」的文本</u></b>。<b>欧洲议会的会议记录必须以全部官方语言发布，于是它就成了现成的平行语料。</b></p>
+<p class=""><b>⇒ 这类「<u>借用因其它目的而天然成对的数据</u>」的做法，在机器学习里是常见套路，值得记住它的形状。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>把三个桶的数据代价并排看，一个很重要的结论就浮出来了。</b></p>
+<p class=""><b>代价梯度</b>：<b>① 分类 —— <u>一段文本配一个标签</u>，标注者看一眼点一下；② 多分类 —— <u>每个词都要标</u>，慢得多；③ 生成 —— <u>你要给出整段正确的输出</u>，等于让标注者把这件事本身做一遍。</b></p>
+<p class=""><b>★★ 而这个梯度直接指向这门课后面最重要的一件事</b>：<b><u>既然生成任务的标注这么贵，那 LLM 是怎么训出来的？</u></b></p>
+<p class=""><b>⇒ 答案是：<u>它根本不用这种标注</u>。</b><b>「预测下一个词」这个目标的妙处在于 —— <u>标签就是文本本身的下一个词，完全免费</u>。</b><b>⇒ 所以整个互联网都能直接当训练数据。</b></p>
+<p class=""><b>★★★ 讲者在 L4 会把这件事说透：<u>预训练的目标就是预测下一个 token，而且标签免费</u>；在 L2 他会给出一个更强的判断：<u>「下一个词预测」之所以赢，不是因为它在每个任务上最好，而是因为它最能扩展</u>。</b></p>
+<p class=""><b>⇒ 所以请把这个「数据代价梯度」记住：<u>它是理解「为什么是这条路线赢了」的第一块拼图</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">19:07</span><span class="en">So that is what is making it this hard</span></div><div class="body"><p class=""><b>第二个麻烦是评估，而它的根子不是技术问题。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>而要评估这些、要评估你模型的表现，实际上要棘手得多。因为正如你能想象的，同一个东西可以有很多种不同的翻译方式。我相信我们这屋里很多人都是双语、三语的。所以这就是让它这么难的原因</u>。」</b></p>
+<p class=""><b>★★ 请注意这个困难的性质：<u>它不是「我们还没找到好办法」，而是「问题本身就没有唯一答案」</u>。</b></p>
+<p class=""><b>⇒ 回到第 7 条那个梯度：<u>分类的输出空间有限且固定，所以能直接数对错；生成的输出空间无限，而且其中有很多个都是对的</u>。</b><b>这就从根本上堵死了「和标准答案比一比」这条路。</b></p>
+<p class=""><b>★★★ 这个困难会在这门课里反复回来，而且一次比一次严重</b>：<b>① 这里是翻译 —— <u>多种译法都对</u>；② L4 讲 LLM 评估 —— <u>连「任务」都没法枚举</u>，讲者的结论是「没有哪一个数字能告诉你你关心的东西」；③ L8 整整一讲都在处理它。</b></p>
+<p class=""><b>⇒ 而下面要讲的 BLEU 和 ROUGE，正是在「<u>承认没有唯一答案</u>」的前提下，退而求其次的办法。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">19:42</span><span class="en">Same story for ROUGE, which is actually a suite of metrics</span></div><div class="body"><p class=""><b>既然没有唯一答案，人们退而求其次：<u>和一份参考答案比</u>。这就是 BLEU 和 ROUGE。</b></p>
+<p class=""><b>讲者的交代</b>：<b><u>在过去，人们用过好几种基于规则的指标来做这件事。其中一个你可能听过的是 BLEU</u>。</b></p>
+<p class=""><b>BLEU</b>：<b><u>BLEU 代表 Bilingual Evaluation Under Study。而它是一个衡量「你的翻译相对于一份参考文本表现如何」的度量</u>。</b></p>
+<p class=""><b>ROUGE</b>：<b><u>ROUGE 也是同样的故事 —— 它其实是一套指标，但以一种不同的方式捕捉这件事</u>。</b></p>
+<p class=""><b>★★ 两者的共同点才是关键，而它也是它们共同的软肋：<u>都要有一份参考答案</u>。</b></p>
+<p class=""><b>⇒ 而「有参考答案」这件事，意味着你已经让人把活干了一遍 —— <u>也就是说你又回到了上一条那个昂贵的成对数据问题</u>。</b></p>
+<p class="warn"><b>⚠ 讲者下一镜就会把这一点挑明。所以这两个指标虽然缓解了「没有唯一答案」，<u>却没有缓解「要人来做」</u>。</b></p>
+<p class=""><b>⇒ 顺带一提：你会在 L5 和 L7 再次见到这两个名字，而两次都是以「<u>如今已经不太常用了</u>」的身份出现的。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>一个小插曲，但它顺带提醒了一件实用的事。</b></p>
+<p class=""><b>讲者的话（他本人是法国人，所以这个梗他说起来特别自然）</b>：<b>「<u>而你会看到机器学习社区挺好玩的 —— 因为 BLEU，我不确定你懂不懂法语，意思是「蓝色」；而 rouge 的意思是「红色」。所以我猜他们是想在这里加点乐子</u>。」</b></p>
+<p class="star"><b>⭐ 这类「名字里藏梗」的习惯在这个领域确实很常见。</b><b>但我想借这个机会提醒你一件更有用的事：<u>这个领域里的名字分两种，而它们该用不同的方式对待</u>。</b></p>
+<p class=""><b>① <u>藏梗的名字</u>：BLEU / ROUGE 这种，名字和方法本身没有关系，<u>记住就好，别想从名字推出什么</u>。</b></p>
+<p class=""><b>② <u>藏设计的名字</u>：这类才值得你去拆。<u>比如 PPO 的 proximal（邻近的）—— 它直接告诉你「不想离基座模型太远」是这个算法的核心约束；RAG 是 Retrieve-Augment-Generate 三步的首字母，名字就是流程；GRPO 的 group relative 直接说明了它和 PPO 唯一的区别在「拿同组的其它回答当基线」</u>。</b></p>
+<p class=""><b>⇒ 所以遇到一个新缩写时，先花三秒判断它属于哪一类。<u>第二类的名字是免费的理解</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">20:16</span><span class="en">It takes a lot of time, a lot of money to get labels</span></div><div class="body"><p class=""><b>讲者把这两个指标的软肋挑明了，而这句话是后面好几讲的伏笔。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>但这些指标的问题是：你总是需要一份参考文本。所以你基本上需要标签。而在实践中，拿到标签是非常昂贵的 —— 它要花很多时间、很多钱</u>。」</b></p>
+<p class=""><b>★★ 请看清这个困境的形状</b>：<b>我们本来是为了解决「<u>生成任务没有唯一答案</u>」才引入这些指标的；<u>但这些指标自己又要求一份「答案」</u>。</b><b>⇒ <u>于是问题并没有被解决，只是被挪了个位置</u> —— 从「模型该输出什么」挪到了「谁来提供参考文本」。</b></p>
+<p class="warn"><b>⚠ 而「需要标签」这件事的代价在真实项目里被严重低估</b>：<b>讲者说的是「很多时间、很多钱」，而更麻烦的是 —— <u>每当你换一个任务、换一个领域、换一批 prompt，你就要重新标一遍</u>。</b></p>
+<p class=""><b>⇒ 所以这不是一次性成本，<u>是持续成本</u>。</b></p>
+<p class=""><b>★ 下一镜讲者会给出这件事的出路，而那个出路正是这门课后面大量内容的来源。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>讲者在这里埋了一个伏笔，而我想现在就把它接上，因为它能帮你理解后面好几讲为什么长成那个样子。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>而我们会在这门课后面看到：随着我们在 LLM 这个领域取得的进展 —— 或者说社区取得的进展 —— 我们其实可以抛开这些基于参考的指标，转而走向更偏「无参考」的指标。我们后面会看到</u>。」</b></p>
+<p class=""><b>★★ 这个伏笔在哪里兑现？</b><b>⇒ <u>L5 和 L8 的 LLM-as-a-judge（拿 LLM 当评委）</u>。</b></p>
+<p class=""><b>做法是：<u>不再准备参考答案，而是直接让一个（通常更强的）LLM 去判断「这两个输出哪个更好」</u>。</b><b>⇒ 讲者在 L5 讲偏好数据怎么来时，会把它和人工评分、BLEU/ROUGE 并列，并且说<u>BLEU、ROUGE 这类规则指标「如今已经不太常用了」</u>。</b></p>
+<p class=""><b>★★★ 请体会这个转变的分量：<u>评估的瓶颈从「人要写出标准答案」变成了「人只要能判断好坏」—— 而后者既便宜得多，也更容易由模型代劳</u>。</b></p>
+<p class=""><b>⇒ 这和 L5 里那条贯穿整讲的判断是同一件事：<u>比较比产出容易得多</u>。</b><b>⚠ 但它也带来一个新问题：<u>评委本身是不完美的</u>，而优化一个不完美的评委会导致 reward hacking。<u>这正是 L5 最重要的那条警告</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">20:46</span><span class="en">And then the last metric that I will say that people sometimes use is called perplexity</span></div><div class="body"><p class=""><b>第三个指标，而它的性质和前两个完全不同 —— 这一点值得专门留意。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>然后最后一个我会说人们有时会用的指标，叫 perplexity（困惑度）。而 perplexity 只看模型输出的那些概率。它基本上量化的是「模型对它自己的输出有多惊讶」</u>。」</b></p>
+<p class=""><b>★★ 请抓住那句「<u>只看模型输出的那些概率</u>」，因为它意味着一件大事：<u>perplexity 不需要参考文本</u>。</b></p>
+<p class=""><b>⇒ 这正好是上一条那个困境的一个出口 —— 虽然讲者没有在这里点破。</b></p>
+<p class=""><b>⇒ 它怎么做到的？<u>因为它根本不问「输出对不对」，只问「模型对自己输出的这串东西有多确信」</u>。</b></p>
+<p class="warn"><b>⚠ 而这也正是它的局限，你必须同时知道</b>：<b><u>一个模型可以非常自信地输出一串胡话</u>。</b><b>perplexity 低只说明模型觉得这串 token 很「顺」，<u>不说明它是对的</u>。</b></p>
+<p class=""><b>⇒ 所以它更适合用来衡量「<u>这个模型对这种语言/这个领域熟不熟</u>」，而不是「<u>这次回答好不好</u>」。</b><b>★ 这个区分在读论文时很要紧：<u>看到 perplexity 下降，别直接理解成「更有用了」</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">21:10</span><span class="en">And I guess LLMs have been a hot topic since 2022</span></div><div class="body"><p class=""><b>讲者特意把方向说了一遍，而这正是最容易出错的地方。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以 BLEU 和 ROUGE，越高越好。perplexity，越低越好</u>。」</b></p>
+<p class=""><b>★★ 为什么方向会反？因为<u>它们量的东西方向相反</u></b>：<b>BLEU 和 ROUGE 量的是「<u>和参考答案有多像</u>」—— 像得越多越好；perplexity 量的是「<u>模型有多惊讶</u>」—— 越不惊讶说明模型越觉得这串输出是顺理成章的。</b></p>
+<p class="warn"><b>⚠ 这类「方向性」的东西在这门课里会出现好几次，而每一次搞反都会让你把结论读成相反的</b>：<b>⇒ 后面你会遇到 <u>损失（loss）要最小化、而 PPO 那个写成 L 的式子其实要最大化</u>（讲者专门为这个停下来提醒过）；<u>KL 散度越小越近</u>；<u>advantage 为正要强化、为负要压低</u>。</b></p>
+<p class=""><b>★ 一个好用的习惯：<u>每遇到一个新指标，先问「它越大越好还是越小越好，为什么」</u>。</b><b>「为什么」这一半很重要 —— <u>记住理由就不会记反，而死记方向则很容易混</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>把这三个指标收一下，顺便说清它们今天各自的处境。</b></p>
+<p class=""><b>三者对照</b>：<b><u>BLEU / ROUGE 要参考文本、越高越好、是规则式的；perplexity 不要参考文本、越低越好、只看模型自己的概率</u>。</b></p>
+<p class=""><b>★ 今天的处境</b>：<b>讲者在 L5 讲偏好数据怎么比较时，会把 BLEU、ROUGE 列为一个选项，<u>然后补一句「不过如今已经不太常用了」</u>；在 L7 讲 vanilla LLM 的弱点时，他又会用它们当反例 —— <u>传统 NLP 有 BLEU、ROUGE 这类规则指标，但 LLM 能做的事远超这些，所以非常难评估</u>。</b></p>
+<p class=""><b>⇒ 而 <u>perplexity 仍然在用</u>：L3 讲 LLM 时它还会再出现一次（那里有它的公式）。</b></p>
+<p class=""><b>★★ 为什么 perplexity 活了下来？<u>因为它量的是一件仍然有意义的事：这个模型对这种文本熟不熟</u>。</b><b>这在比较「同一个模型在不同领域上」或者「预训练到哪一步了」时仍然有用。</b></p>
+<p class="warn"><b>⚠ 而 BLEU/ROUGE 之所以退场，是因为它们量的那件事（<u>和一份参考答案有多像</u>）在开放生成的场景里已经不成立了 —— <u>当任务本身都没法枚举时，参考答案从何而来？</u></b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>指标讲完，讲者转向历史。而这个转向本身值得留意。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我想 LLM 从 2022 年起一直是个热门话题。但其实这个领域可以追溯到很早很早之前那一年</u>。」</b></p>
+<p class=""><b>★★ 为什么要讲历史？我认为有两个很实在的理由</b>：</p>
+<p class=""><b>① <u>它回答「为什么是现在」</u>。</b><b>下一条你会看到，讲者会明确指出：<u>80 年代就有那类模型、90 年代就有 LSTM，但当时没有互联网、没有算力</u>。<u>所以今天的成功不是因为想法新，而是因为条件到了</u>。</b></p>
+<p class=""><b>② <u>它帮你分辨「新东西」和「老东西换了名字」</u>。</b><b>这在一个高速变动的领域里特别重要 —— <u>你会看到很多概念其实是旧的（注意力是 2014 年的、RNN 是 80 年代的），而真正新的只有少数几个</u>。</b></p>
+<p class=""><b>⇒ 对你为科研看这门课来说，第 ② 点尤其有用：<u>能分辨哪些是真正的新贡献、哪些只是重新包装，是读文献最省时间的能力之一</u>。</b></p>
+<p class=""><b>⇒ 下一条就走这条时间线。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">21:50</span><span class="en">And I guess this was one of the limiting factors</span></div><div class="body"><p class=""><b>时间线从很早开始，而讲者点出的「缺什么」是整条线的关键。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以在 80 年代 —— 我们待会就会看到 —— 有一类模型其实在 80 年代就被想出来了。而到了 90 年代，我们有了 LSTM，我们待会也会看到</u>。」</b><b>⇒ 他说的那两类就是本讲后面要讲的 <u>RNN</u> 和 <u>LSTM</u>。</b></p>
+<p class=""><b>★★ 然后是关键的那一句</b>：<b>「<u>但问题是，在那个年代，我们没有互联网。我们没有很多算力。而我想这正是其中一个限制因素 —— 它阻止了今天这些模型在当时被训练出来</u>。」</b></p>
+<p class=""><b>★★★ 请认真对待这句话，因为它纠正了一个很常见的误解：<u>今天的成功不是因为「终于想出了正确的想法」</u>。</b><b>⇒ 想法在 80 年代就有了。<u>变的是数据（互联网）和算力</u>。</b></p>
+<p class="warn"><b>⚠ 而这个判断有一个对你做研究很实际的推论：<u>当你看到一个旧方法「不work」时，要分清它是「想法错了」还是「当时条件不够」</u>。</b><b>这两者的处理方式完全不同 —— 前者该放弃，<u>后者值得在新条件下重试</u>。</b><b>⇒ 深度学习本身就是这样回来的，而注意力机制（2014 年提出、2017 年才爆发）也是。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">22:12</span><span class="en">And then, of course, we had the transformers</span></div><div class="body"><p class=""><b>时间线的后半段，而讲者用一句话交代了 LLM 这个名字是怎么来的。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>然后更近一些，我们有了几项进展。Word2vec 真的是在「计算有意义的嵌入」这件事上的先驱工作之一 —— 我们待会就会看到它</u>。」</b></p>
+<p class=""><b>⇒ <u>然后当然就是 transformers，它是 2017 年发表的一篇论文的一部分，而它基本上就是你今天看到的所有模型的基础</u>。</b></p>
+<p class=""><b>★★ 然后是最关键的一步</b>：<b>「<u>而这些模型随后就被规模化了 —— 既在算力上，也在用来训练它们的数据上。而这就是 LLM 这个名字的由来。我想这更像是 2020 年代的事</u>。」</b></p>
+<p class=""><b>★★★ 请注意这里的因果：<u>LLM 不是一种新架构，它就是「被规模化了的 transformer」</u>。</b><b>⇒ 讲者在 L3 会把这件事说得更明确（他会给 LLM 下一个定义）；而 L4 整整一讲都在讲「规模化」具体是怎么做到的（数据从哪来、算力怎么量、固定预算下模型该多大、一块 GPU 装不下怎么办）。</b></p>
+<p class=""><b>⇒ 所以这条时间线的形状是：<u>想法（80s–2017）→ 条件到位（互联网 + 算力）→ 规模化（2020s）</u>。</b><b>而这门课的九讲，几乎全部落在最后那一段上。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">22:53</span><span class="en">Everyone good?</span></div><div class="body"><p class=""><b>高层概览结束，讲者抛出了这门课真正的第一个问题 —— 而它简单得有点朴素。</b></p>
+<p class=""><b>他的过渡</b>：<b><u>关于高层的部分，有什么问题吗？大家都还好？好的</u>。</b></p>
+<p class=""><b>★★ 然后是那个问题</b>：<b>「<u>我想我想问我们自己的第一个问题是：我们想要的是一个能处理文本的模型。但模型懂的是数字，它们并不真的懂文本。所以我们得对那段文本做点什么，让它变得更可量化 —— 变成某种模型能理解的东西</u>。」</b></p>
+<p class=""><b>★★★ 这句话是接下来一大段内容的全部动机，值得你带着它往下听</b>：<b>⇒ <u>分词（tokenization）回答「怎么把文本切开」；one-hot 回答「怎么给每一块一个数字表示」；Word2vec 回答「怎么让这些数字表示是有意义的」；RNN 回答「怎么把顺序也编进去」；而注意力回答「怎么让每个词的表示依赖于上下文」</u>。</b></p>
+<p class=""><b>⇒ 这五步是一条连贯的、每一步都在修上一步缺陷的链条。<u>这个片子接下来会一步步跟着它走</u>。</b></p>
+<p class="star"><b>⭐ 而我建议你每学完一步就问一句：「<u>到这一步为止，我的表示还缺什么？</u>」—— 下一步基本上就是在补那个缺口。</b></p></div></article>
+</section>
+<section id="m-d"><h2><span class="tag">模块 d</span>字幕第 232–290 句（23:23–30:13）：tokenization 是什么、 任意切 / 词级 / 子词级 / 字符级四种切法各自的利弊、⚠ 为什么「序列变长」是代价、 OOV（Out Of Vocabulary）、三者总对照<small>句 232–290 · 23:23–30:13</small></h2>
+<article class="card"><div class="meta"><span class="ts">23:23</span><span class="en">So if you look at a sentence, for instance, a cute teddy bear is reading</span></div><div class="body"><p class=""><b>模型只懂数字，所以第一步是把文本切成块。这一步的名字你会用一整门课。</b></p>
+<p class=""><b>讲者的问法</b>：<b>「<u>所以如果你看一个句子，比如「a cute teddy bear is reading」，你首先得问自己：你要怎么切这个句子，才能把它传给模型？</u>」</b></p>
+<p class=""><b>★ 名字与定义</b>：<b><u>这一部分叫 tokenization。而它所包含的，基本上就是「按照某个任意的文本单位去切分文本」</u>。</b><b>⇒ <u>顺便说，这个文本单位叫做 token，这也正是这个方法被叫做 tokenization 的原因</u>。</b></p>
+<p class=""><b>★★ 请特别留意「<u>任意的（arbitrary）</u>」这个词，因为它是整段的钥匙</b>：<b><u>切法是人定的，不是语言自带的</u>。</b><b>⇒ 这意味着不存在「正确的切法」，只存在「各有利弊的切法」—— 而接下来一整段就是在比较这些利弊。</b></p>
+<p class="warn"><b>⚠ 而这个「任意性」在今天仍有实际后果，值得你知道</b>：<b><u>不同模型的分词器不一样，所以同一段文本在不同模型里 token 数不同</u>。</b><b>⇒ 这直接影响你的账单（按 token 计费）、也影响能塞进上下文的内容量。<u>「这段文本有多少 token」不是文本的属性，是「文本 + 分词器」的属性</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">23:54</span><span class="en">I guess the first way is doing it completely arbitrarily</span></div><div class="body"><p class=""><b>第一种切法，而讲者举的例子里藏着一个重要的暗示。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我想第一种方式是完全任意地切。比如这里，你会有「a」—— 那是一个文本单位；「cute」可以是另一个文本单位；「teddy bear」会是又一个，依此类推</u>。」</b></p>
+<p class=""><b>★★ 请留意「<u>teddy bear</u>」被当成了<u>一个</u> token —— 它是两个英文词。</b></p>
+<p class=""><b>⇒ 这个细节说明了「任意」是真的任意：<u>token 的边界不必和「词」的边界对齐</u>。</b><b>而这在今天的分词器里是常态：<u>常见的多词短语可能是一个 token，而一个罕见的长词可能被切成四五个 token</u>。</b></p>
+<p class="warn"><b>⚠ 一个你可以自己验证的现象：<u>常见词往往是一个 token，而生僻词、专有名词、数字、代码符号往往被切得很碎</u>。</b><b>⇒ 这意味着「<u>一段文本有多贵</u>」和它的内容强相关 —— 一段普通英文和一段同样长度的代码或化学式，token 数可以差好几倍。</b></p>
+<p class=""><b>⇒ 这一点在你做预算估算时会直接影响结论，值得记住。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">24:25</span><span class="en">But I guess we would have always pros and cons</span></div><div class="body"><p class=""><b>讲者在比较切法之前，先立了一个判断标准 —— 这一步很讲究，值得学。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>另一种方式是干脆按词来分。但我想我们总是会有利弊。我想我们想达成的目标之一，是接下来我们要能够「有意义地表示」这些 token</u>。」</b></p>
+<p class=""><b>★★ 请注意他做了什么：<u>他没有直接说哪种切法好，而是先说清「我们要拿切出来的东西干什么」</u>。</b><b>⇒ 有了这个标准，后面所有比较才有依据。</b><b>这个习惯很值得照搬：<u>比较几个方案之前，先把评判标准摆出来，否则讨论会变成各说各话</u>。</b></p>
+<p class="warn"><b>⚠ 词级的坏处</b>：<b>「<u>按词级切的一个坏处是：你最终会得到一些「看起来很像、但实际上被当作不同 token」的词</u>。」</b><b>⇒ <u>而这里的限制在于：你得为这些相似却不同的 token 都算出嵌入，然后还得想办法让它们的嵌入彼此相似</u>。</b></p>
+<p class=""><b>★ 想清楚这个代价有多实在：<u>模型并不知道 bear 和 bears 有关系</u>。</b><b>它们是两个独立的符号，各自有一个要从数据里学出来的向量。<u>如果某个形式在训练数据里出现得少，它的向量就学不好</u> —— 而这纯粹是切法造成的，不是语言本身的问题。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">25:27</span><span class="en">If we go ahead with the word-level tokenization, then we will end up with just two different entities</span></div><div class="body"><p class=""><b>讲者给了两个最直白的例子，而它们说明了词级切法的结构性浪费。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我给你举个例子。假设我有一个词「bear」，然后你有另一个词、它的复数形式「bears」。这两个词非常相似，只是一个单数、一个复数。而如果我们采用词级分词，那我们最后就只会得到两个不同的实体 —— 它们基本上就被当成不同的东西</u>。」</b><b>⇒ <u>「run」和「runs」也是同样的情况，动词的各种变形</u>。</b></p>
+<p class=""><b>★★ 这个浪费是双重的，值得拆开看</b>：<b>① <u>词表空间</u> —— 每个变形各占一个位置，而词表大小直接决定模型输出层的大小；② <u>学习效率</u> —— <u>模型在 bear 上学到的东西，完全不会自动迁移到 bears 上</u>。</b></p>
+<p class=""><b>⇒ 讲者自己说了这个代价：<u>你得为这些相似却不同的 token 各算嵌入，还得想办法让它们相似</u>。<u>注意「想办法让它们相似」这件事是额外的负担</u> —— 而一个更聪明的切法可以让它免费发生。</b></p>
+<p class="warn"><b>⚠ 一个本讲没提、但值得你知道的事：<u>英语的形态变化其实算少的</u>。</b><b>换成德语、俄语、芬兰语这类变位/变格丰富的语言，同一个词根能派生出几十上百个形式，<u>词级切法在那些语言上几乎不可用</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">25:42</span><span class="en">So for that reason, people have dug into a category of tokenizers that are called subword tokenizers</span></div><div class="body"><p class=""><b>第三种切法，也是今天的主流。而它正是为了修掉上一条那个浪费。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以出于那个原因，人们深入研究了一类叫做 subword tokenizer（子词分词器）的东西 —— 它是围绕「利用词根」来做的：去找出我们能在这些词里找到的公共词根</u>。」</b></p>
+<p class=""><b>例子</b>：<b><u>比如对 bear 和 bears，你会有一个「bear」这个部件是被共享的</u>。</b></p>
+<p class=""><b>★★ 为什么这一下就解决了上一条的问题</b>：<b><u>既然 bear 和 bears 共享同一个部件，那模型在那个部件上学到的东西就自动被两者共享了</u>。</b><b>⇒ 不再需要「想办法让它们的嵌入相似」—— <u>相似性是切法本身送的</u>。</b></p>
+<p class=""><b>★ 讲者的利弊总结</b>：<b>「<u>我想好处是你得以利用词根。但这里的坏处是：你的序列会变长。而我们会看到为什么这是个坏处</u>。」</b></p>
+<p class=""><b>⇒ 请注意他说「<u>我们会看到为什么这是个坏处</u>」—— 他知道「序列变长」这件事本身听起来不像个问题，所以他接下来专门解释。<u>下一镜就是那个解释，而它引出了这门课最重要的一个量</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">26:28</span><span class="en">I guess later on, I guess I can give you a preview</span></div><div class="body"><p class=""><b>这一镜是讲者主动提前剧透的，而它剧透的东西会贯穿后面好几讲。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我想在后面 —— 我想我可以先给你剧透一下。这些模型的复杂度也是序列长度的一个函数。所以你要处理的 token 越多，你的模型跑起来就越久，因为它基本上得处理所有这些 token</u>。」</b></p>
+<p class=""><b>★★★ 这句剧透的分量远超它的篇幅，因为「<u>复杂度是序列长度的函数</u>」是这门课后面一长串内容的共同根源</b>：</p>
+<p class=""><b>⇒ <u>L1 后面你会看到自注意力要算 QKᵀ —— 那是一个 n×n 的矩阵，n 是序列长度，所以是平方级的</u>。</b></p>
+<p class=""><b>⇒ <u>L2 的滑动窗口注意力（sliding window）就是为了把这个平方级降下来</u>。</b></p>
+<p class=""><b>⇒ <u>L3 的 KV 缓存、PagedAttention、MLA，全都是在对付「序列一长、显存和时间就炸」</u>。</b></p>
+<p class=""><b>⇒ <u>L4 的 FlashAttention 更是直接冲着这个来的</u>。</b></p>
+<p class=""><b>⇒ <u>L7 的「上下文有限」「大海捞针」也是同一个限制的另一面</u>。</b></p>
+<p class=""><b>★ 所以现在就把这句话记牢：<u>token 数不是免费的</u>。它既是钱（按 token 计费）、是时间（复杂度）、也是能力（上下文装得下多少）。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>把这笔交易并排写清楚，子词级为什么成为主流就一目了然了。</b></p>
+<p class=""><b>讲者的小结</b>：<b>「<u>所以 pro 是它利用了词根；con 是它让你的序列变长</u>。」</b></p>
+<p class=""><b>★★ 换来的那一侧值得多说一句</b>：<b>除了「相似词的表示自动相关」，<u>还有一个讲者没明说但很实在的好处：词表可以小得多</u>。</b><b>⇒ 因为你不必为每一个变形、每一个罕见词各留一个位置 —— <u>你只要存下那些部件</u>。</b><b>而词表大小直接决定模型输出层（softmax 那一层）的大小，所以这是实打实的节省。</b></p>
+<p class=""><b>★ 而为什么这笔交易划算，可以这么看</b>：<b><u>序列变长带来的代价是「线性到平方级」的计算增加，而它换来的是「表示质量」和「词表规模」上的根本改善</u>。</b><b>⇒ 前者可以靠工程优化（FlashAttention、KV 缓存）缓解，<u>而后者是切法层面决定的、事后补不回来</u>。</b></p>
+<p class=""><b>⇒ 这是一个在系统设计里常见的判断：<u>宁可接受一个可以靠工程缓解的代价，也不要接受一个结构上补不回来的缺陷</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜是方法论，不是新内容 —— 但我认为它值得占一镜。</b></p>
+<p class=""><b>观察</b>：<b>讲者对每一种切法都走同一个三段式：<u>① 想法是什么；② pro 换来了什么；③ con 付出了什么</u>。</b></p>
+<p class=""><b>★★ 而最值得学的是第 ③ 步里他多做的那一件事：<u>他会解释「为什么这是个代价」</u>。</b><b>⇒ 「序列变长」听起来完全不像问题 —— <u>直到他说了「模型复杂度是序列长度的函数」</u>。</b><b>有了这句话，这个 con 才真的站得住。</b></p>
+<p class=""><b>⇒ 对比一下：<u>如果他只说「子词级的缺点是序列更长」，你会点头，但不会真的在意；而他多说的那一句，让这个缺点有了量级、有了后果</u>。</b></p>
+<p class=""><b>★★★ 这一点对你做研究是直接有用的：<u>你在论文里写「我们的方法的局限是 X」时，只写 X 是不够的 —— 要写「X 会导致什么、在什么规模下开始要命」</u>。</b></p>
+<p class="warn"><b>⚠ 而反过来读别人的论文时，这也是一个检验点：<u>一个只列出局限却不说明后果的工作，往往是作者自己也没量过</u>。</b></p>
+<p class=""><b>⇒ 这个片子后面会一直跟着讲者的这个三段式走。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">27:05</span><span class="en">You have a last category of ways of tokenizing things</span></div><div class="body"><p class=""><b>第四种也是最后一种切法，而它的强项很具体。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>你还有最后一类切分方式，就是直接在字符这一级做 —— 就是把字符一个个取出来</u>。」</b></p>
+<p class=""><b>它的强项</b>：<b>「<u>我想这里，你和我写消息的时候，有时候会有拼写错误。而用子词的方式切分，你可能没法识别出那个被拼错的词。而这正是字符级分词器能够考虑到的东西</u>。」</b></p>
+<p class=""><b>★★ 为什么字符级对拼错鲁棒，值得想清楚机制</b>：<b><u>子词分词器的部件是从训练数据里统计出来的 —— 它只认识见过的那些片段</u>。</b><b>一个拼错的词（比如 teddi）可能没有任何一个它认识的部件能对上，<u>于是会被切得乱七八糟，和正确拼写的 teddy 完全不像</u>。</b></p>
+<p class=""><b>⇒ 而字符级没有这个问题：<u>t-e-d-d-i 和 t-e-d-d-y 只差最后一个字符，前四个字符完全一样</u>。<u>相似性在表面上就保住了</u>。</b></p>
+<p class=""><b>★ 讲者还提到「<u>大小写错误</u>」也属于这一类（在后面的小结里）。<u>同样的道理</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">27:36</span><span class="en">And this is something that the character-level tokenizer can, I guess, take into consideration</span></div><div class="body"><p class=""><b>字符级的第一个代价，而它正是上一条那句剧透的直接后果。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>但这里的问题是：你的序列长度会长得多得多，这会让你的模型处理这个序列花多得多的时间。所以这是一个坏处</u>。」</b></p>
+<p class=""><b>★★ 把量级感受一下</b>：<b>同样一句 <u>「a cute teddy bear is reading」</u>，子词级大概切成六到八个 token，<u>而字符级是二十八个字符</u>（含空格）。</b><b>⇒ 差了三四倍。</b></p>
+<p class="warn"><b>⚠ 而按上一条那句剧透（<u>复杂度是序列长度的函数</u>），这个差距的后果比看上去严重</b>：<b>你后面会学到自注意力要算一个 <u>n×n</u> 的矩阵 —— <u>序列长三倍，那个矩阵就大九倍</u>。</b></p>
+<p class=""><b>⇒ 所以字符级的代价不是「慢三倍」，在注意力这一环是「<u>慢九倍</u>」。</b></p>
+<p class=""><b>★ 这就是为什么字符级虽然有明显优点，却没有成为主流 —— <u>它在最贵的那个环节上被惩罚得最狠</u>。</b></p>
+<p class=""><b>⇒ 顺带一提：这也解释了为什么 L2 要花力气讲滑动窗口注意力 —— <u>那是在想办法让「长序列」这件事不那么贵</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">27:55</span><span class="en">And then the other con is, I guess, when you want to represent each of these tokens</span></div><div class="body"><p class=""><b>字符级的第二个代价，而它正好撞上了讲者一开始立的那个判断标准。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>然后另一个坏处是：当你想表示这些 token 中的每一个时，我想很难知道一个字母的表示究竟意味着什么。比如字母 U 的表示代表什么？这非常难</u>。」</b></p>
+<p class=""><b>★★ 回想第 15 条里他立的标准：<u>「我们想达成的目标之一，是能够有意义地表示这些 token」</u>。</b><b>⇒ 而字符级在这个标准上是明确输的 —— <u>「bear」这个部件可以有一个有意义的向量（关于熊的某种语义），而「b」这个字母的向量代表什么，确实说不出来</u>。</b></p>
+<p class=""><b>★★★ 这一条揭示了分词这件事的一个核心张力，我建议你把它单独记住</b>：<b><u>切得越细，越不会遇到没见过的东西（OOV 风险低）、也越对拼写错误鲁棒；但切得越细，每一块本身就越没有意义</u>。</b><b>⇒ 反过来，切得越粗，每一块越有意义，但越容易碰到没见过的。</b></p>
+<p class=""><b>★ 而子词级之所以是今天的主流，正是因为它<u>在这条轴上坐在中间</u>：部件通常对应词根或常见片段（<u>有意义</u>），而罕见词可以被拆成已知部件（<u>OOV 风险低</u>）。</b><b>⇒ 讲者后面回答学生提问时会把这一点明说：<u>subword 是一个很好的折中</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">28:37</span><span class="en">And I did not mention this, but there is a term</span></div><div class="body"><p class=""><b>这一条是整个分词段落里最要紧的概念，而讲者是以「我刚才忘了说」的方式补上的。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我刚才没提这个，但有一个术语。每当你切完东西，然后在推理时你想做预测，我想你有一个前提条件是：你在训练时见过的那个 token，你需要它在你的训练集里</u>。」</b></p>
+<p class=""><b>⇒ <u>而问题是：假设在推理时你把文本切成词，再假设你碰到一个训练时没见过的词 —— 你就只能把它标成「未知」。而这个东西叫 OOV，Out Of Vocabulary（词表之外）</u>。</b></p>
+<p class=""><b>★★ 请把 OOV 的机制想清楚，因为它不只是一个术语</b>：<b><u>模型的输入层是一张查找表：每个 token 对应一行向量。碰到表里没有的 token，就没有向量可查</u>。</b><b>⇒ 于是只能用一个专门的「unknown」槽位 —— <u>而那个槽位里所有不认识的词共用同一个向量</u>。</b></p>
+<p class=""><b>⇒ 后果很直接：<u>模型对那个词一无所知，而且把它和所有其它不认识的词混为一谈</u>。</b></p>
+<p class="warn"><b>⚠ 所以 OOV 不是「少学到一点」，<u>是「这个位置的信息被彻底抹掉了」</u>。这就是为什么降低 OOV 风险是选分词器时的首要考虑。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">29:09</span><span class="en">And let us suppose you have not seen a word at training time</span></div><div class="body"><p class=""><b>三种切法在 OOV 上正好排成三档，而讲者在后面回答学生提问时又确认了一次。</b></p>
+<p class=""><b>他的小结</b>：<b><u>幸运的是，子词级的分词器缓解了那个问题。所以你有更低的 OOV 风险，但仍然可能有</u>。</b></p>
+<p class=""><b>⇒ 而在后面回答「怎么算嵌入」那个问题时，他把三档说全了：<u>这是词级分词器很难做到的事，因为你会有大得多的机会碰到词表外的 token；子词级的机会更低；而字符级，我想你没有这个问题</u>。</b></p>
+<p class=""><b>★★ 为什么字符级没有这个问题？<u>因为字符集是封闭的</u>。</b><b>英文字母加标点数字，几十上百个，<u>你不可能在推理时碰到一个训练时没见过的字符</u>。</b><b>⇒ 而词是开放的：<u>新词、人名、品牌名、拼写变体会无穷无尽地出现</u>。</b></p>
+<p class=""><b>★★★ 于是三种切法的全貌就清楚了，而且它是一条连续的轴</b>：<b><u>切得越细 ⇒ 单位集合越封闭 ⇒ OOV 越不可能；但单位本身越没有意义、序列越长</u>。</b><b>⇒ <u>子词级是在这条轴上找到的那个折中点</u>，这就是它成为主流的全部理由。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">29:41</span><span class="en">And then character-level, it is robust to our misspellings and our casing errors</span></div><div class="body"><p class=""><b>讲者做了一次完整的总对照，我按他的话排一遍。</b></p>
+<p class=""><b>词级</b>：<b>「<u>词级是一种超级朴素、超级简单的方式，把你的文本分成任意的单位。但问题是，如我们提到的，我们没有利用上词根</u>。」</b><b>⇒ 再加上 OOV 风险最高。</b></p>
+<p class=""><b>子词级</b>：<b><u>幸运的是子词级的分词器缓解了 OOV 那个问题。所以你有更低的 OOV 风险，但仍然可能有。而如我们提到的，就 pro 而言，你利用上了词根</u>。</b></p>
+<p class=""><b>字符级</b>：<b>「<u>然后字符级，它对我们的拼写错误和大小写错误是鲁棒的。但问题是它让计算慢得多，而且你的序列会非常非常长，这也会让你的推理时间高得多</u>。」</b></p>
+<p class=""><b>★★ 把三者按「<u>这个片子一直在用的那个三段式</u>」排一遍，你会发现它们的取舍是同一条轴上的三个点</b>：<b><u>粒度从粗到细，OOV 风险从高到低，单位的意义从强到弱，序列长度从短到长</u>。</b></p>
+<p class=""><b>⇒ 没有哪一个在所有维度上都好，<u>而子词级赢在它在每个维度上都不差</u>。</b></p>
+<p class="star"><b>⭐ 这是一个很典型的工程结论：<u>胜出的往往不是某个维度上的冠军，而是没有明显短板的那个</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">30:13</span><span class="en">OK, so now what we did is we took an input text</span></div><div class="body"><p class=""><b>分词讲完，讲者把下一段的问题摆了出来 —— 而他顺手做的一个自我更正值得留意。</b></p>
+<p class=""><b>他的交代</b>：<b>「<u>好，那么我们刚才做的是：我们拿了一段输入文本，我们做的是把它切成了一些部分，那些部分基本上就是 token。而为了让我们的模型能理解这些 token，我们需要为它们每一个找到一个表示</u>。」</b></p>
+<p class=""><b>⇒ <u>所以这里我们要看一下这个。这叫做 word representation（词表示）</u>。</b></p>
+<p class=""><b>★★ 然后他立刻自我更正</b>：<b>「<u>或者我想，更正确的说法是，它应该叫 token representation（token 表示）</u>。」</b></p>
+<p class="star"><b>⭐ 这个小更正很说明问题，值得你记一下</b>：<b><u>「word embedding」「word representation」这些说法是历史遗留的 —— 它们来自 Word2vec 那个年代，那时候单位确实是「词」</u>。</b><b>⇒ 而今天的实际单位是子词 token，<u>所以严格说「词嵌入」这个词本身就不准确了</u>。</b></p>
+<p class="warn"><b>⚠ 这类「名字没跟上实际」的情况在这个领域很多，而它会制造真实的困惑</b>：<b>你后面还会遇到 <u>PPO 里的 old 不是 SFT 模型、r_θ 不是 reward、L 不是要最小化的损失</u> —— 讲者每次都会专门停下来提醒。</b></p>
+<p class=""><b>⇒ 下一段就从「怎么给 token 一个表示」开始。</b></p></div></article>
+</section>
+<section id="m-e"><h2><span class="tag">模块 e</span>字幕第 291–367 句（30:13–37:49）：one-hot 编码、余弦相似度、 ⚠ one-hot 让所有向量两两正交这个致命问题、关于「为什么不管范数」的问答、 词表该多大（英语几万 / 多语言几十万）<small>句 291–367 · 30:13–37:49</small></h2>
+<article class="card"><div class="meta"><span class="ts">30:43</span><span class="en">Or I guess, in a more correct way, it should be token representation</span></div><div class="body"><p class=""><b>分词完了，现在要给每一块一个数字表示。讲者从最朴素的做法讲起。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以我们想找到一种方式来表示这些 token 中的每一个。而做这件事的简单、朴素的方法，就是给每一个词、或者说每一个 token，指派一个 one-hot 向量</u>。」</b></p>
+<p class=""><b>他的设定</b>：<b>「<u>比如假设我们有一个三个 token 的词表 —— book、soft 和 teddy bear</u>。」</b></p>
+<p class="star"><b>⭐ 留意「teddy bear」在这里仍然是<u>一个</u> token（不是两个）—— 和分词那一段的设定一致。<u>讲者在整讲里保持了这个一致性，这让例子可以一路用下去</u>。</b></p>
+<p class=""><b>★★ 而「one-hot」这三个字本身就说明了做法：<u>一个向量里只有一个位置是 1（hot），其余全是 0</u>。</b><b>⇒ 向量的长度就是词表大小，每个 token 占一个位置。</b></p>
+<p class="warn"><b>⚠ 所以这个表示有一个马上能看出来的性质：<u>词表多大，向量就多长</u>。</b><b>词表几万，向量就几万维 —— 而其中只有一个 1。<u>这个浪费后面会被 Word2vec 修掉</u>，但更要命的问题是下一条讲的那个。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">31:14</span><span class="en">That is 1, 0, 0 vector</span></div><div class="body"><p class=""><b>三个具体的向量，以及这一讲的又一个缩写。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>我们会有，比如说 soft，那是 (1, 0, 0) 向量；teddy bear，那是 (0, 1, 0) 向量；而 book，那是 (0, 0, 1) 向量。所以这叫做 One-Hot Encoding，OHE —— 你会经常见到</u>。」</b></p>
+<p class=""><b>★ 这是本讲的第三个缩写了（NLP、OOV、OHE），而它们正好印证了讲者开场那个免责声明：<u>这个领域全是缩写</u>。</b></p>
+<p class=""><b>⇒ 他的做法也和他说的一致：<u>每引入一个都把全称念出来</u>。</b></p>
+<p class=""><b>★★ 这三个向量有一个值得注意的性质，而它正是下一条要讲的问题的根源：<u>它们两两之间的「位置」没有任何关系</u>。</b><b>⇒ soft 排第一、teddy bear 排第二、book 排第三 —— <u>这个顺序是任意的</u>。</b><b>你把它们重新排一遍，得到的是三个不同的向量，<u>但模型学到的东西完全一样</u>。</b></p>
+<p class=""><b>⇒ 这说明了一件事：<u>one-hot 向量里没有携带任何关于「这个 token 是什么」的信息</u>。</b><b>它只是一个编号的另一种写法。<u>而「编号」这件事本身，就是下一条问题的来源</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">31:37</span><span class="en">But basically what people want to do is compare these tokens</span></div><div class="body"><p class=""><b>讲者在这里转了一个很关键的弯：<u>他不问「这个表示好不好」，而是问「我们拿它干什么」</u>。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>好，这是一种表示我们 token 的方式。但人们基本上想做的事，是去比较这些 token，看看哪些和哪些更相似</u>。」</b></p>
+<p class=""><b>★★ 请注意这个提问方式有多重要</b>：<b>如果只看 one-hot 本身，它没什么毛病 —— <u>每个 token 有一个唯一的向量，清清楚楚</u>。</b><b>⇒ <u>只有当你说出「我要用它来比较相似度」时，它的缺陷才暴露出来</u>。</b></p>
+<p class=""><b>⇒ 这和第 15 条里他先立判断标准是同一个手法：<u>一个表示的好坏，取决于你要拿它做什么</u>。</b><b>而这一次，用途是「比较相似度」。</b></p>
+<p class=""><b>★ 然后他引入了度量</b>：<b><u>所以人们常用的一个相似度度量，是叫做 cosine similarity（余弦相似度）的东西。我不确定你们是不是都听过它</u>。</b><b>⇒ 他又一次停下来解释 —— 和他开场说的「<u>我会假设我们从零起步</u>」一致。</b></p>
+<p class="warn"><b>⚠ 顺带：<u>余弦相似度在这门课里会一直用到最后</u>。L7 讲 RAG 的候选召回时，比较 query 和 chunk 的 embedding 用的就是它。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">32:14</span><span class="en">And if, I guess, they are pointing in the same direction, then maybe they are similar</span></div><div class="body"><p class=""><b>余弦相似度的直觉，讲者讲得非常朴素 —— 他没有推公式，而是直接给几何图像。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>你可以把它想成：就是看这些向量在 n 维空间里成了什么样的夹角。而如果它们指向同一个方向，那也许它们是相似的；如果它们正交，那也许它们是独立的；而如果它们完全相反，那也许它们是相反的。这基本上就是我们想要进入的那个心智模型</u>。」</b></p>
+<p class=""><b>★★ 三档值得按他的话记住，因为它们各有明确含义</b>：<b><u>同向（夹角 0°，余弦 1）⇒ 相似；正交（夹角 90°，余弦 0）⇒ 独立、无关；相反（夹角 180°，余弦 −1）⇒ 意思相反</u>。</b></p>
+<p class=""><b>⇒ 注意中间那一档「<u>正交 = 独立</u>」是关键 —— 下一条的整个问题就建立在它上面。</b></p>
+<p class="warn"><b>⚠ 而讲者用词很谨慎，三次都说了「<u>也许（maybe）</u>」。这个谨慎是有道理的：<u>余弦相似度只是一种度量，它和「语义相似」之间的对应关系是我们希望的，不是保证的</u>。</b><b>⇒ 他在后面回答学生提问时会把这个谨慎说得更明白：<u>这是一种度量，不是完美的度量</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">32:47</span><span class="en">So ideally, what we want is for tokens that mean the same or similar to basically have a high similarity</span></div><div class="body"><p class=""><b>这是 one-hot 的致命伤，而它是上一条那个心智模型的直接后果。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以问题是：如果你用 one-hot 的方式表示你的 token，你最后会得到所有的向量彼此两两正交。所以这就是问题所在</u>。」</b></p>
+<p class=""><b>★★ 为什么必然正交，值得自己算一遍</b>：<b><u>soft = (1,0,0)、teddy bear = (0,1,0)</u>。</b><b>点积是 1×0 + 0×1 + 0×0 = <u>0</u>。</b><b>⇒ 而这不是巧合：<u>两个不同 token 的那个「1」一定在不同位置，所以逐位相乘必然处处为 0</u>。</b></p>
+<p class=""><b>★★★ 把这个数学事实翻译回语义，问题的严重性就出来了</b>：<b>按上一条的心智模型，<u>余弦为 0 意味着「独立、毫无关系」</u>。</b><b>⇒ 所以 one-hot 表示在说：<u>词表里任意两个词之间都毫无关系</u>。</b></p>
+<p class=""><b>⇒ 「cat」和「dog」毫无关系；「bear」和「bears」毫无关系（这正好接上分词那一段的抱怨）；<u>「happy」和「joyful」也毫无关系</u>。</b></p>
+<p class="warn"><b>⚠ 而这不是「表示得不够好」，<u>是「表示里根本没有相似度这个维度」</u> —— 你再怎么比，得到的永远是 0。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">33:17</span><span class="en">And let us say teddy bear and book, which is independent, you want them to be closer to 0</span></div><div class="body"><p class=""><b>讲者用例子说清了「我们想要什么」，而这正是后面 Word2vec 要去实现的目标。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以理想情况下，我们想要的是：意思相同或相似的 token 基本上有高的相似度；而不相似、讲的是不同东西的 token，更接近正交</u>。」</b></p>
+<p class=""><b>⇒ <u>所以这里，纯粹为了说明：泰迪熊是软的。所以你想要 teddy bear 和 soft 之间有高的相似度。而假设 teddy bear 和 book 是独立的，你希望它们接近 0</u>。</b></p>
+<p class=""><b>★ 然后他做了一个很有效的展示动作</b>：<b>「<u>所以这是你想要的。这是 one-hot 编码给你的，而这是你想要的</u>。」—— <u>他把两张图并排放</u>。</b></p>
+<p class=""><b>★★ 这个「<u>把『现状』和『目标』并排放</u>」的展示方式值得学，因为它把问题变成了一个可以努力的方向</b>：<b>⇒ 左边是「全是 0」，右边是「该高的高、该低的低」。<u>接下来一整段（Word2vec）要做的事，就是从左边走到右边</u>。</b></p>
+<p class=""><b>⇒ 所以你可以带着一个很具体的问题去听下一段：<u>怎么才能让 teddy bear 和 soft 的向量靠得近？</u></b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>把 one-hot 的问题拆细一层，你会更明白下一段为什么是个大进步。</b></p>
+<p class=""><b>问题 ①：没有相似度。</b><b>就是本条讲的那个 —— <u>两两正交，任何两个词之间都「无关」</u>。</b><b>⇒ 这是讲者明确点出的那个。</b></p>
+<p class=""><b>问题 ②：维度浪费。</b><b>这一条讲者在这里没明说，但他讲 Word2vec 的网络结构时会说：<u>隐层维度 d 通常比词表小得多 —— 词表是几万或几十万，而 d 通常是几百，比如 768</u>。</b><b>⇒ 言下之意就是：<u>one-hot 用几万维去表示一个 token，而几百维就够了</u>。</b></p>
+<p class=""><b>★★ 而 Word2vec 的妙处在于它<u>用同一个办法把两件事一起修了</u></b>：<b>⇒ <u>把 one-hot 向量乘上一个矩阵，得到一个低维的稠密向量</u>（修掉 ②）；<u>而这个矩阵是通过一个「预测上下文」的任务学出来的，于是经常一起出现的词会得到相近的向量</u>（修掉 ①）。</b></p>
+<p class=""><b>⇒ 所以下一段你要盯住的就是这两件事：<u>维度怎么降下来的，以及相似度是怎么被「学」出来的</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜我想提前把下一段的核心逻辑点出来，因为带着它去听会清楚很多。</b></p>
+<p class=""><b>问题</b>：<b>one-hot 里确实没有相似度。<u>那我们希望的那个相似度，信息从哪来？</u></b></p>
+<p class=""><b>★★ 它不可能凭空出现。<u>没有人会去手工标注「teddy bear 和 soft 相似度 0.8」</u> —— 那样的话词表几万，要标的对数就是几亿。</b></p>
+<p class=""><b>⇒ 所以它<u>必须从数据里自动长出来</u>。而数据里有什么线索？</b></p>
+<p class=""><b>★★★ 线索就是那条著名的假设：<u>意思相近的词，会出现在相近的上下文里</u>。</b><b>⇒ 「软的玩具」「软的枕头」「软的毯子」—— <u>soft 周围反复出现一类词；而 teddy bear 周围也会出现 soft、cute、hug 这些</u>。</b><b>于是「谁和谁常一起出现」这件事，就隐含了「谁和谁相似」。</b></p>
+<p class=""><b>⇒ <u>而这正是 Word2vec 的全部赌注</u>：它不直接学相似度，<u>它学一个「用上下文预测词」的任务，然后把学出来的中间表示拿来当词向量</u>。</b></p>
+<p class=""><b>★ 讲者会把这个叫做 <u>proxy task（代理任务）</u>，而那是下一段最重要的一个概念。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">33:50</span><span class="en">So it is dot products</span></div><div class="body"><p class=""><b>这里学生插进来一个问题，而我建议你认真看讲者怎么回答 —— 那个回答的诚实程度很少见。</b></p>
+<p class=""><b>问题的来回</b>：<b>讲者先听成了一个意思，澄清说「<u>我想余弦相似度其实是被范数归一化过的，所以它是点积（除以范数）</u>」。</b><b>⇒ 然后他意识到学生问的是另一回事：「<u>哦，你是说我为什么这里只写了点积？…哦我明白了，你的问题是：我们为什么不在乎范数？</u>」</b></p>
+<p class=""><b>★ 他还顺手照顾了录像观众：「<u>好，我想观众现在知道问题是什么了</u>」—— 这正是第 5 条说的那个复述习惯在起作用。</b></p>
+<p class=""><b>★★ 而这个问题其实很尖锐，值得你也想一想</b>：<b>余弦相似度<u>故意</u>把范数除掉了，也就是说<u>它只看方向，完全不管向量有多长</u>。</b><b>⇒ 可向量的长度真的没有信息吗？</b><b>直觉上，<u>一个在训练数据里出现很多次的词，它的向量可能会被「推」得更长</u> —— 那长度里似乎藏着「这个词有多常见/多确定」这类信息。</b></p>
+<p class=""><b>⇒ 讲者的回答就在下一镜，而他没有给一个漂亮的答案。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">34:20</span><span class="en">So I guess why do you not care about the norm?</span></div><div class="body"><p class=""><b>讲者的回答分了几层，而我们照他的顺序走一遍。</b></p>
+<p class=""><b>第一层：这些都只是度量。</b><b>「<u>我想这些度量，它们都是度量。它们都是试图去捕捉这些「相似」的东西的某种方式</u>。」</b></p>
+<p class=""><b>⇒ 这句话的意思是：<u>余弦相似度、点积、L2 距离，都是人为选定的量，没有哪一个是「正确的」</u>。</b></p>
+<p class=""><b>第二层：取决于向量怎么训出来的。</b><b>「<u>我想你需要看看你的向量是怎么被训练的，以及范数是否指示着什么东西</u>。」</b></p>
+<p class=""><b>★★ 这一层其实是个相当深的回答，值得展开</b>：<b><u>范数有没有意义，取决于训练目标有没有对范数施加压力</u>。</b><b>⇒ 如果损失函数只关心方向（比如训练时就用余弦），<u>那范数就是自由的、不携带信息</u>；而如果损失函数里出现了点积（范数会影响结果），<u>那范数就会被训练过程赋予含义</u>。</b></p>
+<p class=""><b>⇒ 所以「要不要管范数」这个问题<u>没有统一答案，它取决于你的模型是怎么被训出来的</u>。</b></p>
+<p class=""><b>★ 而下一镜是他的收口，那句话我觉得很值得你听到。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜是讲者的收口，而我认为它是本讲最该被注意到的一个片段 —— 不是因为技术内容，而是因为态度。</b></p>
+<p class=""><b>他的原话</b>：<b>「<u>我想我能给你的最好答案是：我想这是一种度量。这不是那个完美的度量。人们可能也会用点积作为度量，但是 —— 是啊，我没有一个很好的答案给你</u>。」</b></p>
+<p class=""><b>★★★ 请注意他做了什么：<u>他被问到一个他答不好的问题，于是他说他答不好</u>。</b><b>⇒ 他没有编一个听起来合理的理由，<u>也没有用术语把问题绕过去</u>。</b></p>
+<p class=""><b>⇒ 然后他给了一个「够用」的实践说法：「<u>但只要你捕捉到了这些向量指向哪里 —— 我想通常你在乎的就是它们之间的夹角。而一般来说，你不会真的把范数考虑进去</u>。」</b></p>
+<p class=""><b>★★ 为什么我要为这一段单独花一镜？因为<u>它告诉你怎么判断一个讲者/一篇论文可不可信</u>。</b><b>⇒ <u>一个在小问题上坦白说「我不知道」的人，在大问题上说「这是对的」时才值得你相信</u>。</b></p>
+<p class="warn"><b>⚠ 反过来，<u>一个对什么问题都有流畅答案的来源，你要提高警惕</u> —— 因为真实的知识是有边界的，而边界应该是可见的。</b></p>
+<p class=""><b>⇒ 这个片子也按同样的规矩办：<u>凡是我补的、不是讲者说的，都会标出来</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜是我补的（讲者没展开），但它是你以后一定会撞上的事。</b></p>
+<p class="warn"><b>⚠ 先声明：<u>这不是课上说的内容</u>。</b></p>
+<p class=""><b>两个度量的实际差别</b>：<b><u>余弦相似度只看方向</u>，所以两个向量不管多长，只要指同一个方向就是 1。</b><b><u>点积则把长度也算进去</u>，所以一个很长的向量和谁算都容易得到大值。</b></p>
+<p class=""><b>⇒ 这个差别在实践中有后果：<u>如果训练过程让高频词的向量更长，那用点积做检索时，高频词会天然占便宜</u> —— 不管它和查询是不是真的相关。</b></p>
+<p class=""><b>★ 而讲者在 L7 讲 RAG 时会顺带提到这件事的另一面</b>：<b>有学生问「默认的相似度是什么」，他答<u>是余弦</u>，但补充说<u>你会在不同实现里看到人们用别的距离，比如 L2；不过如果所有向量的模长都是 1，就能做很多化简 —— 所以那些变体多多少少都是余弦相似度</u>。</b></p>
+<p class=""><b>⇒ 「<u>如果都归一化到模长 1</u>」这个前提很关键：<u>归一化之后，点积就等于余弦，L2 距离也和余弦一一对应</u>。</b><b>★ 所以实践中的常见做法是<u>先归一化，然后随便用哪个都一样</u> —— 这就把这个选择问题消解掉了。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">35:39</span><span class="en">So the question is around size of vocabulary</span></div><div class="body"><p class=""><b>又一个课堂提问，而它问的是一个很实际的工程参数。</b></p>
+<p class=""><b>讲者的复述</b>：<b>「<u>这是个很好的问题。所以问题是关于词表的大小，以及这会怎么影响「选词级还是子词级」这个选择，还有这在不同语言之间怎么变化。很好的问题</u>。」</b></p>
+<p class=""><b>⇒ 又一次印证了第 5 条：<u>复述习惯让这个问答对录像观众完全可用</u>。</b></p>
+<p class=""><b>他的第一层回答</b>：<b>「<u>我会说，首先这真的取决于你试图达成的任务</u>。」</b></p>
+<p class=""><b>⇒ 然后他给了最常见的那个情形：<u>如果你的任务只关于一种语言，那你就用那同一种语言。而你通常会用子词分词器 —— 正是出于我们刚才提到的那些理由</u>。</b></p>
+<p class=""><b>★ 他接着把子词级的定位说得特别清楚，这句话值得记</b>：<b>「<u>我想子词是一个不错的折中：既能通过词根来识别词、利用上那一点，同时又更少撞上 OOV 的风险</u>。」</b></p>
+<p class=""><b>⇒ 这正好印证了第 18 条那个结论：<u>子词级赢在它在每个维度上都不差</u>。而这里是讲者自己用「折中（trade-off）」这个词确认的。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">36:11</span><span class="en">So I guess subwords is a nice trade-off</span></div><div class="body"><p class=""><b>具体的量级，而这是少数几个值得直接背下来的数字。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以在大小方面，我知道人们试过不同的做法。我想对英语来说，你通常会瞄准「几万」这个量级的词表大小。但如今，这些模型是多语言的，而且还关于代码。所以你会看到词表大小现在有时候是「几十万」这个量级</u>。」</b></p>
+<p class=""><b>⇒ 他最后收口：<u>所以我会说，数量级上：单语言几万，多语言几十万。这些就是你想瞄准的数量级</u>。</b></p>
+<p class=""><b>★★ 为什么「含代码」会让词表变大，值得想一层</b>：<b>代码里有大量自然语言里没有的符号组合 —— <u>缩进、括号配对、运算符、驼峰命名、各种语言的关键字</u>。</b><b>⇒ 如果词表里不给它们位置，<u>代码就会被切得极碎</u>（回想第 15 条：生僻符号往往被切成很多 token）。<u>而代码被切碎既贵又伤效果</u>。</b></p>
+<p class=""><b>★ 这个数字还有一个实际用处：<u>词表大小直接决定模型输出层（softmax 那一层）的大小</u>。</b><b>⇒ 几十万的词表意味着每生成一个 token 都要在几十万个选项上算 softmax —— <u>这是生成的固定开销之一</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">36:44</span><span class="en">But nowadays, the models, they are multilingual, they are also about codes</span></div><div class="body"><p class=""><b>关于语言差异的那一问，讲者答得比较简略，我把它和一点背景一起说。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>关于中文，我想那里你会有「你所使用的字符」上的差别。对拉丁语系来说，我想那就是我们都习惯的那套字母表。但当然对其它那些语言，你会有类似的东西，只是是在目标语言的字符上</u>。」</b></p>
+<p class=""><b>⇒ 然后他回到了量级结论：<u>单语言几万、多语言几十万</u>。</b></p>
+<p class="warn"><b>⚠ 他没有展开，而这里确实有一个真实的差异值得你知道（<u>以下是我补的</u>）</b>：<b><u>中文没有空格分词，而且单个汉字本身就携带意义</u>。</b><b>⇒ 这让「词 / 子词 / 字符」这三档在中文里的分界和英文很不一样：<u>英文的「字符级」是字母（几乎没有意义），而中文的「字符级」是汉字（有相当的意义）</u>。</b></p>
+<p class=""><b>★ 所以第 17 条那个「<u>切得越细，每块越没有意义</u>」的结论，<u>在中文上的斜率要平缓得多</u> —— 这也是为什么中文模型用字级切分的可行性比英文高。</b></p>
+<p class=""><b>⇒ 但词表那一侧反过来：<u>常用汉字几千，而要覆盖足够的词组又会把词表推大</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">37:17</span><span class="en">So yeah, I would say order of magnitude, tens of thousands for one language</span></div><div class="body"><p class=""><b>这一小段是过渡，而学生问的正是前面留下的那个悬念。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>很好的问题。所以问题是：你怎么得到那些 embedding？其实这就是下一张幻灯，所以我这就讲</u>。」</b></p>
+<p class=""><b>★ 这个巧合其实不是巧合 —— <u>讲者把内容铺到了一个让人自然会问这个问题的位置</u>。</b><b>⇒ 他先让你看到 one-hot 的致命伤（全正交），再让你看到「想要的样子」（teddy bear 与 soft 相近），<u>这时「那怎么做到？」就成了一个你自己会问的问题</u>。</b></p>
+<p class=""><b>⇒ 这是很好的讲法：<u>先制造缺口，再填上</u>。比起直接讲 Word2vec 是什么，这样你会一直知道「它在解决什么」。</b></p>
+<p class=""><b>★★ 所以带着这个问题进入下一段：<u>怎么才能让 teddy bear 和 soft 的向量靠得近？</u></b></p>
+<p class=""><b>⇒ 而第 20 条最后那一镜已经预告了答案的形状：<u>相似度必须从数据里长出来，而数据里的线索是「意思相近的词出现在相近的上下文里」</u>。</b></p>
+<p class=""><b>⇒ 下一段的主角是 <u>Word2vec</u>，而它的核心概念是 <u>proxy task（代理任务）</u>。</b></p></div></article>
+</section>
+<section id="m-f"><h2><span class="tag">模块 f</span>字幕第 368–493 句（37:49–53:17）：Word2vec 全程<small>句 368–493 · 37:49–53:17</small></h2>
+<article class="card"><div class="meta"><span class="ts">37:49</span><span class="en">So now that we know that the one-hot encoding is not a good way to represent tokens</span></div><div class="body"><p class=""><b>这是整段的转折点，而它的形状比内容更值得记。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以现在既然我们知道 one-hot 编码不是一个表示 token 的好方式，我们想做的就是从数据里学出那些 embedding</u>。」</b></p>
+<p class=""><b>★★ 请看清这个转折的性质</b>：<b>one-hot 是<u>人为指派</u>的 —— 第 i 个 token 就在第 i 位放个 1，<u>没有任何数据参与</u>。</b><b>⇒ 而现在的做法是：<u>让表示成为训练的产物</u>。</b></p>
+<p class=""><b>★★★ 这个「从人设计表示，到让模型学表示」的转变，是整个深度学习的缩影</b>：<b>⇒ 图像领域是从 <u>SIFT、HOG 这些手工特征</u> 到 <u>卷积网络自己学出来的特征</u>；而 NLP 这边就是从 <u>one-hot 和各种手工特征</u> 到 <u>学出来的词向量</u>。</b></p>
+<p class="warn"><b>⚠ 而这个转变有一个代价，值得你同时知道：<u>学出来的表示没有人能直接解释</u>。</b><b>one-hot 的每一维有明确含义（这一维就是「是不是 book」），<u>而学出来的 768 维里，没有哪一维有名字</u>。</b></p>
+<p class=""><b>⇒ 这正是下一镜要讲的事之所以让人兴奋的原因：<u>Word2vec 居然做到了让这些不可解释的维度，呈现出可以解释的结构</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">38:19</span><span class="en">And the reason why it was so popular is because they showed a very intuitive and interpretable way</span></div><div class="body"><p class=""><b>Word2vec 为什么出名，讲者给的理由不是「效果好」，而是「<u>它让人看懂了</u>」。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我提到过有一篇 2010 年代出来的论文 —— 我想是 2013 年 —— 叫 Word2vec。而它之所以这么流行，是因为他们展示了一种非常直观、非常可解释的方式去看待这些 embedding</u>。」</b></p>
+<p class=""><b>⇒ 因为他们在说这样的话：<u>「king 之于 queen，就像这个之于那个」；「Paris 之于 France，就像 Berlin 之于 Germany」</u>。</b><b>★ <u>所以基本上有了一种办法，能让这些 embedding 说得通</u>。</b></p>
+<p class=""><b>★★ 这些类比之所以震撼，在于它们是<u>向量运算</u>上成立的</b>：<b>著名的那个形式是 <u>king − man + woman ≈ queen</u>。</b><b>⇒ 也就是说，<u>「性别」这个概念在向量空间里对应一个固定的方向</u>；而 <u>Paris − France + Germany ≈ Berlin</u> 说明「首都关系」也是一个方向。</b></p>
+<p class=""><b>★★★ 而这件事为什么重要？回到上一镜的那个代价：<u>学出来的维度本来没有人能解释</u>。</b><b>⇒ 而 Word2vec 显示：<u>虽然单独一维没有名字，但向量之间的「方向」是有结构的</u>。<u>意义不在坐标轴上，在相对关系里</u>。</b></p>
+<p class=""><b>⇒ 这是一个很深的观念转变，而它一直延续到今天的 LLM。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>把这件事接回第 20 条留下的那个目标，你会看到 Word2vec 其实超额完成了。</b></p>
+<p class=""><b>当时的目标</b>：<b><u>teddy bear 和 soft 相似度高，teddy bear 和 book 接近 0</u>。</b><b>⇒ 也就是说，<u>我们只要求「相似的靠近、不相似的远离」</u>。</b></p>
+<p class=""><b>Word2vec 给出的</b>：<b>⇒ <u>相似的确实靠近了</u>（目标达成）；<u>但它还附带给出了方向上的结构</u> —— 也就是那些类比关系。</b></p>
+<p class=""><b>★★ 而这个「附带」的部分才是它出名的原因，这一点很值得体会</b>：<b><u>没有人在训练目标里要求过「性别方向要一致」</u>。</b><b>训练目标只是「用上下文预测词」。<u>而类比结构是自己冒出来的</u>。</b></p>
+<p class=""><b>⇒ 这类「<u>训练目标里没要求，但结果里出现了</u>」的现象，在这门课里会反复遇到，而且越往后越壮观</b>：<b>L6 里 R1-Zero 只被要求「格式对 + 答案对」，<u>而推理能力自己长出来了</u>；L2 里 BERT 只被要求填空，<u>而它学到了可用于各种下游任务的表示</u>。</b></p>
+<p class=""><b>★ 所以这是一条值得带走的直觉：<u>一个好的代理任务，产出的东西往往比它要求的多</u>。而下一条讲的正是「代理任务」这个概念。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">38:51</span><span class="en">The other one was called skip gram</span></div><div class="body"><p class=""><b>Word2vec 有两种算法，但讲者立刻强调了它们的共同点。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以现在的问题是：他们是怎么做到的？他们有两种计算这些 embedding 的方式。一种叫 continuous bag of words（连续词袋，CBOW），另一种叫 skip gram</u>。」</b></p>
+<p class=""><b>两者的区别</b>：<b><u>比如 continuous bag of words，目标是把一个给定目标词「周围」的词考虑进来，而你的目标是预测那个目标词</u>。</b><b>⇒ <u>而 skip gram 正好相反：你从一个目标词出发，想预测它周围的那些词</u>。</b></p>
+<p class=""><b>★ 记法：<u>CBOW 是「周围 → 中心」，skip-gram 是「中心 → 周围」</u>。</b><b>⇒ 一个填空，一个扩散。</b></p>
+<p class=""><b>★★ 但讲者立刻把重点拉回共同点</b>：<b>「<u>但它们都依赖同一个想法，那就是：让我们利用手上已有的文本，然后试着基于比如上下文，去预测文本的一部分</u>。」</b></p>
+<p class=""><b>⇒ 请注意这句话里最关键的是「<u>手上已有的文本</u>」—— <u>不需要任何标注</u>。</b><b>⇒ 这正是第 11 条那个「数据代价梯度」里说的事：<u>这类任务的标签是文本自己提供的，所以完全免费</u>。</b></p>
+<p class=""><b>⇒ 而下一条要讲的「代理任务」，是理解这一整套的钥匙。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">39:25</span><span class="en">And skip gram is the opposite</span></div><div class="body"><p class=""><b>这是本段最重要的一个概念，而它的名字就说明了一切。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以我想这个任务通常被称为 proxy task（代理任务）</u>。」</b></p>
+<p class=""><b>★★ 「proxy」就是「替身、代理」的意思。而要理解它，得先问：<u>它在替谁？</u></b></p>
+<p class=""><b>⇒ 答案是：<u>替「学出有意义的词表示」这件事</u>。</b></p>
+<p class="warn"><b>⚠ 为什么需要一个替身？因为「<u>有意义的词表示</u>」<u>没法直接拿来训练</u></b>：<b>你没法写出一个损失函数说「让这个向量更有意义一点」—— <u>「有意义」不是一个可以求导的量</u>。</b></p>
+<p class=""><b>★★★ 所以代理任务的逻辑是</b>：<b><u>找一个「可以训练」而且「做好了就说明学到了我想要的东西」的任务，训它，然后把中间产物拿走</u>。</b></p>
+<p class=""><b>⇒ 这个套路在机器学习里极其普遍，而且它正是这门课后面好几件事的原型</b>：<b>L2 的 BERT 用「<u>填空</u>」当代理学通用表示；L4 的预训练用「<u>预测下一个 token</u>」当代理学语言结构；L7 的 Sentence-BERT 用「<u>相关的余弦高、不相关的低</u>」当代理学检索用的嵌入。</b></p>
+<p class=""><b>⇒ 下一条讲者会解释「为什么这个替身是合格的」。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">39:56</span><span class="en">And so here the idea is, if you have a model that somehow knows how to predict, let us say, the next word</span></div><div class="body"><p class=""><b>代理任务凭什么能替？讲者的论证只有一句话，但它是整件事的支点。</b></p>
+<p class=""><b>他先把真实目标说清</b>：<b>「<u>因为归根结底，在这个练习里，我们关心的不一定是预测下一个词 —— 或者至少现在还不是。我们的目标是学到这些词的一个有意义的表示</u>。」</b></p>
+<p class=""><b>★★★ 然后是那个支点</b>：<b>「<u>所以这里的想法是：如果你有一个模型，它多少知道怎么去预测下一个词，那就意味着你的模型对「语言是怎么运作的」有某种理解 —— 而那基本上就是你想要的</u>。」</b></p>
+<p class=""><b>⇒ 请把这个论证的结构看清楚：<u>A（会预测下一个词）⇒ B（对语言有理解）⇒ B 正是我们要的</u>。</b></p>
+<p class=""><b>★ 而第二步是关键，也是可质疑的一步</b>：<b>「会预测下一个词」真的蕴含「对语言有理解」吗？</b><b>⇒ <u>在 Word2vec 这个规模上，这个推论是朴素但有效的</u>。</b></p>
+<p class="warn"><b>⚠ 而有意思的是：<u>同一个论证在 LLM 的规模上被推到了极致，也因此引发了最大的争议</u>。</b><b>讲者在 L6 会用一个更谨慎的说法谈这件事：<u>LLM 回应问题的方式是「让自己听起来说得通」—— 它在优化 token 序列的概率</u>。</b><b>⇒ <u>「听起来说得通」和「理解」之间有多大距离，是今天仍在争论的问题</u>。而这门课的态度是：按功能定义、不谈内在。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">40:16</span><span class="en">You basically want an embedding that is reflective of, I guess, what language is</span></div><div class="body"><p class=""><b>讲者把目标又说了一遍，而这次他用的词正好解释了「embedding」这个名字。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>你基本上想要一个能反映「语言是什么」的 embedding —— king 和 queen 是相似的，或者 Paris 和 France，这是一个首都（关系）。你想要把这些关联嵌进（embedded in）这个表示里</u>。」</b></p>
+<p class=""><b>★ 「<u>嵌进</u>」这个词值得留意：<u>embedding 这个术语就是从这里来的</u>。</b><b>⇒ 它的字面意思是「把某个东西嵌入到另一个空间里」—— <u>把离散的词，嵌入到一个连续的向量空间里</u>。</b><b>而「嵌入」要保住的，正是词与词之间的那些关系。</b></p>
+<p class=""><b>★★ 这给了你一个判断嵌入好坏的标准，而且它比「准确率」更本质：<u>好的嵌入，是「保结构」的嵌入</u>。</b><b>⇒ 原空间（语言）里相近的，嵌入后也相近；原空间里有的关系（首都、性别、单复数），嵌入后仍能看出来。</b></p>
+<p class=""><b>⇒ 这个「保结构」的视角在后面还会有用：<u>L7 讲 Sentence-BERT 时，问题正是「普通 BERT 的向量不保证『余弦大 = 语义相关』」—— 也就是它没保住我们要的那个结构</u>。</b><b>⇒ 所以才要专门设计损失去保它。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">40:39</span><span class="en">And let us go through a very simple example of what that looks like</span></div><div class="body"><p class=""><b>讲者要走一个具体例子了，而他做了一个简化，这个简化本身值得点出来。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>让我们走一个非常简单的例子，看看那是什么样子。所以这里在我们的例子里，假设我们的代理任务是关于预测下一个词</u>。」</b></p>
+<p class="warn"><b>⚠ 请注意：<u>「预测下一个词」既不是 CBOW（周围→中心），也不是严格的 skip-gram（中心→周围）</u>。</b><b>它是一个更简单的版本。</b></p>
+<p class=""><b>★★ 而这个简化是对的，因为他要讲的不是 Word2vec 的具体算法，<u>而是「表示是怎么被学出来的」这个机制</u>。</b><b>⇒ 而这个机制在三种代理任务下完全一样：<u>把 one-hot 乘进一个矩阵 → 得到低维向量 → 用它去预测 → 根据误差更新矩阵 → 最后把矩阵的那一列拿走当表示</u>。</b></p>
+<p class=""><b>⇒ 所以用最简单的那个代理任务来演示，是把无关的复杂度去掉了。</b></p>
+<p class=""><b>★ 这个「<u>为了讲清机制而主动简化细节</u>」的做法在教学上很重要，但它有一个前提：<u>要说清自己简化了什么</u>。</b><b>⚠ 讲者这里说了「假设我们的代理任务是…」，算是交代了。<u>而这个片子会把「他简化了什么」明确标出来</u>，免得你以为 Word2vec 就是这么做的。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">41:01</span><span class="en">So here what we take is a very vanilla neural network model</span></div><div class="body"><p class=""><b>网络本身极其简单，而它的要害在两个维度的关系上。</b></p>
+<p class=""><b>讲者的描述</b>：<b>「<u>所以这里我们拿的是一个非常原味（vanilla）的神经网络模型，它基本上接收一个大小为 v 的向量，做一次乘法加一个偏置项得到一个隐状态，然后再做一组乘法得到我们的最终向量。所以这里基本上就是一个非常简单的神经网络</u>。」</b></p>
+<p class=""><b>两个维度</b>：<b><u>输入的大小是 v</u>（也就是词表大小，因为输入是 one-hot）。</b><b><u>隐层的大小是 d，而 d 通常比词表小得多</u>。</b></p>
+<p class=""><b>★★★ 「<u>d 远小于 v</u>」这一句就是整个设计的要害，值得停下来想清楚</b>：<b>⇒ 这意味着<u>信息必须被压缩</u>。</b><b>几万维的 one-hot 要挤进几百维，<u>而且还要能预测出下一个词</u>。</b></p>
+<p class=""><b>⇒ 而正是这个「挤」的过程，逼出了我们想要的东西：<u>既然维度不够，那就只能把「行为相似的词」安排到相近的位置上</u>。</b><b>⚠ 如果 d 和 v 一样大，网络完全可以把每个词放在互不相干的位置上 —— <u>那就学不出任何相似度</u>。</b></p>
+<p class=""><b>★ 所以「压缩」不是为了省内存，<u>它是学出相似度的必要条件</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">41:33</span><span class="en">The hidden layer is of size d, which is typically much smaller than the vocabulary</span></div><div class="body"><p class=""><b>两个维度的量级，而 768 这个数字你会一直见到。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以词表通常是几万或者几十万。而 d 通常是几百 —— 比如 768 就是一个维度的例子。所以它小得多、小得多</u>。」</b></p>
+<p class=""><b>★ <u>768</u> 这个数字值得记住，因为它在这个领域里几乎是个文化符号</b>：<b>⇒ 它是 BERT-base 的隐层维度，而因为 BERT 的影响力，<u>后来无数模型和工具都沿用了它</u>。</b><b>⇒ 讲者在后面回答「隐层该多大」时会再提一次：<u>768 这些数字是人们通常会取的</u>。</b></p>
+<p class=""><b>★★ 压缩比值得算一下</b>：<b>词表五万、隐层 768 ⇒ <u>压缩了约 65 倍</u>。</b><b>而如果词表是几十万，压缩比还要高好几倍。</b></p>
+<p class=""><b>⇒ 想想这意味着什么：<u>几十万个词，每个都要在 768 维里找到自己的位置，而且位置之间的关系要能反映语义</u>。</b><b>⚠ 这里有一个很容易被忽略的事实：<u>768 维空间能装下的「彼此近似正交」的方向，远多于 768 个</u>。</b><b>⇒ 这就是为什么压缩这么狠还能工作 —— <u>高维空间比我们的三维直觉「宽敞」得多</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜是我补的一层解释（讲者没有明说），但它能让后面那几镜一下变清楚。</b></p>
+<p class=""><b>观察</b>：<b>one-hot 向量 <u>(0, 1, 0, 0, 0)</u> 乘一个矩阵，结果是什么？</b><b>⇒ 因为只有第 2 位是 1、其余全是 0，<u>所以结果就是那个矩阵的第 2 行</u>。</b></p>
+<p class=""><b>★★★ 所以「one-hot 乘矩阵」这个运算，<u>实际上就是一次查表</u>。</b><b>⇒ 而那个矩阵，<u>每一行正好对应词表里的一个 token</u>。</b></p>
+<p class=""><b>⇒ 于是结论很漂亮：<u>那个矩阵就是「嵌入表」，它的第 i 行就是第 i 个 token 的 embedding</u>。</b></p>
+<p class=""><b>★ 这一点之所以重要，是因为它解释了第 27 条里那个关键动作</b>：<b>讲者会说「<u>我们要把模型学到的那个表示拿走，就是绿色那些单元</u>」。</b><b>⇒ 而现在你知道了：<u>所谓「拿走绿色单元」，就是把这个矩阵保存下来，以后直接查表用</u>。</b></p>
+<p class="warn"><b>⚠ 而这也解释了为什么实现里根本不会真的去做那个矩阵乘法：<u>既然是查表，直接按下标取那一行就行了</u>。</b><b>⇒ 这在代码里叫 embedding lookup，是个纯粹的索引操作。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">41:33</span><span class="en">So vocabulary is typically like tens of thousands or hundreds of thousands</span></div><div class="body"><p class=""><b>这一镜也是我补的，但它说明了一件对后面很有用的事：<u>这个网络的代价不在输入端，在输出端</u>。</b></p>
+<p class=""><b>输入端（v → d）</b>：<b>如上一镜所说，<u>它只是一次查表</u>。</b><b>虽然嵌入表本身有 v×d 个参数（几万乘几百，也不小），<u>但每次前向只取一行</u>。</b></p>
+<p class="warn"><b>⚠ 输出端（d → v）</b>：<b>这一侧要算出<u>词表里每一个词的概率</u>。</b><b>⇒ 所以它是一个 <u>d × v</u> 的矩阵，<u>而且每次前向都要把全部 v 个输出算出来，再做 softmax</u>。</b></p>
+<p class=""><b>★★ 于是词表大小的成本就清楚了：<u>它不在「存」，在「算」</u>。</b><b>⇒ 词表从五万涨到五十万，<u>输出层的计算量就涨十倍</u> —— 而这个开销每生成一个 token 都要付一次。</b></p>
+<p class=""><b>⇒ 这解释了第 22 条里那句话：<u>词表大小直接决定输出层 softmax 的大小，这是生成的固定开销之一</u>。</b></p>
+<p class=""><b>★ 顺带一提：<u>这也是 Word2vec 原论文里有那么多「怎么避免算全部 softmax」的技巧的原因</u>（负采样、层次 softmax）。讲者没有讲这些，因为它们不影响理解机制。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">42:12</span><span class="en">So let us go with the first word of the sequence</span></div><div class="body"><p class=""><b>现在走一个具体的前向，而讲者先打了个招呼。</b></p>
+<p class=""><b>他的声明</b>：<b>「<u>顺便说，我把 token 和 word 混着用</u>。」</b><b>⇒ 这和第 18 条那个自我更正（「word representation 更正确地说该叫 token representation」）是一回事：<u>术语是历史遗留的，而讲者选择不在措辞上纠缠</u>。</b><b>知道就行。</b></p>
+<p class=""><b>这一步做什么</b>：<b>「<u>我们从序列的第一个词开始。假设我们有词「a」，而我们想预测下一个词，也就是词「cute」。所以我们做的是：拿词「a」，取它的 one-hot 编码表示，把它传进网络</u>。」</b></p>
+<p class=""><b>★★ 请注意这个任务的设定有多朴素：<u>输入一个词，输出下一个词</u>。</b><b>没有上下文、没有顺序信息、没有注意力 —— <u>就是一个词进、一个词出</u>。</b></p>
+<p class=""><b>⇒ 而这个朴素正是后面一连串改进的起点</b>：<b><u>RNN 会加上「之前所有词的记忆」；注意力会加上「直接看任意位置」</u>。</b><b>⇒ 所以请记住这里的局限：<u>这个网络对「a」的表示，和它出现在哪句话里完全无关</u>。</b><b>这正是本讲最后那个学生问到的问题（同形不同义怎么办）的根源。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">42:42</span><span class="en">So here, if you are familiar with neural networks</span></div><div class="body"><p class=""><b>前向的第一步，而这一步就是上一条讲的那个「查表」。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以这里，如果你熟悉神经网络的话 —— 这里你有一个矩阵和这个向量之间的乘法。于是你有一个隐状态的表示，它是一个大小为 d 的向量。所以这里，假设它是 0.2 和 0.9，也就是 d 等于 2</u>。」</b></p>
+<p class="warn"><b>⚠ 请记住 <u>d = 2 只是为了能画在幻灯上</u>。真实的 d 是几百（讲者刚说过 768）。</b></p>
+<p class=""><b>★★ 而按第 25 条最后那一镜，这一步的实质是：<u>把嵌入表里对应「a」的那一行取出来</u>。</b><b>⇒ 所以 <u>(0.2, 0.9) 就是词「a」此刻的 embedding</u>。</b></p>
+<p class=""><b>⇒ 「此刻」这两个字很重要：<u>它现在还是随机初始化的、没有意义的；要经过大量训练之后，它才会变成有意义的那个向量</u>。</b></p>
+<p class=""><b>★★★ 所以整个训练过程，<u>本质上就是在反复调整这张表里的每一行</u>。</b><b>⇒ 而调整的依据，是「用这一行去预测下一个词，预测得准不准」。<u>这就是代理任务起作用的地方</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">43:07</span><span class="en">And then you get, after softmax, a set of probabilities</span></div><div class="body"><p class=""><b>前向的第二步，输出端。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>然后你有另一次传递。然后在 softmax 之后，你得到一组概率，它们是关于「下一个词是什么」的。所以在这个例子里，我们有一个大小为 6 的词表。所以第一个词以 0.2 的概率被预测，第二个词 0.4，然后在这个例子里其它词都是 0.1</u>。」</b></p>
+<p class=""><b>★ 验一下：<u>0.2 + 0.4 + 0.1×4 = 1.0</u>。</b><b>⇒ 这是 softmax 的作用：<u>把任意一组实数变成一个合法的概率分布（都非负、加起来是 1）</u>。</b></p>
+<p class=""><b>★★ 这个输出的形状值得记住，因为它从这里一直延续到 LLM</b>：<b><u>输出永远是一个「词表大小」的概率向量</u>。</b><b>⇒ 本讲最后 Shervine 的端到端走查里，解码器的最后一步也正是这个：<u>线性投影 + softmax，得到词表上的一个概率分布</u>。</b></p>
+<p class=""><b>⇒ L3 讲解码策略（贪心、beam search、top-k、top-p、温度）时，<u>所有策略都是在对这个向量做文章</u>。</b></p>
+<p class="warn"><b>⚠ 而第 25 条最后说的那个成本也在这里：<u>这个向量有多长，取决于词表多大，而它每一步都要算一遍</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">43:36</span><span class="en">So let us suppose that we want to somehow be able to maximize our prediction</span></div><div class="body"><p class=""><b>现在到了「教」的部分，而讲者把监督信号的形式说得很清楚。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>假设我们想要以某种方式能够最大化我们的预测，让它是词表里的第二个词，也就是那个 0.4。所以我们基本上是把预测结果和 (0, 1, 0, 0, 0) 去比较 —— 那是词表里第二个词的表示。然后我们做反向传播，更新权重</u>。」</b></p>
+<p class=""><b>★★ 请看清这里的结构：<u>「真值」也是一个 one-hot 向量</u>。</b><b>⇒ 模型输出的是一个概率分布 <u>(0.2, 0.4, 0.1, 0.1, 0.1, 0.1)</u>，而真值是 <u>(0, 1, 0, 0, 0, 0)</u>。</b><b>训练就是让前者去靠近后者。</b></p>
+<p class="warn"><b>⚠ 注意一件事：<u>真值要求的是「第二个词的概率是 1，其余全是 0」</u>。</b><b>也就是说，<u>训练目标要求模型「完全确定」</u>。</b></p>
+<p class=""><b>★★★ 而这件事在本讲最后会被专门拿出来质疑 —— 那就是 <u>label smoothing</u>。</b><b>讲者会说：<u>在 NLP 里，当你想预测接下来是什么时，通常不止一种可能（「what a great day / lecture / book」）</u>。</b><b>⇒ 所以逼模型说「就是这个、100%」其实是不合理的。<u>label smoothing 就是把那个 1 改成 1−ε，把 0 改成 ε/(v−1)</u>。</b><b>⇒ 现在先记住这个「强行要求确定」的设定，等到那一条你会立刻明白它在修什么。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">44:14</span><span class="en">But the idea here is, once you obtain a prediction, you compute the loss</span></div><div class="body"><p class=""><b>反向传播这一段，讲者照例没有假设大家都懂。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我不确定是不是每个人都熟悉那一部分。但这里的想法是：一旦你得到一个预测，你计算损失 —— 通常是交叉熵，它会决定你离真实答案有多远。而基于那个差距，你就去更新权重，好让你的预测更接近真值。所以这就是你做的事。然后你重复这个过程</u>。」</b></p>
+<p class=""><b>★ 交叉熵在这里是自然的选择，理由值得点一句</b>：<b>⇒ 模型输出的是一个<u>概率分布</u>，真值也是一个（退化的）<u>概率分布</u>。<u>比较两个概率分布的标准工具就是交叉熵</u>。</b></p>
+<p class="warn"><b>⚠ 而交叉熵在真值是 one-hot 时会简化成一个很简单的形式：<u>只剩下「−log(目标词的概率)」这一项</u>。</b><b>⇒ 因为真值里其余位置都是 0，乘进去就没了。</b></p>
+<p class=""><b>★★ 这个简化形式很好记，也很有解释力：<u>你给正确答案的概率越高，损失越小</u>。</b><b>⇒ 而且因为是 log，<u>当你给正确答案的概率接近 0 时，损失会趋于无穷大</u> —— 也就是说，<u>「把正确答案判成几乎不可能」会受到极重的惩罚</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">44:45</span><span class="en">So the one-hot encoding representation is 0, 1, 0, 0, 0</span></div><div class="body"><p class=""><b>第二轮，而对照两轮的隐状态能看清嵌入表的结构。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>然后你重复那个过程。假设你拿词「cute」—— 如我们所说它是词表里的第二个词。所以 one-hot 编码表示是 (0, 1, 0, 0, 0)。你过一遍那个网络，你有一个隐状态，比如向量是 0.8 和 0.4。你再做一次。而你想做的是预测下一个 token，这里是 teddy bear</u>。」</b></p>
+<p class=""><b>⇒ <u>而你看到现在在这个例子里，你的模型预测下一个词是均匀的，但你想以某种方式最大化 teddy bear 的概率</u>。</b></p>
+<p class=""><b>★★ 对照两轮的隐状态：<u>「a」是 (0.2, 0.9)，「cute」是 (0.8, 0.4)</u>。</b><b>⇒ 不同的词，不同的行 —— <u>这就是嵌入表</u>。</b><b>而训练要做的，就是让这些行慢慢移动到「有意义」的位置上。</b></p>
+<p class="warn"><b>⚠ 「预测是均匀的」这个细节也值得留意：<u>它说明模型此刻什么都还没学会</u>（均匀分布 = 完全没有偏好）。</b><b>⇒ 训练的全部作用，就是把这个均匀分布推成「在正确答案上尖起来」的形状。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">45:19</span><span class="en">So you go about doing this again and again for all the words</span></div><div class="body"><p class=""><b>这是整段 Word2vec 的收官动作，也是「代理任务」这个概念最直观的体现。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以你就这样一遍又一遍地对所有的词做下去。而到最后，你得到一个学会了怎么预测下一个词的模型 —— 那基本上就是那个代理任务。而你要做的是：把模型学到的那个表示拿走，也就是那些绿色的单元</u>。」</b></p>
+<p class=""><b>★★★ 请体会这个动作的果断</b>：<b><u>我们辛辛苦苦训了一个「会预测下一个词」的模型，然后把这个能力丢掉，只留下中间那一层</u>。</b></p>
+<p class=""><b>⇒ 这正是第 24 条里「代理任务」定义的兑现：<u>任务本身不是目的，它只是一个为了逼出好表示而设的借口</u>。</b></p>
+<p class=""><b>★ 而「绿色的单元」具体是什么？按第 25 条最后那一镜：<u>就是那张嵌入表 —— 也就是输入端那个矩阵</u>。</b><b>⇒ 所以「拿走绿色单元」= <u>把那个 v×d 的矩阵保存下来</u>。</b></p>
+<p class="warn"><b>⚠ 一个有意思的对照：<u>这个「训一个任务、丢掉任务、留下中间层」的套路，在今天仍然到处都是</u>。</b><b>L2 的 BERT 就是这么用的（预训练完，把 encoder 拿去做下游任务）；而 L4 的「预训练 + 微调」范式，本质上也是同一件事的放大版。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">45:54</span><span class="en">And you just multiply this with these weights, and then you obtain the green representation</span></div><div class="body"><p class=""><b>训完之后怎么用，讲者说得很简单。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以现在发生的事是：每当你有一个词，你就把它表示成 one-hot 编码表示，然后你把它和这些权重相乘，于是你就得到那个绿色的表示。而那就是你的词表示</u>。」</b></p>
+<p class=""><b>★ 而按第 25 条那一镜，这一步的实质就是<u>按下标取出嵌入表的那一行</u>。</b><b>⇒ 所以<u>训练很贵，但使用几乎免费</u>。</b></p>
+<p class=""><b>★★★ 这个「<u>训练一次、到处复用</u>」的性质值得单独点出来，因为它是一个范式的雏形</b>：<b>⇒ 你训一次 Word2vec，<u>得到的词向量可以给任何下游任务用</u> —— 情感分析、NER、翻译，都能拿这些向量当输入起点。</b></p>
+<p class=""><b>⇒ 而这正是 L4 开头讲的那个<u>迁移学习范式</u>的早期形态：<u>昂贵的那一步只付一次，成本被摊薄到无数个下游任务上</u>。</b></p>
+<p class="warn"><b>⚠ 但也要看到它的局限（本讲稍后就会讲到）：<u>Word2vec 的向量是「静态」的 —— 一个词永远是同一个向量，不管它出现在什么句子里</u>。</b><b>⇒ 这个局限正是学生马上要问到的那个问题，也是 L1 后半段（RNN → 注意力）要修的东西。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">46:57</span><span class="en">So you can technically have many variations of words</span></div><div class="body"><p class=""><b>学生问「v 是什么、为什么只有六个」，而讲者借这个问题回到了分词那一段的困难。</b></p>
+<p class=""><b>他先答了字面那一半</b>：<b><u>是的，在这个例子里我们只有六个可能的词，那基本上就是词表大小 —— 只是一个很玩具的例子，因为实践中要多得多</u>。</b></p>
+<p class=""><b>★★ 然后他说了那句更有分量的</b>：<b>「<u>所以我想这是语言的挑战之一：技术上说，你可以有一个词的很多很多变体 —— 而这就是为什么，如果你用词级的方式把文本切成 token，你最后可能得到一个非常大的词表，因为你需要把一个给定词的所有变体都算进去</u>。」</b></p>
+<p class=""><b>⇒ 这正好印证了第 15 条那个 bear / bears、run / runs 的例子：<u>每一个变形都要单独占一个词表位置</u>。</b></p>
+<p class=""><b>★ 而把两段连起来看，一条因果链就完整了</b>：<b><u>词级切分 ⇒ 每个变形各占一位 ⇒ 词表很大 ⇒ 输出层 softmax 很大（第 25 条讲的那个成本）、而且每个变形各学一个向量、学得都不好</u>。</b></p>
+<p class=""><b>⇒ <u>所以子词级要解决的不是一个问题，而是这一整串</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">47:31</span><span class="en">And so the answer for that is typically what people do is they reserve a spot</span></div><div class="body"><p class=""><b>第一个问答，它把第 18 条的 OOV 落到了实现上。</b></p>
+<p class=""><b>问题</b>：<b>学生问 v 是什么、为什么只有 6。讲者先答了玩具例子那一半，然后主动把问题推进了一步：<u>假设你的词表大小是 6，就是你训练时见过的那六个词。那如果推理时你碰到一个训练时没见过的词，会发生什么？</u></b></p>
+<p class=""><b>★ 答案</b>：<b>「<u>那个的答案是：人们通常会保留一个位置给他们所谓的 unknown token（未知 token）或者 out-of-vocabulary token —— 你基本上可以把它想成一个桶，装下所有我们没能识别出来的东西。所以假设推理时你有一个你没能识别的 token，它们全都会用那个表示，也就是 unknown token 的表示</u>。」</b></p>
+<p class=""><b>★★ 「<u>桶</u>」这个比喻很准，而它正好说明了 OOV 的代价有多大</b>：<b>⇒ <u>所有不认识的词共用同一个向量</u>。</b><b>一个罕见人名、一个新造词、一个拼错的词 —— <u>在模型眼里它们是同一个东西</u>。</b></p>
+<p class=""><b>⇒ 这正是第 18 条说的：<u>OOV 不是「少学到一点」，是「这个位置的信息被彻底抹掉」</u>。</b></p>
+<p class="warn"><b>⚠ 而讲者接着把三种分词的 OOV 风险又排了一遍：<u>词级机会大得多、子词级更低、字符级没有这个问题</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">48:53</span><span class="en">So the thing with the proxy task is when you train your model</span></div><div class="body"><p class=""><b>第二个问答，而它之所以微妙，正是因为「代理任务」这个设定。</b></p>
+<p class=""><b>讲者的回答</b>：<b>「<u>代理任务的问题在于：当你训练你的模型时，我想你真正的目标并不是去学会怎么预测下一个词 —— 你的目标是拥有有意义的表示。但你能做的，是去跟踪你所追求的那个代理任务的损失函数，同时也要记住这不一定是你的最终目标</u>。」</b></p>
+<p class=""><b>★★ 请看清这个两难：<u>你能测的东西（代理任务的损失）不是你要的东西（表示的质量）</u>。</b><b>⇒ 而你要的那个东西<u>没法直接测</u>（否则一开始就不用代理任务了）。</b></p>
+<p class=""><b>他给的实用办法</b>：<b>「<u>我想一个非常合理的做法就是等到你的模型收敛</u>。」</b><b>具体是：<u>把损失画成 epoch（你的模型看过训练集多少遍）的函数，比较这些曲线，当它收敛时通常就是个好的停止时机 —— 然后看看那样做是否说得通</u>。</b><b>⇒ 他还补了一句：<u>当然这取决于你的下游任务</u>。</b></p>
+<p class=""><b>★★★ 这个「代理指标和真实目标之间有缝」的问题，会在 L5 变成这门课最重要的一条警告 —— <u>reward hacking</u>。</b><b>⇒ 那里讲者会说：<u>优化一个不完美的代理优化得太狠，奖励最大化了而目标没达成</u>。<u>这里只是它温和的版本</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">49:24</span><span class="en">So I guess one very reasonable way of going about doing this is just to wait until your model converges</span></div><div class="body"><p class=""><b>上一镜说了「你能测的不是你要的」，这一镜是讲者给的实用出路。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以我想，一个非常合理的做法就是等到你的模型收敛。这里你做的是跟踪损失，把它作为 —— 有个术语叫 epoch，也就是你的模型把训练集看了多少遍 —— 的函数。然后你比较这些不同的曲线。而当它收敛时，这通常就是一个好的时机去停止训练过程，然后看看那样是否说得通</u>。」</b><b>⇒ 他补了一句：<u>当然，这取决于你的下游任务</u>。</b></p>
+<p class=""><b>★ 这里顺带引入了一个基础术语：<u>epoch = 把整个训练集完整过一遍</u>。</b><b>⇒ 它会在后面反复出现（L4 讲预训练时就用它来计量）。</b></p>
+<p class=""><b>★★ 而「<u>看看那样是否说得通</u>」这半句值得留意，因为它承认了一件事：<u>收敛只是一个停止的信号，不是「表示已经够好」的证明</u>。</b><b>⇒ 你最终还是得拿它去下游任务上试。</b></p>
+<p class=""><b>⇒ 这和他前一句「<u>取决于你的下游任务</u>」是一致的：<u>代理任务的训练什么时候算完，最终只能由真实目标来裁决</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">50:26</span><span class="en">So yeah, exactly</span></div><div class="body"><p class=""><b>这个问题是学生插进来的，而它正好补上了第 7 条留下的那个洞。</b></p>
+<p class=""><b>问题</b>：<b>讲者复述：<u>所以问题是：你怎么知道生成什么时候停？我想不然它就永远停不下来了</u>。</b></p>
+<p class=""><b>★ 答案</b>：<b>「<u>是的，正是。所以你有一些特殊 token。典型地，你有 end of sequence（序列结束）。所以通常当 end of sequence 这个 token 被生成出来时，那就是它停下来的时候</u>。」</b></p>
+<p class=""><b>★★ 回想第 7 条：<u>生成任务的定义里有「输出长度事先不知道」</u>。</b><b>⇒ 而既然不知道长度，就必须有一个「<u>什么时候算完</u>」的机制。<u>EOS 就是那个机制</u>。</b></p>
+<p class=""><b>⇒ 它的妙处在于：<u>停不停这件事，本身也是模型学出来的</u>。</b><b>EOS 和别的 token 一样参与训练 —— <u>模型学会在「该结束了」的地方给 EOS 高概率</u>。</b></p>
+<p class=""><b>★★★ 这个设计在本讲最后会被完整演示：<u>Shervine 的端到端走查里，解码一个 token 就把它喂回去、再解码下一个，直到撞上 EOS 为止</u>。</b><b>他还会把「什么时候停」这个问题抛给学生，答案就是 EOS。</b></p>
+<p class=""><b>⇒ 而 BOS（begin of sequence）是它的对偶：<u>解码的第一步需要一个起点，那就是 BOS</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">50:59</span><span class="en">So for instance, if you want to somehow get an embedding of, let us say, your sentence</span></div><div class="body"><p class=""><b>最后一个问答，而讲者把它处理成了一个标准的取舍问题。</b></p>
+<p class=""><b>他的两个因素</b>：<b>「<u>我会说这是个取舍，因为你希望 embedding 足够丰富，丰富到它能对你的下游任务有信息量</u>。」</b><b>⇒ <u>比如如果你想得到你句子的一个 embedding，而你想做一个非常非常专门的任务、有很多不同的结果，那也许你想要一个能重新捕捉到那些的向量，所以也许你想要一个更大的向量；但如果你的任务很简单，也许小一点的向量就说得通</u>。</b></p>
+<p class=""><b>⇒ 第二个因素：<u>你隐藏维度的大小也影响你后面跑的任何东西的复杂度。因为当然，如果你有更长的向量，你会有更多计算，所以你的推理可能会更贵</u>。</b></p>
+<p class=""><b>★ 他的小结</b>：<b>「<u>所以我想就是：一是你的下游任务有多复杂；二是你对延迟、成本这些东西有多敏感。所以这真的是个取舍</u>。」</b></p>
+<p class=""><b>量级</b>：<b><u>外面你通常会看到几百到几千的 embedding。当然这些模型一直在变大，所以这个数字可能会变。但那就是你要看的数量级</u>。</b><b>⇒ 他还说这<u>确实是经验性的</u>，而且<u>你也可以依赖别人的发现、从那儿出发 —— 768 这些数字是人们通常会取的</u>。</b></p>
+<p class="warn"><b>⚠ 最后还有个学生问「<u>同一个词拼写一样但语境不同怎么区分？</u>」—— 讲者说<u>你远远跑在我前面了，我们后面会讲把词放进句子里做上下文化的方法</u>。<u>那正是本讲后半段的主线</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">51:31</span><span class="en">Because of course, if you have longer vectors, you will have more computation</span></div><div class="body"><p class=""><b>这一镜把那个取舍的另一半说清，而它的形状你在这一讲里已经见过好几次了。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以我想你隐藏维度的大小，也影响你之后跑的任何东西的复杂度。因为当然，如果你有更长的向量，你会有更多的计算，所以你的推理很可能会更贵</u>。」</b></p>
+<p class=""><b>⇒ 他的小结：<u>所以我想有很多因素。总结一下：一是你的下游任务有多复杂；二是你对延迟、成本这些东西有多敏感。所以这真的是个取舍</u>。</b></p>
+<p class=""><b>★★ 把这个取舍和前面几个并排看，你会发现它们是同一个形状</b>：<b><u>chunk 大小（太小脱语境 / 太大代表不了）、子词 vs 字符（词根 vs 序列长度）、词表大小（覆盖 vs 输出层开销）、现在是嵌入维度（表达力 vs 计算）</u>。</b></p>
+<p class=""><b>⇒ <u>四个取舍，一个共同结构：「表达能力」对「计算代价」</u>。</b></p>
+<p class=""><b>★ 所以你可以把这当成一条默认的提问方式：<u>每看到一个超参，先问「它往大了调换来什么、往小了调省下什么」</u>。</b><b>⇒ 答得出来，这个超参你就算理解了；答不出来，你只是记住了一个数字。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">52:47</span><span class="en">So the question is, how can you distinguish words that are spelled the same but in different contexts?</span></div><div class="body"><p class=""><b>这是 Word2vec 那一段的最后一个提问，而它恰好问到了这一讲的下半场。</b></p>
+<p class=""><b>讲者的复述</b>：<b>「<u>很好的问题。所以问题是：你怎么区分那些拼写相同、但处在不同语境里的词？</u>」</b></p>
+<p class=""><b>★ 他的回答</b>：<b>「<u>你远远跑在我前面了。所以这些基本上是基础。而我们接下来会去处理那些能解决「把词在句子里上下文化」这类问题的方法。所以我们待会儿就会看到</u>。」</b></p>
+<p class=""><b>★★★ 「<u>你远远跑在我前面了</u>」这句话标记了这一讲的一个转折</b>：<b>⇒ <u>到此为止的所有内容（分词、one-hot、Word2vec）都有同一个局限：一个词永远是同一个向量</u>。</b><b>而这位学生直接问到了那个局限。</b></p>
+<p class="warn"><b>⚠ 请注意这个问题后来被回答了<u>两次</u>，而且一次比一次彻底</b>：<b>① <u>RNN</u>（第 29–30 条）—— 隐状态带上了上下文，<u>但词本身的输入嵌入还是固定的</u>；② <u>自注意力</u>（第 34 条）—— <u>这才真正做到「同一个词在不同句子里有不同表示」</u>，而讲者在那里会亲口回到 river bank / robbing a bank 这个例子。</b></p>
+<p class=""><b>⇒ 所以带着这个问题往下听，你会看到它被一步步解决。</b></p></div></article>
+</section>
+<section id="m-g"><h2><span class="tag">模块 g</span>字幕第 494–575 句（53:17–65:00）：句子表示的朴素做法丢了什么、 RNN 登场与它怎么跑、三类任务各怎么用 RNN、⚠ 长程依赖与 LSTM、梯度消失/爆炸、 以及「到这一步为止表示还缺什么」的小结<small>句 494–575 · 53:17–65:00</small></h2>
+<article class="card"><div class="meta"><span class="ts">53:41</span><span class="en">So one very naive way to do that with what we saw before is to take something like the average</span></div><div class="body"><p class=""><b>词的表示有了，但我们要的往往是整句话的表示。讲者先给最朴素的做法，再数它丢了什么。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>好，我们刚才看了怎么学到 token 的表示。但我想你可能也想得到句子、或者一段文本的表示。而用我们之前看到的东西去做这件事，一个非常朴素的方式，就是取比如说那些词表示的平均</u>。」</b></p>
+<p class="warn"><b>⚠ 然后他数了丢掉的东西</b>：<b>「<u>但问题是你丢掉了很多意义，你丢掉了顺序，而且 —— 我想这里你指出得很好 —— 你学到的那些表示是 token 特有的，不管它们处在哪里</u>。」</b></p>
+<p class=""><b>★★ 三件事值得分开看，因为后面是被不同的东西修掉的</b>：</p>
+<p class=""><b>① <u>丢掉意义</u>（平均会把一切抹平）；</b></p>
+<p class=""><b>② <u>丢掉顺序</u> —— <u>「狗咬人」和「人咬狗」取平均后完全一样</u>；⇒ 这一条由 <u>RNN</u> 来修。</b></p>
+<p class=""><b>③ <u>表示与位置/语境无关</u> —— 同一个词永远同一个向量；⇒ 这一条 RNN 修不彻底，要等到<u>注意力</u>。</b></p>
+<p class=""><b>⇒ 所以接下来的两段（RNN、注意力）正是在依次修 ② 和 ③。<u>而讲者特意把 ③ 归功给了提问的学生</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">54:20</span><span class="en">So we are going to talk about RNNs, which stands for Recurrent Neural Network</span></div><div class="body"><p class=""><b>RNN 登场，而它的核心机制讲者一句话就说完了。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以有一类模型，目标是捕捉「文本出现的序列性质」。我们要讲的是 RNN，它代表 Recurrent Neural Network（循环神经网络）</u>。」</b></p>
+<p class=""><b>★ 机制</b>：<b>「<u>RNN 做的事是：它不是一次处理一个词（就那么孤立地），而是保留一个「到目前为止这个句子」的隐表示，然后一次考虑一个 token</u>。」</b></p>
+<p class=""><b>⇒ 两个关键词：<u>「保留一个隐表示」</u>和<u>「一次一个 token」</u>。</b><b>前者让历史被记住，后者让顺序有意义。</b></p>
+<p class=""><b>★★ 而讲者顺手接上了第 14 条那条时间线：<u>如我之前提到的，这个技术其实是相当久以前引入的 —— 在 80 年代</u>。</b><b>⇒ 正好印证那条判断：<u>想法很早就有，缺的是数据和算力</u>。</b></p>
+<p class=""><b>★★★ 这里有一个对比很值得现在就想清楚，因为它预告了后面的全部故事</b>：<b><u>RNN 用「顺序处理」来获得顺序信息 —— 这是它的本事，也将成为它的死穴</u>。</b><b>⇒ 顺序处理意味着<u>不能并行</u>，而不能并行意味着<u>训练慢、而且长序列时信息要走很远</u>。<u>这两件事会分别变成它的两个致命问题</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">54:50</span><span class="en">So as I mentioned before, this technique was actually introduced a fair amount of time ago</span></div><div class="body"><p class=""><b>RNN 怎么起步，以及一个你一定会撞上的术语混乱。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>在这个例子里，你从句子的最开头开始处理。你有某个 dummy（占位的）隐状态，通常记作 A 或者 H。它被叫做 hidden state（隐状态）、activation（激活），甚至有时候叫 context vector（上下文向量）</u>。」</b></p>
+<p class="warn"><b>⚠ <u>三个名字，同一个东西</u>。</b><b>⇒ 这是本讲里术语混乱的又一个例子（前面有 word/token representation、word/token 混用）。</b><b>★ 而讲者的做法值得学：<u>他把三个名字都念出来，而不是只用自己习惯的那一个</u>。因为你读别人的材料时，三个都会碰到。</b></p>
+<p class=""><b>⇒ 顺带说明三个名字各自的来历，这样你就不会被它们绕晕</b>：<b><u>「hidden state」强调它是网络内部的状态；「activation」强调它是某一层的输出值；「context vector」强调它承载了上下文信息</u>。</b><b>⇒ 三种叫法反映的是三种看问题的角度，而不是三种东西。</b></p>
+<p class=""><b>★ 至于为什么要一个「dummy 的」初始隐状态：<u>因为第一个词之前没有历史，总得有个起点</u>。</b><b>通常就初始化成全零向量。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">55:21</span><span class="en">It is called the hidden state, activation, or even sometimes a context vector</span></div><div class="body"><p class=""><b>一个 RNN 模块的结构，极其简单 —— 两进一出，然后循环。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>你有某种模块，它把「到目前为止的隐状态」和「时刻 t 的那个词」都考虑进来 —— 这里是时刻 1。所以它做的事是：它接收「这个句子到目前为止的意思」，并把「此刻正在发生的那个词」也考虑进来。然后它产出一个输出向量，这里可以用来试着预测下一个词</u>。」</b></p>
+<p class=""><b>⇒ 里面是什么：<u>这里你有这个隐状态和那个词的表示，然后在这个蓝色盒子里有一些矩阵乘法，于是你有一个输出向量，你拿它去训练预测下一个词</u>。</b></p>
+<p class=""><b>★★ 「<u>两进一出，然后把新状态传给下一步</u>」—— 这个循环结构就是 recurrent（循环）这个名字的来源。</b></p>
+<p class=""><b>⇒ 而讲者对隐状态的解释值得记：<u>你解读这些隐状态的方式是：它是「到目前为止已处理序列」的一个表示</u>。</b></p>
+<p class=""><b>★★★ 请注意这个设计里一个很强的假设：<u>整句话到目前为止的全部信息，都必须被压进那一个固定大小的向量里</u>。</b><b>⇒ 句子一长，这个向量就要装下越来越多东西，<u>而它的容量是不变的</u>。</b><b>⇒ 这正是后面那个「长程依赖」问题的根源，而讲者马上就会说到。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">56:20</span><span class="en">And then you keep on doing that by keeping track of these hidden states</span></div><div class="body"><p class=""><b>RNN 换来了什么，讲者说得很干脆。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>然后你就这样一直做下去，一路追踪这些隐状态。所以你重复这个过程。而我想你解读这些隐状态的方式是：它是「到目前为止已处理序列」的一个表示。所以 RNN 的好处是：现在词的顺序是算数的了。而且你也能够以一种更自然的方式去编码这个句子</u>。」</b></p>
+<p class=""><b>★★ 「<u>词序算数了</u>」这件事为什么能成立，值得看清机制</b>：<b>⇒ 因为<u>隐状态是按顺序累积的</u>。</b><b>处理「a → cute → teddy bear」时，<u>每一步的隐状态都依赖于前一步</u>；换个顺序，整条链路算出来的东西就完全不同。</b></p>
+<p class=""><b>⇒ 对照取平均：<u>加法是可交换的，所以顺序天然被抹掉</u>；而 RNN 的递推不可交换，<u>顺序自然被保留</u>。</b></p>
+<p class=""><b>★ 这是一个很干净的设计洞察：<u>想保留某种信息，就让计算对那种信息敏感</u>。</b><b>⇒ 而反过来说，<u>后面 transformer 放弃了顺序处理，于是顺序信息就丢了 —— 所以它必须另外加「位置编码」把顺序补回来</u>。</b><b>这个对照在本讲后半段会出现。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">57:00</span><span class="en">So let us see roughly how it works</span></div><div class="body"><p class=""><b>走一遍具体流程，而它和第 26 条那个 Word2vec 的前向只差一样东西。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>我们还是用那个最爱的例子：a cute teddy bear is reading。你会有 token「a」，你要一个 one-hot 编码向量，你把它过一遍你的网络，你算出隐状态，你试着预测 cute。但接着你保留那个隐状态，然后你把它输入到另一个模块里。而你也考虑接下来的那些词。所以你考虑的不只是那个词本身，还有这个句子到目前为止的隐状态。然后你再一次试着预测下一个词，一次又一次</u>。」</b></p>
+<p class=""><b>★★ 和 Word2vec 的前向对照一下，差别就一目了然</b>：<b><u>Word2vec：一个词进 → 预测下一个词。每一步彼此独立</u>。</b><b><u>RNN：一个词 + 到目前为止的隐状态 → 预测下一个词。每一步依赖前一步</u>。</b></p>
+<p class=""><b>⇒ 多出来的就是那条<u>把隐状态往下传</u>的线。而整个 RNN 的能力和问题，都来自这一条线。</b></p>
+<p class=""><b>★ 能力：<u>历史被带下去了</u>。问题：<u>历史只能通过这一条线传，而且每传一步都要被挤压一次</u>。</b><b>⇒ 这正是下一条要讲的。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">57:54</span><span class="en">So RNNs were used for a bunch of tasks</span></div><div class="body"><p class=""><b>讲者把 RNN 挂回第 7 条那三个桶上，而这正是那个坐标系开始发挥作用的地方。</b></p>
+<p class=""><b>他的交代</b>：<b>「<u>RNN 被用在一堆任务上，正好可以映射回我们之前看到的那些类别</u>。」</b></p>
+<p class=""><b>① 分类</b>：<b>「<u>出于分类的目的，你基本上可以用你句子里最后一个词的隐状态。比如如果你想预测一篇评论的情感，你基本上会取这里最后那个向量，然后试着把它投影到你想预测的那些预测/标签所在的空间。比如如果你要正面还是负面，你基本上就把那个向量投影到那个空间上</u>。」</b></p>
+<p class=""><b>★★ 为什么取最后一个？<u>因为按定义，隐状态是「到目前为止已处理序列」的表示</u>。</b><b>⇒ 处理到最后一个词时，那个隐状态承载的就是<u>整句话</u>。</b></p>
+<p class=""><b>⇒ 所以「取最后一个隐状态」= 「拿整句话的表示」。<u>这比第 29 条那个「取平均」高明得多，因为它是按顺序累积出来的，不是抹平出来的</u>。</b></p>
+<p class="warn"><b>⚠ 但也请记住它的脆弱之处：<u>整句话的信息全压在这一个向量里</u>。句子一长，这个向量就不堪重负 —— <u>而这正是下一条的主题</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">58:33</span><span class="en">For multi-classification, so you would basically have the representation of the token of interest</span></div><div class="body"><p class=""><b>另外两个桶，而三者的对照非常清楚。</b></p>
+<p class=""><b>② 多分类</b>：<b>「<u>对多分类，你基本上会拿到你关心的那个 token 的表示，然后把它投影出去</u>。」</b><b>⇒ 对应第 8 条说的 NER：<u>标签挂在词上，所以取那个词位置的隐状态</u>。</b></p>
+<p class=""><b>③ 生成</b>：<b>「<u>或者对生成，你基本上会处理完整个源文本，然后在处理结束时得到一个 context vector —— 也就是 activation vector、也就是 hidden state —— 它接着会被用来解码出输出的预测</u>。」</b><b>⇒ 讲者又一次把三个名字并列念了出来。</b></p>
+<p class=""><b>★★★ 把三者并排看，那个坐标系就完全活了</b>：<b><u>① 分类取「最后一个」位置；② 多分类取「你关心的那个」位置；③ 生成取「最后一个」然后拿它去解码</u>。</b></p>
+<p class=""><b>⇒ 三个桶的差别，在模型层面就是<u>「从这条隐状态链上取哪里、取完干什么」</u>。</b><b>⚠ 而 ③ 和 ① 的差别值得留意：<u>两者都取最后一个，但 ① 是投影到标签、③ 是拿它当起点去生成</u>。</b></p>
+<p class=""><b>⇒ 这个「编码完得到一个向量、再拿它解码」的结构有个名字叫 <u>encoder-decoder</u>，<u>而本讲后半段的 transformer 架构仍然是这个结构</u> —— 只是中间那一环从 RNN 换成了注意力。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜是我补的一个中途结账，因为它能让你看清后面注意力到底在补什么。</b></p>
+<p class=""><b>✓ RNN 解决了「顺序」</b>：<b>隐状态是按顺序递推的，<u>换个词序结果就不同</u>。这一条干干净净地解决了。</b></p>
+<p class="warn"><b>⚠ 但「上下文化」只解决了一半</b>：<b>⇒ <u>隐状态里确实带上了上下文</u>（它是「到目前为止」的表示）；<u>但每个词送进网络时，用的还是查表查出来的那个固定嵌入</u>。</b><b>也就是说，<u>「bank」这个词在「河岸」和「银行」两句话里，输入端仍然是同一个向量</u>。</b></p>
+<p class=""><b>★★ 而且还有一个方向上的缺陷：<u>隐状态只包含「左边」的上下文</u>。</b><b>处理到「bank」时，<u>右边的词还没被看到</u>。而很多时候正是右边的词决定了词义（「river bank」里是 river 在前，但「bank of the river」里就是右边了）。</b></p>
+<p class=""><b>⇒ 这两个缺口，<u>一个由自注意力修（每个词的表示直接由全句所有词算出来），一个由「双向」修（L2 的 BERT 就是双向的）</u>。</b></p>
+<p class=""><b>★ 所以本讲后半段你要盯住的就是：<u>注意力是怎么让「同一个词在不同句子里有不同表示」的</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">59:09</span><span class="en">So the reason why you have not really heard of RNNs these days</span></div><div class="body"><p class=""><b>讲者主动提出了那个该问的问题，而答案就是 RNN 退场的原因。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>你今天其实没怎么听说过 RNN 的原因是：它们有一些 pro，但有很多 con。其中一个 con 是：句子的意义基本上全部被封装在这个隐状态里。所以你有这个「长程依赖」的问题，它基本上影响你去「记住」模型过去看到了什么的能力</u>。」</b></p>
+<p class=""><b>★★ 请把因果链看清楚，它只有两步</b>：<b>① <u>整句话的意义全压在一个固定大小的向量里</u>（第 29 条就指出的那个强假设）；② ⇒ <u>句子越长，早期的信息越容易被挤掉</u>。</b></p>
+<p class=""><b>⇒ 这就是「<u>长程依赖（long-range dependencies）</u>」这个名字的含义：<u>当一个词要依赖很远之前的某个词时，RNN 做不好</u>。</b></p>
+<p class=""><b>★ 举个很具体的例子你就明白了：<u>「我在法国长大，……（中间一百个词）……所以我说一口流利的 ____」</u>。</b><b>要填「法语」，<u>模型必须记住一百个词之前的「法国」</u>。</b><b>⇒ 而那条信息要在固定大小的隐状态里<u>被挤压一百次</u>才能到这里。</b></p>
+<p class=""><b>⇒ 讲者用了引号的「记住」（quote unquote「remember」），这个谨慎是对的：<u>RNN 没有记忆器官，它只有一个被反复覆写的向量</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">59:59</span><span class="en">So this one is called LSTMs, Long Short-Term Memory</span></div><div class="body"><p class=""><b>对付长程依赖的第一个尝试，而讲者的评价很克制。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>这就是为什么你有另一类模型，它们试着在 RNN 的基础上建造。这一个叫 LSTM，Long Short-Term Memory（长短期记忆）。而那个扩展的目标，是在我们说过的隐状态之外，再有一种办法去追踪那些「重要到该记住」的东西</u>。」</b></p>
+<p class=""><b>两个量</b>：<b>「<u>所以这里你有 a of t，也就是你的 activation —— 基本上是到目前为止的序列被编码在里面。然后你还追踪另一个量，它叫 cell state，这里记作 c</u>。」</b></p>
+<p class=""><b>★★ 直觉上，LSTM 的想法是把「<u>工作记忆</u>」和「<u>长期记忆</u>」分开</b>：<b><u>activation 是每一步都在剧烈变化的那个；cell state 则有机制让信息「不被覆写地」一路传下去</u>。</b><b>⇒ 名字里的「Long Short-Term」就是这个意思：<u>一种「长的」短期记忆</u>。</b></p>
+<p class="warn"><b>⚠ 而讲者的评价是：<b>「<u>这个架构的目标是改进那一块，但我想它也并不完美</u>。」</b></b></p>
+<p class=""><b>⇒ 他没有展开 LSTM 的门控细节，<u>因为这不是本课重点</u>。但那句「并不完美」很重要：<u>LSTM 缓解了长程依赖，没有解决它</u>。<u>真正解决它的是注意力</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">60:45</span><span class="en">So this architecture aims at improving that piece, but I guess it was not perfect either</span></div><div class="body"><p class=""><b>讲者给这个现象点了名，而且特意为它留出了时间。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以是的，那就是基于 RNN 的方法的主要问题 —— 它们有这个「忘记过去的东西」的毛病。而你会在文献里看到这个现象被称为 vanishing gradient（梯度消失）。而它为什么叫这个名字 —— 我知道我们时间不够了，但我还是要把那一部分解释一下</u>。」</b></p>
+<p class=""><b>★ 留意他的选择：<u>时间不够了，但他还是要讲为什么叫这个名字</u>。</b><b>⇒ 这和第 6 条那个「希望你有一张缩写的心智映射表」是一致的：<u>名字里藏着机制，知道机制就不用死记</u>。</b></p>
+<p class="warn"><b>⚠ 而这里有一个概念上的细节值得现在就说清</b>：<b><u>「忘记过去」是现象，「梯度消失」是机制</u>。</b><b>⇒ 两者不是同一件事，而是因果关系：<u>因为梯度在往回传的过程中消失了，所以早期的权重得不到有效更新，于是模型学不会依赖远处的信息</u>。</b></p>
+<p class=""><b>⇒ 下一镜讲者就会把这个机制推一遍，而推导的形状很简单：<u>一串数相乘</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">61:32</span><span class="en">And so whenever you want to update the weights of your model</span></div><div class="body"><p class=""><b>推导只有两步，而第二步是关键。</b></p>
+<p class=""><b>第一步</b>：<b>「<u>为了让你预测比如最后那些词，你基本上依赖于在那之前的每一个隐状态</u>。」</b></p>
+<p class=""><b>第二步</b>：<b>「<u>而每当你想更新模型的权重、好让这里的预测和实际的预测对上，当你做反向传播时，你某种程度上必须考虑到：这里的值不只是这一次计算的事，也是那一次计算、那一次计算的事 —— 它们基本上是以顺序的方式发生的。所以你有这个「按时间反向传播（back-propagate through time）」的现象</u>。」</b></p>
+<p class=""><b>★★ 「<u>按时间反向传播</u>」这个名字说得很准：<u>误差不只要往「层」的后面传，还要往「时间」的前面传</u>。</b><b>⇒ 而时间步有多少，这条链就有多长。</b></p>
+<p class=""><b>⇒ 然后他说出了关键：<b>「<u>但问题是，实践中当你把它写下来 —— 那是个非常丑的公式 —— 但当你写下来之后，它最后变成一堆量的乘积</u>。」</b></b></p>
+<p class=""><b>★ 「<u>一堆量的乘积</u>」就是全部要害。下一镜就是这个乘积会怎样。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">62:17</span><span class="en">But the problem is, in practice when you write that down</span></div><div class="body"><p class=""><b>这是整个机制的落点，而它简单得只需要一点算术直觉。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>它最后变成一堆量的乘积 —— 而如果它大于 1，那它就是爆炸；如果它小于 1，那就是消失。因为如果你把很多小于 1 的东西乘起来，它就直接奔向 0 了。所以我想如果你有一个想用来做更新的东西却趋于 0，你基本上就很难做你的更新了</u>。」</b></p>
+<p class=""><b>★★ 自己感受一下量级：<u>0.9 的 100 次方 ≈ 0.000027</u>。</b><b>⇒ 也就是说，<u>一百步之前的那个词，收到的梯度只有万分之零点二七</u>。</b><b>它实际上收不到任何有效的更新信号。</b></p>
+<p class=""><b>⇒ 反方向也一样极端：<u>1.1 的 100 次方 ≈ 13780</u>。梯度爆炸会让训练直接发散。</b></p>
+<p class=""><b>★★★ 所以问题的本质是：<u>指数</u>。</b><b>只要是连乘，<u>偏离 1 一点点，经过很多步之后就会变成天文数字或者零</u>。<u>而 RNN 的结构决定了它必须连乘</u>。</b></p>
+<p class="warn"><b>⚠ 这也解释了为什么 LSTM 只是缓解而非解决：<u>它通过 cell state 提供了一条「乘法更少」的通路，但只要还是递推结构，这个风险就还在</u>。</b><b>⇒ <u>真正解决它的办法是：别再让信息走那么长的路</u> —— 那就是注意力。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">63:19</span><span class="en">So our goal is to represent text</span></div><div class="body"><p class=""><b>讲完 RNN 的病，讲者先停下来把前面整条线收了一遍 —— 这个小结本身就是最好的复习。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我希望下一个东西会更说得通一点。但在那之前，我先把我们看过的东西回顾一下。所以我们的目标是表示文本。我们首先从表示词、或者 token 开始 —— 那就是我们用 Word2vec 试图做的事。而我们看到，利用代理任务来学这个表示是一个好办法</u>。」</b></p>
+<p class="warn"><b>⚠ 然后是局限</b>：<b>「<u>但我们有一堆局限。而其中一个 —— 你提到过的 —— 是它不知道上下文。而且词的顺序也不算数</u>。」</b></p>
+<p class=""><b>★ 请注意他又一次把这个洞察归给了学生（「you mentioned」）。<u>这是第三次了</u>（第 29 条、第 28 条末尾、这里）。</b></p>
+<p class=""><b>⇒ 这不只是礼貌，<u>它说明那个问题确实是这条线上的关键缺口</u> —— 而且学生比课程进度先想到了它。</b></p>
+<p class=""><b>★★ 把 Word2vec 的两个局限记牢，因为它们正是后面两步各自要修的</b>：<b><u>① 不知道上下文（同一个词永远同一个向量）；② 词序不算数</u>。</b><b>⇒ RNN 修了 ②，而 ① 要等注意力。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">63:51</span><span class="en">And so you have this other class of methods</span></div><div class="body"><p class=""><b>小结的第二段，把 RNN 这一类也收了。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以你有这另一类方法，它能够把那些词考虑进来，但它们在序列变得很长的时候就有点追踪不住了。而你就有了这个梯度消失、或者说长程依赖的问题。所以每当你看到这个术语，它基本上指的就是那件事</u>。」</b></p>
+<p class=""><b>★ 「<u>每当你看到这个术语，它基本上指的就是那件事</u>」—— 这又是一次「给术语建立心智映射」的动作。</b></p>
+<p class=""><b>⇒ 到目前为止这一讲已经建立了好几条这样的映射：<u>NLP、OOV、OHE、proxy task、hidden state 的三个名字、long-range dependencies / vanishing gradient</u>。</b></p>
+<p class=""><b>★★ 而值得注意的是：<u>长程依赖和梯度消失这两个词，讲者是当成同一件事的两个名字在用的</u>。</b><b>⇒ 严格说它们是现象和机制的关系（第 31 条分过），<u>但在文献的实际用法里，它们确实常被互换</u>。</b><b>⇒ 知道这一点，你读论文时就不会被绕住。</b></p>
+<p class=""><b>⇒ 而他接着要补的那个毛病，是本讲里 RNN 的「第三宗罪」，也是最后压垮它的那一条。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">64:22</span><span class="en">So when you want to train these models, at training time</span></div><div class="body"><p class=""><b>RNN 的第三宗罪，而它是最后压垮它的那一条。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>还有一件我没提过的事：那就是计算非常慢。所以当你想训练这些模型时，在训练阶段，为了预测这个词，你基本上需要先把前面所有这些隐状态都算出来。所以当你的序列变得很长，它就是要花非常长的时间</u>。」</b></p>
+<p class=""><b>★★★ 请看清这一条的性质：<u>它是结构性的，不是实现问题</u>。</b><b>⇒ <u>RNN 第 t 步的输入里有第 t−1 步的输出</u>，所以<u>第 t 步在第 t−1 步算完之前根本没法开始</u>。</b><b>⇒ 这就是「不能并行」。<u>你有一万块 GPU 也没用，因为它们只能排队等</u>。</b></p>
+<p class=""><b>★ 而这正是第 29 条里那个预言的兑现：<u>RNN 用「顺序处理」换来顺序信息，而顺序处理同时带来了「不能并行」和「信息要走很远」两个问题</u>。</b></p>
+<p class=""><b>⇒ 所以 RNN 的三宗罪齐了</b>：<b>① <u>记不住远处</u>（长程依赖 / 梯度消失）；② <u>算得慢</u>（不能并行）；③ 加上从 Word2vec 继承下来的 <u>表示不够上下文化</u>。</b></p>
+<p class=""><b>★★ 而下一段的注意力，恰恰是一次把三条全修了 —— <u>它让每个位置直接连到所有位置：不用走远路（修 ①）、可以同时算（修 ②）、而且表示由全句决定（修 ③）</u>。</b></p></div></article>
+</section>
+<section id="m-h"><h2><span class="tag">模块 h</span>字幕第 576–730 句（65:00–83:16）：注意力的想法（直接链接）、 Attention is All You Need 与 self-attention、★ Q/K/V、矩阵形式与 softmax(QK)V、 encoder-decoder 架构与三处注意力、位置编码、端到端流程、多头<small>句 576–730 · 65:00–83:16</small></h2>
+<article class="card"><div class="meta"><span class="ts">65:00</span><span class="en">people have tried having more direct connections</span></div><div class="body"><p class=""><b>注意力的想法，讲者是直接从 RNN 的病引出来的。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以出于所有这些理由 —— 出于「模型记不住过去的东西」这个事实 —— 人们试着让「某个东西」和「过去的那个东西」之间有更直接的连接。而这就是 attention 背后的想法</u>。」</b></p>
+<p class=""><b>⇒ <u>所以 attention 做的事，是试着在「你正试图预测的东西」和「过去的某个东西」之间，建立一条直接的链路</u>。</b></p>
+<p class=""><b>★★★ 请看清这个想法有多朴素：<u>既然信息走长路会被挤掉，那就别走长路</u>。</b></p>
+<p class=""><b>⇒ 对照 RNN：要用到一百步之前的信息，<u>那条信息必须被压缩、覆写一百次</u>。而注意力说：<u>直接连过去就行了</u>。</b></p>
+<p class=""><b>★ 而这一个改动同时解决了第 32 条那三宗罪</b>：<b><u>① 不走远路 ⇒ 记得住；② 所有连接可以同时算 ⇒ 能并行；③ 每个词的表示由全句算出 ⇒ 上下文化</u>。</b><b>⇒ 一招三得，这就是它为什么成了整个领域的地基。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">65:32</span><span class="en">So in this example, let us suppose I am trying to translate an English sentence into a French one</span></div><div class="body"><p class=""><b>讲者用翻译的例子来讲这个直觉，而他把自己放在了「解码到一半」的位置上。</b></p>
+<p class=""><b>他的设定</b>：<b>「<u>在这个例子里，假设我在试着把一个英文句子翻成法文。所以这里输入句子是给定的，我在算隐状态，我一个个词地处理 —— 这是我传统的 RNN。所以「a cute teddy bear is reading」。于是我有一个隐状态，然后我在解码它</u>。」</b></p>
+<p class=""><b>★★ 而关键的那一句是他的设想</b>：<b>「<u>而你可以想象：当我想生成译文的下一个词时，如果我知道我正试图预测的是哪个词，那该多好</u>。」</b></p>
+<p class=""><b>⇒ 请体会这个念头的自然：<u>人翻译的时候就是这么做的</u>。</b><b>翻到一半，你会回头看原文的某个位置 —— <u>而不是凭一个压缩过的「整句话的印象」在那儿猜</u>。</b></p>
+<p class=""><b>★ 这正是 RNN 的别扭之处：<u>它把整个源句压成一个向量，然后让解码器拿着这一个向量把整句话翻出来</u>。</b><b>⇒ 源句越长，这个向量越不堪重负。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">66:07</span><span class="en">Or in other words, it would be great if I could take a peek at a certain area of the input text</span></div><div class="body"><p class=""><b>这一句是整个注意力机制最好的直觉表述。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>或者换句话说：如果我能朝输入文本的某个区域瞥一眼（take a peek），那该多好。所以 attention 背后的想法就是：在你正试图预测的东西和之前的那些东西之间，有一条直接的链路。这就是 attention 背后的想法</u>。」</b></p>
+<p class=""><b>⇒ 出处：<u>它是 2014 年被引入的。而同样，这是为了解决那些长程依赖的问题</u>。</b></p>
+<p class=""><b>★★ 「<u>瞥一眼</u>」这个词选得很好，因为它暗示了两件事</b>：<b>① <u>是有选择的</u> —— 不是把整个输入都看一遍，而是看「某个区域」；② <u>是动态的</u> —— 每生成一个词，瞥的地方可能不同。</b></p>
+<p class=""><b>⇒ 而注意力机制的全部工作，就是<u>算出「这一次该往哪儿瞥、各瞥多少」</u>。</b><b>那组权重就是后面 softmax 出来的东西。</b></p>
+<p class=""><b>★ 时间线值得记：<u>注意力 2014 年，transformer 2017 年</u>。</b><b>⇒ 也就是说，<u>注意力比 transformer 早三年</u> —— 它最初是加在 RNN 上的补丁，后来才被发现「其实可以只要它」。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">66:42</span><span class="en">And this concept is going to actually be key for this class</span></div><div class="body"><p class=""><b>讲者在这里给了注意力一个很高的定位，而他说话时的那个自我更正值得留意。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>而这个概念实际上会是这门课的关键。因为我们会看到：注意力机制就是那个让一切 —— 我是说，让大部分东西 —— 能工作起来的东西。而这实际上是 transformer 那篇论文所依赖的主要原理</u>。」</b></p>
+<p class="star"><b>⭐ 请注意那个自我更正：<u>他先说「让一切工作」，立刻改成「让大部分东西工作」</u>。</b><b>⇒ 这是一个很小的动作，<u>但它和第 21 条那个「我没有一个好答案给你」是同一种克制</u>。</b><b>他不愿意说一句稍微夸张一点的话。</b></p>
+<p class=""><b>★★ 而「这门课的关键」这个定位是名副其实的，你可以用后面的内容验证</b>：<b><u>L2 整整一讲都在讲注意力的变体（滑窗、MQA/GQA）；L3 的 KV 缓存缓存的就是注意力的 K 和 V；L4 的 FlashAttention 优化的就是注意力的计算；L7 的 bi-encoder/cross-encoder 之分，本质也是「要不要让两者互相注意」</u>。</b></p>
+<p class=""><b>⇒ 所以这一段如果只能反复看一处，就看它。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜是我补的一个比喻，因为它能让后面几讲都省力。</b></p>
+<p class=""><b>RNN 像接力棒</b>：<b>信息沿着一条链一棒一棒往下传。<u>传得越远损耗越大（梯度消失），而且必须排队传（不能并行）</u>。</b></p>
+<p class=""><b>注意力像直拨电话</b>：<b><u>任意两个位置之间直接有一条线</u>。<u>距离不再重要</u>（第 1 个词和第 100 个词之间也只隔一条线），<u>而且所有线可以同时拨</u>（能并行）。</b></p>
+<p class=""><b>★★★ 但直拨电话有一个代价，而它是这门课后面一大堆内容的来源：<u>n 个位置两两连线，就是 n² 条线</u>。</b></p>
+<p class=""><b>⇒ 序列长一倍，连线多四倍。<u>这就是第 16 条那句剧透（复杂度是序列长度的函数）在注意力这里的具体形式</u>。</b></p>
+<p class=""><b>⇒ 而后面你会看到一长串工作都在对付这个 n²</b>：<b><u>L2 的滑动窗口（只连附近的）、L2 的 MQA/GQA（少存几份 K/V）、L3 的 KV 缓存与 MLA、L4 的 FlashAttention</u>。</b><b>★ 所以记住这笔交易：<u>注意力用 n² 的代价，买来了「距离无关」和「可并行」</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">67:12</span><span class="en">So the transformer, which is the core architecture that we will see in this class</span></div><div class="body"><p class=""><b>本课的核心架构登场，而它的论文标题本身就是一句主张。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以 transformer —— 我们这门课要看的那个核心架构 —— 是在 2017 年由一篇叫《Attention is All You Need》的论文引入的。所以光从标题你就能看出来，作者们想要只依赖那一个部分</u>。」</b></p>
+<p class=""><b>★★ 「<u>All You Need</u>」这个说法在当时是很强的主张，值得体会</b>：<b>⇒ 在那之前，<u>注意力是加在 RNN 上的一个增强</u> —— 你先有一个 RNN，再给它配上注意力去缓解长程依赖。</b><b>⇒ 而这篇论文说的是：<u>RNN 那部分可以整个去掉，只留注意力</u>。</b></p>
+<p class=""><b>★ 这是一个很大的赌注，因为它意味着放弃「顺序处理」——而顺序处理正是 RNN 提供顺序信息的方式。</b><b>⇒ 放弃它意味着<u>模型不再天然知道词序</u>，而这个窟窿得另外补（位置编码，本模块后面会讲）。</b></p>
+<p class="warn"><b>⚠ 顺带：这个标题后来成了一个被滥用的句式（「X is All You Need」满天飞）。<u>但原作确实配得上这个标题</u> —— 它真的把前一代的主干扔掉了。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">67:28</span><span class="en">So what the authors tried to do was to move away from this sequential way of processing the text</span></div><div class="body"><p class=""><b>作者到底做了什么，讲者一句话说完，而那句话里有两个关键词。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以作者们试图做的，是摆脱这种顺序处理文本的方式，转而让模型一次性地、直接地与文本的所有部分相连。所以那个东西叫 self-attention（自注意力）。他们在翻译任务上试了，然后发现它给出了很好的结果</u>。」</b></p>
+<p class=""><b>★★ 两个关键词</b>：<b>① 「<u>一次性（at once）</u>」—— 这是并行性的来源；② 「<u>直接连接</u>」—— 这是距离无关的来源。</b></p>
+<p class=""><b>★★★ 而「<u>self（自）</u>」这个字是整个名字的要害，值得专门说清</b>：<b>⇒ 注意力最初（2014 年）是<u>解码器去看编码器</u> —— 两个不同的序列之间。</b><b>而 <u>self-attention 是「一个序列看它自己」</u>：句子里的每个词去看同一个句子里的所有词。</b></p>
+<p class=""><b>⇒ 这个区别在后面会变成两种不同的层：<u>self-attention（自己看自己）和 cross-attention（看另一个序列）</u>，而 transformer 架构里两种都有。</b></p>
+<p class="warn"><b>⚠ 另外注意他们的验证方式很朴素：<u>在翻译任务上试，效果好</u>。<u>没有理论保证，就是试出来的</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">68:03</span><span class="en">Here what we would say is that in order to compute the representation of the token teddy bear</span></div><div class="body"><p class=""><b>自注意力具体在做什么，用老例子一看就清楚。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>回到我们一直用的那个例子「a cute teddy bear is reading」—— 这里我们会说：为了算出 token「teddy bear」的表示，我们要一次性地、用直接的链接，看序列里所有其它的 token</u>。」</b></p>
+<p class=""><b>★★★ 然后是那个决定性的结果</b>：<b>「<u>所以回到你的问题 —— 这里我们会得到一个 teddy bear 的表示，而它对「它所处的那个上下文」是独一无二的</u>。」</b></p>
+<p class=""><b>⇒ 这正好修掉了第 32 条小结里那个局限 ①（<u>不知道上下文</u>）。</b></p>
+<p class=""><b>⇒ 对照一下就看得很清楚：<u>Word2vec 里 teddy bear 的向量是查表查出来的，不管它在哪句话里都一样；而自注意力算出来的表示，是「这一句里的 teddy bear」的表示</u>。</b></p>
+<p class=""><b>★ 而讲者立刻把这件事接回了学生早先那个问题：<u>回到你关于 riverbank（河岸）和 robbing a bank（抢银行）的问题 —— 这里 bank 会有不同的表示</u>。</b><b>⇒ <u>同一个词，不同句子，不同向量</u>。这就是「上下文化」四个字的全部含义。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">68:36</span><span class="en">So back to your question about riverbank and robbing a bank</span></div><div class="body"><p class=""><b>这是学生在第 28 条末尾提前问到的那个问题，讲者当时说「你远远跑在我前面了」—— 现在是答案。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>回到你关于 riverbank 和 robbing a bank 的问题 —— 这里 bank 会有不同的表示</u>。」</b></p>
+<p class=""><b>★★ 机制是这样的：<u>两个句子里 bank 的「输入嵌入」是同一个（查同一张表）</u>。</b><b>⇒ 但自注意力算表示时，会<u>把周围所有词的信息按权重混进来</u>。</b><b>「river bank」里周围是 river、water；「robbing a bank」里周围是 rob、money。<u>混进来的东西不同，算出来的表示自然不同</u>。</b></p>
+<p class=""><b>★★★ 所以上下文化不是「给每个词义各准备一个向量」，而是「<u>让表示成为上下文的函数</u>」。</b><b>⇒ 这个区别很重要：<u>前者需要你事先知道有几个词义，后者不需要 —— 它对任何上下文都能给出一个对应的表示，包括训练时没见过的那些组合</u>。</b></p>
+<p class=""><b>⇒ 讲者的收口很轻：<u>所以这就是那个想法。我想这个想法大致说得通吧？而且，这叫做 self-attention 机制</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>停下来结一次账，你会看到这条线走得非常完整。</b></p>
+<p class=""><b>回到第 29 条数的三样东西</b>：<b>① <u>丢掉意义</u> —— 自注意力是加权求和，权重由内容决定，<u>不是无差别地抹平</u>；② <u>丢掉顺序</u> —— ⚠ 这一条<u>自注意力自己修不了</u>；③ <u>与语境无关</u> —— 刚刚解决。</b></p>
+<p class=""><b>再回到第 32 条 RNN 的三宗罪</b>：<b><u>记不住远处（解决，直连）、算得慢（解决，可并行）、不够上下文化（解决）</u>。</b></p>
+<p class=""><b>★★★ 唯独 ② 是<u>新欠下的债</u>，而且它是自找的</b>：<b><u>transformer 主动扔掉了顺序处理，于是也扔掉了顺序信息</u>。</b></p>
+<p class=""><b>⇒ 讲者马上就会说这件事：<u>「因为你有到不同 token 的直接链接，所以你没有那种顺序感。在 RNN 里你是一次一个地表达东西，所以你有某种词序的感觉；但这里你没有了，因为它是直接链接 —— 这就是为什么你有位置编码」</u>。</b></p>
+<p class=""><b>★ 这是一个很干净的工程故事：<u>为了拿到三样好处，主动放弃一样东西，然后再用一个专门的部件把它补回来</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">69:17</span><span class="en">So when you want to express something in terms of something else</span></div><div class="body"><p class=""><b>这是整门课最该记牢的一组术语，而讲者的引入方式很讲究。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以现在我要引入另一组想法，它更偏术语，但会非常重要。当你想要用别的东西来表达某个东西时，我们用 query、key、value 这几个词 —— Q、K 和 V</u>。」</b></p>
+<p class=""><b>★★ 请抓住「<u>用别的东西来表达某个东西</u>」这句话，因为它就是自注意力的一句话定义</b>：<b>⇒ <u>我要算 teddy bear 的新表示，而我要用「句子里所有其它词」来表达它</u>。</b></p>
+<p class=""><b>★★★ 而 Q/K/V 这组术语的来历是「检索」的隐喻，知道这个会好记很多</b>：<b>⇒ 想象一个字典/数据库：<u>你拿着一个查询（query）去和每条记录的键（key）比对，比对上了就取出对应的值（value）</u>。</b></p>
+<p class=""><b>⇒ 注意力做的是这件事的「软」版本：<u>不是只取最匹配的那一条，而是按匹配程度给所有条目加权，然后把它们的 value 加权平均</u>。</b></p>
+<p class="warn"><b>⚠ 而这组字母会一直用到最后：<u>L2 的 MQA/GQA 是在省 K 和 V、L3 的 KV 缓存缓存的就是 K 和 V、L4 的 FlashAttention 优化的是 QKᵀ 的算法</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">69:52</span><span class="en">And so what you are going to do is to look at all the other tokens</span></div><div class="body"><p class=""><b>三者在例子里各是谁，讲者说得很具体。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>在这个例子里，我们的目标是弄清楚：query 也就是 teddy bear，和其它哪些 token 更相似。所以这里的问题是：你有一个 query，你想看看其它哪些 token 最相似。而你要做的，就是去看所有其它的 token —— 它们基本上由 key 和 value 组成。我们要把 query 和 key 做比较，来量化你的 query 和某个给定的 key 有多相似，然后取出对应的 value</u>。」</b></p>
+<p class=""><b>★★★ 请特别留意 key 和 value 的<u>职责分离</u>，这是整个机制最精巧的一点</b>：<b><u>key 是「用来被比对的那一面」，value 是「比对上之后被取走的那一面」</u>。</b></p>
+<p class=""><b>⇒ 为什么要分开？<u>因为「怎样算匹配」和「匹配上之后该贡献什么内容」是两件不同的事</u>。</b><b>⇒ 一个词可能因为语法角色而被匹配上（key 的作用），但它要贡献的是它的语义内容（value 的作用）—— <u>这两者不必是同一个向量</u>。</b></p>
+<p class=""><b>★ 如果 K 和 V 是同一个东西，模型就少了一个自由度。<u>分开，模型就能独立地学「什么该被找到」和「找到后给什么」</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">70:23</span><span class="en">What you are going to do is you are going to take the query teddy bear</span></div><div class="body"><p class=""><b>整个过程走一遍，而最关键的是最后那个「加权」。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>我们会在这个例子里看到：假设你想用其它一切来表达 teddy bear。你要做的是：你拿 query teddy bear，你把那个 query 和所有其它的 key 做比较，看哪个元素最相似，然后给更相似的那些加权，并取它们关联的 value。这就是这些东西如何运作的一个很高层的想法</u>。」</b></p>
+<p class=""><b>★★★ 请注意「<u>加权（weight）</u>」这个词，它和「挑一个」有本质区别</b>：<b>⇒ <u>不是找出最相似的那一个然后只用它</u>，而是<u>所有 value 都参与，按相似度分配权重</u>。</b></p>
+<p class=""><b>⇒ 这就是为什么它被叫做「软」检索。而这个「软」是必要的：<u>硬性地挑一个会让整个运算不可导，也就没法用梯度下降训练了</u>。</b></p>
+<p class=""><b>★ 而「按相似度分配权重」具体怎么做？<u>softmax</u>。</b><b>⇒ 它把一组相似度分数变成一组加起来为 1 的权重 —— 这正是下一条要讲的公式里那个 softmax 的作用。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">70:55</span><span class="en">And speaking of query and key and value, we will also see that one benefit</span></div><div class="body"><p class=""><b>这一条讲的是一个「意外之喜」，但它可能才是 transformer 能赢的真正原因。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>说到 query、key 和 value，我们还会看到用这种方式表达东西的一个好处：我们可以把「在整个序列上做这个自注意力计算」这件事，表达成矩阵的形式。而 GPU 爱矩阵。所以它真的是为我们手上这种硬件而做的</u>。」</b></p>
+<p class=""><b>★★★ 「<u>GPU 爱矩阵</u>」这五个字值得你认真对待，因为它解释了一件更大的事</b>：<b>⇒ 一个算法能不能赢，<u>不只取决于它的数学性质，还取决于它和硬件合不合得来</u>。</b></p>
+<p class=""><b>⇒ 对照 RNN：<u>RNN 的递推天然是串行的，而 GPU 的本事是「同时做几万个乘加」</u>。<u>RNN 用不上 GPU 的长处</u>。</b><b>而 transformer 把整个序列的计算变成几个大矩阵乘法 —— <u>正好打在 GPU 的强项上</u>。</b></p>
+<p class=""><b>★★ 这是第 14 条那条时间线的另一面：<u>当年缺的不只是「数据和算力」，还有「能用上这种算力的架构」</u>。</b></p>
+<p class=""><b>⇒ 这一条在 L4 会被展开：<u>整整一讲都在讲怎么把算力喂饱</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">71:26</span><span class="en">And I guess what I mentioned here can be expressed in a form of softmax of the query and the key</span></div><div class="body"><p class=""><b>这就是这门课最核心的那条公式，而讲者此刻只给了直觉，细节留给了最后的走查。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>而我刚才提到的那些，可以表达成「query 和 key 的 softmax」的形式 —— 它基本上是一种办法，去得到某种权重，表示哪些 value 会更重要。比如如果一个 value 更重要，你就有更大的权重；另一个不那么重要，你就有更小的权重。然后你基本上把那个乘以 value</u>。」</b></p>
+<p class=""><b>★★ 对着公式读一遍</b>：<b><u>QKᵀ 是「每个 query 和每个 key 的相似度」；除以 √d_k 是缩放（最后的走查里会讲为什么）；softmax 把这些分数变成加起来为 1 的权重；最后乘 V，就是「按权重把 value 加权平均」</u>。</b></p>
+<p class=""><b>⇒ 完全对应上一条那句话：<u>比 key、给权重、取 value</u>。</b></p>
+<p class=""><b>★ 讲者很体贴地安抚了一句</b>：<b>「<u>别担心，我们后面会有一个详细的例子。所以如果现在还觉得很高层、很模糊，别担心 —— 我们会有一个详细的走查</u>。」</b><b>⇒ 那正是本讲最后 Shervine 做的事，而这个片子的模块 i 会跟着走。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">72:47</span><span class="en">So first of all, I just want to say that these quantities, they are learned</span></div><div class="body"><p class=""><b>这个追问问到了点子上，而讲者的第一句回答就划清了边界。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>首先我想说的是：这些量是学出来的。所以你不是在把它们固定下来</u>。」</b></p>
+<p class=""><b>★★★ 这一点非常要紧，因为它纠正了一个很自然的误解：<u>很多人会以为 key 和 value 是某种人为设计的、有明确语义的东西</u>。</b><b>⇒ 不是。<u>它们是三个投影矩阵的输出，而那三个矩阵是训练出来的</u>。</b></p>
+<p class=""><b>⇒ 所以「key 代表什么」这个问题<u>没有人给的答案</u> —— 就像第 23 条说的，<u>学出来的表示没有哪一维有名字</u>。</b></p>
+<p class=""><b>★ 但讲者接着给了一个<u>解释层面</u>（而不是定义层面）的说法，下一镜就是。</b></p>
+<p class="warn"><b>⚠ 而这个区分值得你建立起来：<u>「它在数学上是什么」（一个学出来的投影）和「我们怎么解释它」（key 用来被匹配）是两回事</u>。</b><b>⇒ 后者是帮助理解的比喻，<u>不是模型里真实存在的约束</u>。模型完全可以用一种我们想不到的方式去用这三个投影。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">73:10</span><span class="en">So here, you will have something like you want to express this in terms of all the values</span></div><div class="body"><p class=""><b>讲者给的解释层面的说法，正好印证了第 35 条那个「职责分离」。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>但从解释的角度，你可以这样理解：key 在那里，是为了让你弄清哪一个和 query 最相似；而 value 是和那个元素关联的实际的值。所以这里你会有类似「你想用所有这些 value 来表达这个东西」的情形。于是你那个加权平均里的权重，基本上就是 query 和 key 之间的点积。而 value 就是你会用到的那个实际的向量</u>。」</b></p>
+<p class=""><b>★★ 注意他特意说了「<u>从解释的角度（from an interpretation standpoint）</u>」—— 这正是上一镜说的那个区分</b>：<b>⇒ <u>他给的是一个帮助理解的框架，不是一个数学上的定义</u>。</b></p>
+<p class=""><b>★ 而公式对照一下就全通了</b>：<b><u>QKᵀ 就是「query 和 key 的点积」（权重的来源）；softmax 把它变成加起来为 1 的权重；乘 V 就是「用这些 value 做加权平均」</u>。</b></p>
+<p class=""><b>⇒ 所以这条公式的每一部分，<u>讲者都用大白话说过一遍了</u>。公式只是把这段话写紧凑。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">73:40</span><span class="en">And these projections are actually learned by the model</span></div><div class="body"><p class=""><b>这是学生逼出来的最后一个关键细节，而它把 self-attention 的机制补全了。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>还有一件我没提到的事 —— 但你说对了 —— 我们实际上要做投影来得到这些量。而这些投影实际上是模型学出来的</u>。」</b></p>
+<p class=""><b>★★★ 这句话补上的是一个结构性的事实：<u>Q、K、V 全都来自同一份输入表示</u>。</b><b>⇒ 你有一串 token 的嵌入；<u>把它们乘上 W_q 得到 Q，乘上 W_k 得到 K，乘上 W_v 得到 V</u>。</b><b>三者同源，只是被三个不同的、学出来的矩阵变换过。</b></p>
+<p class=""><b>★ 这正是「<u>self</u>」这个字的字面含义</b>：<b>⇒ 既然 Q、K、V 都来自同一个序列，<u>那就是「自己看自己」</u>。</b><b>⇒ 而后面会看到 <u>cross-attention</u>：那里 Q 来自一个序列，K 和 V 来自另一个序列 —— <u>所以是「看别人」</u>。</b></p>
+<p class=""><b>⇒ 这个对照是理解 transformer 架构里三处注意力的钥匙，<u>而本讲最后的走查会把 W_q、W_k、W_v 明确画出来</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜是我补的（讲者没展开），但它能让「为什么要投影」这件事变得理所当然。</b></p>
+<p class=""><b>反过来想：如果不投影，直接拿嵌入当 Q、K、V 会怎样？</b><b>⇒ 那么 <u>Q 和 K 就是同一组向量</u>。</b><b>算 QKᵀ 时，<u>每个词和自己的点积一定是最大的（因为向量和自己最像）</u>。</b><b>⇒ 结果是：<u>每个词主要在关注自己</u>，这个机制就退化了。</b></p>
+<p class=""><b>★★ 而有了三个独立的投影，模型就有了三个自由度</b>：<b><u>W_q 决定「我以什么角度去找」；W_k 决定「我以什么角度被找」；W_v 决定「被找到后我贡献什么」</u>。</b></p>
+<p class=""><b>⇒ 于是模型可以学出这样的行为：<u>一个形容词去找它修饰的名词（用某种语法角度匹配），但贡献的是它的语义内容</u>。<u>匹配的依据和贡献的内容是解耦的</u>。</b></p>
+<p class=""><b>★ 这正是第 35 条那个「职责分离」能真正实现的技术前提。<u>没有投影，分离就只是说说而已</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">74:12</span><span class="en">the authors propose an architecture that is composed of two parts</span></div><div class="body"><p class=""><b>架构登场，而它的形状直接来自它要解决的那个任务。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>在一个很高的层面上，为了让自注意力机制发生，作者提出了一个由两部分组成的架构：一个 encoder，在左边；一个 decoder，在右边。他们的应用是翻译。所以走 encoder 的是你源语言的输入文本，而走 decoder 的是你正在预测的目标语言</u>。」</b></p>
+<p class=""><b>★ 这个两段式结构其实你在第 30 条见过：<u>RNN 做生成任务时，也是「先把整个源文本处理完得到 context vector，再拿它解码」</u>。</b><b>⇒ 所以 <u>encoder-decoder 不是 transformer 发明的</u>，transformer 只是把两边的内部从 RNN 换成了注意力。</b></p>
+<p class=""><b>★★ 高层任务讲者也说了</b>：<b>「<u>高层的想法是：你要通过把输入文本过一遍 encoder，来算出有意义的嵌入。而你想让自注意力机制起作用 —— 意思是你想把每个 token 的表示算成其它 token 的函数</u>。」</b></p>
+<p class=""><b>⇒ 「<u>每个 token 的表示 = 其它 token 的函数</u>」这句话，是自注意力最精确的一句定义。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">75:13</span><span class="en">So multi-head attention layer, but multi-head is just doing this computation in different ways</span></div><div class="body"><p class=""><b>encoder 内部只有两样东西，而讲者对 multi-head 给了一句先行解释。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>你用一个叫 attention layer 的层来做这件事 —— 是 multi-head attention 层，不过 multi-head 只是用不同的方式去做这个计算，好让模型学到不同的表示、不同的投影。但这里的想法是：你会输入你的输入文本，而你输入文本里的所有 token 都会互相 attend（关注）</u>。」</b></p>
+<p class=""><b>⇒ 具体到例子：<u>「a cute teddy bear is reading」，你要把这段文本里所有 token 的表示，都算成其它 token 的函数</u>。</b></p>
+<p class=""><b>★ 然后是第二层</b>：<b>「<u>然后你有一个 feedforward 层，它只是让模型学另一种投影。而在你编码过程结束时，你会得到输入句子那些 token 的丰富表示</u>。」</b></p>
+<p class=""><b>★★ 注意 feedforward 层的定位：<u>讲者两次都说它是「让模型学另一种投影 / 多一些自由度」</u>。</b><b>⇒ 它不像注意力那样有一个清晰的「它在做什么」的故事 —— <u>它就是加算力、加参数、加非线性</u>。</b><b>⇒ 而本讲最后 Shervine 会补一个有意思的细节：<u>FFN 的隐层维度比输入输出「更大」，和 Word2vec 那里正好相反</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">75:46</span><span class="en">you are going to compute the representation of all the tokens in this text basically as a function of others</span></div><div class="body"><p class=""><b>这一镜把 encoder 在做的事落到那句老例子上。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>所以比如「a cute teddy bear is reading」，你要把这段文本里所有 token 的表示，基本上都算成其它 token 的函数。而你是用 encoder 来做这件事的 —— 这里就是用 multi-head attention</u>。」</b></p>
+<p class=""><b>★★ 请留意一个这里没被强调、但很要紧的性质：<u>encoder 的自注意力是「全看」的</u>。</b><b>⇒ 算 teddy bear 的表示时，<u>它既看左边的 a、cute，也看右边的 is、reading</u>。</b></p>
+<p class=""><b>⇒ 这和第 30 条那个 RNN 的局限正好对照：<u>RNN 的隐状态只包含左边</u>，而 encoder 的自注意力两边都看。</b></p>
+<p class="warn"><b>⚠ 而这个「全看」在 decoder 那边是<u>不允许</u>的，原因第 37 条会讲（生成时右边还不存在）。</b></p>
+<p class=""><b>★★ 所以同一个机制（自注意力）在两处有不同的约束，而这个差别后来长成了两条技术路线</b>：<b>⇒ <u>L2 会讲 BERT（双向、全看，擅长理解类任务）和 decoder-only（单向、只看左边，擅长生成）</u>。</b><b>⇒ 它们的分野，<u>就始于这里这个「看不看右边」的选择</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">76:50</span><span class="en">So this what I just said is the cross-attention layer</span></div><div class="body"><p class=""><b>这里讲者设计了一个很好的当堂提问，而这个问题值得你自己先想一想再往下看。</b></p>
+<p class=""><b>场景</b>：<b><u>现在你的目标是真的去翻译那个输入句子。你要做的是从「句首 token」开始你的翻译，然后用输入句子的所有表示，来弄清楚接下来该预测什么</u>。</b></p>
+<p class=""><b>★ 这一层就是 <u>cross-attention</u></b>：<b>讲者描述图上的箭头：<u>有两个箭头来自 encoder，一个箭头来自 decoder</u>。</b></p>
+<p class=""><b>★★ 然后他考学生</b>：<b>「<u>谁能告诉我 decoder 那个箭头代表什么？decoder 是 query、key 还是 value？我猜有三分之一的概率。谁想试试？</u>」</b><b>⇒ 有人答 key，有人答 query。</b></p>
+<p class="warn"><b>⚠ 在往下看之前，建议你自己想一下。提示：<u>回到第 35 条那个定义 —— query 是「你想表达的那个东西」</u>。</b></p>
+<p class=""><b>⇒ 而现在你想表达/弄清楚的是什么？<u>是「译文的下一个词该是什么」</u>。那个东西在 decoder 这一侧。</b></p>
+<p class=""><b>⇒ 答案在下一镜。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">77:36</span><span class="en">So the way to think about it is you are trying to ask yourself, what are the words from the input that matter</span></div><div class="body"><p class=""><b>答案和它的推理方式，讲者说得很清楚。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>思考的方式是：你在问自己 —— 输入里的哪些词才是要紧的？对吧？所以基本上，给定你的 query，你想知道输入里哪些元素是要紧的。所以这里，这个箭头确实是 query，因为这就是你想弄清楚的那个东西。而 key 和 value 实际上来自 encoder，也就是来自输入序列</u>。」</b></p>
+<p class=""><b>★★★ 记法很简单，而且通用：<u>谁在「提问」，谁就是 Q；被查询的那一方提供 K 和 V</u>。</b></p>
+<p class=""><b>⇒ 用这个记法回头看 self-attention：<u>那里提问的和被查的是同一个序列，所以 Q、K、V 同源</u>（第 36 条讲的）。</b><b>⇒ 而 cross-attention 里提问的是 decoder、被查的是 encoder，<u>所以 Q 来自 decoder、K 和 V 来自 encoder</u>。</b></p>
+<p class=""><b>★ 这个结构在 L7 还会以另一个面貌出现：<u>RAG 的检索里，query 是用户的问题、而文档库提供「被查的那一面」</u>。</b><b>⇒ 同一个「提问方 vs 被查方」的结构，换了一层皮。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">78:17</span><span class="en">And that one is trying to figure out what other tokens of the output sentence</span></div><div class="body"><p class=""><b>第三处注意力，而它的名字 masked（被遮住的）说明了一切。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>然后你有另一个 attention 层，就是这个。那一个在试图弄清楚：你正在解码的那个输出句子里，还有哪些 token 会对预测下一个 token 有用。假设你开始解码，你说了「un ours en peluche」（法语）。要预测下一个词，你基本上想弄清楚：到目前为止已经翻译出来的那些 token 里，哪些会对预测下一个词有用。所以这就是这一层在做的事</u>。」</b></p>
+<p class=""><b>★★ 名字的由来</b>：<b>「<u>而它被叫做 masked，是因为它只看到目前为止已经翻译出来的那些 token。它不看那些没被翻译的 —— 当然啦，因为它们还没被翻译出来。所以在你试图预测的那个 token 的右边，是没有办法（看到东西）的</u>。」</b></p>
+<p class=""><b>★★★ 这个限制不是可选的，<u>它是生成任务的逻辑必然</u></b>：<b>⇒ 生成第 5 个词时，第 6、7、8 个词<u>还不存在</u>。</b><b>如果训练时让模型看到它们，<u>那就是作弊</u> —— 模型会学会「抄答案」，而推理时根本没有答案可抄。</b></p>
+<p class=""><b>⇒ 这个性质在 L3 会有个名字叫<u>因果（causal）</u>，而 L7 的 prompt caching 正是建立在它上面（<u>只看左边 ⇒ 相同前缀必然相同激活</u>）。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">79:28</span><span class="en">So the attention layer here aims at computing embeddings from the input sentence as a function of themselves</span></div><div class="body"><p class=""><b>这是讲者对三处注意力的完整总结，而我认为它是全讲最该记住的一张表。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以在一个很高的层面上，你有这个 attention 层，它在 encoder 里出现、也在 decoder 里出现，但它有好几种用法。这里的 attention 层，目标是「从输入句子算出嵌入，而这些嵌入是它们自己的函数」。然后 decoder 里那些 —— 第一个，masked 自注意力层，目标是「把东西表达成到目前为止已经解码出来的一切的函数」。而第二个，cross-attention 层，试图把东西表达成「输入里见到的东西」的函数</u>。」</b></p>
+<p class=""><b>★★★ 三句话的句式完全一样，只有「拿什么来表达」不同</b>：<b><u>① 用「输入自己」表达输入；② 用「已解码的部分」表达当前；③ 用「输入」表达当前</u>。</b></p>
+<p class=""><b>⇒ 这正好回到第 35 条那个定义：<u>注意力就是「用别的东西来表达某个东西」</u>。<u>三处注意力的差别，只在于「别的东西」指的是谁</u>。</b></p>
+<p class=""><b>★ 而用第 37 条那个记法对一遍，三处的 Q/K/V 来源也就清楚了</b>：<b><u>① Q、K、V 全来自输入；② 全来自已解码部分；③ Q 来自已解码部分，K 和 V 来自输入</u>。</b></p>
+<p class=""><b>⇒ <u>一个机制，三种接线方式</u>。记住这张表，transformer 的结构你就拿住了。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">80:10</span><span class="en">So here, given that you are having direct links to different tokens, you do not have this sense of order</span></div><div class="body"><p class=""><b>第 34 条欠下的那笔债，讲者在这里点名还了。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以这里，既然你和不同的 token 之间有直接链接，你就没有那种顺序感。因为在 RNN 里，你基本上是一次一个地表达东西，所以你有某种词序的感觉；但这里你没有了，因为它是直接链接 —— 这就是为什么你有 position encodings（位置编码），它们在那儿是为了告知「这个词在序列里的位置」</u>。」</b></p>
+<p class=""><b>★★★ 请看清这个因果</b>：<b><u>并行处理（所有位置同时算）和「知道顺序」是天然冲突的</u>。</b><b>⇒ 如果你把句子里的词打乱顺序再送进自注意力，<u>算出来的每个词的表示完全一样</u> —— 因为注意力是对集合的操作，它不知道谁在前谁在后。</b></p>
+<p class=""><b>⇒ 所以位置信息<u>必须被显式加进去</u>。</b><b>而加的办法就是：<u>给每个位置一个向量，加到那个位置的词嵌入上</u>。</b></p>
+<p class=""><b>★ 讲者在这里没有展开：<u>我们今天不会深入那个，但我只是想把它点出来</u>。</b><b>⇒ 而本讲最后 Shervine 会提一句原论文的做法（<u>正弦余弦，逐元素相加</u>），而 <u>L2 会用一整段讲「位置嵌入换了五代」，终点是 RoPE</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">80:40</span><span class="en">So we are not going to dig into that today, but I just want to call that out</span></div><div class="body"><p class=""><b>讲者在这里完整走了一遍流程，而这正好是本讲前面所有内容的串联。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>在一个很高的层面上 —— 我们会在那个详细例子里看到 —— 为了把一个句子从源语言翻到目标语言，我们首先要把文本分词，也就是切成任意的单位。我们要为这些 token 学一个嵌入，这就是 input embedding 的意思。然后我们要加上关于位置的某种编码 —— 今天不讲，但知道就好。然后我们过 encoder</u>。」</b></p>
+<p class=""><b>⇒ <u>encoder 试图把东西表达成输入里其它东西的函数，它在 multi-head attention 层里做这件事。然后它过一个前馈神经网络，那只是一种把向量投影一下、好有更多自由度去学东西的方式</u>。</b></p>
+<p class=""><b>⇒ <u>然后一旦你有了输入的这些表示，你就开始翻译。你从 BOS token 开始。你要弄清下一个词是什么，所以你看「到目前为止翻译出来的哪些词对翻译有用」—— 这就是 masked multi-head attention 层做的事。然后你有另一个 attention 层，是关于「把东西表达成输入里有什么的函数」，那就是 cross-attention 层。然后再一个前馈网络，又给一些自由度。最后你有一个向量，过 softmax —— 它就是让你猜下一个词的办法</u>。</b></p>
+<p class=""><b>★ 他的收口很俏皮：<u>你有一个词表大小的向量，你用这些值来决定你的下一个词是什么。简单吧？</u></b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">81:35</span><span class="en">And then it goes through a feedforward neural network</span></div><div class="body"><p class=""><b>讲者在这里完整走了一遍流程的前半截，而它正好把前面所有内容串起来。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>在一个很高的层面上 —— 我们会在详细例子里看到 —— 为了把一个句子从源语言翻到目标语言，我们首先要把文本分词，也就是切成任意单位。我们要为这些 token 学一个嵌入，这就是 input embedding。然后我们要加上关于位置的某种编码 —— 今天不讲，但知道就好。然后我们过 encoder。encoder 试图弄清怎么把东西表达成输入里其它东西的函数，它在 multi-head attention 层里做这件事。然后它过一个前馈神经网络，那只是一种把向量投影一下、好有更多自由度去学东西的方式</u>。」</b></p>
+<p class=""><b>★★ 请对照一下这条流程和本讲的章节</b>：<b><u>分词（第 15–18 条）→ 嵌入（第 23–27 条）→ 位置编码（刚讲）→ 自注意力（第 34–36 条）→ FFN</u>。</b></p>
+<p class=""><b>⇒ <u>一个半小时的内容，在这里被压成了五个词</u>。</b></p>
+<p class=""><b>★ 这正是「走查」这种讲法的价值：<u>它不引入新知识，但它把所有旧知识排成了一条执行顺序</u>。</b><b>⇒ 而「能按顺序说出来」和「每一块都懂」是两种不同的掌握程度。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">82:46</span><span class="en">So you have a vector of vocabulary size</span></div><div class="body"><p class=""><b>流程的后半截，而最后那个向量的形状值得专门记一下。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>然后一旦你有了输入的这些表示，你就开始你的翻译。你从 BOS token 开始。而你想做的是弄清下一个词是什么。所以你要看：到目前为止翻译出来的哪些词对翻译有用 —— 这就是 masked multi-head attention 层做的事。然后你有另一个 attention 层，是关于把东西表达成输入里有什么的函数，那就是那边的 cross-attention 层。然后又一个前馈神经网络，再给一些自由度。而到最后，你有一个向量，你让它过 softmax —— 它就是让你猜下一个词的办法</u>。」</b></p>
+<p class=""><b>★★ 最后那句最该记</b>：<b>「<u>所以你有一个「词表大小」的向量。而你要用这些值来决定你的下一个词是什么</u>。」</b></p>
+<p class=""><b>⇒ 回想第 26 条：<u>Word2vec 的输出也是一个词表大小的概率向量</u>。</b><b>⇒ <u>从 Word2vec 到 transformer，输出端的形状一点没变</u> —— 变的全在「怎么算出那个向量」。</b></p>
+<p class=""><b>★ 而这个形状会一直延续到今天的 LLM：<u>L3 讲的所有解码策略（贪心、beam、top-k、top-p、温度），都是在对这个向量做文章</u>。</b></p>
+<p class=""><b>⇒ 讲者的收口很俏皮：<u>简单吧？有什么问题吗？</u></b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">83:16</span><span class="en">So I guess I went too fast</span></div><div class="body"><p class=""><b>最后一个提问，而讲者又一次坦白了自己的疏漏。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>那是个很好的问题。问题是：head 是什么意思？我想我讲太快了，我把那部分忽略掉了</u>。」</b></p>
+<p class=""><b>⇒ 他的解释：<u>当你做自注意力计算时，你基本上让 query 和 key 互动，然后取对应的 value。但没有什么能阻止你把这件事做好几次。所以 head 这个词，是给「你用来得到 query、key 和 value 的那些投影矩阵」的名字</u>。</b></p>
+<p class=""><b>★★ 把它和第 36 条接起来就完全通了</b>：<b>第 36 条说 <u>Q、K、V 是由三个学出来的投影矩阵得到的</u>。</b><b>⇒ 而「<u>多头</u>」就是：<u>不只有一组 (W_q, W_k, W_v)，而是有 h 组</u>。</b><b>每一组各算一次注意力，然后把结果拼起来。</b></p>
+<p class=""><b>⇒ 讲者说了它的好处：<u>当你有好几个 head 时，你是在允许你的模型学到不同的投影。所以这基本上是给你的模型一个额外的自由度，去学你那些向量之间的不同关联</u>。</b></p>
+<p class=""><b>★ 记号：<u>通常记作小写 h，表示 head 的数量</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">83:46</span><span class="en">And when you have several heads, what you are doing is you are allowing your model to learn different projections</span></div><div class="body"><p class=""><b>多头的直觉，而讲者给了一个很好用的类比。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以这就是你提到的那个多头。我们基本上是在并行地把自注意力计算跑好几次，还是用模型学出来的不同投影矩阵。如果你有计算机视觉的背景，这类似于在你的卷积里有多个 filter（滤波器）。所以是同一个想法，不过这里是不一样的东西</u>。」</b></p>
+<p class=""><b>★★ 这个类比为什么好用</b>：<b>卷积网络里每个 filter 学一种模式（边缘、纹理、角点），<u>多个 filter 就能同时捕捉多种模式</u>。</b><b>⇒ 多头注意力同理：<u>每个 head 可以学一种「关注的角度」</u> —— 比如一个头关注语法依存、另一个关注指代、再一个关注语义相关。</b></p>
+<p class=""><b>⇒ 讲者说「<u>不过这里是不一样的东西</u>」是对的：<u>filter 是在空间上滑动的，而 head 是在同一组输入上做不同的投影</u>。类比只到「多个并行的特征提取器」这一层。</b></p>
+<p class="warn"><b>⚠ 而学生紧接着追问了一个很尖锐的问题：<u>这些投影是不同的吗？会不会学成一样？</u></b><b>⇒ 讲者先给了一个简短回答（<u>我们通常不约束，就让模型学；而实践中它往往会学出不同的说法</u>），<u>而更完整的回答由 Shervine 在最后的走查里给出 —— 那是下一个模块</u>。</b></p></div></article>
+</section>
+<section id="m-i"><h2><span class="tag">模块 i</span>字幕第 731–924 句（83:16–101:33）：多头的投影会不会学成一样、 label smoothing、以及 Shervine 的端到端走查（分词与 BOS/EOS、嵌入 + 位置嵌入、 三个投影、★ 逐步拆解 QKᵀ 与为什么除 √d_k、多头拼接与 W_o、FFN 隐层更大、 N 层堆叠、解码循环到 EOS）<small>句 731–924 · 83:16–101:33</small></h2>
+<article class="card"><div class="meta"><span class="ts">85:07</span><span class="en">So the question is, are the projections different?</span></div><div class="body"><p class=""><b>这个追问问到了多头机制最脆弱的一环，而讲者的回答很坦率。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>很好的问题。所以问题是：那些投影是不同的吗？我们通常不去约束任何东西 —— 我们就让模型去学。但实践中，它就是倾向于学出「说同一件事的不同方式」。所以是的，典型地你没有任何约束</u>。」</b><b>⇒ <u>当然，也有论文深入研究「如果你改动这个会怎样」。但典型地你没有任何约束</u>。</b></p>
+<p class=""><b>★★ 请体会这个回答里的张力</b>：<b>多头的<u>全部价值</u>建立在「不同的头学到不同的东西」上；<u>而这件事没有任何机制保证</u>。</b><b>⇒ 它纯粹是「实践中它就这样」。</b></p>
+<p class="warn"><b>⚠ 这类「<u>没有保证，但实践中有效</u>」的情形在深度学习里非常多，而知道哪些属于这一类很重要：</b><b>⇒ <u>它意味着当它失效时，你不会有任何理论能告诉你为什么</u>。</b><b>（后来的研究确实发现：<u>一部分头是冗余的，剪掉它们对性能影响很小</u>。）</b></p>
+<p class=""><b>★ 而 Shervine 在最后的走查里会给这个问题一个更完整的回答 —— <u>那个回答比这里的更有说服力</u>，我们到第 44 条再看。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">85:39</span><span class="en">OK, I will just mention one trick, another trick that the transformer authors use</span></div><div class="body"><p class=""><b>这是本讲最后一个技术点，而它修的正是第 26 条留下的那个别扭。</b></p>
+<p class=""><b>讲者的引入</b>：<b>「<u>我就再提一个技巧，transformer 作者用的另一个技巧。它叫 label smoothing。谁听说过 label smoothing？</u>」</b></p>
+<p class=""><b>它要处理的事实</b>：<b>「<u>这里有个新东西：在 NLP 里，当你想预测接下来是什么时，通常不止一种方式。当你说「what a great day」「what a great lecture」「what a great book」「what a great ——」总是有多个选择。填那个空的方式不止一种</u>。」</b></p>
+<p class=""><b>★★★ 请回想第 26 条那个设定</b>：<b>训练时的真值是一个 <u>one-hot</u> —— <u>目标词概率 1、其余全 0</u>。</b><b>⇒ 也就是说，<u>我们在要求模型断言「接下来一定是 day，绝不可能是 lecture 或 book」</u>。</b></p>
+<p class=""><b>⇒ 可事实上 lecture 和 book 都是完全合理的。<u>所以这个训练目标本身就是错的 —— 它在教模型说一句不真实的话</u>。</b></p>
+<p class=""><b>★ 而 label smoothing 就是对这件事的一个直接修正，下一镜看它怎么做。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">86:44</span><span class="en">And instead of saying it is a 1, 0, 0, 0, that you need to predict</span></div><div class="body"><p class=""><b>做法本身只是改标签，一行就说完了。</b></p>
+<p class=""><b>讲者的大白话</b>：<b>「<u>它做的事是：不是说「100% 预测这个词、没有别的词」，而是说「预测这个词，但有一定机会它不是这个词」</u>。」</b></p>
+<p class=""><b>具体怎么改</b>：<b>「<u>实践中它做的是：它拿那个 one-hot 编码，而不是说你需要预测的是 (1, 0, 0, 0)，它说其实是 1 减去 epsilon，然后那些是 epsilon 除以 v 减 1</u>。」</b></p>
+<p class=""><b>⇒ 读一遍这个式子：<u>目标词分到 1−ε，剩下那 ε 被平均分给其余的 v−1 个词</u>。</b><b>★ 注意它仍然是一个合法的概率分布（加起来是 1）。</b></p>
+<p class=""><b>★★ 它的效果，讲者说得很准</b>：<b>「<u>实践中，这是一个倾向于让你的模型「更不确定」的方法。再说一次，是让它对这个预测不那么笃定，因为你总是在告诉它：试着预测这个，但其实有可能它不是正确的值</u>。」</b></p>
+<p class="warn"><b>⚠ 而这是一个很有意思的训练哲学：<u>我们在主动地教模型「别太自信」</u>。</b><b>⇒ 这和一般「让模型更准」的直觉相反，<u>但它对应的是真实世界的性质：语言本来就有多个合理的续写</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">87:19</span><span class="en">But in practice, the authors see that it tends to improve metrics like BLEU</span></div><div class="body"><p class=""><b>它管用吗？作者给的是经验证据。</b></p>
+<p class=""><b>讲者的话</b>：<b>「<u>但实践中，作者们看到它倾向于提升像 BLEU 这样的指标 —— 而 BLEU 是翻译任务的一个代理指标。所以是的，我觉得这个方法对 NLP 来说是相当通用的。所以它是个值得知道的东西</u>。」</b></p>
+<p class=""><b>★ 注意他用了「<u>代理指标（proxy metric）</u>」这个词来形容 BLEU</b>：<b>⇒ 这和第 24 条的「代理任务」是同一个词根，而含义一致：<u>BLEU 不是我们真正关心的（翻译质量），只是一个能测的替身</u>。</b></p>
+<p class="warn"><b>⚠ 于是这里有一个值得想一层的细节：<u>label smoothing 提升的是 BLEU，而 BLEU 本身是个不完美的代理</u>。</b><b>⇒ 所以严格说，这个证据证明的是「<u>它让 BLEU 上去了</u>」，<u>而不是「它让翻译变好了」</u>。</b></p>
+<p class=""><b>★★ 这不是在质疑 label smoothing（它确实被广泛采用），<u>而是提醒你留意这类证据的形状</u>：</b><b>⇒ 整个领域的进步大量依赖这种「<u>在某个代理指标上变好了</u>」的证据。<u>而 L5 的 reward hacking、L6 的长度膨胀，讲的都是这种依赖出问题的时候</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">88:32</span><span class="en">So question is, is there a relation with explore and exploit?</span></div><div class="body"><p class=""><b>这个追问很有意思，因为它把 label smoothing 和强化学习里的一个概念联系了起来。</b></p>
+<p class=""><b>学生的问题</b>：<b>讲者复述为：<u>所以问题是，这和「探索与利用（explore and exploit）」有关系吗？</u></b><b>⇒ 他的第一反应：<u>这是个有意思的问题</u>。</b></p>
+<p class=""><b>★ 这个联想其实有道理</b>：<b>「<u>探索 vs 利用</u>」说的是「<u>要不要偶尔试试不是当前最优的那个选项</u>」；而 label smoothing 做的事是<u>不让模型把全部概率押在一个词上</u>。</b><b>⇒ 表面上都在「保留一点不确定性」。</b></p>
+<p class="warn"><b>⚠ 但讲者没有顺着这个类比走，而是把话题拉回了那个更基本的区分</b>：<b>他反问「<u>那为什么 softmax 会免费给你这个呢？</u>」然后落到：<u>归根结底，你想做的是把你的预测和标签做比较。所以问题是：你想和 (1,0,0,0) 比，还是想和某个不是 (1,0,0,0) 的东西比</u>。</b></p>
+<p class=""><b>★★ 我认为他不顺着类比走是对的：<u>两者「看起来像」，但机制完全不同</u>。</b><b>⇒ 探索发生在<u>行为选择</u>这一侧（要不要试别的动作）；label smoothing 发生在<u>监督信号</u>这一侧（标签该多硬）。</b><b>⇒ <u>把它们混为一谈会让你在两边都想不清楚</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">89:02</span><span class="en">So I guess the question here is, do you want to compare with 1, 0, 0, 0</span></div><div class="body"><p class=""><b>学生的追问抓住了一个真实的混淆点，而讲者的回答把两侧分清了。</b></p>
+<p class=""><b>来回的过程</b>：<b>学生问「<u>softmax 不是已经免费给了这个吗？</u>」讲者反问「<u>softmax 为什么会免费给它呢？</u>」</b></p>
+<p class=""><b>★★ 然后他点破了关键</b>：<b>「<u>我想归根结底，你想做的是把你的预测和标签去比较。所以我想这里的问题是：你是想和 (1, 0, 0, 0) 比，还是想和某个不是 (1, 0, 0, 0) 的东西比？所以我想 softmax 不让你做那件事</u>。」</b></p>
+<p class=""><b>★★★ 这个区分非常要紧：<u>softmax 管的是「预测」那一侧，label smoothing 改的是「标签」那一侧</u>。</b><b>⇒ 模型的输出确实是个软的分布（softmax 保证的）；<u>但损失是拿它去和标签比的，而标签原来是硬的</u>。</b><b>⇒ 只要标签是 (1,0,0,0)，<u>损失就会一直推着模型把那个概率往 1 顶</u> —— 哪怕输出端是软的。</b></p>
+<p class=""><b>★ 讲者最后又强调了一遍：<b>「<u>我不确定这说清楚了没有，但这实际上是标签。你试图预测的不是 (1, 0, 0)，而是我们改变了标签，好让模型去预测一个不那么笃定的东西</u>。」</b></b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">89:34</span><span class="en">And yes, so we saw basically how the transformer worked</span></div><div class="body"><p class=""><b>最后二十分钟交给 Shervine，而他要做的事是把前面所有零件装起来。</b></p>
+<p class=""><b>他的开场</b>：<b>「<u>好的，谢谢 Afshine。我们基本上看了 transformer 是怎么工作的。而现在我们要用一个具体的例子把它全部拼起来。那就拿我们最爱的例子：a cute teddy bear is reading。然后我们一起走过每一步</u>。」</b></p>
+<p class=""><b>★★ 为什么这一段值得你花最多时间</b>：<b>前面 Afshine 讲的都是「<u>这个部件在做什么</u>」；而 Shervine 要讲的是「<u>这些部件连起来，数据是怎么流过去的</u>」。</b></p>
+<p class=""><b>⇒ 这两件事的难度完全不同。<u>你可以逐个理解每个概念，却仍然说不出「一个 token 从进去到出来，中间经历了什么形状的变化」</u>。</b></p>
+<p class=""><b>★ 所以我建议你用一个很具体的标准来检验自己：<u>听完这一段，你应该能画出每一步的矩阵形状</u>。</b><b>⇒ 输入是什么形状、Q/K/V 是什么形状、QKᵀ 是什么形状、乘完 V 又是什么形状、多头拼起来是什么形状。</b></p>
+<p class=""><b>⇒ <u>这个片子接下来会把每一步的形状都明确标出来</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">90:06</span><span class="en">So as we said, we can use any arbitrary decomposition to decompose this into tokens</span></div><div class="body"><p class=""><b>第一步是分词，而 Shervine 特意呼应了 Afshine 那个「任意」。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以我们先从分词开始。如我们所说，我们可以用任意的分解方式把它分解成 token</u>。」</b></p>
+<p class=""><b>⇒ 这正好接上第 15 条：<u>切法是人定的，不存在「正确的切法」</u>。所以在走查里用哪种切法并不重要。</b></p>
+<p class=""><b>★ 然后他引出了一个之前没提过的必需品</b>：<b>「<u>然后，正如有人提到的，你需要有某种办法去指明一个序列的开始和结束</u>。」</b></p>
+<p class=""><b>⇒ 「<u>正如有人提到的</u>」—— 这又是一次对学生提问的呼应。<u>第 28 条那个「生成什么时候停」的问题，答案是 EOS</u>。</b></p>
+<p class=""><b>★★ 而这里把这件事补完整了：<u>不只需要「结束」，还需要「开始」</u>。</b><b>⇒ 为什么需要「开始」？因为<u>解码的第一步要有个输入</u> —— 还没生成任何词时，你得喂给 decoder 点什么。<u>那就是 BOS</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">90:17</span><span class="en">So typically, this is done with the BOS and EOS tokens</span></div><div class="body"><p class=""><b>两个特殊 token，而它们是生成任务能自洽运转的最后两块拼图。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>所以典型地，这是用 BOS 和 EOS token 来做的。所以你把它们加上去</u>。」</b></p>
+<p class=""><b>⇒ <u>BOS = beginning of sequence（序列开始），EOS = end of sequence（序列结束）</u>。</b></p>
+<p class=""><b>★★ 两者的角色是对称而不同的</b>：<b><u>EOS 回答「什么时候停」</u>（第 28 条那个学生的问题）；<u>BOS 回答「从哪儿开始」</u>。</b></p>
+<p class=""><b>⇒ 后者容易被忽略，但它同样必要：<u>解码的第一步，模型还一个词都没生成，可自注意力总得有个输入</u>。<u>BOS 就是那个「我要开始说话了」的信号</u>。</b></p>
+<p class=""><b>★★★ 而它们能工作的原因很妙：<u>它们就是词表里普通的两个 token</u>。</b><b>⇒ 模型通过训练学会「在该结束的地方给 EOS 高概率」—— <u>没有任何特殊机制，就是正常地学</u>。</b></p>
+<p class=""><b>⇒ 这是一个很优雅的设计：<u>把一个控制问题（什么时候停）变成了一个预测问题（下一个 token 是不是 EOS）</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">90:25</span><span class="en">So now let us focus on the composition of each token representation</span></div><div class="body"><p class=""><b>分词完成，现在看每个 token 送进网络时携带的是什么。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>现在让我们聚焦在每个 token 表示的组成上。你有它的 embedding —— 那是学出来的</u>。」</b></p>
+<p class=""><b>⇒ 「<u>学出来的</u>」这三个字接上了整段 Word2vec：<u>这就是那张嵌入表，第 i 行对应第 i 个 token</u>。</b><b>⇒ 区别只在于：<u>Word2vec 里这张表是用代理任务单独训的，而在 transformer 里它和整个模型一起训</u>。</b></p>
+<p class=""><b>★ 但 token 的表示不止这一个成分</b>：<b>⇒ 还有第二个，而它正是第 38 条欠下的那笔债 —— <u>位置信息</u>。</b></p>
+<p class=""><b>⇒ 下一条就讲它怎么被加进来，而「<u>加</u>」这个字是字面意义的。</b></p>
+<p class="star"><b>⭐ 顺带值得点一句：<u>到这里为止，前面讲过的东西已经开始各就各位了</u> —— 分词（第 15–18 条）、嵌入（第 23–27 条）、BOS/EOS（第 28 条的伏笔）、马上要来的位置编码（第 38 条的伏笔）。<u>这正是走查这种讲法的价值</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">90:42</span><span class="en">you have some added information that is in the form of a position embedding</span></div><div class="body"><p class=""><b>第 38 条欠下的那笔债，在这里被具体地还上了。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>而如 Afshine 提到的，为了有一个关于「这个词、或者说这个 token 在序列里处于什么位置」的概念，你有一些额外加上去的信息，形式是一个 position embedding（位置嵌入）。而这里原论文用的约定，是一组正弦和余弦，它把它们「加性地」加到那个表示上。所以这就像一次逐元素的加法</u>。」</b></p>
+<p class=""><b>★★★ 请特别留意「<u>加</u>」这个字 —— 它是字面意义的逐元素相加，而这件事值得想一想</b>：<b>⇒ 直觉上，「内容」和「位置」是两种不同的信息，<u>把它们直接加在一起似乎会混在一起分不开</u>。</b></p>
+<p class=""><b>⇒ 但它确实能工作，原因在于<u>高维空间足够宽敞</u>：在几百维里，「内容方向」和「位置方向」可以基本互不干扰，<u>模型能学会把它们分开读</u>。</b></p>
+<p class="warn"><b>⚠ 不过这个设计并不是唯一的、也不是最好的。<u>L2 会专门讲「位置嵌入换了五代」—— 从学出来的、到正弦余弦、到 T5 的偏置、到 ALiBi、最后到 RoPE</u>。</b><b>⇒ <u>每一代都在修前一代的具体毛病</u>，而「直接加上去」正是最早那一代被诟病的地方之一。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">91:07</span><span class="en">So now you have a position-aware embedding for your token</span></div><div class="body"><p class=""><b>两个成分合起来，就得到了送进 encoder 的东西。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>好，所以现在你有了一个位置感知的（position-aware）嵌入，属于你的那个 token。然后你对你的每一个 token 都重复这件事</u>。」</b></p>
+<p class=""><b>★ 「<u>位置感知的嵌入</u>」这个说法很准：<u>它既携带「我是哪个词」，也携带「我在第几位」</u>。</b></p>
+<p class=""><b>★★ 而这正好补上了第 38 条指出的那个缺口。回顾一下那条因果链，你会发现它非常干净</b>：<b>⇒ <u>① 为了能并行和直连，transformer 扔掉了顺序处理；② 于是失去了顺序信息（注意力是对集合的操作）；③ 所以要显式地把位置加回来</u>。</b></p>
+<p class=""><b>⇒ <u>三步，每一步都是上一步的必然后果</u>。</b></p>
+<p class="warn"><b>⚠ 一个值得留意的推论：<u>如果你把输入序列打乱，同时也把对应的位置嵌入一起打乱，模型的输出应该完全一样</u>。</b><b>⇒ 因为位置信息现在完全由那个加上去的向量携带，<u>而不是由「在数组里的次序」携带</u>。<u>这正是它能并行的技术基础</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">91:07</span><span class="en">So now you can see all of these embeddings in the format of a matrix</span></div><div class="body"><p class=""><b>这是走查里第一个要记住的形状，而后面每一步都在这个形状上做文章。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>所以现在你可以把所有这些嵌入看成一个矩阵的格式 —— 它的大小是 d_model，也就是你嵌入的大小；而另一个维度是序列的长度，通常是 n</u>。」</b></p>
+<p class=""><b>★★ 两个符号现在正式登场，它们会用到整门课结束</b>：<b><u>d_model = 嵌入维度</u>（就是第 25 条那个 d，比如 768）；<u>n = 序列长度</u>（有多少个 token）。</b></p>
+<p class=""><b>⇒ 所以输入是一个 <u>n × d_model</u> 的矩阵：<u>n 行，每行是一个 token 的位置感知嵌入</u>。</b></p>
+<p class=""><b>★★★ 请把这个形状记牢，因为第 16 条那句剧透（<u>复杂度是序列长度的函数</u>）从这里开始就变得具体了</b>：<b>⇒ <u>n 是会变的（句子有长有短），而 d_model 是固定的</u>。</b><b>⇒ 后面你会看到 QKᵀ 是 <u>n × n</u> 的 —— <u>那是唯一一个「两个维度都是 n」的东西，也正是平方级复杂度的来源</u>。</b></p>
+<p class=""><b>⇒ Shervine 在这里停下来问了一句：<u>到目前为止都说得通吗？关于输入有什么问题吗？</u></b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>这一镜是我补的，把接下来几镜会出现的形状先列出来，你可以边听边对。</b></p>
+<p class=""><b>① 输入 X：<u>n × d_model</u></b>（n 个 token，每个一行）。</b></p>
+<p class=""><b>② Q、K、V：<u>各自 n × d_k</u></b>（由 X 分别乘 W_q、W_k、W_v 得到；<u>行数还是 n，因为每个 token 都要有自己的 query/key/value</u>）。</b></p>
+<p class=""><b>③ ⚠ <u>QKᵀ：n × n</u></b> —— <b>这是全场唯一一个两个维度都是 n 的矩阵。</b><b>⇒ <u>它的第 (i, j) 个元素是「第 i 个 token 的 query 和第 j 个 token 的 key 的相似度」</u>。</b><b>⇒ <u>序列长一倍，这个矩阵大四倍 —— 第 33 条那个「n² 条线」就是它</u>。</b></p>
+<p class=""><b>④ <u>softmax(QKᵀ/√d_k)·V：n × d_k</u></b> —— <b>n×n 的权重矩阵乘 n×d_k 的 V，<u>又回到每个 token 一行</u>。</b></p>
+<p class=""><b>★★ 请留意这个「<u>进出形状一致</u>」的性质：<u>进去是每 token 一行，出来还是每 token 一行</u>。</b><b>⇒ 正因为如此，<u>这些层才能一层层堆起来</u>（后面会讲 N 层堆叠）。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">91:39</span><span class="en">So now we will send this representation through the encoder</span></div><div class="body"><p class=""><b>进 encoder 的第一步，而它把第 36 条那个抽象说法变成了三个具体的矩阵。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>所以现在我们要把这个表示送进 encoder。如 Afshine 所说，你有自注意力这个概念。而你执行自注意力的方式是：你拿这个输入，把它投影到三个空间上。你把它投到空间 W_q，得到 queries；你把同样的那些嵌入投到空间 W_k，得到 keys；你对 values 做同样的事，得到你的 values。而 W_q、W_k 和 W_v 是模型学出来的 —— 它们基本上就是投影矩阵</u>。」</b></p>
+<p class=""><b>★★ 三个要点，每个都接上了前面</b>：<b>① <u>「同一份输入」投三次</u> —— 这正是第 36 条说的「三者同源」，也是「self」的含义；② <u>三个矩阵是学出来的</u> —— 这正是 Afshine 回答学生时说的；③ <u>它们是投影矩阵</u> —— 也就是第 36 条最后补的那个细节。</b></p>
+<p class=""><b>⇒ 所以这一步没有新东西，<u>它只是把前面说过的话画成了图</u>。</b></p>
+<p class="star"><b>⭐ 而这正是走查的价值：<u>同一件事，先用语言说一遍，再用形状走一遍</u>。两遍之后它才真的变成你的。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">92:21</span><span class="en">you can apply the formula that Afshine mentioned, that is the self-attention formula</span></div><div class="body"><p class=""><b>公式正式登场，而 Shervine 把它念了一遍 —— 建议你也跟着念，因为念出来比看着记得牢。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以现在把这一切放在心上，你就可以应用 Afshine 提到的那条公式，也就是自注意力公式：softmax of Q K transpose over square root of d_k, times V —— 它从这一切里给你另一个矩阵</u>。」</b></p>
+<p class=""><b>★ 「<u>另一个矩阵</u>」这句话里有信息：<u>输出还是一个矩阵，而且它的形状和输入那个是一致的</u>（n 行，每个 token 一行）。</b></p>
+<p class=""><b>⇒ 这正是第 41 条最后一镜说的「<u>进出形状一致</u>」，<u>也是这些层能堆叠的原因</u>。</b></p>
+<p class=""><b>★★ 而 Shervine 接下来做了一件非常可贵的事</b>：<b>他说：<u>现在让我们停一秒，看看这个计算在实践中是怎么做的，以及每一步意味着什么</u>。</b></p>
+<p class=""><b>⇒ 也就是说，<u>他不满足于「套公式」，而要把这个矩阵乘法一层层拆开看</u>。</b><b>⇒ 接下来那几镜是整讲最有价值的部分之一 —— <u>因为理解这条公式的关键，全在「每一行每一列代表什么」上</u>（这正好印证了第 2 条里说的那个先修要求）。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">92:42</span><span class="en">Now let us pause for a second and look at how this computation is done in practice</span></div><div class="body"><p class=""><b>拆解从 Q 开始，而 Shervine 的问法很好：<u>你得到了什么？</u></b></p>
+<p class=""><b>他的话</b>：<b>「<u>我们先看 Q。当你计算 Q 时，你基本上是把你的嵌入投影到那个空间里。你得到了什么？你得到一个矩阵，它的每一行代表一个给定的 query</u>。」</b></p>
+<p class=""><b>★★ 「<u>每一行代表一个 query</u>」—— 请把这句话和形状对上</b>：<b>⇒ Q 是 <u>n × d_k</u>：<u>n 行（序列里每个 token 一行），每行是 d_k 维的一个 query 向量</u>。</b></p>
+<p class=""><b>⇒ 也就是说，<u>序列里的每一个 token 都在「提问」</u>。</b><b>这正是自注意力和 cross-attention 的区别所在：<u>这里提问的和被问的是同一批 token</u>。</b></p>
+<p class=""><b>★ 而我建议你现在就在脑子里具体化一下：<u>「a cute teddy bear is reading」加上 BOS、EOS，假设是 7 个 token，那 Q 就有 7 行</u>。</b><b>⇒ 第 3 行是 teddy bear 的 query，<u>它在问「句子里谁和我有关」</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">93:07</span><span class="en">When you say k transpose, it is basically the same matrix, but transposed</span></div><div class="body"><p class=""><b>第二步看 Kᵀ，而转置这个动作的意义正在于让后面的乘法说得通。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>当你说 K transpose 时，它基本上是同一个矩阵，只是被转置了 —— 在那里，每一列代表每个 token 的 key 表示</u>。」</b></p>
+<p class=""><b>★★ 把两个形状并排放，矩阵乘法的意义就出来了</b>：<b><u>Q 是 n × d_k：每一行是一个 query。Kᵀ 是 d_k × n：每一列是一个 key</u>。</b></p>
+<p class=""><b>⇒ 矩阵乘法的规则是「<u>左边的行 × 右边的列</u>」。<u>所以 Q 乘 Kᵀ 的第 (i, j) 项 = 第 i 个 query 和第 j 个 key 的点积</u>。</b></p>
+<p class=""><b>★★★ 而点积正是第 36 条里讲者说的那个东西：<u>加权平均里的权重，基本上就是 query 和 key 之间的点积</u>。</b></p>
+<p class=""><b>⇒ 所以「<u>为什么要转置</u>」有了一个干净的答案：<u>因为我们要的是「每个 query 对每个 key」的全部两两点积，而矩阵乘法恰好一次把它们全算出来</u>。</b></p>
+<p class="warn"><b>⚠ 这也正是第 35 条那句「GPU 爱矩阵」的具体兑现：<u>n² 次点积，被写成了一次矩阵乘法</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">93:25</span><span class="en">So when you multiply each of them, you see that each row represents the projection of the query over each key</span></div><div class="body"><p class=""><b>相乘之后的结果，Shervine 一句话就说清了它的结构。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>所以当你把它们各自相乘时，你会看到：每一行代表「这个 query 在每一个 key 上的投影」</u>。」</b></p>
+<p class=""><b>★★ 把这句话翻译成具体的</b>：<b>⇒ <u>第 i 行有 n 个数，第 j 个数是「第 i 个 token 和第 j 个 token 有多相关」</u>。</b></p>
+<p class=""><b>⇒ 所以整个矩阵是 <u>n × n</u>，<u>它完整地记录了「每个 token 对每个 token」的关系</u>。</b></p>
+<p class=""><b>★★★ 这就是第 33 条那个「<u>n² 条线</u>」的真身</b>：<b>注意力说「任意两个位置直接连」—— <u>而这个 n × n 矩阵就是那些连线的强度</u>。</b></p>
+<p class=""><b>⇒ 于是「<u>序列长一倍，这个矩阵大四倍</u>」就不再是抽象的说法了，<u>你能看见它</u>。</b></p>
+<p class="warn"><b>⚠ 而所有对付长序列的工作，本质上都是在对付这个矩阵</b>：<b><u>滑动窗口（只算对角线附近那一条带）、FlashAttention（不把整个矩阵存下来）、MLA（压缩 K 和 V）</u>。</b><b>⇒ 心里有了这个 n×n 的图像，后面那几讲会好懂很多。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">93:32</span><span class="en">such that when you take the matrix multiplication and get the softmax of all of this</span></div><div class="body"><p class=""><b>softmax 之后发生了什么，Shervine 说得很准确。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>这样当你做完矩阵乘法、再对这一切取 softmax 时，你就得到：对每一个 query，一个「query 在那些 key 上的投影」的概率分布。每一行都会有这个</u>。」</b></p>
+<p class=""><b>★★ 「<u>每一行一个概率分布</u>」这句话值得咀嚼，因为它说明了注意力到底在做什么</b>：<b>⇒ <u>第 i 行是一组加起来为 1 的权重，告诉你「第 i 个 token 应该把多少注意力分给每一个 token」</u>。</b></p>
+<p class=""><b>⇒ 这正是第 33 条那个「<u>瞥一眼</u>」的量化版本：<u>它不是瞥向一个地方，而是把注意力按比例分配给所有地方</u>。</b></p>
+<p class=""><b>★ 而「分配」这个性质有个重要含义：<u>总量是守恒的</u>。</b><b>⇒ 多关注某个 token，就必然少关注别的。<u>这是 softmax 强加的约束，而它让注意力成为一种「取舍」而不是「随便加强」</u>。</b></p>
+<p class="warn"><b>⚠ 一个顺带的实际后果：<u>序列越长，平均每个位置能分到的注意力就越少</u>（因为要分给 n 个地方）。<u>这是长序列变难的另一个角度</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">93:55</span><span class="en">And I do not know if anyone asked the question regarding why do we scale by square root of dk</span></div><div class="body"><p class=""><b>这是 Shervine 主动补的一个点，而且他特意说「不知道有没有人问过」—— 说明他认为这个值得讲。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>我不知道有没有人问过「为什么我们要除以 d_k 的平方根」这个问题。其实写成 d_q 也可以，因为矩阵乘法 —— 也就是这里的点积 —— 强制了 d_q 等于 d_k</u>。」</b></p>
+<p class=""><b>★ 先把这个澄清理解了</b>：<b>⇒ <u>query 和 key 要做点积，而点积要求两个向量维度相同</u>。</b><b>⇒ 所以 <u>d_q 必然等于 d_k</u>，写哪个都一样。</b><b>⇒ 这是个小细节，但它说明了一件事：<u>W_q 和 W_k 投出来的空间维度必须一致，而 W_v 可以不一样</u>。</b></p>
+<p class="warn"><b>⚠ 顺带：这也解释了为什么 L2 讲 MQA/GQA（多个 query 头共享 key/value 头）时，<u>共享的是 K 和 V 而不是 Q</u> —— 结构上 K 和 V 是「被查的那一侧」，可以被多个 query 复用。</b></p>
+<p class=""><b>⇒ 而真正的理由，下一镜。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">94:16</span><span class="en">And basically, what you see is that these dot products has the dimension of key and queries grows</span></div><div class="body"><p class=""><b>这就是那个缩放因子的理由，而它比看上去重要。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>而基本上你看到的是：随着 key 和 query 的维度变大，这些点积也会倾向于跟着变大。所以你想把这些点积归一化。而这就是为什么你要除以 key 的维度的平方根</u>。」</b></p>
+<p class=""><b>★★ 为什么点积会随维度增长？直觉是这样的</b>：<b><u>点积是 d 个乘积项加起来</u>。</b><b>如果每一项的量级差不多，<u>那加的项越多，和就越大</u>。<u>而对随机的、独立的项，和的标准差大致按 √d 增长</u> —— 所以除以 √d_k 正好把它拉回来。</b></p>
+<p class=""><b>★★★ 而不归一化会有什么后果？这一点 Shervine 没展开，但值得知道</b>：<b>⇒ <u>点积太大 ⇒ softmax 的输入太大 ⇒ softmax 会变得极度「尖锐」</u>（几乎把全部权重给一个位置、其余接近 0）。</b><b>⇒ 而 softmax 在那种极端区域<u>梯度几乎为零</u>（回想第 12 条讲 sigmoid 时说的「两端很平」）。</b><b>⇒ <u>于是训练就学不动了</u>。</b></p>
+<p class=""><b>★ 所以这个 √d_k 不是美化，<u>它是让训练能进行下去的必要条件</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">94:37</span><span class="en">And this is Afshine explained as having the query projected on the space of keys</span></div><div class="body"><p class=""><b>最后一步，而它正好闭合了第 35 条那个「比 key、给权重、取 value」。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>然后现在你有了这一切的 softmax，你把它乘上矩阵 V。而这就是 Afshine 解释的那个：把 query 投影到 key 的空间上，然后乘以对应的 value。所以 value 是我们投上去的那个对应 key 的表示。于是你对每一个 query，最后得到一个 value 的加权和</u>。」</b></p>
+<p class=""><b>★★★ 「<u>对每一个 query，一个 value 的加权和</u>」—— 这就是自注意力输出的一句话定义。</b></p>
+<p class=""><b>⇒ 把形状对上：<u>n×n 的权重矩阵 乘 n×d_k 的 V，得到 n×d_k</u>。<u>每一行是一个 token 的新表示，而它是全句所有 token 的 value 按权重混合出来的</u>。</b></p>
+<p class=""><b>★★ 到这里，第 34 条那个「<u>teddy bear 的表示对它所处的上下文是独一无二的</u>」就有了完整的机制解释</b>：<b>⇒ <u>teddy bear 那一行的新表示 = 句子里每个词的 value，按「teddy bear 和它们各自有多相关」加权平均</u>。</b><b>⇒ 换一句话，周围的词变了，权重变了，<u>混出来的东西自然就不同了</u>。</b></p>
+<p class=""><b>⇒ 这就是「上下文化」四个字的全部数学内容。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">95:20</span><span class="en">So you are right, it is not just single one, one time that it is done</span></div><div class="body"><p class=""><b>多头在这里被完整交代了一遍，而重点在最后两步（拼接与投回）。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>有人问过 multi-head 是什么东西。所以你说得对，它不是只做单独一次。它实际上是每次都做。而你得到的是 —— 所有这些是并行做的。最后你得到 h 个这样的矩阵。然后你把它们按列拼接起来</u>。」</b></p>
+<p class=""><b>★ 三个动作</b>：<b>① <u>做 h 次</u>（每次用自己的那组 W_q、W_k、W_v）；② <u>并行做</u>（互不依赖，所以能同时算）；③ <u>按列拼接</u>（concatenate）。</b></p>
+<p class=""><b>★★ 形状对一下</b>：<b>每个头输出 <u>n × d_k</u>；h 个头按列拼接 ⇒ <u>n × (h·d_k)</u>。</b><b>⇒ 行数仍然是 n（每个 token 一行），<u>但宽度变成了 h 倍</u>。</b></p>
+<p class="warn"><b>⚠ 而这就带来一个问题：<u>进来的是 n × d_model，出去的是 n × (h·d_k)</u> —— <u>形状对不上了</u>。</b><b>⇒ 而第 41 条说过，<u>形状必须进出一致，这些层才能堆起来</u>。</b></p>
+<p class=""><b>⇒ 下一镜就是解决这个问题的那一步。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">95:37</span><span class="en">And at the end of this, you have another projection matrix that you call Wo</span></div><div class="body"><p class=""><b>这一步解决了上一镜那个形状问题，而它的意义比看上去大。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>而在这一切的最后，你有另一个投影矩阵，你叫它 W_o，它会把所有这些投影回嵌入原来的维度。所以这是一种办法，让网络有一个维度不变的方式 —— 从原来的维度出发，再回到原来的那个</u>。」</b></p>
+<p class=""><b>★★ 「<u>维度不变（dimension-invariant）</u>」这个说法点出了要害</b>：<b>⇒ <u>多头注意力这一整块，是一个「n × d_model 进、n × d_model 出」的模块</u>。</b></p>
+<p class=""><b>⇒ 中间它内部膨胀成了 h 倍宽，但出口被 W_o 压回原尺寸。</b></p>
+<p class=""><b>★★★ 而这就是「<u>能堆叠</u>」的技术前提</b>：<b>既然进出形状一样，<u>你就可以把同样的模块一个接一个地叠起来</u>。</b><b>⇒ 下一镜 Shervine 就会说：<u>你不是只有一个 encoder 模块，而是有 N 个</u>。</b></p>
+<p class=""><b>⇒ 如果没有 W_o 这一步，<u>每叠一层维度就乘 h，叠几层就爆炸了</u>。</b></p>
+<p class=""><b>★ 所以 W_o 看起来只是「一个投影」，<u>实际上它是整个架构能变深的那块基石</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">96:24</span><span class="en">So what makes it different?</span></div><div class="body"><p class=""><b>这个追问在第 39 条出现过，Afshine 给了个简短回答；而 Shervine 这里给的回答完整得多。</b></p>
+<p class=""><b>学生的问题</b>：<b><u>关于 h —— 有没有可能每次得到一样的结果？如果那样，拼接同一个东西会有帮助吗？</u></b></p>
+<p class=""><b>★ Shervine 的回答</b>：<b>「<u>那么是什么让它们不一样？那是梯度下降的魔法。网络在最后有一个目标函数。它有自由度。它的激励是去建出一个有助于学习下一个词的表示</u>。」</b></p>
+<p class=""><b>★★★ 这个论证的结构值得学，因为它不是「因为设计是这样」，而是「<u>因为激励是这样</u>」</b>：<b>⇒ <u>没有任何机制禁止两个头学成一样</u>；<u>但两个一样的头不会让损失更低</u>。</b><b>⇒ 而梯度下降在找更低的损失，<u>所以它没有动力让它们一样</u>。</b></p>
+<p class=""><b>⇒ 下一镜 Shervine 会把这个论证说完，而他的收尾非常诚实。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">96:57</span><span class="en">So what makes it such that you do not have the same thing?</span></div><div class="body"><p class=""><b>这是对那个追问的完整回答，而它的诚实程度和第 21 条那个「我没有好答案」是一个级别的。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>它没有动机去复制同一个东西、或者做同样的机制。而这就是为什么实践中你看到模型会收敛到建出不同的表示，然后它可以把它们拼接起来、再投影成有用的东西</u>。」</b></p>
+<p class=""><b>⇒ <u>那么是什么让你不会得到同样的东西？什么都没有。就像，你没有任何约束。但「你让模型去进行的那种学习」的性质，使得它实践中就这么做了</u>。</b></p>
+<p class=""><b>★★★ 请把这两句话放在一起体会：<u>「什么都没有」+「但实践中它就这么做了」</u>。</b></p>
+<p class=""><b>⇒ 这是深度学习里一类非常典型的情形：<u>行为不是被设计保证的，而是被优化压力诱导出来的</u>。</b></p>
+<p class="warn"><b>⚠ 而知道一个性质属于「保证的」还是「诱导的」，在实践中非常重要：<u>保证的性质你可以依赖；诱导的性质在分布变了、规模变了、目标变了的时候可能就不成立了</u>。</b></p>
+<p class=""><b>⇒ 他最后半开玩笑地说：<u>我是说，梯度下降通常会创造奇迹</u>。<u>这句玩笑背后是实话 —— 这个领域有相当多东西是靠「它就是能 work」支撑的</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts"></span><span class="en"></span></div><div class="body"><p class=""><b>把多头这一整块的形状串一遍，你就能完整地画出它了。</b></p>
+<p class=""><b>① 输入 <u>X：n × d_model</u></b>（n 个 token，每个 d_model 维）。</b></p>
+<p class=""><b>② 每个头各自用自己的 <u>W_q、W_k、W_v</u> 投影，各算出一个 <u>n × d_k</u> 的输出。</b><b>⇒ <u>h 个头并行做</u>。</b></p>
+<p class=""><b>③ 把 h 个 <u>n × d_k</u> 按列拼接 ⇒ <u>n × (h·d_k)</u>。</b></p>
+<p class=""><b>④ 乘上 <u>W_o</u> ⇒ 回到 <u>n × d_model</u>。</b></p>
+<p class=""><b>★★ 于是整块是「<u>进出同形</u>」的，而这正是能堆 N 层的原因。</b></p>
+<p class="star"><b>⭐ 顺带一个常见的设置值得知道（Shervine 没说，我补的）：<u>通常取 h · d_k = d_model</u>。</b><b>⇒ 也就是说，<u>把 d_model 维切成 h 份，每个头分一份</u>。</b><b>⇒ 这样多头<u>几乎不增加计算量</u> —— 它是「把同样的维度分给几个头各用各的」，而不是「把计算量乘 h 倍」。</b></p>
+<p class=""><b>★ 这个设计很巧：<u>多头换来的是「多个不同的关注角度」，而代价接近于零</u>。<u>这也解释了为什么多头几乎是标配</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">97:27</span><span class="en">So now that we have gone through the self-attention layer, you have another component that is the FFN</span></div><div class="body"><p class=""><b>Shervine 在这里回答了之前那个关于隐层维度的问题，而答案很有意思 —— 它和 Word2vec 正好相反。</b></p>
+<p class=""><b>他的话</b>：<b>「<u>现在我们过完了自注意力层，你有另一个部件，就是 FFN。而我想刚才这里有个问题，是关于「怎么相对于输入和输出来选隐层的维度」。所以当 Afshine 讲 Word2vec 时，你通常有一个比输入输出更小的维度。但这里，实际上隐层的维度比输入和输出都更大。而这样做的道理是：你想有足够的自由度让模型去学有用的表示。所以这是一种把你学到的特征复杂化的方式</u>。」</b></p>
+<p class=""><b>★★ 两者方向相反，因为目的不同</b>：<b><u>Word2vec 的隐层是「要被拿走当表示的那一层」—— 所以要小，压缩才能逼出相似度（第 25 条）</u>。</b><b><u>而 FFN 的隐层只是中间计算 —— 它不会被拿走，所以可以放大，给模型更多转圜空间</u>。</b></p>
+<p class=""><b>⇒ 所以「隐层该大还是该小」没有统一答案，<u>取决于那一层是「瓶颈」还是「中转」</u>。</b><b>★ 这是个很好的判断依据，值得带走。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">98:11</span><span class="en">And you do not have just one encoder module</span></div><div class="body"><p class=""><b>堆叠这一步，以及一个容易搞错的连接方式。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>而你不是只有一个 encoder 模块 —— 你实际上有 N 个，原论文里是大写的 N。而在这一切的最后，你得到一组编码过的、上下文感知的嵌入。然后这些被编码的嵌入，会是那些被喂给 N 个 decoder 的东西。所以你有一串堆叠的 N 个 encoder，你有一串堆叠的 N 个 decoder</u>。」</b></p>
+<p class=""><b>★★★ 而最关键的那个细节是</b>：<b>「<u>而 encoder 的最后那个表示，就是你会喂给每一个 decoder 的 cross-attention 的东西</u>。」</b></p>
+<p class=""><b>⇒ 请把这个连接方式想清楚，因为它很容易被想错：<u>不是「第 1 个 encoder 接第 1 个 decoder、第 2 个接第 2 个」</u>。</b><b>⇒ 而是：<u>N 个 encoder 先串着跑完，得到一份最终表示；然后这一份表示被送给每一个 decoder 层的 cross-attention</u>。</b></p>
+<p class=""><b>★ 所以 encoder 和 decoder 的关系是「<u>一对多</u>」的：<u>一份编码结果，被所有解码层共用</u>。</b><b>⇒ 这也意味着 encoder 只需要跑一次，而 decoder 要跑很多次（每生成一个 token 跑一轮）。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">98:57</span><span class="en">So how do we even start the decoding process?</span></div><div class="body"><p class=""><b>解码起步，而这里的「因果」正是第 37 条那个 masked 的另一个名字。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>那我们到底怎么开始解码过程？你从 BOS token 开始，基本上是在跟模型说：嘿，我们需要预测下一个词了，咱们开始吧。那么一开始 BOS token 会发生什么？你把它喂给 decoder。然后和之前 encoder 那里类似，你有一个自注意力层。而如 Afshine 提到的，这个自注意力层是因果的（causal）</u>。」</b></p>
+<p class=""><b>★★ 「<u>因果</u>」的定义他说得很准</b>：<b>「<u>所以注意力会在同一个 token 和它前面的那些 token 上做</u>。」</b><b>⇒ 也就是：<u>第 i 个位置只能看 1 到 i，不能看 i+1 以后</u>。</b></p>
+<p class=""><b>⇒ 这正是第 37 条那个 masked self-attention，<u>「masked」和「causal」是同一件事的两个名字</u>（又一组同义词）。</b></p>
+<p class=""><b>★ 而他观察到一个有意思的边界情形</b>：<b>「<u>所以在这第一个 BOS token 上，你看不出区别，因为它只会 attend 它自己。但当你有别的要解码的 token 时，你就会在「你 attend 到哪里」上看到这个区别</u>。」</b></p>
+<p class=""><b>⇒ <u>第一步时 mask 不起作用（因为只有一个 token），从第二步开始才显现</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">99:51</span><span class="en">And then you have what I mentioned to be the cross-attention</span></div><div class="body"><p class=""><b>decoder 里的三件事，而第 ② 件正好印证了第 37 条那个记法。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>然后你有我提到的那个 cross-attention，它把这些编码过的嵌入作为 key 和 value 输入。而 query 是从自注意力层出来的那些。好，然后一旦你做完这个 cross-attention，你就像在 encoder 里一样，有一个 FFN 部件，让表示更丰富。然后在最后，你把这一切做 N 次</u>。」</b></p>
+<p class=""><b>★★ 对照第 37 条那个记法：<u>谁在提问谁就是 Q</u>。</b><b>⇒ 这里提问的是 decoder（我要决定下一个词），<u>所以 Q 来自 decoder 的自注意力输出</u>；被查的是源句子，<u>所以 K 和 V 来自编码过的嵌入</u>。</b><b>⇒ 完全一致。</b></p>
+<p class=""><b>★ 而 decoder 的结构比 encoder 多一层</b>：<b><u>encoder 是「自注意力 → FFN」两件事；decoder 是「因果自注意力 → cross-attention → FFN」三件事</u>。</b><b>⇒ 多出来的正是那层「看源句子」的 cross-attention。</b></p>
+<p class=""><b>⇒ 这也说明了为什么<u>只有 encoder-decoder 架构才有 cross-attention</u>：纯 decoder-only 的模型（也就是今天的 LLM）没有一个独立的源序列要看，<u>所以它只有因果自注意力</u>。</b></p></div></article>
+<article class="card"><div class="meta"><span class="ts">100:32</span><span class="en">And at the very end of the decoding process, you have a linear projection and a softmax layer</span></div><div class="body"><p class=""><b>最后一步，整个循环闭合，而本讲的所有伏笔都在这里收完。</b></p>
+<p class=""><b>Shervine 的话</b>：<b>「<u>而在解码过程的最末尾，你有一个线性投影和一个 softmax 层，把「下一个词的预测」变成词表上的一个概率分布。好，所以我们看了怎么对这里的下一个词做这件事。而基本上你一遍又一遍地做</u>。」</b></p>
+<p class=""><b>⇒ <u>你找到了你的下一个 token，它基本上是你想要的那个东西的 one-hot 编码。然后你拿那个嵌入，把它放回 decoder，继续这个过程</u>。</b></p>
+<p class=""><b>★★ 然后他把那个问题抛给学生</b>：<b>「<u>那什么时候停？这是个留给你们所有人的问题。</u>」答案是：<u>当你撞上 EOS token 的时候</u>。</b></p>
+<p class=""><b>⇒ <u>这正是第 28 条那个学生提问的闭环</u>：当时有人问「生成什么时候停，不然它不就永远停不下来了吗」，Afshine 答了 EOS；<u>而现在你看到它在完整流程里的位置</u>。</b></p>
+<p class=""><b>★ 他的收口</b>：<b>「<u>而用这个过程，基本上就是这篇原始的里程碑论文的作者们做机器翻译的方式。所以这通常就是当时被呈现的那个用例</u>。」</b></p>
+<p class=""><b>⇒ 全讲到此结束。<u>从「NLP 是什么」到「一个 token 怎么被生成出来」，111 分钟</u>。</b></p></div></article>
+</section>
+</main></div></body></html>
