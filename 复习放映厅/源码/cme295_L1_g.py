@@ -73,12 +73,13 @@ def add(KP):
         (r'''clearScene();setEq(null);setBig(null);setCap(null);noTitle();
   says("59:09","So the reason why you have not really heard of RNNs these days",166);
   says("59:59","So this one is called LSTMs, Long Short-Term Memory",192);
-  note("⭐ 第一宗罪：长程依赖 —— 而 LSTM 是第一次尝试去修它",640,222,"y");
-  boxNode(80,254,500,50,"病因","r");
-  boxNode(700,254,500,50,"LSTM 的办法","g");
-  note("整句意义全压在一个固定大小的向量里",330,328,"r");
-  note("除了 activation，再追踪一个 cell state",950,328,"g");
-  note("⚠ 「这个架构的目标是改进那一块，但我想它也不完美」—— 讲者的评价很克制",640,374,"r");''',
+  says("60:39","this architecture aims at improving that piece",218);
+  note("⭐ 第一宗罪：长程依赖 —— 而 LSTM 是第一次尝试去修它",640,248,"y");
+  boxNode(80,276,500,46,"病因","r");
+  boxNode(700,276,500,46,"LSTM 的办法","g");
+  note("整句意义全压在一个固定大小的向量里",330,344,"r");
+  note("除了 activation，再追踪一个 cell state",950,344,"g");
+  note("⚠ 「这个架构的目标是改进那一块，但我想它也不完美」—— 讲者的评价很克制",640,384,"r");''',
          "<b>第一宗罪，而它正是 RNN 退场的原因。</b><br>⭐ 「<b>其中一个 con 是：句子的意义基本上全部被封装在这个隐状态里 ⇒ 所以你有这个『长程依赖』的问题，它基本上影响你去『记住』模型过去看到了什么的能力</b>」 ⇒ 因果链只有两步：<b>① 整句意义全压在一个固定大小的向量里；② ⇒ 句子越长，早期的信息越容易被挤掉</b>。<br>⭐ 第一次尝试去修它的是 <b>LSTM（Long Short-Term Memory）</b>:<b>除了 activation，再追踪一个 cell state —— 直觉上是把「工作记忆」和「长期记忆」分开</b>。<br>⚠ 而讲者的评价很克制：「<b>这个架构的目标是改进那一块，但我想它也不完美</b>」。", 0),
         (r'''clearScene();setEq(null);setBig(null);setCap(null);noTitle();
   says("61:32","And so whenever you want to update the weights of your model",166);
