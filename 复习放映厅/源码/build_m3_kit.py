@@ -14,8 +14,8 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 HALL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-M2KIT = os.path.join(HALL, "M2备考包-速查表与模拟卷.html")
-OUT = os.path.join(HALL, "M3备考包-速查表与模拟卷.html")
+M2KIT = os.path.join(HALL, "备考", "M2备考包-速查表与模拟卷.html")
+OUT = os.path.join(HALL, "备考", "M3备考包-速查表与模拟卷.html")
 
 css = io.open(M2KIT, encoding="utf-8").read()
 css = css[css.find("<style>"):css.find("</style>") + len("</style>")]

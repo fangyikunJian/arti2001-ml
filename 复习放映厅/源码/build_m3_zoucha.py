@@ -15,8 +15,8 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 HALL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(HALL, "★M2考前框架走查.html")
-OUT = os.path.join(HALL, "★M3考前框架走查.html")
+SRC = os.path.join(HALL, "备考", "★M2考前框架走查.html")
+OUT = os.path.join(HALL, "备考", "★M3考前框架走查.html")
 
 src = io.open(SRC, encoding="utf-8").read()
 head = src[:src.index("</style>") + len("</style>")]

@@ -6,8 +6,8 @@
 import io, os, re, sys
 sys.stdout.reconfigure(encoding="utf-8")
 
-SRC = "../★考前框架走查.html"      # M1 版，借它的 <style>
-OUT = "m2-zoucha.html"
+SRC = "../备考/★M1考前框架走查.html"   # M1 版，借它的 <style>
+OUT = "../备考/★M2考前框架走查.html"
 
 src = io.open(SRC, encoding="utf-8").read()
 head = src[:src.index("</style>") + len("</style>")]

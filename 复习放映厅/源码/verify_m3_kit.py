@@ -15,7 +15,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "build_m3_kit.py")
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   "M3备考包-速查表与模拟卷.html")
+                   "备考", "M3备考包-速查表与模拟卷.html")
 
 # ── ① 打散前后的一致性 ──────────────────────────────
 ns = {}
