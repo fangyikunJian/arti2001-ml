@@ -268,13 +268,20 @@ BLOCK = re.compile(r"\n?<!-- " + MARK + r" : start.*?" + MARK + r" : end -->\n?"
 def inject(rel, patch):
     p = os.path.join(ROOT, rel)
     s = io.open(p, encoding="utf-8").read()
-    s2 = BLOCK.sub("\n", s)                       # 先清掉上一次注入的，保证幂等
+    s2 = BLOCK.sub("\n", s)                       # 先清掉上一次注入的
     i = s2.rfind("</body>")
     if i < 0:
         i = len(s2.rstrip())                      # 有些片子没写 </body>
-        s3 = s2[:i] + patch + s2[i:]
-    else:
-        s3 = s2[:i] + patch + s2[i:]
+    # ⚠ 幂等的关键一步（2026-11-17 补）：BLOCK 把旧块换成一个 "\n"，而 patch 自己
+    #   又以 "\n" 开头 —— 所以**每跑一次 apply.py，插入点前就多一个空行**。
+    #   实测已经堆到 8 个，后果是此后每次提交都带 24 份精读的假改动。
+    #   这里把插入点前连续的空行一律压回一个，再插。
+    j = i
+    while j > 0 and s2[j - 1] == "\n":
+        j -= 1
+    s2 = s2[:j] + "\n" + s2[i:]
+    i = j + 1
+    s3 = s2[:i] + patch + s2[i:]
     if s3 == s:
         print("   = %s（没变）" % rel)
         return False
